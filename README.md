@@ -10,7 +10,7 @@ files, open your site, and the installer takes it from there.
 ![PHP](https://img.shields.io/badge/PHP-8.1%2B-blue)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
-[![CI](https://github.com/basehim/basehim/actions/workflows/ci.yml/badge.svg)](https://github.com/basehim/basehim/actions/workflows/ci.yml)
+
 
 [basehim.com](https://www.basehim.com) · [Docs](https://www.basehim.com/docs) · [API reference](https://www.basehim.com/docs/api-reference) · [Getting started](https://www.basehim.com/docs/getting-started)
 
