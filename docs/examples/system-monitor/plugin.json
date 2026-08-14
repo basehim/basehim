@@ -1,0 +1,10 @@
+{
+    "name": "System Resource Monitor",
+    "slug": "system-monitor",
+    "version": "0.1.0",
+    "description": "Example plugin: shows CPU/RAM/disk from desktop agents using the core Agent API. Ships a desktop module that collects metrics; it auto-installs on activation.",
+    "author": "Example",
+    "namespace": "Example\\SystemMonitor",
+    "src": "src",
+    "entry": "Plugin"
+}
