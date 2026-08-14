@@ -1,0 +1,23 @@
+{
+    "name": "Default",
+    "slug": "default",
+    "version": "1.0.0",
+    "description": "The default Basehim theme - clean, blue, and minimal. Built with Tailwind CSS.",
+    "author": "Basehim Team",
+    "screenshot": "",
+    "supports": ["menus", "featured-image", "post-thumbnails", "custom-logo"],
+    "menu_locations": {
+        "primary": "Primary Menu",
+        "footer": "Footer Menu"
+    },
+    "widget_areas": {
+        "sidebar": {
+            "name": "Sidebar",
+            "description": "Appears alongside posts and pages."
+        },
+        "footer": {
+            "name": "Footer",
+            "description": "Shown in the site footer."
+        }
+    }
+}

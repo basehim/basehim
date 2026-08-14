@@ -1,0 +1,158 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Basehim Block Editor — writing experience
+   Added in 1.42.13. Loads after block-editor.css and only adds to it.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── lists ───────────────────────────────────────────────────────────────────
+   The reported bug. Tailwind's preflight resets `menu, ol, ul` to
+   `list-style: none`, and .nbe-list set padding without putting the markers
+   back — so a list was created correctly and stored correctly, but showed as
+   unmarked lines in the editor. The published page was always right, because
+   the theme's own stylesheet applies there.
+
+   !important is deliberate and load-order independent: preflight ships in the
+   same admin bundle and either file may win depending on how it is cached. */
+ul.nbe-list { list-style: disc !important; }
+ol.nbe-list { list-style: decimal !important; }
+ul.nbe-list, ol.nbe-list {
+  padding-left: 26px !important;
+  margin: 0;
+}
+ul.nbe-list ul, ol.nbe-list ol,
+ul.nbe-list ol, ol.nbe-list ul {
+  /* A nested list gets the second-level marker, as a reader expects. */
+  list-style: circle;
+  padding-left: 22px;
+  margin: 2px 0;
+}
+ol.nbe-list ol { list-style: lower-alpha; }
+.nbe-list li { margin: 1px 0; }
+/* An empty item still needs height, or a fresh list collapses to nothing and
+   looks as though Enter did not work. */
+.nbe-list li:empty::after { content: ''; display: inline-block; min-height: 1.7em; }
+
+/* ── slash menu ──────────────────────────────────────────────────────────── */
+.nbe-slash {
+  position: absolute; z-index: 90;
+  width: 260px; max-height: 320px; overflow-y: auto;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 11px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, .18);
+  padding: 6px;
+}
+.nbe-slash__item {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; cursor: pointer;
+  padding: 8px 10px; border-radius: 7px;
+  font: 500 13px/1.3 system-ui, -apple-system, sans-serif; color: #334155;
+}
+.nbe-slash__item.is-on { background: #eff6ff; color: #2563eb; }
+.nbe-slash__none { padding: 12px 10px; font-size: 12.5px; color: #94a3b8; }
+
+/* ── inline formatting toolbar ───────────────────────────────────────────── */
+.nbe-inline {
+  position: absolute; z-index: 92; display: none;
+  align-items: center; gap: 1px;
+  background: #0f172a; border-radius: 9px; padding: 3px;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, .35);
+}
+.nbe-inline__btn {
+  min-width: 30px; height: 28px; padding: 0 8px;
+  border: 0; background: none; color: #e2e8f0; cursor: pointer;
+  border-radius: 6px; font: 600 13px/1 system-ui, -apple-system, sans-serif;
+}
+.nbe-inline__btn:hover { background: #1e293b; color: #fff; }
+.nbe-inline__btn:active { background: #2563eb; }
+
+/* ── hint ────────────────────────────────────────────────────────────────── */
+.nbe-hint {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+  font-size: 11.5px; color: #94a3b8; line-height: 1.9;
+}
+.nbe-hint kbd {
+  display: inline-block; padding: 1px 5px; margin: 0 1px;
+  background: #f1f5f9; border: 1px solid #e2e8f0; border-bottom-width: 2px;
+  border-radius: 4px; font: 500 10.5px/1.5 ui-monospace, monospace; color: #475569;
+}
+
+/* ── toolbar buttons that can be disabled ────────────────────────────────── */
+/* Undo and redo are the first buttons here that are ever unavailable, so the
+   base stylesheet has no disabled state for them. */
+.nbe-tbtn:disabled { opacity: .35; cursor: not-allowed; }
+.nbe-tbtn:disabled:hover { background: none; color: #475569; }
+
+/* ── writing comfort ─────────────────────────────────────────────────────── */
+/* A comfortable measure. Text set the full width of a wide screen is genuinely
+   harder to read — the eye loses its place returning to the next line. */
+.nbe-canvas { max-width: 820px; margin: 0 auto; width: 100%; }
+.nbe--wide .nbe-canvas { max-width: 900px; }
+
+.nbe-text, .nbe-list, .nbe-quote {
+  /* Long words and pasted URLs must not push the canvas wider than the page. */
+  overflow-wrap: break-word;
+}
+
+/* More room between blocks: the original 4px made a document read as one
+   undifferentiated mass. */
+.nbe-block { margin-bottom: 8px; }
+.nbe-block__body { padding: 10px 14px; }
+
+/* A clearer selected state. The old one-pixel ring was easy to miss, which
+   matters because every inspector setting applies to the selected block. */
+.nbe-block.is-selected {
+  border-color: #93b4fb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+
+/* Headings need visible hierarchy while writing, not only once published. */
+h2.nbe-h { font-size: 28px; line-height: 1.25; letter-spacing: -.01em; }
+h3.nbe-h { font-size: 22px; line-height: 1.3; }
+h4.nbe-h { font-size: 18px; }
+
+/* The placeholder should invite rather than instruct. */
+[data-placeholder]:empty::before { font-style: normal; opacity: .85; }
+
+@media (max-width: 640px) {
+  .nbe-slash { width: calc(100vw - 32px); }
+  .nbe-hint { display: none; }        /* no keyboard to shortcut with */
+  .nbe-inline__btn { min-width: 38px; height: 34px; }
+}
+
+/* ── alignment ───────────────────────────────────────────────────────────────
+   Two things here. The first is the toolbar state; the second is a bug.
+
+   The image block renders `class="align-left|center|right"` on its <figure>,
+   and no stylesheet in core or in any bundled theme defines those classes. So
+   aligning an image did nothing at all — in the editor and on the published
+   page. These rules give them meaning.
+
+   They are scoped loosely on purpose: the same class names are what the server
+   renderer emits, so a theme that later defines its own can override them
+   simply by being more specific. */
+.nbe-bbtn.is-on {
+  background: var(--nbe-accent, #2563eb);
+  color: #fff;
+}
+.nbe-bbtn.is-on:hover { background: #1d4ed8; color: #fff; }
+
+/* Editor-side preview for figures the block itself does not position. */
+.nbe-fig.align-center, figure.align-center { margin-left: auto; margin-right: auto; }
+.nbe-fig.align-left,   figure.align-left   { margin-right: auto; margin-left: 0; }
+.nbe-fig.align-right,  figure.align-right  { margin-left: auto; margin-right: 0; }
+.nbe-fig.align-left, .nbe-fig.align-right,
+figure.align-left, figure.align-right { display: block; width: fit-content; max-width: 100%; }
+.nbe-fig.align-left  img, .nbe-fig.align-right  img { display: block; }
+
+/* Text alignment inside a block body, applied live while editing. */
+.nbe-block__body[style*="text-align"] .nbe-text,
+.nbe-block__body[style*="text-align"] .nbe-h,
+.nbe-block__body[style*="text-align"] .nbe-list,
+.nbe-block__body[style*="text-align"] .nbe-quote { text-align: inherit; }
+
+/* A centred or right-aligned list needs its markers inside, or they sit far
+   from the text they belong to. */
+.nbe-block__body[style*="text-align: center"] .nbe-list,
+.nbe-block__body[style*="text-align: right"] .nbe-list {
+  list-style-position: inside;
+  padding-left: 0 !important;
+}
