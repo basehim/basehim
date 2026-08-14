@@ -102,6 +102,19 @@ class ResolveController extends Controller
         $seoMeta = $seo->forPost((int)$row['id']);
         $template = $row['type'] === 'post' ? 'single' : 'page';
 
+        // Run the body through the `post.content` filter, exactly as
+        // PostController and PageController do.
+        //
+        // This controller serves every bare /{slug} URL and, under the
+        // 'category' permalink structure, every /{cat}/{slug} post URL — which
+        // is most of the site. Skipping the filter meant a post stored in block
+        // format was handed to the theme as raw JSON and printed verbatim. It
+        // went unnoticed because content written through the old editor is
+        // stored as HTML and passes through unchanged either way.
+        /** @var \App\Core\HookRegistry $hooks */
+        $hooks = $this->app->make(\App\Core\HookRegistry::class);
+        $row['content'] = $hooks->applyFilters('post.content', (string)($row['content'] ?? ''), $row);
+
         return $this->renderTheme($template, [
             'post'           => $row,
             'page'           => $row,
