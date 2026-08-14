@@ -16,7 +16,7 @@ Basehim has no build step and no Composer install. You need PHP 8.1+, MySQL 5.7+
 (or MariaDB 10.3+), and Apache with `mod_rewrite`.
 
 ```bash
-git clone https://github.com/<your-username>/basehim.git
+git clone https://github.com/basehim/basehim.git
 cd basehim
 
 cp .env.example .env
