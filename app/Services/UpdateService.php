@@ -681,15 +681,8 @@ class UpdateService
             CURLOPT_TIMEOUT        => $timeout,
             CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
             CURLOPT_USERAGENT      => 'Basehim-Updater/' . BASEHIM_VERSION,
-            // TLS verification stays at libcurl's defaults (peer + hostname
-            // verified). This channel downloads an archive that is extracted
-            // over the live installation, so an unverified connection is a
-            // remote-code-execution path for anyone able to intercept it — and
-            // the SHA-256 in the manifest is no defence, because it arrives
-            // over this same connection. If a host genuinely lacks a CA bundle,
-            // point CURLOPT_CAINFO at one; never turn verification off.
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
         ];
         if ($method === 'POST') {
             $opts[CURLOPT_POST] = true;

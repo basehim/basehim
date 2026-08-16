@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: PHP ${{ matrix.php }} syntax
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.1 is the documented floor; the rest catch forward-compat breakage.
+        php: ['8.1', '8.2', '8.3', '8.4']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, mbstring, fileinfo, gd, zip, simplexml, curl
+          coverage: none
+
+      - name: Lint every PHP file
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            if ! php -l "$file" > /dev/null 2>&1; then
+              echo "::error file=$file::Syntax error"
+              php -l "$file" || true
+              status=1
+            fi
+          done < <(find . -type f -name '*.php' -not -path './vendor/*' -print0)
+          exit $status
+
+      - name: Verify required extensions are loadable
+        run: php -m
+
+  schema:
+    name: Migrations apply cleanly
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: basehim_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply migrations in order
+        run: |
+          for f in $(ls database/migrations/*.sql | sort); do
+            echo "--> $f"
+            mysql -h 127.0.0.1 -P 3306 -uroot -proot basehim_ci < "$f"
+          done
+
+      - name: Show resulting schema
+        run: mysql -h 127.0.0.1 -P 3306 -uroot -proot -e 'SHOW TABLES;' basehim_ci
+
+  secrets:
+    name: No secrets committed
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if a .env was committed
+        run: |
+          if git ls-files --error-unmatch .env > /dev/null 2>&1; then
+            echo "::error::.env is tracked by git. Remove it and rotate every credential it contained."
+            exit 1
+          fi
+          leaked=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$' || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::Environment files are tracked: $leaked"
+            exit 1
+          fi
+          echo "No environment files tracked."
+
+      - name: Scan for hardcoded credentials
+        run: |
+          if grep -rInE "(JWT_SECRET|APP_KEY|DB_PASSWORD)\s*=\s*['\"]?[A-Za-z0-9!@#%^&*_()+-]{12,}" \
+               --include='*.php' --include='*.js' --include='*.json' . \
+               | grep -viE 'example|placeholder|please-change|your-|change-this'; then
+            echo "::error::Possible hardcoded credential found above."
+            exit 1
+          fi
+          echo "No hardcoded credentials found."

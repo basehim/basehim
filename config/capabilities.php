@@ -25,13 +25,6 @@ return [
             'delete_pages', 'delete_others_pages',
             'upload_media', 'delete_media',
             'read', 'read_private_meta',
-            // Publish markup without sanitization (script tags, embeds, custom
-            // attributes). Deliberately NOT granted to editor and below: those
-            // roles can still author content, it is just passed through the
-            // allowlist sanitizer on output. Grant this only to accounts you
-            // would also trust with the server, because in practice it is
-            // equivalent — raw markup runs in every visitor's browser.
-            'unfiltered_html',
         ],
 
         'editor' => [

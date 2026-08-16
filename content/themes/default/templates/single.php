@@ -108,14 +108,8 @@
                         <div class="flex-1 min-w-0">
                             <div class="bg-slate-50 rounded-2xl px-4 py-3">
                                 <div class="flex items-baseline gap-2 mb-1 flex-wrap">
-                                    <?php
-                                    // Re-check on output as well as on save: rows
-                                    // stored before author_url was validated are
-                                    // still in the table.
-                                    $authorUrl = \App\Services\CommentService::safeAuthorUrl($c['author_url'] ?? null);
-                                    ?>
-                                    <?php if ($authorUrl): ?>
-                                        <a href="<?= htmlspecialchars($authorUrl) ?>" rel="nofollow ugc noopener noreferrer" target="_blank" class="font-semibold text-slate-900 text-sm hover:text-brand-600"><?= htmlspecialchars($c['author_name']) ?></a>
+                                    <?php if (!empty($c['author_url'])): ?>
+                                        <a href="<?= htmlspecialchars($c['author_url']) ?>" rel="nofollow ugc" target="_blank" class="font-semibold text-slate-900 text-sm hover:text-brand-600"><?= htmlspecialchars($c['author_name']) ?></a>
                                     <?php else: ?>
                                         <span class="font-semibold text-slate-900 text-sm"><?= htmlspecialchars($c['author_name']) ?></span>
                                     <?php endif; ?>

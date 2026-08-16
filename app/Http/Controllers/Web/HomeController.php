@@ -27,6 +27,13 @@ class HomeController extends Controller
             if ($slug) {
                 $page = $posts->findBySlug($slug);
                 if ($page && $page['type'] === 'page' && $page['status'] === 'published') {
+                    // A static homepage renders a full page body, so it needs the
+                    // same filter the other single-body routes apply. The post
+                    // feed below does not: those are excerpts in a list.
+                    /** @var \App\Core\HookRegistry $hooks */
+                    $hooks = $this->app->make(\App\Core\HookRegistry::class);
+                    $page['content'] = $hooks->applyFilters('post.content', (string) ($page['content'] ?? ''), $page);
+
                     return $this->renderTheme('page', [
                         'post' => $page,
                         'page' => $page,

@@ -1,0 +1,13 @@
+{
+    "name": "Dark Night",
+    "slug": "dark-night",
+    "version": "1.0.0",
+    "description": "A deep-midnight theme with moon-gold accents, a starfield hero, and serif article typography. Easy on the eyes, elegant after dark.",
+    "author": "Circuits-DIY",
+    "screenshot": "",
+    "supports": ["menus", "featured-image", "post-thumbnails", "custom-logo"],
+    "menu_locations": {
+        "primary": "Primary Menu",
+        "footer": "Footer Menu"
+    }
+}

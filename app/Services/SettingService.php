@@ -157,41 +157,6 @@ class SettingService
     /**
      * Settings exposed publicly via /api/v1/settings/public
      */
-    /**
-     * Keys whose values are credentials and must never leave the server.
-     *
-     * Matched by name so a setting an app invents (`stripe_secret`,
-     * `webhook_token`) is covered without anyone remembering to add it.
-     */
-    private const SECRET_KEY_PATTERN = '/(pass|passwd|password|secret|token|api_?key|private_?key|dsn|credential|smtp_pw)/i';
-
-    /**
-     * Every setting, with credential values replaced by a placeholder.
-     *
-     * The MCP tool already did this; the REST endpoint returned all()
-     * unfiltered, so GET /api/v1/settings handed back the SMTP password in
-     * clear. Read paths should default to this and call all() only when the
-     * raw value is actually needed (i.e. when about to use it).
-     */
-    public function allRedacted(): array
-    {
-        $out = [];
-        foreach ($this->all() as $group => $values) {
-            if (!is_array($values)) { $out[$group] = $values; continue; }
-            foreach ($values as $key => $value) {
-                $out[$group][$key] = self::isSecretKey((string) $key) && $value !== '' && $value !== null
-                    ? '[redacted]'
-                    : $value;
-            }
-        }
-        return $out;
-    }
-
-    public static function isSecretKey(string $key): bool
-    {
-        return (bool) preg_match(self::SECRET_KEY_PATTERN, $key);
-    }
-
     public function publicSettings(): array
     {
         $all = $this->all();

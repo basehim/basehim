@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/basehim/basehim/discussions
+    about: Ask about installing, configuring, or building on Basehim.
+  - name: Security vulnerability
+    url: https://github.com/basehim/basehim/security/advisories/new
+    about: Report privately. Please do not open a public issue.

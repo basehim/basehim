@@ -27,24 +27,6 @@ final class Authenticate
 {
     public function __construct(private string $guard = 'web') {}
 
-    /**
-     * Is this request under /api/?
-     *
-     * The install base has to come off first — on a subdirectory install the
-     * path is '/basehim/api/v1/posts', and a bare str_starts_with('/api/')
-     * check silently answers no, which would hand API routes back their cookie
-     * authentication on exactly the installs least likely to be tested.
-     */
-    private static function isApiPath(Request $request): bool
-    {
-        $path = $request->path();
-        $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
-        if ($base !== '' && str_starts_with($path, $base)) {
-            $path = substr($path, strlen($base)) ?: '/';
-        }
-        return str_starts_with($path, '/api/');
-    }
-
     public function handle(Request $request, Closure $next): mixed
     {
         $app = Application::getInstance();
@@ -78,9 +60,8 @@ final class Authenticate
 
             // 2. Try as a JWT token
             if (!$user) {
-                $cfg = $app->make(Config::class);
-                $secret = $cfg->get('auth.jwt.secret');
-                $payload = Jwt::decode($token, $secret, (string) $cfg->get('auth.jwt.algorithm', 'HS256'));
+                $secret = $app->make(Config::class)->get('auth.jwt.secret');
+                $payload = Jwt::decode($token, $secret);
                 if ($payload && isset($payload['sub'])) {
                     $repo = $app->make(UserRepository::class);
                     $user = $repo->find((int) $payload['sub']);
@@ -88,18 +69,8 @@ final class Authenticate
             }
         }
 
-        // Cookie-based auth is for the browser admin panel only.
-        //
-        // The API used to accept $_SESSION too, which meant every /api/v1 route
-        // carried ambient authority from an admin's browser cookie while having
-        // no CSRF token requirement of its own. Any page the admin visited could
-        // then drive the API as them. Bearer credentials are explicit and are
-        // never attached by the browser automatically, so the API takes those
-        // only.
-        $cookieAuthAllowed = $guard !== 'api' && !self::isApiPath($request);
-
         // Try session next (admin)
-        if (!$user && $cookieAuthAllowed) {
+        if (!$user) {
             $session = $app->make(Session::class);
             $uid = $session->get('user_id');
             if ($uid) {
@@ -110,7 +81,7 @@ final class Authenticate
 
         // Try a "remember me" cookie last — if valid, restore the session so
         // the user stays logged in across browser restarts.
-        if (!$user && $cookieAuthAllowed) {
+        if (!$user) {
             // Read the current cookie, falling back to the pre-rename name so an
             // upgrade from Basehim doesn't sign everyone out.
             $cookie = (string) ($_COOKIE[\App\Services\AuthSecurityService::REMEMBER_COOKIE] ?? '');
@@ -138,7 +109,7 @@ final class Authenticate
         }
 
         if (!$user || ($user['status'] ?? 'inactive') !== 'active') {
-            if ($guard === 'api' || self::isApiPath($request)) {
+            if ($guard === 'api' || str_starts_with($request->path(), '/api/')) {
                 return Response::json([
                     'type' => 'https://basehim.io/errors/unauthorized',
                     'title' => 'Unauthorized',

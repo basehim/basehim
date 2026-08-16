@@ -1,0 +1,2 @@
+This directory is a placeholder.
+All API requests are routed via /index.php and handled by App\Http\Controllers\Api\* (see routes/api.php).

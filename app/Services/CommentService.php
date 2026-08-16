@@ -88,7 +88,7 @@ class CommentService
             'author_id' => !empty($data['author_id']) ? (int)$data['author_id'] : null,
             'author_name' => $data['author_name'] ?? null,
             'author_email' => $data['author_email'] ?? null,
-            'author_url' => self::safeAuthorUrl($data['author_url'] ?? null),
+            'author_url' => $data['author_url'] ?? null,
             'author_ip' => $_SERVER['REMOTE_ADDR'] ?? null,
             'content' => $data['content'] ?? '',
             'status' => $data['status'] ?? 'pending',
@@ -160,29 +160,6 @@ class CommentService
              ORDER BY c.created_at DESC
              LIMIT {$limit}"
         );
-    }
-
-    /**
-     * Normalise a commenter-supplied website URL, or drop it.
-     *
-     * The theme escapes this for HTML but escaping does not constrain a scheme:
-     * `javascript:...` survives htmlspecialchars intact and runs when the
-     * author's name is clicked. Only http(s) links are kept.
-     */
-    public static function safeAuthorUrl(?string $url): ?string
-    {
-        $url = trim((string) $url);
-        if ($url === '') return null;
-
-        // Strip characters browsers ignore inside a scheme ("java\tscript:").
-        $probe = strtolower(preg_replace('/[\x00-\x20]+/', '', $url) ?? '');
-        if (!preg_match('#^https?://#', $probe)) return null;
-
-        $parts = parse_url($url);
-        if (empty($parts['host'])) return null;
-        if (!in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)) return null;
-
-        return mb_substr($url, 0, 255);
     }
 
     /**

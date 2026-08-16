@@ -99,21 +99,25 @@ class ResolveController extends Controller
     {
         /** @var SeoService $seo */
         $seo     = $this->app->make(SeoService::class);
-        $seoMeta = $seo->forPost((int)$row['id']);
-        $template = $row['type'] === 'post' ? 'single' : 'page';
 
-        // Run the body through the `post.content` filter, exactly as
-        // PostController and PageController do.
-        //
-        // This controller serves every bare /{slug} URL and, under the
-        // 'category' permalink structure, every /{cat}/{slug} post URL — which
-        // is most of the site. Skipping the filter meant a post stored in block
-        // format was handed to the theme as raw JSON and printed verbatim. It
-        // went unnoticed because content written through the old editor is
-        // stored as HTML and passes through unchanged either way.
+        /*
+         * Run the body through the `post.content` filter, as PostController and
+         * PageController already do.
+         *
+         * This controller serves /{slug} and /{cat}/{slug} — the pretty
+         * permalinks most posts actually use — so an app filtering post.content
+         * worked on /posts/{slug} and silently did nothing on the canonical URL
+         * of the same post. An ad-insertion app shipped an entire output-buffer
+         * fallback to work around it: buffering the whole page, re-querying the
+         * post by slug, and substituting the body by string search. That is the
+         * kind of workaround a missing filter call invites, and it only ever
+         * worked for HTML-format content on the stock theme.
+         */
         /** @var \App\Core\HookRegistry $hooks */
         $hooks = $this->app->make(\App\Core\HookRegistry::class);
-        $row['content'] = $hooks->applyFilters('post.content', (string)($row['content'] ?? ''), $row);
+        $row['content'] = $hooks->applyFilters('post.content', (string) ($row['content'] ?? ''), $row);
+        $seoMeta = $seo->forPost((int)$row['id']);
+        $template = $row['type'] === 'post' ? 'single' : 'page';
 
         return $this->renderTheme($template, [
             'post'           => $row,

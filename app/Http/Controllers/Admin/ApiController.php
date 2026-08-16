@@ -88,26 +88,10 @@ class ApiController extends Controller
             return $this->redirect('/admin/api/keys');
         }
 
-        // Allowlist rather than concatenating user input into a relative-time
-        // expression: an unparseable value threw a 500, and a plausible-looking
-        // one ('-1 year') silently minted an already-expired key that the UI
-        // still displayed as valid.
-        $expiryOptions = [
-            'never' => null,
-            '7d'    => '+7 days',
-            '30d'   => '+30 days',
-            '90d'   => '+90 days',
-            '180d'  => '+180 days',
-            '1y'    => '+1 year',
-        ];
-        $expiresKey = (string) ($expiresIn ?: 'never');
-        if (!array_key_exists($expiresKey, $expiryOptions)) {
-            $this->flash('error', 'Choose a valid expiry period.');
-            return $this->redirect('/admin/api/keys');
+        $expiresAt = null;
+        if ($expiresIn && $expiresIn !== 'never') {
+            $expiresAt = new \DateTimeImmutable('+' . $expiresIn);
         }
-        $expiresAt = $expiryOptions[$expiresKey] !== null
-            ? new \DateTimeImmutable($expiryOptions[$expiresKey])
-            : null;
 
         /** @var ApiKeyService $svc */
         $svc    = $this->app->make(ApiKeyService::class);

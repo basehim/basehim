@@ -172,16 +172,7 @@ class BlockRenderer
             default:
                 // Unknown type (app block with no server renderer active):
                 // fall back to client-provided html, else leave a marker.
-                //
-                // That html comes from the stored document, so it is author
-                // input and cannot be echoed as-is — this branch was a raw sink
-                // that bypassed every other check in this class. The outer
-                // post.content filter sanitizes again for non-privileged
-                // authors; this call means the block path is safe on its own
-                // terms even when an app calls render() directly.
-                if (!empty($d['html'])) {
-                    return \App\Services\HtmlSanitizer::clean((string)$d['html']);
-                }
+                if (!empty($d['html'])) return (string)$d['html'];
                 return '<!-- bh-block:' . $esc($type) . ' (no renderer) -->';
         }
     }

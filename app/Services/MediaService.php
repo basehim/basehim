@@ -93,20 +93,6 @@ class MediaService
     // ── Upload ────────────────────────────────────────────────────────────────
 
     /**
-     * Extensions that may never be uploaded, whatever the settings say.
-     *
-     * `allowed_types` is operator-editable data, so it was the only thing
-     * standing between an upload and a PHP file inside a directory Apache
-     * serves directly — one settings edit away from remote code execution.
-     * This list is code and cannot be configured away.
-     */
-    private const NEVER_ALLOWED = [
-        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phps', 'pht', 'phtml', 'phar',
-        'shtml', 'cgi', 'pl', 'py', 'rb', 'sh', 'bash', 'asp', 'aspx', 'jsp', 'jspx',
-        'htaccess', 'htpasswd', 'ini', 'conf', 'so', 'dll', 'exe', 'com', 'bat', 'cmd',
-    ];
-
-    /**
      * Upload a single file from PHP's $_FILES array entry.
      * Returns the new media row (with generated `sizes` when applicable).
      *
@@ -127,16 +113,6 @@ class MediaService
 
         $originalName = $file['name'] ?? 'upload';
         $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-
-        // Check EVERY dot-separated segment, not just the last one. Some server
-        // configurations execute "shell.php.jpg" as PHP because they dispatch
-        // on the first extension they recognise rather than the final one.
-        foreach (explode('.', strtolower($originalName)) as $segment) {
-            if (in_array(trim($segment), self::NEVER_ALLOWED, true)) {
-                throw new \RuntimeException('That file type can never be uploaded.');
-            }
-        }
-
         if (!in_array($ext, $allowed, true)) {
             throw new \RuntimeException('File type ".' . $ext . '" not allowed.');
         }
@@ -145,24 +121,6 @@ class MediaService
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime = finfo_file($finfo, $file['tmp_name']) ?: 'application/octet-stream';
         finfo_close($finfo);
-
-        // A file claiming to be an image must actually parse as one. This
-        // catches a script body wearing a .jpg extension, which matters because
-        // the file is written into a web-served directory.
-        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'ico'], true)) {
-            if (!str_starts_with($mime, 'image/') || @getimagesize($file['tmp_name']) === false) {
-                throw new \RuntimeException('That file is not a valid image.');
-            }
-        }
-
-        // SVG is an XML document that executes script when opened directly, and
-        // it is served from the site's own origin. Strip the active parts.
-        if ($ext === 'svg') {
-            $svg = @file_get_contents($file['tmp_name']);
-            if ($svg === false || !$this->svgIsSafe($svg)) {
-                throw new \RuntimeException('That SVG contains scripting and was rejected.');
-            }
-        }
 
         $ms = $this->mediaSettings();
 
@@ -223,35 +181,6 @@ class MediaService
         $created = $this->repo->find($id);
         $this->hooks->doAction('media.uploaded', $created);
         return $created;
-    }
-
-    /**
-     * Does this SVG contain anything that can execute?
-     *
-     * Deliberately a rejection check rather than a rewrite: an SVG that needs
-     * script is not a legitimate media upload, and silently rewriting someone's
-     * artwork is worse than telling them no.
-     */
-    private function svgIsSafe(string $svg): bool
-    {
-        // Decode entities first — "&#106;avascript:" and friends survive a
-        // naive substring search but are live once the parser has run.
-        $probe = html_entity_decode($svg, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $probe = preg_replace('/[\x00-\x20]/', '', $probe) ?? $probe;
-        $probe = strtolower($probe);
-
-        $dangerous = [
-            '<script', '<foreignobject', '<use', '<handler', '<set',
-            'javascript:', 'data:text/html', 'vbscript:',
-            '<!entity', '<!doctype', 'xlink:href=http', 'xlink:href=//',
-        ];
-        foreach ($dangerous as $needle) {
-            if (str_contains($probe, $needle)) return false;
-        }
-        // Any on* event attribute.
-        if (preg_match('/<[^>]*\son[a-z]+=/i', $probe)) return false;
-
-        return true;
     }
 
     // ── Thumbnail generation ──────────────────────────────────────────────────

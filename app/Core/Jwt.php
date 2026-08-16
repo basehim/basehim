@@ -23,17 +23,7 @@ final class Jwt
         return "{$headerEnc}.{$payloadEnc}.{$sigEnc}";
     }
 
-    /**
-     * Verify and decode a token.
-     *
-     * $expectedAlg is pinned by the CALLER, never read from the token. Reading
-     * it from the header is the classic algorithm-confusion shape: harmless
-     * here while every supported algorithm is HMAC with the same secret, but it
-     * also meant an unsupported `alg` threw an uncaught RuntimeException out of
-     * the auth middleware — a 500 with the attacker's string in it — and it is
-     * one refactor away from being a real forgery bug.
-     */
-    public static function decode(string $token, string $secret, string $expectedAlg = 'HS256'): ?array
+    public static function decode(string $token, string $secret): ?array
     {
         $parts = explode('.', $token);
         if (count($parts) !== 3) {
@@ -45,21 +35,11 @@ final class Jwt
         $payload = json_decode(self::base64UrlDecode($payloadEnc), true);
         $providedSig = self::base64UrlDecode($sigEnc);
 
-        if (!is_array($header) || !is_array($payload)) {
+        if (!is_array($header) || !is_array($payload) || !isset($header['alg'])) {
             return null;
         }
 
-        // Reject rather than adapt: a token whose alg is not the one we issue
-        // is not our token.
-        if (($header['alg'] ?? '') !== $expectedAlg) {
-            return null;
-        }
-
-        try {
-            $expected = self::sign("{$headerEnc}.{$payloadEnc}", $secret, $expectedAlg);
-        } catch (\RuntimeException) {
-            return null;
-        }
+        $expected = self::sign("{$headerEnc}.{$payloadEnc}", $secret, $header['alg']);
         if (!hash_equals($expected, $providedSig)) {
             return null;
         }

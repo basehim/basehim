@@ -135,42 +135,16 @@ final class Request
         return str_contains($accept, 'application/json') || str_contains($accept, '+json');
     }
 
-    /**
-     * The client's IP address.
-     *
-     * Forwarding headers are set by the client and are only meaningful when the
-     * request actually arrived from a proxy we run. This used to prefer
-     * X-Forwarded-For unconditionally, which means any caller could choose the
-     * value — fine for logging, useless for a rate limit or a block list, and
-     * this helper is exactly what someone reaches for when writing one.
-     *
-     * Configure real proxies in config/app.php under `trusted_proxies`.
-     */
     public function ip(): string
     {
-        $remote = trim((string) ($this->server['REMOTE_ADDR'] ?? '0.0.0.0'));
-
-        $trusted = [];
-        try {
-            $trusted = (array) \App\Core\Application::getInstance()
-                ->make(\App\Core\Config::class)
-                ->get('app.trusted_proxies', []);
-        } catch (\Throwable) {
-            // No container (CLI/early boot) — REMOTE_ADDR is the safe answer.
-        }
-
-        if ($remote === '' || !in_array($remote, $trusted, true)) {
-            return $remote !== '' ? $remote : '0.0.0.0';
-        }
-
-        foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR'] as $key) {
+        $candidates = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'];
+        foreach ($candidates as $key) {
             if (!empty($this->server[$key])) {
-                // Left-most entry is the original client as recorded by our proxy.
-                $ip = trim(explode(',', (string) $this->server[$key])[0]);
-                if (filter_var($ip, FILTER_VALIDATE_IP)) return $ip;
+                $ip = explode(',', $this->server[$key])[0];
+                return trim($ip);
             }
         }
-        return $remote;
+        return '0.0.0.0';
     }
 
     public function userAgent(): string

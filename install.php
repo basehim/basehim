@@ -20,7 +20,7 @@ declare(strict_types=1);
 // App\Core\BASEHIM_ROOT" — PHP resolves an unknown bare constant against the
 // current namespace before giving up.
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.0.2');
+define('BASEHIM_VERSION', '1.0.3');
 define('BASEHIM_INSTALLING', true);
 
 
@@ -43,54 +43,6 @@ if (is_file($envFile)) {
     if (\App\Core\Env::get('INSTALLED') === 'true') {
         header('Location: ' . (BASEHIM_BASE ?: '/'));
         exit;
-    }
-}
-
-/*
- * Second guard: a working install locks the installer even without the flag.
- *
- * The INSTALLED flag was the only thing standing here, and .env.example never
- * shipped with it — so anyone who wrote .env by hand (a deploy script, a host
- * migration, following the README's DB section) had a live site with a fully
- * functional installer on it. Re-running it lets an attacker point the site at
- * their own database, rotate JWT_SECRET and create an administrator.
- *
- * So: if we can connect and there is already a populated users table, this is
- * an installed site. Refuse regardless of what the flag says.
- */
-if (is_file($envFile) && \App\Core\Env::get('DB_DATABASE', '') !== '') {
-    try {
-        $checkDsn = sprintf(
-            'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-            \App\Core\Env::get('DB_HOST', '127.0.0.1'),
-            \App\Core\Env::get('DB_PORT', '3306'),
-            \App\Core\Env::get('DB_DATABASE', '')
-        );
-        $checkPdo = new PDO(
-            $checkDsn,
-            \App\Core\Env::get('DB_USERNAME', ''),
-            \App\Core\Env::get('DB_PASSWORD', ''),
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 5]
-        );
-        $prefix = (string) \App\Core\Env::get('DB_PREFIX', '');
-        $userCount = (int) $checkPdo->query('SELECT COUNT(*) FROM `' . $prefix . 'users`')->fetchColumn();
-        if ($userCount > 0) {
-            http_response_code(403);
-            echo '<!doctype html><meta charset="utf-8"><title>Already installed</title>'
-               . '<div style="font-family:system-ui,sans-serif;max-width:34rem;margin:15vh auto;padding:2rem;'
-               . 'border:1px solid #e2e8f0;border-radius:14px;">'
-               . '<h1 style="font-size:1.15rem;margin:0 0 .6rem;">Basehim is already installed</h1>'
-               . '<p style="color:#475569;font-size:.9rem;line-height:1.6;margin:0 0 1rem;">'
-               . 'This site has a database with existing accounts, so the installer will not run. '
-               . '<strong>Delete <code>install.php</code> from the server</strong> — leaving it in place '
-               . 'is a security risk.</p>'
-               . '<a href="' . htmlspecialchars(BASEHIM_BASE ?: '/', ENT_QUOTES) . '" '
-               . 'style="color:#2563eb;font-size:.9rem;">Go to the site</a></div>';
-            exit;
-        }
-    } catch (\Throwable) {
-        // Cannot connect, or no users table yet — a genuinely fresh install.
-        // Fall through and let the wizard run.
     }
 }
 
@@ -345,9 +297,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Write .env
                 $jwtSecret = bin2hex(random_bytes(32));
                 $appKey = bin2hex(random_bytes(16));
-                // Carry the prefix through: omitting it pointed a prefixed
-                // install at tables that do not exist on the next boot.
-                $dbPrefix = (string) ($cfg['DB_PREFIX'] ?? '');
 
                 $envContent = <<<ENV
 APP_NAME="{$cfg['SITE_TITLE']}"
@@ -366,7 +315,6 @@ DB_USERNAME={$cfg['DB_USERNAME']}
 DB_PASSWORD="{$cfg['DB_PASSWORD']}"
 DB_CHARSET=utf8mb4
 DB_COLLATION=utf8mb4_unicode_ci
-DB_PREFIX={$dbPrefix}
 
 JWT_SECRET={$jwtSecret}
 

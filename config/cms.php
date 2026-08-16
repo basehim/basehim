@@ -9,14 +9,6 @@ return [
 
     'posts_per_page' => 10,
 
-    // Cross-origin browser clients that may send credentials to the API.
-    // Exact origin match including scheme, e.g. 'https://app.example.com'.
-    // Leave empty unless a browser app on another domain needs cookie-based
-    // access — token clients (Authorization: Bearer) do not need to be listed.
-    'cors' => [
-        'origins' => [],
-    ],
-
     'permalinks' => [
         'post' => '/posts/:slug',
         'page' => '/:slug',

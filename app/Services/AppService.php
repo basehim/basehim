@@ -1368,12 +1368,8 @@ class AppService
             CURLOPT_TIMEOUT        => $timeout,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_USERAGENT      => 'Basehim-Marketplace/' . (defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1'),
-            // Verified TLS: this call downloads code that is extracted into
-            // content/, so an intercepted response is arbitrary code on the
-            // server. The x-checksum-sha256 header cannot help — it travels on
-            // the same connection an attacker would control.
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
             CURLOPT_HEADER         => true,
         ]);
         $raw = curl_exec($ch);

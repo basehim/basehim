@@ -127,7 +127,7 @@ final class McpOAuthService
         $this->ready = true;
         try {
             $this->db->execute(
-                'CREATE TABLE IF NOT EXISTS {mcp_oauth_clients} (
+                'CREATE TABLE IF NOT EXISTS `mcp_oauth_clients` (
                     `id`             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                     `client_id`      VARCHAR(64) NOT NULL,
                     `secret_hash`    VARCHAR(255) NULL,
@@ -139,7 +139,7 @@ final class McpOAuthService
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
             );
             $this->db->execute(
-                'CREATE TABLE IF NOT EXISTS {mcp_oauth_codes} (
+                'CREATE TABLE IF NOT EXISTS `mcp_oauth_codes` (
                     `id`             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                     `code_hash`      CHAR(64) NOT NULL,
                     `client_id`      VARCHAR(64) NOT NULL,
@@ -154,7 +154,7 @@ final class McpOAuthService
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
             );
             $this->db->execute(
-                'CREATE TABLE IF NOT EXISTS {mcp_oauth_tokens} (
+                'CREATE TABLE IF NOT EXISTS `mcp_oauth_tokens` (
                     `id`             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                     `access_hash`    CHAR(64) NOT NULL,
                     `refresh_hash`   CHAR(64) NULL,
@@ -278,7 +278,7 @@ final class McpOAuthService
     public function findClient(string $clientId): ?array
     {
         $this->ensureSchema();
-        $row = $this->db->selectOne('SELECT * FROM {mcp_oauth_clients} WHERE client_id = :c', ['c' => $clientId]);
+        $row = $this->db->selectOne('SELECT * FROM mcp_oauth_clients WHERE client_id = :c', ['c' => $clientId]);
         if (!$row) return null;
         $row['redirect_uris'] = json_decode((string) $row['redirect_uris'], true) ?: [];
         return $row;
@@ -330,7 +330,7 @@ final class McpOAuthService
     {
         $this->ensureSchema();
         $hash = hash('sha256', $code);
-        $row = $this->db->selectOne('SELECT * FROM {mcp_oauth_codes} WHERE code_hash = :h', ['h' => $hash]);
+        $row = $this->db->selectOne('SELECT * FROM mcp_oauth_codes WHERE code_hash = :h', ['h' => $hash]);
         if (!$row) throw new \RuntimeException('invalid_grant');
 
         // Always burn the code, even if the rest fails — codes are single-use.
@@ -404,7 +404,7 @@ final class McpOAuthService
     {
         $this->ensureSchema();
         $row = $this->db->selectOne(
-            'SELECT * FROM {mcp_oauth_tokens} WHERE refresh_hash = :h', ['h' => hash('sha256', $refreshToken)]
+            'SELECT * FROM mcp_oauth_tokens WHERE refresh_hash = :h', ['h' => hash('sha256', $refreshToken)]
         );
         if (!$row) throw new \RuntimeException('invalid_grant');
         if (!hash_equals((string) $row['client_id'], $clientId)) throw new \RuntimeException('invalid_grant');
@@ -451,7 +451,7 @@ final class McpOAuthService
         if (!str_starts_with($token, self::TOKEN_PREFIX)) return null;
         $this->ensureSchema();
         $row = $this->db->selectOne(
-            'SELECT * FROM {mcp_oauth_tokens} WHERE access_hash = :h', ['h' => hash('sha256', $token)]
+            'SELECT * FROM mcp_oauth_tokens WHERE access_hash = :h', ['h' => hash('sha256', $token)]
         );
         if (!$row) return null;
         if (strtotime((string) $row['expires_at']) <= time()) return null;
@@ -473,8 +473,8 @@ final class McpOAuthService
         $this->ensureSchema();
         $now = date('Y-m-d H:i:s');
         try {
-            $this->db->execute('DELETE FROM {mcp_oauth_codes} WHERE expires_at < :n', ['n' => $now]);
-            $this->db->execute('DELETE FROM {mcp_oauth_tokens} WHERE refresh_expires_at IS NOT NULL AND refresh_expires_at < :n', ['n' => $now]);
+            $this->db->execute('DELETE FROM mcp_oauth_codes WHERE expires_at < :n', ['n' => $now]);
+            $this->db->execute('DELETE FROM mcp_oauth_tokens WHERE refresh_expires_at IS NOT NULL AND refresh_expires_at < :n', ['n' => $now]);
         } catch (\Throwable) {}
     }
 

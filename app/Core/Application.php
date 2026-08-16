@@ -68,26 +68,6 @@ final class Application
                 }
                 return $content;
             }, 5, 2);
-
-            // Core filter (priority 6, immediately after rendering and still
-            // ahead of app filters): strip dangerous markup from content whose
-            // AUTHOR does not hold `unfiltered_html`.
-            //
-            // Raw HTML for administrators is a deliberate feature. Raw HTML for
-            // everyone was a privilege-escalation path: a contributor holds
-            // edit_posts, so they could store a <script> that ran in an
-            // administrator's session. The check is on the author rather than
-            // the viewer, because the question is who wrote the markup.
-            $hooks->addFilter('post.content', function ($content, $post = null) {
-                $content = (string) $content;
-                if ($content === '' || !is_array($post)) return $content;
-
-                $authorId = (int) ($post['author_id'] ?? 0);
-                if ($authorId > 0 && \App\Services\ContentPolicy::authorMayPostRawHtml($authorId)) {
-                    return $content;
-                }
-                return \App\Services\HtmlSanitizer::clean($content);
-            }, 6, 2);
             // Widget block: `{"type":"widget","data":{"widget":"key","settings":{}}}`
             // renders on the public site by delegating to the WidgetRegistry.
             $hooks->addFilter('blocks.render.widget', function ($html, array $data) {

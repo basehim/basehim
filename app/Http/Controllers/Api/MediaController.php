@@ -6,19 +6,14 @@ namespace App\Http\Controllers\Api;
 use App\Core\Config;
 use App\Core\Request;
 use App\Core\Response;
-use App\Http\Middleware\CheckCapability;
 use App\Services\MediaService;
 
 class MediaController extends ApiController
 {
-    use AuthorizesContent;
-
     public function index(Request $request): Response
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
-        if ($denied = $this->requireScope('media:read')) return $denied;
-        if (!CheckCapability::userCan($user, 'upload_media')) return $this->forbidden('upload_media');
 
         /** @var MediaService $media */
         $media = $this->app->make(MediaService::class);
@@ -33,8 +28,6 @@ class MediaController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
-        if ($denied = $this->requireScope('media:write')) return $denied;
-        if (!CheckCapability::userCan($user, 'upload_media')) return $this->forbidden('upload_media');
         if (empty($_FILES['file'])) return Response::json(['error' => 'No file'], 422);
 
         /** @var MediaService $media */
@@ -64,19 +57,10 @@ class MediaController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
-        if ($denied = $this->requireScope('media:write')) return $denied;
 
         /** @var MediaService $media */
         $media = $this->app->make(MediaService::class);
-        $item = $media->find((int)$id);
-        if (!$item) return Response::json(['error' => 'Not found'], 404);
-
-        // Uploaders may remove their own files; removing someone else's needs
-        // the site-wide delete_media capability.
-        $own = (int)($item['author_id'] ?? 0) === (int)$user['id'];
-        $cap = $own ? 'upload_media' : 'delete_media';
-        if (!CheckCapability::userCan($user, $cap)) return $this->forbidden($cap);
-
+        if (!$media->find((int)$id)) return Response::json(['error' => 'Not found'], 404);
         $media->delete((int)$id);
         return Response::json(['message' => 'Deleted']);
     }
@@ -92,16 +76,11 @@ class MediaController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
-        if ($denied = $this->requireScope('media:write')) return $denied;
 
         /** @var MediaService $media */
         $media = $this->app->make(MediaService::class);
         $item = $media->find((int) $id);
         if (!$item) return Response::json(['error' => 'Not found'], 404);
-
-        $own = (int)($item['author_id'] ?? 0) === (int)$user['id'];
-        $cap = $own ? 'upload_media' : 'delete_media';
-        if (!CheckCapability::userCan($user, $cap)) return $this->forbidden($cap);
 
         $data = [];
         foreach (['title', 'alt_text', 'caption', 'description'] as $field) {

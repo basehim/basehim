@@ -4,14 +4,11 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Core\Request;
-use App\Http\Middleware\CheckCapability;
 use App\Core\Response;
 use App\Services\TaxonomyService;
 
 class TaxonomyController extends ApiController
 {
-    use AuthorizesContent;
-
     public function taxonomies(Request $request): Response
     {
         /** @var TaxonomyService $tax */
@@ -33,8 +30,6 @@ class TaxonomyController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
-        if ($denied = $this->requireScope('taxonomies:write')) return $denied;
-        if (!CheckCapability::userCan($user, 'manage_taxonomies')) return $this->forbidden('manage_taxonomies');
 
         /** @var TaxonomyService $tax */
         $taxSvc = $this->app->make(TaxonomyService::class);
@@ -52,8 +47,6 @@ class TaxonomyController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
-        if ($denied = $this->requireScope('taxonomies:write')) return $denied;
-        if (!CheckCapability::userCan($user, 'manage_taxonomies')) return $this->forbidden('manage_taxonomies');
 
         /** @var TaxonomyService $tax */
         $taxSvc = $this->app->make(TaxonomyService::class);
@@ -73,8 +66,6 @@ class TaxonomyController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
-        if ($denied = $this->requireScope('taxonomies:write')) return $denied;
-        if (!CheckCapability::userCan($user, 'manage_taxonomies')) return $this->forbidden('manage_taxonomies');
 
         /** @var TaxonomyService $tax */
         $taxSvc = $this->app->make(TaxonomyService::class);

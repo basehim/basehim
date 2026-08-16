@@ -60,7 +60,7 @@ final class AuthSecurityService
                 );
             } catch (\Throwable) {}
             $this->db->execute(
-                'CREATE TABLE IF NOT EXISTS {auth_remember_tokens} (
+                'CREATE TABLE IF NOT EXISTS `auth_remember_tokens` (
                     `id`         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                     `user_id`    BIGINT UNSIGNED NOT NULL,
                     `selector`   CHAR(32) NOT NULL,
@@ -301,7 +301,7 @@ final class AuthSecurityService
         if ($selector === '' || $validator === '') return null;
 
         $row = $this->db->selectOne(
-            'SELECT * FROM {auth_remember_tokens} WHERE selector = :s',
+            'SELECT * FROM auth_remember_tokens WHERE selector = :s',
             ['s' => $selector]
         );
         if (!$row) return null;
@@ -320,7 +320,7 @@ final class AuthSecurityService
     {
         $this->ensureSchema();
         try {
-            $this->db->execute('DELETE FROM {auth_remember_tokens} WHERE selector = :s', ['s' => $selector]);
+            $this->db->execute('DELETE FROM auth_remember_tokens WHERE selector = :s', ['s' => $selector]);
         } catch (\Throwable) {}
     }
 
@@ -337,7 +337,7 @@ final class AuthSecurityService
     {
         $this->ensureSchema();
         try {
-            $this->db->execute('DELETE FROM {auth_remember_tokens} WHERE user_id = :u', ['u' => $userId]);
+            $this->db->execute('DELETE FROM auth_remember_tokens WHERE user_id = :u', ['u' => $userId]);
         } catch (\Throwable) {}
     }
 

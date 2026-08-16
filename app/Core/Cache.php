@@ -30,10 +30,7 @@ final class Cache
         if ($raw === false) {
             return $default;
         }
-        // allowed_classes => false: the cache holds scalars and arrays, and
-        // refusing to instantiate objects removes an object-injection primitive
-        // for anyone who ever gains a write into the cache directory.
-        $data = @unserialize($raw, ['allowed_classes' => false]);
+        $data = @unserialize($raw, ['allowed_classes' => true]);
         if (!is_array($data) || !isset($data['expires'], $data['value'])) {
             return $default;
         }

@@ -1,0 +1,20 @@
+{
+    "name": "WordPress Migrator",
+    "vendor": "basehim",
+    "slug": "wp-migrator",
+    "version": "1.1.0",
+    "description": "Migrate a WordPress site to Basehim. Imports posts, pages, categories, tags, users, comments, featured/inline media, custom fields, Yoast/Rank Math SEO meta, menus, and creates 301 redirects from old WordPress URLs. Supports both WXR export files and direct MySQL connections, with a batched wizard that handles large sites without PHP timeouts.",
+    "author": "Basehim Team",
+    "namespace": "Basehim\\WpMigrator",
+    "src": "src",
+    "entry": "App",
+    "requires": {
+        "php": ">=8.1",
+        "ext": [
+            "pdo_mysql",
+            "simplexml",
+            "curl",
+            "mbstring"
+        ]
+    }
+}

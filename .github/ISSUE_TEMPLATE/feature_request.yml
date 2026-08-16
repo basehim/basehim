@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest a capability or improvement.
+labels: ["enhancement", "needs triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation you are stuck in, not just the feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including whether an app could do this instead of core.
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Compatibility
+      description: Basehim targets cPanel-style shared hosting.
+      options:
+        - label: This can be done without requiring Composer.
+        - label: This can be done without a build step (npm/bundler).
+        - label: This can be done without a daemon (Redis, queue worker, cron).
+        - label: This needs core, and could not reasonably be an app.

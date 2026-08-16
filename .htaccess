@@ -1,0 +1,100 @@
+# Basehim — Apache .htaccess
+# Works at document root OR in a subdirectory (e.g. example.com/basehim/).
+# No RewriteBase needed when we use REQUEST_FILENAME checks below.
+
+Options -Indexes -ExecCGI
+ServerSignature Off
+DirectoryIndex index.php
+
+# ---------------------------------------------------------------------------
+# 1. Rewrites
+# ---------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Pass the Authorization header to PHP. Apache/cPanel under mod_rewrite/CGI
+    # commonly strips it, which breaks bearer-token auth — desktop agents would
+    # poll commands and get 401, so remote commands silently never run. Both
+    # lines are belt-and-suspenders for different server configs.
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+    # Allow direct access to public asset paths FIRST.
+    # These match real files; [L] terminates rewrite processing here.
+    RewriteRule ^(storage/uploads|admin/assets|content/themes/[^/]+/assets)/ - [L]
+
+    # Block direct access to sensitive directories AFTER the public allow rule.
+    # storage/uploads is already terminated above; this catches storage/cache,
+    # storage/logs, storage/sessions, etc.
+    RewriteRule ^(app|config|database|storage|routes|bootstrap\.php|\.env)(/.*)?$ - [F,L]
+
+    # Everything else → index.php. Check only for existing files, NOT dirs,
+    # so routes that share names with disk directories (admin, content) still
+    # reach the router.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 2. Access controls
+# ---------------------------------------------------------------------------
+# Block dotfiles (incl. .env, .git, .htpasswd)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Block config / DB dump / lockfiles by extension
+<FilesMatch "\.(env|log|sql|lock|yml|yaml|ini)$">
+    Require all denied
+</FilesMatch>
+
+# Explicit grant for media files — overrides any inherited denies and works
+# even when subdirectory .htaccess files aren't honored. This applies anywhere
+# the file lives, but since these are extensions only Apache should ever serve
+# (never PHP), this is safe.
+<FilesMatch "\.(jpg|jpeg|png|gif|webp|avif|svg|ico|pdf|mp4|mov|m4v|mp3|m4a|wav|ogg|webm|woff|woff2|ttf|eot|otf|css|js|map|json|txt)$">
+    Require all granted
+</FilesMatch>
+
+# ---------------------------------------------------------------------------
+# 3. Security headers
+# ---------------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 4. PHP settings (cPanel allows these via .user.ini or .htaccess)
+# ---------------------------------------------------------------------------
+<IfModule mod_php.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 64M
+    php_value memory_limit 256M
+    php_value max_execution_time 300
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 5. Performance: gzip + browser caching
+# ---------------------------------------------------------------------------
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json text/xml application/xml image/svg+xml
+</IfModule>
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+    ExpiresByType image/avif "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+    ExpiresByType image/x-icon "access plus 1 year"
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType application/font-woff "access plus 1 year"
+</IfModule>

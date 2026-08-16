@@ -1,0 +1,17 @@
+/* wp-migrator — wizard styles
+ * Keeps things minimal; the admin layout already loads Tailwind.
+ */
+.wpmig-tab {
+    background: #fff;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.wpmig-tab.bg-blue-50 {
+    border-color: #bfdbfe;
+}
+#wpmig-step-bar {
+    transition: width 0.4s ease-out;
+}
+#wpmig-log {
+    white-space: pre-wrap;
+    word-break: break-word;
+}

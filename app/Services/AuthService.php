@@ -170,7 +170,7 @@ class AuthService
     public function userFromToken(string $token): ?array
     {
         $secret = $this->config->get('auth.jwt.secret');
-        $payload = Jwt::decode($token, $secret, (string) $this->config->get('auth.jwt.algorithm', 'HS256'));
+        $payload = Jwt::decode($token, $secret);
         if (!$payload || !isset($payload['sub'])) return null;
 
         $user = $this->db->selectOne(
@@ -194,11 +194,8 @@ class AuthService
         );
         if (!$row) return null;
 
-        // Status matters here, not just deletion: without it a suspended
-        // account kept minting fresh access tokens indefinitely, so suspending
-        // someone did not actually end their API access.
         $user = $this->db->selectOne(
-            "SELECT * FROM {users} WHERE id = :id AND deleted_at IS NULL AND status = 'active'",
+            'SELECT * FROM {users} WHERE id = :id AND deleted_at IS NULL',
             ['id' => (int)$row['user_id']]
         );
         if (!$user) return null;

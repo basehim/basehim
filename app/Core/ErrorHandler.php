@@ -40,29 +40,12 @@ final class ErrorHandler
             http_response_code($status);
             header('Content-Type: application/json; charset=utf-8');
         }
-
-        // `detail` used to carry $e->getMessage() unconditionally. Only the
-        // trace was gated behind debug, so production leaked things like
-        // "Database connection failed: SQLSTATE[HY000] [1045] Access denied for
-        // user 'x'@'host'" to anyone who sent an Accept: application/json
-        // header — including attacker-supplied strings echoed back from
-        // exception messages.
         $body = [
             'type'   => 'https://basehim.io/errors/exception',
             'title'  => self::titleFromStatus($status),
             'status' => $status,
-            'detail' => $debug
-                ? ($e->getMessage() ?: 'An error occurred.')
-                : self::genericDetail($status),
+            'detail' => $e->getMessage() ?: 'An error occurred.',
         ];
-
-        // A correlation id keeps production diagnosable: this value is written
-        // to the log next to the real message and stack trace.
-        $ref = self::logReference($e);
-        if ($ref !== null) {
-            $body['reference'] = $ref;
-        }
-
         if ($debug) {
             $body['debug'] = [
                 'exception' => $e::class,
@@ -72,34 +55,6 @@ final class ErrorHandler
             ];
         }
         echo json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-    }
-
-    /** Safe, non-revealing message for each status class. */
-    private static function genericDetail(int $status): string
-    {
-        return match ($status) {
-            400 => 'The request could not be understood.',
-            401 => 'Authentication required.',
-            403 => 'You do not have access to this resource.',
-            404 => 'The requested resource was not found.',
-            405 => 'That method is not allowed for this resource.',
-            422 => 'The request could not be processed.',
-            429 => 'Too many requests. Please slow down.',
-            default => 'An unexpected error occurred. Please try again later.',
-        };
-    }
-
-    /**
-     * A short id shared between the response and the log line, so an operator
-     * can find the real error without it being disclosed to the caller.
-     */
-    private static function logReference(\Throwable $e): ?string
-    {
-        try {
-            return substr(hash('sha256', $e->getFile() . '|' . $e->getLine() . '|' . microtime(true)), 0, 12);
-        } catch (\Throwable) {
-            return null;
-        }
     }
 
     private static function renderHtml(\Throwable $e, bool $debug): void

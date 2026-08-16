@@ -140,10 +140,7 @@ final class Database
                 ]
             );
         } catch (PDOException $e) {
-            // The driver message embeds host, database and username. It belongs
-            // in the log, not in an exception that may surface in a response.
-            error_log('Basehim DB connection failed: ' . $e->getMessage());
-            throw new \RuntimeException('Database connection failed.');
+            throw new \RuntimeException('Database connection failed: ' . $e->getMessage());
         }
 
         return $this->pdo;

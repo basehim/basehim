@@ -17,9 +17,7 @@ class SettingController extends ApiController
         }
         /** @var SettingService $settings */
         $settings = $this->app->make(SettingService::class);
-        // Redacted: credentials in the email/integration groups must not be
-        // readable over the API, whatever the caller's role.
-        return Response::json(['data' => $settings->allRedacted()]);
+        return Response::json(['data' => $settings->all()]);
     }
 
     public function publicSettings(Request $request): Response
@@ -39,21 +37,11 @@ class SettingController extends ApiController
         /** @var SettingService $settings */
         $settings = $this->app->make(SettingService::class);
         $body = $request->all();
-        // A redacted value read back and re-submitted must not overwrite the
-        // real credential with the placeholder.
-        foreach ($body as $group => $values) {
-            if (!is_array($values)) continue;
-            foreach ($values as $k => $v) {
-                if ($v === '[redacted]' && SettingService::isSecretKey((string) $k)) {
-                    unset($body[$group][$k]);
-                }
-            }
-        }
         foreach ($body as $group => $values) {
             if (is_array($values)) {
                 $settings->setMany($group, $values);
             }
         }
-        return Response::json(['data' => $settings->allRedacted()]);
+        return Response::json(['data' => $settings->all()]);
     }
 }

@@ -1,0 +1,85 @@
+name: Bug report
+description: Something in Basehim behaves incorrectly.
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not include the contents of your `.env`
+        or any real credentials below.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What went wrong, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to /admin/posts
+        2. Click "New post"
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Basehim version
+      placeholder: "1.43.0"
+    validations:
+      required: true
+
+  - type: input
+    id: php
+    attributes:
+      label: PHP version
+      placeholder: "8.2.12"
+    validations:
+      required: true
+
+  - type: input
+    id: database
+    attributes:
+      label: Database
+      placeholder: "MySQL 8.0.35 / MariaDB 10.6"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where is it running?
+      options:
+        - cPanel shared hosting
+        - VPS / dedicated (Apache)
+        - VPS / dedicated (nginx)
+        - Local (XAMPP / MAMP / Laragon)
+        - Docker
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: From `storage/logs/`. Redact anything sensitive.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I am on the latest release, or have confirmed the bug exists there.
+          required: true
+        - label: I searched existing issues for a duplicate.
+          required: true
+        - label: I have removed all credentials from the details above.
+          required: true

@@ -1,0 +1,96 @@
+#==============================================================================
+# Basehim — .gitignore
+#==============================================================================
+
+#------------------------------------------------------------------------------
+# Secrets — never commit these
+#------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+auth.json
+
+#------------------------------------------------------------------------------
+# Runtime state
+#
+# The directories themselves are tracked via .gitkeep because the app expects
+# them to exist and be writable; their contents are machine-local.
+#------------------------------------------------------------------------------
+storage/cache/*
+!storage/cache/.gitkeep
+
+storage/sessions/*
+!storage/sessions/.gitkeep
+
+storage/logs/*
+!storage/logs/.gitkeep
+!storage/logs/apps/
+storage/logs/apps/*
+!storage/logs/apps/.gitkeep
+
+storage/updates/*
+!storage/updates/.gitkeep
+
+storage/uploads/*
+!storage/uploads/.gitkeep
+
+content/uploads/*
+!content/uploads/.gitkeep
+
+*.log
+*.cache
+
+#------------------------------------------------------------------------------
+# User-installed apps and themes
+#
+# Only the bundled ones ship with core. Anything a site owner drops in at
+# runtime stays out of the repo. Add negations here if you vendor another.
+#------------------------------------------------------------------------------
+content/apps/*
+!content/apps/index.html
+!content/apps/wp-migrator/
+
+content/themes/*
+!content/themes/default/
+!content/themes/dark-night/
+
+#------------------------------------------------------------------------------
+# Installer lock
+#------------------------------------------------------------------------------
+installed.lock
+
+#------------------------------------------------------------------------------
+# Dependencies (Basehim ships without them, but tooling may create them)
+#------------------------------------------------------------------------------
+/vendor/
+/node_modules/
+composer.lock
+package-lock.json
+yarn.lock
+
+#------------------------------------------------------------------------------
+# Editors and OS
+#------------------------------------------------------------------------------
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+#------------------------------------------------------------------------------
+# Build and archive artifacts
+#------------------------------------------------------------------------------
+/dist/
+/build/
+*.zip
+*.tar.gz
+*.sql.gz
+!database/migrations/*.sql
+!database/seeders/*.sql

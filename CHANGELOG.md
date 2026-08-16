@@ -5,61 +5,6 @@ All notable changes to Basehim are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.2] — 2026-08-14
-
-Security release. One critical and four high-severity issues found in an audit
-of 1.0.1. Full detail in `CHANGELOG-1.0.2.md`; two behavioural changes are
-flagged under Changed below.
-
-### Security
-- **Critical — API authorization.** `POST /api/v1/auth/register` ignored the
-  `allow_registration` setting, and the REST write endpoints checked
-  authentication but never capabilities or ownership. Anyone could self-register
-  and then create, edit, publish or delete any content. API key scopes are now
-  enforced as well.
-- **Critical — draft disclosure.** `GET /api/v1/posts?status=draft` returned
-  unpublished content to anonymous callers.
-- **High — TLS verification** was disabled on the core update, app and theme
-  download channels, each of which extracts an archive over the installation.
-- **High — API login** had no brute-force protection, bypassing the admin form's
-  lockout, captcha and OTP for the same credentials.
-- **High — CORS** reflected arbitrary origins with credentials enabled.
-- **High — stored XSS.** Post content was rendered as raw HTML regardless of the
-  author's role, letting a contributor run script in an admin's session.
-- **Medium.** MCP write tools ignored capabilities; uploads had no executable
-  denylist; theme/app PHP was directly executable over HTTP; error responses
-  leaked exception detail; `install.php` could re-run on a live site; the SMTP
-  password was returned unredacted; comment URLs accepted `javascript:`.
-- **Low.** JWT algorithm now pinned by the caller; API key expiry allowlisted;
-  `Request::ip()` no longer trusts forwarding headers by default; refresh tokens
-  check account status; `unserialize` refuses object instantiation.
-
-### Added
-- `App\Services\HtmlSanitizer` — DOMDocument allowlist sanitizer, with a
-  `strip_tags` fallback when `ext-dom` is missing.
-- `App\Services\ContentPolicy` and the `unfiltered_html` capability
-  (`admin`, `super_admin` only).
-- `App\Http\Controllers\Api\AuthorizesContent` — shared capability and ownership
-  checks for the REST content endpoints.
-- `cors.origins` in `config/cms.php`; `app.trusted_proxies` and
-  `TRUSTED_PROXIES` in `.env`.
-- Hardening `.htaccess` for `storage/uploads`, `content/apps`, `content/themes`.
-- `Content-Security-Policy-Report-Only` header.
-
-### Changed — breaking
-- **Content authored by non-admin roles is now sanitized on output.** Embeds and
-  custom markup in editor/author/contributor posts will be stripped. Review
-  existing content before upgrading; grant `unfiltered_html` per user if needed.
-- **`/api/v1` no longer accepts session cookies** — bearer credentials only. The
-  admin panel is unaffected (it uses `/admin/*` throughout).
-
-### Fixed
-- Remember-me was silently broken on installs with a `DB_PREFIX`:
-  `AuthSecurityService` created and read its tables unprefixed while writing to
-  them prefixed, and the resulting error was swallowed by a `catch`.
-- The same prefix bug across all three `McpOAuthService` OAuth tables.
-- `install.php` dropped `DB_PREFIX` when writing `.env`.
-
 ## [Unreleased]
 
 ### Added
