@@ -805,3 +805,142 @@
 @media (min-width: 1280px) {
     .nml-pane__side { flex-basis:360px; }
 }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Picker: two-pane layout, responsive grid, details panel
+   Added in 1.0.4.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.nm-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;          /* or the grid cannot scroll inside a flex parent */
+    border-top: 1px solid #f1f5f9;
+}
+.nm-body .nm-grid { flex: 1; min-width: 0; }
+
+/* Thumbnails size themselves to the space available. The old grid was a fixed
+   140px minimum at every width, which left one-and-a-bit columns on a phone and
+   a wall of tiny squares on a wide screen. */
+.nm-grid {
+    grid-template-columns: repeat(auto-fill, minmax(clamp(88px, 22vw, 150px), 1fr));
+    gap: 0.6rem;
+    align-content: start;
+}
+
+.nm-card img {
+    /* contain, not cover: a picker exists to tell images apart, and cover crops
+       exactly the part that identifies them. */
+    object-fit: contain;
+    background:
+        linear-gradient(45deg, #f1f5f9 25%, transparent 25%, transparent 75%, #f1f5f9 75%),
+        linear-gradient(45deg, #f1f5f9 25%, #fff 25%, #fff 75%, #f1f5f9 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;   /* so transparency reads as transparency */
+}
+
+.nm-card:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.nm-card[data-selected="1"]::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 0.4rem;
+    box-shadow: inset 0 0 0 2px #2563eb;
+    pointer-events: none;
+}
+
+.nm-details {
+    width: 300px;
+    flex-shrink: 0;
+    border-left: 1px solid #e2e8f0;
+    background: #f8fafc;
+    padding: 1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+.nm-details[hidden] { display: none; }
+
+.nm-details-preview {
+    aspect-ratio: 4 / 3;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+}
+.nm-details-preview img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.nm-details-file { color: #94a3b8; }
+
+.nm-details-name {
+    font-size: 0.8125rem; font-weight: 600; color: #0f172a;
+    word-break: break-word; line-height: 1.35;
+}
+.nm-details-facts { font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; }
+
+.nm-field { display: block; }
+.nm-field[hidden] { display: none; }
+.nm-field-label {
+    display: block;
+    font-size: 0.75rem; font-weight: 600; color: #334155;
+    margin-bottom: 0.3rem;
+}
+.nm-field textarea {
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.45rem;
+    font-size: 0.8125rem;
+    font-family: inherit;
+    line-height: 1.45;
+    resize: vertical;
+    background: #fff;
+    color: #0f172a;
+}
+.nm-field textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+.nm-field-hint {
+    display: block;
+    font-size: 0.6875rem; color: #94a3b8; margin-top: 0.25rem; line-height: 1.4;
+}
+
+.nm-savestate { font-size: 0.75rem; color: #64748b; min-height: 1rem; }
+.nm-savestate.is-ok { color: #059669; }
+.nm-savestate.is-error { color: #dc2626; }
+
+.nm-searchwrap { position: relative; flex: 1; display: flex; align-items: center; }
+.nm-searchwrap svg {
+    position: absolute; left: 0.6rem;
+    width: 1rem; height: 1rem; color: #94a3b8; pointer-events: none;
+}
+.nm-searchwrap .nm-search { padding-left: 2rem; width: 100%; }
+
+.nm-upload-btn { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.nm-title { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Below 760px the panes stack, and the details pane is capped in height so the
+   grid never collapses to one row with everything else pushed off-screen. */
+@media (max-width: 760px) {
+    .nm-dialog { max-height: 94vh; }
+    .nm-body { flex-direction: column; }
+    .nm-details {
+        width: auto;
+        border-left: 0;
+        border-top: 1px solid #e2e8f0;
+        max-height: 46vh;
+    }
+    .nm-details-preview { aspect-ratio: 16 / 7; }
+    .nm-grid { padding: 0.75rem; }
+    .nm-toolbar { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+    .nm-overlay { padding: 0; }
+    .nm-dialog { max-height: 100vh; height: 100dvh; border-radius: 0; }
+    .nm-upload-btn span { display: none; }   /* the icon carries it at this width */
+    .nm-footer { padding: 0.75rem; }
+}

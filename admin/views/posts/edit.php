@@ -281,7 +281,7 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
                 </div>
 
                 <button type="button" id="featured-select" class="<?= $currentMediaId ? 'hidden' : '' ?> w-full px-4 py-6 border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/30 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-700 transition">
-                    <?= icon('photo', 'w-6 h-6 block mb-2 text-slate-400') ?>
+                    <?= icon('photo', 'w-6 h-6 mx-auto mb-2 text-slate-400') ?>
                     Set Featured Image
                 </button>
             </div>

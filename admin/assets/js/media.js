@@ -145,15 +145,40 @@
         modal.innerHTML =
             '<div class="nm-dialog">' +
                 '<div class="nm-header">' +
-                    '<h3 class="nm-title">'+BasehimIcon('photo','w-4 h-4')+'Select Media</h3>' +
-                    '<button type="button" class="nm-close" aria-label="Close">'+BasehimIcon('x-mark','w-4 h-4')+'</button>' +
+                    '<h3 class="nm-title">'+BasehimIcon('photo','w-5 h-5')+'<span>Select media</span></h3>' +
+                    '<button type="button" class="nm-close" aria-label="Close">'+BasehimIcon('x-mark','w-5 h-5')+'</button>' +
                 '</div>' +
                 '<div class="nm-toolbar">' +
-                    '<input type="text" placeholder="Search media..." class="nm-search">' +
-                    '<label class="nm-upload-btn">'+BasehimIcon('arrow-up-tray','w-4 h-4')+' Upload new<input type="file" class="nm-upload" multiple></label>' +
+                    '<div class="nm-searchwrap">' +
+                        BasehimIcon('magnifying-glass','w-4 h-4') +
+                        '<input type="text" placeholder="Search media" class="nm-search" aria-label="Search media">' +
+                    '</div>' +
+                    '<label class="nm-upload-btn">'+BasehimIcon('arrow-up-tray','w-4 h-4')+'<span>Upload</span><input type="file" class="nm-upload" multiple></label>' +
                 '</div>' +
                 '<div class="nm-progress"></div>' +
-                '<div class="nm-grid"></div>' +
+                /* Two panes: the library on the left, the selected item on the
+                   right. The details pane is where alt text and caption are
+                   edited — previously the picker could only choose a file, so
+                   the only way to give an image alt text was to leave the post,
+                   open the media library, edit it, and come back. In practice
+                   that meant images went out with no alt text at all. */
+                '<div class="nm-body">' +
+                    '<div class="nm-grid" role="listbox" aria-label="Media library"></div>' +
+                    '<aside class="nm-details" hidden>' +
+                        '<div class="nm-details-preview"></div>' +
+                        '<div class="nm-details-meta"></div>' +
+                        '<label class="nm-field">' +
+                            '<span class="nm-field-label">Alt text</span>' +
+                            '<textarea class="nm-alt" rows="2" placeholder="Describe the image for someone who cannot see it"></textarea>' +
+                            '<span class="nm-field-hint">Leave empty only if the image is purely decorative.</span>' +
+                        '</label>' +
+                        '<label class="nm-field">' +
+                            '<span class="nm-field-label">Caption</span>' +
+                            '<textarea class="nm-caption" rows="2" placeholder="Shown beneath the image"></textarea>' +
+                        '</label>' +
+                        '<div class="nm-savestate" aria-live="polite"></div>' +
+                    '</aside>' +
+                '</div>' +
                 '<div class="nm-footer">' +
                     '<span class="nm-status">Loading…</span>' +
                     '<div class="nm-actions">' +
@@ -171,6 +196,12 @@
         var search   = modal.querySelector('.nm-search');
         var fileIn   = modal.querySelector('.nm-upload');
         var progress = modal.querySelector('.nm-progress');
+        var details  = modal.querySelector('.nm-details');
+        var dPreview = modal.querySelector('.nm-details-preview');
+        var dMeta    = modal.querySelector('.nm-details-meta');
+        var altIn    = modal.querySelector('.nm-alt');
+        var capIn    = modal.querySelector('.nm-caption');
+        var saveMsg  = modal.querySelector('.nm-savestate');
 
         function close() { if (modal) { modal.remove(); modal = null; } }
         modal.querySelector('.nm-close').onclick = close;
@@ -179,6 +210,108 @@
         document.addEventListener('keydown', function escH(e) {
             if (e.key === 'Escape' && modal) { close(); document.removeEventListener('keydown', escH); }
         });
+
+        /**
+         * Fill the details pane for the selected item.
+         *
+         * Alt text and caption save on their own a moment after typing stops,
+         * and immediately when a field loses focus — which matters, because the
+         * next thing anyone does is press Select. An explicit Save button would
+         * be one more thing to forget, and the edit is to the media item rather
+         * than to the post, so there is nothing for it to belong to.
+         */
+        var saveTimer = null;
+        function showDetails(m) {
+            if (!details) return;
+            details.hidden = false;
+            var isImg = m.mime_type && m.mime_type.indexOf('image/') === 0;
+
+            dPreview.innerHTML = isImg
+                ? '<img src="' + escapeHtml(m.url) + '" alt="">'
+                : '<div class="nm-details-file">' + BasehimIcon('document', 'w-8 h-8') + '</div>';
+
+            var bits = [];
+            bits.push('<div class="nm-details-name">' + escapeHtml(m.original_name || m.file_name || '') + '</div>');
+            var facts = [];
+            if (m.width && m.height) facts.push(m.width + ' × ' + m.height);
+            if (m.file_size) facts.push(formatBytes(m.file_size));
+            if (m.mime_type) facts.push(String(m.mime_type).replace('image/', '').toUpperCase());
+            if (facts.length) bits.push('<div class="nm-details-facts">' + escapeHtml(facts.join(' · ')) + '</div>');
+            dMeta.innerHTML = bits.join('');
+
+            altIn.value = m.alt_text || '';
+            capIn.value = m.caption || '';
+            // Alt text means nothing on a file that is not an image.
+            altIn.closest('.nm-field').hidden = !isImg;
+            saveMsg.textContent = '';
+            clearTimeout(saveTimer);
+        }
+
+        function formatBytes(n) {
+            n = Number(n) || 0;
+            if (n < 1024) return n + ' B';
+            if (n < 1048576) return Math.round(n / 1024) + ' KB';
+            return (n / 1048576).toFixed(1) + ' MB';
+        }
+
+        function queueSave() {
+            if (!selected) return;
+            clearTimeout(saveTimer);
+            saveMsg.textContent = '';
+            saveTimer = setTimeout(saveMeta, 700);
+        }
+
+        function saveMeta() {
+            if (!selected) return;
+            var id = selected.id;
+            var body = new URLSearchParams();
+            body.set('alt_text', altIn.value);
+            body.set('caption', capIn.value);
+            // The same token the uploader uses, from body[data-csrf]. There is no
+            // csrf-token meta tag in the admin layout, so looking for one would
+            // send an empty token and be refused with a 419.
+            body.set('_csrf', CSRF);
+
+            saveMsg.textContent = 'Saving…';
+            saveMsg.className = 'nm-savestate';
+
+            fetch(url('/admin/media/' + encodeURIComponent(id) + '/update'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: body.toString()
+            }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+              .then(function (res) {
+                if (!res.ok || res.j.error) {
+                    saveMsg.textContent = res.j.error || 'Could not save.';
+                    saveMsg.className = 'nm-savestate is-error';
+                    return;
+                }
+                // Keep the in-memory copy current, so re-selecting the card shows
+                // what was typed rather than what was first loaded.
+                if (res.j.data) {
+                    selected.alt_text = res.j.data.alt_text;
+                    selected.caption  = res.j.data.caption;
+                }
+                saveMsg.textContent = 'Saved';
+                saveMsg.className = 'nm-savestate is-ok';
+                setTimeout(function () {
+                    if (saveMsg.textContent === 'Saved') saveMsg.textContent = '';
+                }, 2000);
+            }).catch(function () {
+                saveMsg.textContent = 'Could not save.';
+                saveMsg.className = 'nm-savestate is-error';
+            });
+        }
+
+        altIn.addEventListener('input', queueSave);
+        capIn.addEventListener('input', queueSave);
+        altIn.addEventListener('blur', function () { clearTimeout(saveTimer); saveMeta(); });
+        capIn.addEventListener('blur', function () { clearTimeout(saveTimer); saveMeta(); });
 
         function loadMedia(query) {
             status.textContent = 'Loading…';
@@ -206,12 +339,29 @@
                                 '<div class="nm-card-file-name">' + escapeHtml(m.original_name || m.file_name) + '</div>' +
                             '</div>';
                     }
-                    card.onclick = function () {
-                        grid.querySelectorAll('.nm-card[data-selected="1"]').forEach(function (e) { e.dataset.selected = ''; });
+                    card.setAttribute('role', 'option');
+                    card.setAttribute('tabindex', '0');
+                    card.setAttribute('aria-selected', 'false');
+                    card.title = m.original_name || m.file_name || '';
+                    function choose() {
+                        grid.querySelectorAll('.nm-card[data-selected="1"]').forEach(function (e) {
+                            e.dataset.selected = ''; e.setAttribute('aria-selected', 'false');
+                        });
                         card.dataset.selected = '1';
+                        card.setAttribute('aria-selected', 'true');
                         selected = m;
                         btnOk.disabled = false;
+                        showDetails(m);
+                    }
+                    card.onclick = choose;
+                    // Enter or Space selects, so the grid works from the keyboard.
+                    card.onkeydown = function (ev) {
+                        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); choose(); }
                     };
+                    // A double click picks it outright. Choose-then-confirm is the
+                    // common case, and making that two actions instead of three is
+                    // the difference people actually notice.
+                    card.ondblclick = function () { choose(); btnOk.click(); };
                     grid.appendChild(card);
                 });
                 status.textContent = items.length + ' item' + (items.length === 1 ? '' : 's');
