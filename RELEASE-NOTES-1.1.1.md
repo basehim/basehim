@@ -23,3 +23,10 @@ Preview widths for desktop, tablet and phone are built in.
 If you are running a theme of your own, it needs one line added to its header to
 support this — see the changelog for the detail. A theme without it keeps
 working; it simply has nothing to customise.
+
+**The media picker now works everywhere.** It was loaded by some admin screens
+and not others — on the new Customizer the Choose button did nothing at all.
+Every admin screen now shares one definition of the common assets, so a screen
+cannot be built without the picker. Apps can also add an image field to their
+own screens with markup alone, rather than writing picker code.
+

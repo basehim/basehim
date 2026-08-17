@@ -85,3 +85,33 @@ That carries the theme's options as custom properties, the site's custom CSS,
 and — inside a preview only — the script that applies pending changes. Both
 bundled themes have been updated. A theme that does not echo it is simply not
 customisable, rather than broken.
+
+## One media picker, used everywhere
+
+The picker was loaded by whichever layout happened to list it. The Customizer's
+layout was written without it, so the Choose button on an image option did
+nothing — the picker was simply not on the page.
+
+The fix is not to add the line to another layout, because the next layout would
+forget it too. Both layouts now include one shared partial that declares the
+admin's common assets, so a screen cannot be built without them.
+
+The picker also gained a **declarative binding**, so a field can be wired up
+with markup alone:
+
+    <div data-bh-media>
+      <input type="hidden" data-bh-media-value>
+      <div data-bh-media-preview></div>
+      <button type="button" data-bh-media-pick>Choose</button>
+      <button type="button" data-bh-media-clear>Remove</button>
+    </div>
+
+Core handles picking, the preview and clearing. The element fires a `bh:media`
+event when the value changes, so a screen can react without knowing how any of
+it works. The listener is delegated from the document, so markup added later —
+a widget form, a repeating field — works without being registered.
+
+The Customizer's image option uses this, and lost twenty-five lines of its own
+picker code in the process. Any app that needs an image field can use the same
+markup rather than writing its own.
+
