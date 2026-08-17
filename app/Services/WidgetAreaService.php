@@ -25,7 +25,8 @@ class WidgetAreaService
     public function __construct(
         private SettingService $settings,
         private WidgetAreaRegistry $areas,
-        private WidgetRegistry $widgets
+        private WidgetRegistry $widgets,
+        private ?\App\Core\Logger $logger = null
     ) {}
 
     /** @return array<int,array> registered area definitions. */
@@ -174,7 +175,22 @@ class WidgetAreaService
             $settings['__before_title'] = $def['before_title'];
             $settings['__after_title']  = $def['after_title'];
 
-            $html = $this->widgets->render($key, $settings, 'frontend');
+            /*
+             * WidgetRegistry guards the render callback itself, but not the work
+             * around it — reading the definition, building the wrapper. A failure
+             * here would take the whole area, and with it the sidebar or footer
+             * of every page. One widget failing should cost one widget.
+             */
+            try {
+                $html = $this->widgets->render($key, $settings, 'frontend');
+            } catch (\Throwable $e) {
+                try {
+                    $this->logger?->error(
+                        'Widget "' . $key . '" failed in area "' . $area . '": ' . $e->getMessage()
+                    );
+                } catch (\Throwable) {}
+                continue;   // skip this widget, keep the rest of the area
+            }
 
             $wrapClass = trim('widget-' . preg_replace('/[^a-z0-9_-]/', '-', $key));
             $before = str_replace(['%1$s', '%2$s'], [htmlspecialchars((string) $inst['id'], ENT_QUOTES), $wrapClass], $def['before_widget']);

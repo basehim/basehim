@@ -245,6 +245,9 @@ final class Application
             return new \App\Services\ThemeService(
                 $app->make(\App\Services\SettingService::class),
                 BASEHIM_ROOT . '/content/themes',
+                // So a failing template or partial can be reported rather than
+                // disappearing into a blank page.
+                $app->make(Logger::class),
             );
         });
 

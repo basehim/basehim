@@ -35,7 +35,24 @@ trait RendersTheme
             ];
         }
 
-        $html = $themes->render($template, $data);
+        /*
+         * A broken theme must not take the site with it.
+         *
+         * render() deliberately rethrows so the caller can decide, and until now
+         * nothing did — a typo in single.php was a 500 on every post, with the
+         * only clue in a log the site owner has no reason to look at. A theme is
+         * the part of an installation most likely to be edited by hand, so it is
+         * the part most likely to be broken at three in the morning.
+         *
+         * The failure is caught, logged with the file and line, and answered
+         * with a plain page that says which template failed. The site stays up,
+         * the admin stays reachable, and the message names the file to fix.
+         */
+        try {
+            $html = $themes->render($template, $data);
+        } catch (\Throwable $e) {
+            return $this->themeFailure($template, $e, $data);
+        }
 
         // A preview is only ever shown to a signed-in user who may edit the
         // post, so unpublished work never reaches the public. The badge is
@@ -96,6 +113,77 @@ trait RendersTheme
         return $pos === false ? $html . $badge : substr($html, 0, $pos) . $badge . substr($html, $pos);
     }
 
+    /**
+     * Answer a request whose theme template threw.
+     *
+     * Deliberately does not use the theme to render this: the theme is what
+     * just failed. Plain markup, no template lookup, nothing that can throw
+     * again.
+     *
+     * Signed-in administrators see the file and line, because they are the ones
+     * who can fix it. Everyone else sees a generic message — a stack trace on a
+     * public page tells an attacker the directory layout and the framework
+     * version.
+     */
+    private function themeFailure(string $template, \Throwable $e, array $data): Response
+    {
+        try {
+            $this->app->make(\App\Core\Logger::class)->error(sprintf(
+                'Theme template "%s" failed: %s in %s:%d',
+                $template, $e->getMessage(), $e->getFile(), $e->getLine()
+            ));
+        } catch (\Throwable) {}
+
+        $detail = '';
+        if ($this->viewerIsAdmin()) {
+            $file = str_replace(BASEHIM_ROOT . '/', '', $e->getFile());
+            $detail =
+                '<p style="margin:18px 0 6px;font-weight:600">' . htmlspecialchars($template) . ' could not be rendered</p>'
+              . '<pre style="margin:0;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;'
+              . 'border-radius:8px;font:12px/1.6 ui-monospace,monospace;color:#334155;'
+              . 'white-space:pre-wrap;word-break:break-word">'
+              . htmlspecialchars($e->getMessage()) . "\n\n"
+              . htmlspecialchars($file) . ':' . (int) $e->getLine()
+              . '</pre>'
+              . '<p style="margin:14px 0 0;font-size:13px;color:#64748b">'
+              . 'Only administrators see this. Visitors are shown a short message instead.</p>';
+        }
+
+        $title = htmlspecialchars((string) ($data['site_title'] ?? 'Basehim'));
+        $body =
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+          . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+          . '<title>' . $title . '</title></head>'
+          . '<body style="margin:0;font:15px/1.6 system-ui,-apple-system,sans-serif;color:#0f172a;background:#fff">'
+          . '<div style="max-width:640px;margin:12vh auto;padding:0 24px">'
+          . '<h1 style="margin:0 0 10px;font-size:22px">This page could not be displayed</h1>'
+          . '<p style="margin:0;color:#475569">Something in the site\'s theme went wrong. '
+          . 'The rest of the site is unaffected.</p>'
+          . $detail
+          . '</div></body></html>';
+
+        $response = Response::html($body);
+        // 500, because something genuinely is broken and a search engine should
+        // not treat this as the page's real content.
+        $response->status(500);
+        return $response;
+    }
+
+    /** Is the viewer signed in and allowed to see theme internals? */
+    private function viewerIsAdmin(): bool
+    {
+        try {
+            $session = $this->app->make(\App\Core\Session::class);
+            $uid = (int) ($session->get('user_id') ?? 0);
+            if ($uid <= 0) return false;
+            $user = $this->app->make(\App\Repositories\UserRepository::class)->find($uid);
+            if (!$user || ($user['status'] ?? '') !== 'active') return false;
+            return \App\Http\Middleware\CheckCapability::userCan($user, 'manage_options');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     protected function notFound(string $message = 'Page not found'): Response
     {
         /** @var ThemeService $themes */
@@ -119,7 +207,32 @@ trait RendersTheme
             'seo' => ['title' => 'Page Not Found - ' . $settings->get('general', 'site_title', 'Basehim')],
         ];
 
-        $html = $themes->render('404', $data);
+        /*
+         * The 404 template can throw too, and that is the worst case: the page
+         * shown when something is already wrong. Failing here would turn every
+         * missing page into a 500, so a plain fallback is used instead.
+         */
+        try {
+            $html = $themes->render('404', $data);
+        } catch (\Throwable $e) {
+            try {
+                $this->app->make(\App\Core\Logger::class)->error(
+                    'Theme 404 template failed: ' . $e->getMessage()
+                    . ' in ' . $e->getFile() . ':' . $e->getLine()
+                );
+            } catch (\Throwable) {}
+
+            $html = '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                  . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                  . '<title>Page not found</title></head>'
+                  . '<body style="margin:0;font:15px/1.6 system-ui,-apple-system,sans-serif;color:#0f172a">'
+                  . '<div style="max-width:640px;margin:12vh auto;padding:0 24px">'
+                  . '<h1 style="margin:0 0 10px;font-size:22px">Page not found</h1>'
+                  . '<p style="margin:0;color:#475569">'
+                  . htmlspecialchars((string) ($data['message'] ?? 'That page does not exist.'))
+                  . '</p></div></body></html>';
+        }
+
         $response = Response::html($html);
         $response->status(404);
         return $response;

@@ -7,7 +7,8 @@ class ThemeService
 {
     public function __construct(
         private SettingService $settings,
-        private string $themePath
+        private string $themePath,
+        private ?\App\Core\Logger $logger = null
     ) {}
 
     /**
@@ -565,7 +566,27 @@ class ThemeService
         }
         extract($data, EXTR_SKIP);
         ob_start();
-        require $path;
+        try {
+            require $path;
+        } catch (\Throwable $e) {
+            /*
+             * A partial failing costs the partial, not the page.
+             *
+             * The header and footer are partials, so an unguarded throw here
+             * took every page on the site. Worse, the buffer was never cleaned:
+             * whatever the partial had echoed before it failed leaked into the
+             * response, so the page came out half-rendered with no indication
+             * why.
+             */
+            ob_end_clean();
+            try {
+                $this->logger?->error(
+                    'Theme partial "' . $name . '" failed: ' . $e->getMessage()
+                    . ' in ' . $e->getFile() . ':' . $e->getLine()
+                );
+            } catch (\Throwable) {}
+            return '';
+        }
         return ob_get_clean();
     }
 
