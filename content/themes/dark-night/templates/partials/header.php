@@ -36,9 +36,12 @@
     .bh-submenu .bh-menu__link:hover,
     .bh-submenu .bh-menu__link:focus-visible { background:rgba(255,255,255,.07); }
     </style>
-    <?php if (!empty($custom_css)): ?>
-    <style><?= $custom_css ?></style>
-    <?php endif; ?>
+    <?php
+    /* Theme options as CSS custom properties, the site's custom CSS, and — in a
+       Customizer preview only — the bridge that applies pending changes live.
+       Assembled by core so every theme gets it the same way. */
+    echo $customizer_head ?? '';
+    ?>
 </head>
 <body>
 

@@ -32,9 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= $base ?>/content/themes/default/assets/tailwind.min.css?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>">
     <?= menu_assets() ?>
-    <?php if (!empty($custom_css)): ?>
-    <style><?= $custom_css ?></style>
-    <?php endif; ?>
+    <?php
+    /* Theme options as CSS custom properties, the site's custom CSS, and — in a
+       Customizer preview only — the bridge that applies pending changes live.
+       Assembled by core so every theme gets it the same way. */
+    echo $customizer_head ?? '';
+    ?>
 </head>
 <body class="font-sans bg-white text-slate-800 antialiased min-h-screen flex flex-col">
 

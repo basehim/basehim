@@ -19,12 +19,31 @@ trait RendersTheme
         /** @var MenuService $menus */
         $menus = $this->app->make(MenuService::class);
 
-        $data['site_title'] = $settings->get('general', 'site_title', 'Basehim');
-        $data['tagline'] = $settings->get('general', 'tagline', '');
-        $data['footer_text'] = $settings->get('appearance', 'footer_text', '');
-        $data['logo_url'] = $settings->get('appearance', 'logo_url', '');
-        $data['favicon_url'] = $settings->get('appearance', 'favicon_url', '');
-        $data['custom_css'] = $settings->get('appearance', 'custom_css', '');
+        /*
+         * Identity values come through the Customizer rather than straight from
+         * settings, so a preview shows the title being typed rather than the one
+         * on record. On an ordinary request coreValue() reads the stored value
+         * and costs nothing extra — a draft is only ever consulted inside a
+         * verified preview.
+         */
+        $cz = $this->app->make(\App\Services\CustomizerService::class);
+
+        $data['site_title']  = $cz->coreValue('identity', 'site_title', 'Basehim');
+        $data['tagline']     = $cz->coreValue('identity', 'tagline', '');
+        $data['logo_url']    = $cz->coreValue('identity', 'logo_url', '');
+        $data['favicon_url'] = $cz->coreValue('identity', 'favicon_url', '');
+        $data['footer_text'] = $cz->coreValue('footer', 'footer_text', '');
+        $data['custom_css']  = $settings->get('appearance', 'custom_css', '');
+
+        /*
+         * Everything the Customizer needs in <head>: the theme's options as CSS
+         * custom properties, the site's custom CSS, and — inside a preview only
+         * — the script that applies pending changes live.
+         *
+         * Themes echo this in one place instead of assembling it themselves.
+         * A theme that does not is simply not customisable, rather than broken.
+         */
+        $data['customizer_head'] = $cz->headMarkup();
         $data['primary_menu'] = $menus->itemsByLocation('primary') ?? [];
         $data['footer_menu'] = $menus->itemsByLocation('footer') ?? [];
         $data['current_url'] = $url ?? ($_SERVER['REQUEST_URI'] ?? '/');
@@ -201,6 +220,9 @@ trait RendersTheme
             'logo_url' => $settings->get('appearance', 'logo_url', ''),
             'favicon_url' => $settings->get('appearance', 'favicon_url', ''),
             'custom_css' => $settings->get('appearance', 'custom_css', ''),
+            // The 404 page is styled by the theme like any other, so it needs
+            // the same variables — otherwise a preview of it loses its colours.
+            'customizer_head' => $this->app->make(\App\Services\CustomizerService::class)->headMarkup(),
             'primary_menu' => $menus->itemsByLocation('primary') ?? [],
             'footer_menu' => $menus->itemsByLocation('footer') ?? [],
             'current_url' => $_SERVER['REQUEST_URI'] ?? '/',

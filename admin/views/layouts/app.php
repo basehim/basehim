@@ -22,6 +22,7 @@ $navItems = [
     ['url' => '/admin/roles',         'label' => 'Roles',       'icon' => 'shield-check',  'cap' => 'manage_users', 'section' => 'people'],
     ['url' => '/admin/apps',          'label' => 'Apps',        'icon' => 'puzzle-piece',        'cap' => 'manage_apps', 'section' => 'system'],
     ['url' => '/admin/widgets',       'label' => 'Widgets',     'icon' => 'squares-2x2', 'cap' => 'manage_apps', 'section' => 'appearance'],
+    ['url' => '/admin/customize',     'label' => 'Customize',   'icon' => 'paint-brush', 'cap' => 'manage_settings', 'section' => 'appearance'],
     ['url' => '/admin/themes',        'label' => 'Themes',      'icon' => 'swatch',     'cap' => 'manage_themes', 'section' => 'appearance'],
     ['url' => '/admin/api',           'label' => 'API',         'icon' => 'code-bracket',        'cap' => 'manage_options', 'section' => 'system'],
     ['url' => '/admin/settings/general', 'label' => 'Settings', 'icon' => 'cog-6-tooth',  'cap' => 'manage_settings', 'section' => 'system', 'children' => [
@@ -33,7 +34,6 @@ $navItems = [
         ['url' => '/admin/settings/media',         'label' => 'Media',         'cap' => 'manage_settings'],
         ['url' => '/admin/settings/seo',           'label' => 'SEO',           'cap' => 'manage_settings'],
         ['url' => '/admin/settings/email',         'label' => 'Email',         'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/appearance',    'label' => 'Appearance',    'cap' => 'manage_settings'],
         ['url' => '/admin/settings/authorization', 'label' => 'Authorization', 'cap' => 'manage_settings'],
     ]],
     ['url' => '/admin/system',         'label' => 'System',      'icon' => 'heart',  'cap' => 'manage_settings', 'section' => 'system'],
@@ -114,7 +114,7 @@ $flash = $flash ?? null;
     <link rel="icon" type="image/png" sizes="32x32" href="<?= $base ?>/admin/assets/img/favicon-32.png">
     <link rel="apple-touch-icon" href="<?= $base ?>/admin/assets/img/apple-touch-icon.png">
     <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/tailwind.min.css?v=<?= urlencode(BASEHIM_VERSION) ?>">
-    <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/media-picker.css?v=<?= urlencode(BASEHIM_VERSION) ?>">
+    <?php $this->include('partials.admin-styles', ['base' => $base]); ?>
     <!-- Heroicons for JS-built markup (window.BasehimIcon). Loaded in <head> so
          every later script — core, app, and theme — can rely on it. -->
     <script src="<?= $base ?>/admin/assets/js/icons.js?v=<?= urlencode(BASEHIM_VERSION) ?>"></script>
@@ -656,7 +656,7 @@ try {
     </div>
 </div>
 
-<script src="<?= $base ?>/admin/assets/js/media.js?v=<?= urlencode(BASEHIM_VERSION) ?>"></script>
+<?php $this->include('partials.admin-scripts', ['base' => $base, 'skipIcons' => true]); ?>
 <script>
 /* Basehim admin sidebar: collapse, search, pin, and custom order.
    Preferences persist per-browser in localStorage. */

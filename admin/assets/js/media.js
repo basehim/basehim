@@ -402,10 +402,89 @@
         loadMedia();
     }
 
+    /**
+     * Declarative binding, so a picker can be wired up without writing any
+     * JavaScript at all.
+     *
+     * Mark up a field like this and it works anywhere in the admin:
+     *
+     *     <div data-bh-media>
+     *       <input type="hidden" data-bh-media-value value="/uploads/x.png">
+     *       <div data-bh-media-preview></div>
+     *       <button type="button" data-bh-media-pick>Choose</button>
+     *       <button type="button" data-bh-media-clear>Remove</button>
+     *     </div>
+     *
+     * The element fires a `bh:media` event when the value changes, carrying the
+     * chosen item, so a screen that needs to react can listen rather than
+     * reimplement the picker. Attributes are read at click time and the
+     * listener is delegated from the document, so markup added later — a widget
+     * form, a repeating field — works without being registered.
+     */
+    function valueOf(root) {
+        var input = root.querySelector('[data-bh-media-value]');
+        return input ? input.value : '';
+    }
+
+    function setValue(root, media) {
+        var input   = root.querySelector('[data-bh-media-value]');
+        var preview = root.querySelector('[data-bh-media-preview]');
+        var clear   = root.querySelector('[data-bh-media-clear]');
+
+        if (input) input.value = media ? (media.url || '') : '';
+
+        if (preview) {
+            if (media && media.mime_type && media.mime_type.indexOf('image/') === 0) {
+                preview.innerHTML = '<img src="' + escapeHtml(media.url) + '" alt="">';
+                preview.classList.remove('is-empty');
+            } else if (media) {
+                preview.textContent = media.original_name || media.file_name || 'File selected';
+                preview.classList.remove('is-empty');
+            } else {
+                preview.innerHTML = '';
+                preview.classList.add('is-empty');
+            }
+        }
+
+        if (clear) clear.hidden = !media;
+
+        // So a host screen can react — mark itself dirty, update a preview
+        // frame — without knowing anything about how the picker works.
+        root.dispatchEvent(new CustomEvent('bh:media', {
+            bubbles: true,
+            detail: { media: media || null, value: media ? media.url : '' }
+        }));
+    }
+
+    document.addEventListener('click', function (e) {
+        var pick = e.target.closest('[data-bh-media-pick]');
+        if (pick) {
+            var root = pick.closest('[data-bh-media]');
+            if (!root) return;
+            e.preventDefault();
+            openPicker({
+                multiple: root.hasAttribute('data-bh-media-multiple'),
+                onSelect: function (m) { setValue(root, m); }
+            });
+            return;
+        }
+
+        var clear = e.target.closest('[data-bh-media-clear]');
+        if (clear) {
+            var r = clear.closest('[data-bh-media]');
+            if (!r) return;
+            e.preventDefault();
+            setValue(r, null);
+        }
+    });
+
     window.BasehimMedia = {
         openPicker: openPicker,
         attachDropzone: attachDropzone,
         uploadFile: uploadFile,
-        url: url
+        url: url,
+        // Exposed so a screen can drive a field it built itself.
+        setValue: setValue,
+        valueOf: valueOf
     };
 })(window, document);

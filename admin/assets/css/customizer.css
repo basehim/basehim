@@ -1,0 +1,295 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   The Customizer
+
+   A fixed two-pane screen: a scrolling control panel and a preview that fills
+   whatever is left. Nothing here scrolls the page itself — the panel scrolls
+   internally so the header and the Save button stay put, which matters when a
+   theme declares thirty options.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.bh-cz {
+    display: flex;
+    height: 100vh;
+    height: 100dvh;          /* dvh, so an iOS URL bar does not clip the panel */
+    background: #f1f5f9;
+}
+
+/* ── control panel ───────────────────────────────────────────────────────── */
+
+.bh-cz__panel {
+    width: 340px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-right: 1px solid #e2e8f0;
+    min-height: 0;           /* or the inner scroll never engages */
+}
+
+.bh-cz__head {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+.bh-cz__back {
+    display: grid;
+    place-items: center;
+    width: 34px; height: 34px;
+    border-radius: .5rem;
+    color: #475569;
+    flex-shrink: 0;
+}
+.bh-cz__back:hover { background: #f1f5f9; color: #0f172a; }
+
+.bh-cz__headtext { flex: 1; min-width: 0; }
+.bh-cz__title { font-size: .95rem; font-weight: 600; color: #0f172a; line-height: 1.2; }
+.bh-cz__theme {
+    font-size: .75rem; color: #64748b; margin-top: .1rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.bh-cz__save {
+    padding: .5rem .9rem;
+    border-radius: .5rem;
+    background: #2563eb;
+    color: #fff;
+    font-size: .8125rem;
+    font-weight: 600;
+    border: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.bh-cz__save:hover:not(:disabled) { background: #1d4ed8; }
+.bh-cz__save:disabled { background: #e2e8f0; color: #94a3b8; cursor: default; }
+
+.bh-cz__status {
+    padding: .6rem 1rem;
+    font-size: .75rem;
+    line-height: 1.45;
+    border-bottom: 1px solid #e2e8f0;
+    color: #64748b;
+    background: #f8fafc;
+}
+.bh-cz__status[hidden] { display: none; }
+.bh-cz__status.is-ok    { color: #047857; background: #ecfdf5; }
+.bh-cz__status.is-warn  { color: #92400e; background: #fffbeb; }
+.bh-cz__status.is-error { color: #b91c1c; background: #fef2f2; }
+
+.bh-cz__sections { flex: 1; overflow-y: auto; min-height: 0; }
+
+/* ── a section ───────────────────────────────────────────────────────────── */
+
+.bh-cz__section { border-bottom: 1px solid #f1f5f9; }
+
+.bh-cz__sectionhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: .85rem 1rem;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    font-size: .8125rem;
+    font-weight: 600;
+    color: #334155;
+    text-align: left;
+}
+.bh-cz__sectionhead:hover { background: #f8fafc; }
+.bh-cz__chev { color: #94a3b8; transition: transform .15s ease; flex-shrink: 0; }
+.bh-cz__sectionhead[aria-expanded="true"] .bh-cz__chev { transform: rotate(180deg); }
+
+.bh-cz__sectionbody { padding: 0 1rem 1rem; }
+.bh-cz__sectiondesc {
+    font-size: .75rem; color: #64748b; line-height: 1.5;
+    margin: 0 0 .9rem;
+}
+
+/* ── a field ─────────────────────────────────────────────────────────────── */
+
+.bh-cz__field + .bh-cz__field { margin-top: 1.1rem; }
+
+.bh-cz__label {
+    display: block;
+    font-size: .75rem;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: .4rem;
+}
+
+.bh-cz__input {
+    width: 100%;
+    padding: .5rem .6rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .45rem;
+    font-size: .8125rem;
+    font-family: inherit;
+    line-height: 1.45;
+    color: #0f172a;
+    background: #fff;
+}
+.bh-cz__input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+.bh-cz__input--mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .75rem;
+    line-height: 1.6;
+    resize: vertical;
+}
+
+.bh-cz__help {
+    font-size: .6875rem;
+    color: #94a3b8;
+    line-height: 1.45;
+    margin: .35rem 0 0;
+}
+
+/* colour: a swatch and the hex value, which have to stay in step */
+.bh-cz__color { display: flex; gap: .5rem; align-items: center; }
+.bh-cz__color input[type="color"] {
+    width: 42px; height: 34px;
+    padding: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: .45rem;
+    background: none;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.bh-cz__hex {
+    flex: 1;
+    min-width: 0;
+    padding: .5rem .6rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .45rem;
+    font-family: ui-monospace, monospace;
+    font-size: .78125rem;
+    text-transform: lowercase;
+}
+.bh-cz__hex:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+
+.bh-cz__range { display: flex; gap: .7rem; align-items: center; }
+.bh-cz__range input[type="range"] { flex: 1; min-width: 0; accent-color: #2563eb; }
+.bh-cz__range output {
+    min-width: 3.4rem;
+    text-align: right;
+    font-size: .75rem;
+    font-family: ui-monospace, monospace;
+    color: #475569;
+}
+
+.bh-cz__toggle { display: flex; align-items: center; gap: .5rem; font-size: .8125rem; color: #334155; cursor: pointer; }
+.bh-cz__toggle input { width: 1rem; height: 1rem; accent-color: #2563eb; }
+
+/* image: a preview large enough to recognise, and two plain buttons */
+.bh-cz__thumb {
+    aspect-ratio: 16 / 9;
+    border: 1px solid #e2e8f0;
+    border-radius: .5rem;
+    background: #f8fafc;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    margin-bottom: .5rem;
+}
+.bh-cz__thumb img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.bh-cz__thumb.is-empty::after {
+    content: 'No image chosen';
+    font-size: .6875rem;
+    color: #94a3b8;
+}
+.bh-cz__imagebtns { display: flex; gap: .4rem; }
+
+.bh-cz__btn {
+    padding: .4rem .7rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .4rem;
+    background: #fff;
+    font-size: .75rem;
+    font-weight: 500;
+    color: #334155;
+    cursor: pointer;
+}
+.bh-cz__btn:hover { background: #f8fafc; }
+.bh-cz__btn--quiet { border-color: transparent; color: #64748b; }
+.bh-cz__btn--quiet:hover { background: #f1f5f9; color: #334155; }
+.bh-cz__btn[hidden] { display: none; }
+
+/* ── preview ─────────────────────────────────────────────────────────────── */
+
+.bh-cz__preview {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.bh-cz__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .5rem .75rem;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.bh-cz__devices { display: flex; gap: .15rem; }
+.bh-cz__devices button {
+    display: grid;
+    place-items: center;
+    width: 32px; height: 32px;
+    border: 0;
+    border-radius: .4rem;
+    background: none;
+    color: #64748b;
+    cursor: pointer;
+}
+.bh-cz__devices button:hover { background: #f1f5f9; color: #334155; }
+.bh-cz__devices button.is-on { background: #eff6ff; color: #2563eb; }
+
+.bh-cz__frame {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+    overflow: auto;
+}
+.bh-cz__frame iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+    border-radius: .5rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .1), 0 8px 24px rgba(15, 23, 42, .06);
+    transition: width .2s ease;
+}
+/* The device widths are real widths, not a scale transform: a media query has
+   to see the narrower viewport, and a scaled-down desktop layout would be a
+   lie about how the site looks on a phone. */
+.bh-cz__frame[data-device="tablet"] iframe { width: 768px; max-width: 100%; }
+.bh-cz__frame[data-device="mobile"] iframe { width: 390px; max-width: 100%; }
+
+/* ── narrow screens ──────────────────────────────────────────────────────────
+   Below 900px the panes stack, with the preview on top so there is something to
+   look at and the controls beneath it. Genuinely customising a site on a phone
+   is uncomfortable whatever we do, but it should at least work. */
+@media (max-width: 900px) {
+    .bh-cz { flex-direction: column-reverse; }
+    .bh-cz__panel {
+        width: auto;
+        border-right: 0;
+        border-top: 1px solid #e2e8f0;
+        max-height: 55vh;
+    }
+    .bh-cz__frame { padding: .5rem; }
+    .bh-cz__frame[data-device] iframe { width: 100%; }
+}

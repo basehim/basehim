@@ -154,6 +154,11 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->post('/menus/{id}/items/{itemId}', ['App\\Http\\Controllers\\Admin\\MenuController', 'updateItem']);
         $router->post('/menu-items/{id}/delete', ['App\\Http\\Controllers\\Admin\\MenuController', 'destroyItem']);
 
+        // Customizer
+        $router->get ('/customize',       ['App\\Http\\Controllers\\Admin\\CustomizerController', 'index']);
+        $router->post('/customize/save',  ['App\\Http\\Controllers\\Admin\\CustomizerController', 'save']);
+        $router->post('/customize/draft', ['App\\Http\\Controllers\\Admin\\CustomizerController', 'draft']);
+
         // Settings
         $router->get('/settings', ['App\\Http\\Controllers\\Admin\\SettingController', 'general']);
         $router->get('/settings/general', ['App\\Http\\Controllers\\Admin\\SettingController', 'general']);
@@ -166,7 +171,14 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->post('/settings/discussion', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveDiscussion']);
         $router->get('/settings/seo', ['App\\Http\\Controllers\\Admin\\SettingController', 'seo']);
         $router->post('/settings/seo', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveSeo']);
-        $router->get('/settings/appearance', ['App\\Http\\Controllers\\Admin\\SettingController', 'appearance']);
+        // Appearance moved into the Customizer. The route stays as a redirect
+        // rather than a 404, because it is the sort of URL people bookmark.
+        $router->get('/settings/appearance', function () {
+            $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+            $r = new \App\Core\Response('', 302);
+            $r->header('Location', $base . '/admin/customize');
+            return $r;
+        });
         $router->get('/settings/email', ['App\\Http\\Controllers\\Admin\\SettingController', 'email']);
         $router->get('/settings/authorization', ['App\\Http\\Controllers\\Admin\\SettingController', 'authorization']);
         $router->post('/settings/authorization', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveAuthorization']);
