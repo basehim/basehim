@@ -60,7 +60,49 @@ class SettingController extends Controller
     public function saveDiscussion(Request $request): Response { return $this->saveTab($request, 'discussion'); }
     public function saveSeo(Request $request): Response        { return $this->saveTab($request, 'seo'); }
     public function saveAppearance(Request $request): Response { return $this->saveTab($request, 'appearance'); }
-    public function savePermalinks(Request $request): Response { return $this->saveTab($request, 'permalinks'); }
+    /**
+     * POST /admin/settings/permalinks
+     *
+     * Saves the settings, then writes the canonical-URL rules into .htaccess.
+     * The settings are stored first and separately: if the file cannot be
+     * written — no .htaccess, wrong permissions, nginx — the preference is
+     * still recorded and the screen can show the block to paste by hand.
+     */
+    public function savePermalinks(Request $request): Response
+    {
+        if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }
+
+        /** @var SettingService $settings */
+        $settings = $this->app->make(SettingService::class);
+
+        $host = (string) $request->input('canonical_host', 'none');
+        if (!in_array($host, ['none', 'www', 'root'], true)) $host = 'none';
+        $https = (bool) $request->input('force_https', false);
+
+        $settings->set('permalinks', 'structure', (string) $request->input('structure', 'pretty'));
+        $settings->set('permalinks', 'canonical_host', $host);
+        $settings->set('permalinks', 'force_https', $https);
+
+        /** @var \App\Services\HtaccessService $ht */
+        $ht = $this->app->make(\App\Services\HtaccessService::class);
+
+        // The URL to check afterwards. Redirect rules are exactly the kind of
+        // change that can take a site down, so it is fetched before the
+        // operator is told everything went well.
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $verify = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? '') . (defined('BASEHIM_BASE') ? BASEHIM_BASE : '') . '/';
+
+        $result = $ht->apply($host, $https, filter_var($verify, FILTER_VALIDATE_URL) ? $verify : null);
+
+        if ($result['ok']) {
+            $this->flash('success', 'Permalink settings saved. ' . $result['message']);
+        } else {
+            // Not an error state for the settings themselves — they saved.
+            $this->flash('error', 'Settings saved, but the .htaccess file was not changed: ' . $result['message']);
+        }
+
+        return $this->redirect('/admin/settings/permalinks');
+    }
     public function saveMedia(Request $request): Response      { return $this->saveTab($request, 'media'); }
 
     /** POST /admin/settings/media/regenerate — rebuild thumbnails for all images. */
@@ -89,6 +131,16 @@ class SettingController extends Controller
         $session = $this->app->make(Session::class);
 
         $extra = [];
+        if ($tab === 'permalinks') {
+            /** @var \App\Services\HtaccessService $ht */
+            $ht = $this->app->make(\App\Services\HtaccessService::class);
+            $extra['htaccess'] = $ht->status();
+            $extra['htaccessBlock'] = $ht->buildBlock(
+                (string) $settings->get('permalinks', 'canonical_host', 'none'),
+                (bool) $settings->get('permalinks', 'force_https', false)
+            );
+            $extra['currentHost'] = $_SERVER['HTTP_HOST'] ?? '';
+        }
         if ($tab === 'media') {
             /** @var \App\Services\MediaService $media */
             $media = $this->app->make(\App\Services\MediaService::class);

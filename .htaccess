@@ -1,3 +1,48 @@
+# BEGIN Basehim canonical URL
+# Managed by Basehim. Edit the Permalinks settings screen rather than
+# this block: anything written here is replaced when those are saved.
+# Rules outside the BEGIN/END markers are never touched.
+
+<IfModule mod_rewrite.c>
+    # Remember the scheme the visitor actually used, so the host rules
+    # below can redirect without changing it.
+    RewriteEngine On
+    RewriteRule ^ - [E=BH_PROTO:http]
+    RewriteCond %{HTTPS} =on [OR]
+    RewriteCond %{HTTP:X-Forwarded-Proto} =https [OR]
+    RewriteCond %{HTTP:X-Forwarded-SSL} =on
+    RewriteRule ^ - [E=BH_PROTO:https]
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Redirect to HTTPS.
+    #
+    # Three conditions, not one. Behind Cloudflare or a load balancer the
+    # connection to Apache really is plain HTTP, so testing %{HTTPS} alone
+    # redirects a request that already arrived over HTTPS — and redirects it
+    # to itself, forever. The forwarded headers say what the visitor used.
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteCond %{HTTP:X-Forwarded-SSL} !=on
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+    # Add www.
+    #
+    # Only for a name that has exactly one dot: "example.com" gets the www,
+    # "sub.example.com" does not, or every subdomain would be rewritten into
+    # a hostname that does not exist. localhost and bare IPs are left alone
+    # for the same reason.
+    RewriteCond %{HTTP_HOST} !^www\. [NC]
+    RewriteCond %{HTTP_HOST} ^[^.]+\.[^.]+$ [NC]
+    RewriteCond %{HTTP_HOST} !^localhost [NC]
+    RewriteCond %{HTTP_HOST} !^\d+\.\d+\.\d+\.\d+$
+    RewriteRule ^ %{ENV:BH_PROTO}://www.%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+</IfModule>
+# END Basehim canonical URL
+
 # Basehim — Apache .htaccess
 # Works at document root OR in a subdirectory (e.g. example.com/basehim/).
 # No RewriteBase needed when we use REQUEST_FILENAME checks below.
