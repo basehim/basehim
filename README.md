@@ -1,11 +1,8 @@
 # Basehim
 
-**The CMS built for the AI era.** An open-source, API-first PHP CMS with a
-built-in Model Context Protocol server, so AI agents can search, read and draft
-your content — every permission scoped, so you decide exactly what they reach.
+**Open-source PHP CMS with REST API, Admin Dashboard, and built-in MCP Server for AI Agents.** Basehim gives developers authentication, RBAC, apps, themes, webhooks, and permission-scoped AI access in one modular CMS.
 
-No Composer. No build step. No daemons. No `public/` directory. Upload the
-files, open your site, and the installer takes it from there.
+**Modern PHP. Simple deployment.** PSR-4 autoloading, no mandatory Composer setup, no build pipeline, and no background services. Upload the files, run the installer, and start building.
 
 ![PHP](https://img.shields.io/badge/PHP-8.1%2B-blue)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-orange)
