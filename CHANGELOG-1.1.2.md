@@ -1,7 +1,24 @@
-# Basehim 1.1.0 — the Customizer
+# Basehim 1.1.2 — the media picker in the Customizer
 
-Appearance settings move into a new screen with a live preview, and themes can
-declare options of their own.
+A fix for 1.1.1. The Customizer arrived in 1.1.0 and 1.1.1; this makes its image
+options work.
+
+*A version number that has been installed anywhere is spent. The updater
+compares version numbers rather than file contents, so re-issuing a number
+leaves every site already on it believing it is up to date. Corrections always
+ship under a new number — which is why this is 1.1.2 rather than a second
+attempt at 1.1.1.*
+
+## The media picker did not open in the Customizer
+
+The Customizer uses a full-screen layout of its own, and that layout listed only
+the icon script. `media.js` was not on the page, so the picker was undefined and
+the Choose button on a logo or image option did nothing.
+
+Adding the missing line to that one layout would have fixed the symptom and left
+the cause: the next layout would forget too. Both admin layouts now include a
+shared partial that declares the admin's common assets, so a screen cannot be
+built without them.
 
 ## The Customizer
 
