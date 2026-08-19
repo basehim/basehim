@@ -43,5 +43,6 @@
     </div>
 </footer>
 
+<?php echo function_exists('bh_footer') ? bh_footer() : ''; ?>
 </body>
 </html>

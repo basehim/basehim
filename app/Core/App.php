@@ -337,6 +337,58 @@ abstract class App
     }
 
     /** The settings group used for this app: "app:{slug}". */
+    /**
+     * Add a stylesheet to the front end.
+     *
+     * The theme does not need to know the app exists — it calls bh_head(), and
+     * whatever has been registered arrives. That is the whole point: an
+     * analytics or consent app should never ask anyone to edit a template.
+     */
+    protected function enqueueStyle(string $handle, string $url, int $priority = 10, array $attrs = []): void
+    {
+        if (function_exists('bh_enqueue_style')) {
+            bh_enqueue_style($this->slug . '-' . $handle, $url, $priority, $attrs);
+        }
+    }
+
+    /** Add a script to the front end. Before </body> unless $inHead. */
+    protected function enqueueScript(string $handle, string $url, int $priority = 10, bool $inHead = false, array $attrs = []): void
+    {
+        if (function_exists('bh_enqueue_script')) {
+            bh_enqueue_script($this->slug . '-' . $handle, $url, $priority, $inHead, $attrs);
+        }
+    }
+
+    /**
+     * Add markup to every front-end page.
+     *
+     *     $this->addHead(fn() => '<meta name="…" content="…">');
+     *     $this->addFooter(fn() => '<script>…</script>');
+     *
+     * The callback may echo or return a string. A failure is logged and costs
+     * this app's output only.
+     */
+    protected function addHead(callable $fn, int $priority = 10): void
+    {
+        // Registered as both, so a callback that echoes and one that returns
+        // are equally correct. bh_head() collects the echo from the action and
+        // the value from the filter, and a callback only ever does one.
+        $this->addAction('bh.head', $fn, $priority, 0);
+        $this->addFilter('bh.head', function ($carry) use ($fn) {
+            $v = $fn();
+            return $carry . (is_string($v) ? $v : '');
+        }, $priority, 1);
+    }
+
+    protected function addFooter(callable $fn, int $priority = 10): void
+    {
+        $this->addAction('bh.footer', $fn, $priority, 0);
+        $this->addFilter('bh.footer', function ($carry) use ($fn) {
+            $v = $fn();
+            return $carry . (is_string($v) ? $v : '');
+        }, $priority, 1);
+    }
+
     protected function settingGroup(): string
     {
         return 'app:' . $this->slug;

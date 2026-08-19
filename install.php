@@ -20,7 +20,7 @@ declare(strict_types=1);
 // App\Core\BASEHIM_ROOT" — PHP resolves an unknown bare constant against the
 // current namespace before giving up.
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.1.1');
+define('BASEHIM_VERSION', '1.2.0');
 define('BASEHIM_INSTALLING', true);
 
 
