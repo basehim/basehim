@@ -92,16 +92,6 @@ longer. Whatever your site advertises is authoritative — fetch
 
 For companion apps running on a machine rather than in a chat window:
 
-| Method | Path                               | Purpose                          |
-| ------ | ---------------------------------- | -------------------------------- |
-| `POST` | `/api/v1/agents/register`          | First contact; mints the token   |
-| `POST` | `/api/v1/agents/{uuid}/heartbeat`  | Check in and collect commands    |
-| `POST` | `/api/v1/agents/{uuid}/commands/{id}/ack` | Acknowledge a command     |
-
-These authenticate with a per-agent bearer token validated against the `{uuid}`
-in the path, not a user session. Apps queue commands through `AgentService` —
-see [`docs/AGENT-API.md`](docs/AGENT-API.md).
-
 ### Token hygiene
 
 A token is a password. Issue the narrowest scope that does the job, use a
@@ -330,7 +320,6 @@ class App extends \App\Core\App
 | `table($name)` | Prefixed, app-namespaced table name (`app_{slug}_{name}`) |
 | `db()` | The PDO-wrapped `Database` instance |
 | `cache()` | File-based key/value cache |
-| `make(AgentService::class)` | The desktop `AgentService` |
 | `log($msg, $context?, $level?)` | Log line tagged with your app slug |
 | `view($template, $data = [])` | Render a PHP template from `views/` |
 | `asset($relativePath)` | URL to a bundled asset under `assets/` |
@@ -385,14 +374,13 @@ directly, every download SHA-256 verified.
   created on activate and dropped on uninstall, admin views with a sidebar
   entry, app-scoped settings, and bundled assets.
 - `docs/examples/system-monitor/` — a compact reference app showing lifecycle
-  hooks, a scheduled task, the permission manifest, and a shipped desktop
-  module.
+  hooks, a scheduled task, and the permission manifest.
 
 Full guides live in [`docs/`](docs/):
+[theme development](docs/THEME-DEVELOPMENT.md),
 [app development](docs/APP-DEVELOPMENT.md),
 [the app API](docs/APP-API.md),
-[permissions](docs/APP-PERMISSIONS.md),
-[the agent API](docs/AGENT-API.md).
+[permissions](docs/APP-PERMISSIONS.md).
 
 ## Themes
 

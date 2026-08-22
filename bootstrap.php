@@ -397,6 +397,31 @@ if (!function_exists('bh_theme_option')) {
     }
 }
 
+/**
+ * A URL for a file in the active theme's assets directory.
+ *
+ *     <link rel="stylesheet" href="<?= theme_asset('my-theme.css') ?>">
+ *
+ * Version-stamped with the core version, because a browser holding the previous
+ * stylesheet after an update looks exactly like the update not having worked.
+ * Every theme was building this string by hand and most forgot the stamp.
+ */
+if (!function_exists('theme_asset')) {
+    function theme_asset(string $relative, bool $version = true): string {
+        try {
+            $url = \App\Core\Application::getInstance()
+                ->make(\App\Services\ThemeService::class)->assetUrl($relative);
+        } catch (\Throwable) {
+            $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+            $url = $base . '/content/themes/' . ltrim($relative, '/');
+        }
+        if ($version && defined('BASEHIM_VERSION')) {
+            $url .= (str_contains($url, '?') ? '&' : '?') . 'v=' . urlencode(BASEHIM_VERSION);
+        }
+        return $url;
+    }
+}
+
 /** A site setting, for the handful a theme legitimately needs. */
 if (!function_exists('bh_setting')) {
     function bh_setting(string $group, string $key, mixed $default = null): mixed {
