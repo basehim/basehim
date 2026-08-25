@@ -424,6 +424,100 @@ final class Application
                 return $title($s) . '<ul class="widget-recent-posts">' . $items . '</ul>';
             },
         ]);
+
+        /*
+         * Categories and tags.
+         *
+         * One registration for both: the two differ only in which taxonomy
+         * they read and where they link, and two near-identical copies would
+         * drift the first time one of them was fixed.
+         *
+         * The post count comes from the term row, which core already
+         * maintains — counting posts per term here would be one query per
+         * term on every page render.
+         */
+        $termList = function (string $taxonomy, string $urlPrefix) use ($title): callable {
+            return function (array $s) use ($taxonomy, $urlPrefix, $title): string {
+                $limit = (int) ($s['count'] ?? 10);
+                if ($limit < 1) $limit = 10;
+                if ($limit > 50) $limit = 50;
+
+                $showCounts = !empty($s['show_counts']);
+                $hideEmpty  = !empty($s['hide_empty']);
+                $order      = (string) ($s['order'] ?? 'count');
+
+                try {
+                    /** @var \App\Services\TaxonomyService $tax */
+                    $tax = $this->make(\App\Services\TaxonomyService::class);
+                    $terms = $tax->termsByTaxonomySlug($taxonomy);
+                } catch (\Throwable) {
+                    $terms = [];
+                }
+
+                if ($hideEmpty) {
+                    $terms = array_values(array_filter($terms, fn($t) => (int) ($t['count'] ?? 0) > 0));
+                }
+
+                if ($order === 'name') {
+                    usort($terms, fn($a, $b) => strcasecmp((string) $a['name'], (string) $b['name']));
+                } else {
+                    // Busiest first, and alphabetical within a tie so the order
+                    // does not shuffle between requests.
+                    usort($terms, function ($a, $b) {
+                        $d = (int) ($b['count'] ?? 0) <=> (int) ($a['count'] ?? 0);
+                        return $d !== 0 ? $d : strcasecmp((string) $a['name'], (string) $b['name']);
+                    });
+                }
+
+                $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+                $items = '';
+                foreach (array_slice($terms, 0, $limit) as $t) {
+                    $url = $base . $urlPrefix . rawurlencode((string) ($t['slug'] ?? ''));
+                    $items .= '<li><a href="' . htmlspecialchars($url, ENT_QUOTES) . '">'
+                        . htmlspecialchars((string) ($t['name'] ?? ''))
+                        . '</a>'
+                        . ($showCounts
+                            ? '<span class="widget-count">' . (int) ($t['count'] ?? 0) . '</span>'
+                            : '')
+                        . '</li>';
+                }
+
+                if ($items === '') {
+                    $items = '<li class="widget-empty">Nothing yet.</li>';
+                }
+
+                return $title($s) . '<ul class="widget-terms widget-terms--' . $taxonomy . '">' . $items . '</ul>';
+            };
+        };
+
+        $termFields = [
+            ['key' => 'title',       'label' => 'Title', 'type' => 'text'],
+            ['key' => 'count',       'label' => 'How many to show', 'type' => 'number'],
+            ['key' => 'order',       'label' => 'Order by', 'type' => 'select',
+             'options' => ['count' => 'Most used', 'name' => 'Name']],
+            ['key' => 'show_counts', 'label' => 'Show post counts', 'type' => 'checkbox'],
+            ['key' => 'hide_empty',  'label' => 'Hide ones with no posts', 'type' => 'checkbox'],
+        ];
+
+        $reg->register('core.categories', [
+            'title'       => 'Categories',
+            'description' => 'A list of your categories.',
+            'icon'        => 'folder',
+            'source'      => 'core',
+            'surfaces'    => ['frontend'],
+            'fields'      => $termFields,
+            'render'      => $termList('category', '/category/'),
+        ]);
+
+        $reg->register('core.tags', [
+            'title'       => 'Tags',
+            'description' => 'A list of your tags.',
+            'icon'        => 'tag',
+            'source'      => 'core',
+            'surfaces'    => ['frontend'],
+            'fields'      => $termFields,
+            'render'      => $termList('tag', '/tag/'),
+        ]);
     }
 
 

@@ -79,7 +79,7 @@ final class CustomizerService
     /** The sections core always provides. */
     private function coreSections(): array
     {
-        return [
+        return array_merge([
             'identity' => [
                 'label' => 'Site identity',
                 'description' => 'The name, description and marks that identify this site.',
@@ -131,7 +131,80 @@ final class CustomizerService
                     ],
                 ],
             ],
-        ];
+        ], $this->widgetSections());
+    }
+
+    /**
+     * A section per widget area the active theme declares.
+     *
+     * The Customizer is where someone goes to arrange the look of their site,
+     * and "what is in the sidebar" is part of that — but the widget editor
+     * already exists at Appearance → Widgets, with drag-and-drop ordering and
+     * per-widget settings. Rebuilding that inside a 340px panel would be a
+     * worse version of a working screen.
+     *
+     * So this shows what is actually in each area and links through. The
+     * information is the useful part: a theme can declare six areas and an
+     * operator has no way to know which are empty without visiting the other
+     * screen and reading it.
+     */
+    private function widgetSections(): array
+    {
+        try {
+            $app = \App\Core\Application::getInstance();
+            $areas = $app->make(\App\Core\WidgetAreaRegistry::class)->all();
+            $service = $app->make(\App\Services\WidgetAreaService::class);
+        } catch (\Throwable) {
+            return [];
+        }
+        if (!$areas) return [];
+
+        $options = [];
+        foreach ($areas as $area) {
+            $key = (string) ($area['key'] ?? '');
+            if ($key === '') continue;
+
+            $count = 0;
+            $names = [];
+            try {
+                $reg = $app->make(\App\Core\WidgetRegistry::class);
+                foreach ($service->assignmentsFor($key) as $item) {
+                    $count++;
+                    if (count($names) >= 4) continue;
+                    // The widget's own title if it has been given one,
+                    // otherwise the type's name — "core.categories" is a
+                    // key, not something to show an operator.
+                    $custom = trim((string) ($item['settings']['title'] ?? ''));
+                    if ($custom !== '') { $names[] = $custom; continue; }
+                    $def = $reg->get((string) ($item['widget'] ?? ''));
+                    $names[] = (string) ($def['title'] ?? $item['widget'] ?? 'Widget');
+                }
+            } catch (\Throwable) {
+                // An area that cannot be read is reported as unknown rather
+                // than silently shown as empty, which would be a lie.
+                $count = -1;
+            }
+
+            $options['area_' . preg_replace('/[^a-z0-9_]/', '_', strtolower($key))] = [
+                'type'    => 'widgets',
+                'label'   => (string) ($area['name'] ?? $key),
+                'group'   => 'appearance',
+                'default' => '',
+                'area'    => $key,
+                'count'   => $count,
+                'names'   => $names,
+                'help'    => (string) ($area['description'] ?? ''),
+                'preview' => 'reload',
+            ];
+        }
+
+        if (!$options) return [];
+
+        return ['widgets' => [
+            'label'       => 'Widgets',
+            'description' => 'Areas this theme provides. Choose one to add or rearrange what it holds.',
+            'options'     => $options,
+        ]];
     }
 
     /**
@@ -312,6 +385,14 @@ final class CustomizerService
             [$sKey, $oKey] = array_pad(explode('.', (string) $path, 2), 2, null);
             $opt = $sections[$sKey]['options'][$oKey] ?? null;
             if ($opt === null) { $skipped[] = (string) $path; continue; }
+
+            /*
+             * A widget area is shown, not edited. It is a link to the screen
+             * that manages widgets, and accepting a value for it would write
+             * a setting nothing ever reads — the kind of stray row that is
+             * still in a database years later with nobody sure what it did.
+             */
+            if (($opt['type'] ?? '') === 'widgets') { continue; }
 
             $clean = $this->coerce($value, $opt);
             if ($clean === null) { $skipped[] = (string) $path; continue; }

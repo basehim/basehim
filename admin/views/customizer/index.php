@@ -123,6 +123,34 @@ $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
                                     </div>
                                 <?php break;
 
+                                case 'widgets': ?>
+                                    <?php
+                                    /* Not an input. The widget editor already exists at
+                                       Appearance → Widgets with drag-and-drop ordering and
+                                       per-widget settings; rebuilding it inside a 340px panel
+                                       would be a worse version of a working screen. What is
+                                       useful here is knowing which areas are empty. */
+                                    $n = (int) ($opt['count'] ?? 0);
+                                    ?>
+                                    <a class="bh-cz__area" href="<?= $base ?>/admin/widgets/areas#<?= htmlspecialchars($opt['area'] ?? '') ?>">
+                                        <span class="bh-cz__area-main">
+                                            <span class="bh-cz__area-count<?= $n === 0 ? ' is-empty' : '' ?>">
+                                                <?= $n < 0 ? '?' : $n ?>
+                                            </span>
+                                            <span class="bh-cz__area-names">
+                                                <?php if ($n < 0): ?>
+                                                    Could not be read
+                                                <?php elseif ($n === 0): ?>
+                                                    Empty &mdash; nothing will show here
+                                                <?php else: ?>
+                                                    <?= htmlspecialchars(implode(', ', $opt['names'] ?? [])) ?><?= $n > count($opt['names'] ?? []) ? ' and more' : '' ?>
+                                                <?php endif; ?>
+                                            </span>
+                                        </span>
+                                        <?= icon('arrow-right', 'w-4 h-4 bh-cz__area-go') ?>
+                                    </a>
+                                <?php break;
+
                                 default: ?>
                                     <input type="text" id="<?= $id ?>" class="bh-cz__input" data-input
                                            value="<?= htmlspecialchars((string) $val) ?>"

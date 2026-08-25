@@ -293,3 +293,33 @@
     .bh-cz__frame { padding: .5rem; }
     .bh-cz__frame[data-device] iframe { width: 100%; }
 }
+
+/* ── widget areas ────────────────────────────────────────────────────────────
+   A row per area rather than an editor. It says what is in each one and
+   links to the screen that already manages them. */
+.bh-cz__area {
+    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    padding: .6rem .7rem;
+    border: 1px solid #e2e8f0; border-radius: .5rem;
+    background: #fff; text-decoration: none; color: inherit;
+    transition: border-color .15s, background .15s;
+}
+.bh-cz__area:hover { border-color: #2563eb; background: #f8fafc; }
+.bh-cz__area-main { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.bh-cz__area-count {
+    flex-shrink: 0;
+    min-width: 1.6rem; height: 1.6rem;
+    display: grid; place-items: center;
+    border-radius: .4rem;
+    background: #eff6ff; color: #2563eb;
+    font-size: .75rem; font-weight: 700;
+}
+/* An empty area is the thing worth noticing, so it is greyed rather than
+   coloured — a bright badge on a zero reads as a status, not a warning. */
+.bh-cz__area-count.is-empty { background: #f1f5f9; color: #94a3b8; }
+.bh-cz__area-names {
+    font-size: .75rem; color: #64748b; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bh-cz__area-go { color: #cbd5e1; flex-shrink: 0; }
+.bh-cz__area:hover .bh-cz__area-go { color: #2563eb; }
