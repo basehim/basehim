@@ -52,7 +52,21 @@ class PageController extends Controller
             'seo' => [
                 'title' => !empty($seoMeta['meta_title']) ? $seoMeta['meta_title'] : $page['title'],
                 'description' => !empty($seoMeta['meta_description']) ? $seoMeta['meta_description'] : ($page['excerpt'] ?? ''),
-                'canonical' => $seoMeta['canonical_url'] ?? null,
+                /*
+                 * Derived from postUrl() when no manual override is set, so
+                 * the tag can never disagree with the redirect rules that
+                 * govern this row. Absolute, with the scheme and host the
+                 * request actually arrived on — a relative href is technically
+                 * legal but not the form search engines are built around, and
+                 * canonical is exactly the tag where an implicit base should
+                 * not be relied on.
+                 */
+                'canonical' => !empty($seoMeta['canonical_url'])
+                    ? $seoMeta['canonical_url']
+                    : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
+                        . '://' . ($_SERVER['HTTP_HOST'] ?? '')
+                        . rtrim((defined('BASEHIM_BASE') ? BASEHIM_BASE : ''), '/')
+                        . \App\Core\Helpers::postUrl($row),
                 // A preview must never be indexed, whatever the page's own setting says.
                 'robots' => $isPreview ? 'noindex,nofollow' : ($seoMeta['robots'] ?? 'index,follow'),
             ],

@@ -87,7 +87,19 @@ class CategoryPostController extends Controller
             'seo' => [
                 'title'          => !empty($seoMeta['meta_title'])       ? $seoMeta['meta_title']       : $post['title'],
                 'description'    => !empty($seoMeta['meta_description']) ? $seoMeta['meta_description'] : ($post['excerpt'] ?? ''),
-                'canonical'      => $seoMeta['canonical_url'] ?? null,
+                /*
+                 * Derived from postUrl() when no manual override is set. See
+                 * PostController and ResolveController for why this matters:
+                 * a page with no canonical tag relies entirely on redirects to
+                 * tell a crawler which URL is authoritative, and a sitemap or
+                 * stale backlink can bypass those.
+                 */
+                'canonical'      => !empty($seoMeta['canonical_url'])
+                    ? $seoMeta['canonical_url']
+                    : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
+                        . '://' . ($_SERVER['HTTP_HOST'] ?? '')
+                        . rtrim((defined('BASEHIM_BASE') ? BASEHIM_BASE : ''), '/')
+                        . \App\Core\Helpers::postUrl($row),
                 'robots'         => $seoMeta['robots'] ?? 'index,follow',
                 'og_title'       => !empty($seoMeta['og_title'])         ? $seoMeta['og_title']         : $post['title'],
                 'og_description' => !empty($seoMeta['og_description'])   ? $seoMeta['og_description']   : ($post['excerpt'] ?? ''),

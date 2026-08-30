@@ -81,7 +81,22 @@ class PostController extends Controller
             'seo' => [
                 'title' => !empty($seoMeta['meta_title']) ? $seoMeta['meta_title'] : $post['title'],
                 'description' => !empty($seoMeta['meta_description']) ? $seoMeta['meta_description'] : ($post['excerpt'] ?? ''),
-                'canonical' => $seoMeta['canonical_url'] ?? null,
+                /*
+                 * A manual override always wins. Otherwise the canonical is
+                 * derived from the same postUrl() logic that decides where to
+                 * redirect from /posts/{slug} — so the tag and the redirect can
+                 * never disagree about which URL is authoritative. Previously
+                 * no post on the site emitted a canonical tag at all unless an
+                 * editor filled in the SEO field by hand, which meant the 301
+                 * was the only signal Google had, with nothing on the page
+                 * reinforcing it when a crawl bypassed the redirect.
+                 */
+                'canonical' => !empty($seoMeta['canonical_url'])
+                    ? $seoMeta['canonical_url']
+                    : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
+                        . '://' . ($_SERVER['HTTP_HOST'] ?? '')
+                        . rtrim((defined('BASEHIM_BASE') ? BASEHIM_BASE : ''), '/')
+                        . \App\Core\Helpers::postUrl($post),
                 // A preview must never be indexed, whatever the post's own setting says.
                 'robots' => $isPreview ? 'noindex,nofollow' : ($seoMeta['robots'] ?? 'index,follow'),
                 'og_title' => !empty($seoMeta['og_title']) ? $seoMeta['og_title'] : $post['title'],

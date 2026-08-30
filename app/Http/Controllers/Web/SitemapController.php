@@ -29,8 +29,19 @@ class SitemapController extends Controller
         /** @var TaxonomyService $tax */
         $tax = $this->app->make(TaxonomyService::class);
 
+        /*
+         * id is required, not cosmetic: Helpers::postUrl() resolves the
+         * primary category through lookupPrimaryCategory((int) $post['id']).
+         * Without it every row evaluates as id 0, no category is ever found,
+         * and every post silently falls back to /posts/{slug} — which the
+         * sitemap then reasserts to every crawler on every fetch, regardless
+         * of the site's permalink structure. This was confirmed live: all 19
+         * published posts on cloudhim.com listed as /posts/{slug} despite the
+         * category permalink structure being active, which is what let
+         * Google index both the old and new URL for the same post.
+         */
         $posts = $db->select(
-            "SELECT slug, type, updated_at FROM {posts} WHERE status='published' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 2000"
+            "SELECT id, slug, type, updated_at FROM {posts} WHERE status='published' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 2000"
         );
 
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";

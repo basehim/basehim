@@ -130,7 +130,20 @@ class ResolveController extends Controller
             'seo'            => [
                 'title'       => !empty($seoMeta['meta_title']) ? $seoMeta['meta_title'] : $row['title'],
                 'description' => !empty($seoMeta['meta_description']) ? $seoMeta['meta_description'] : ($row['excerpt'] ?? ''),
-                'canonical'   => $seoMeta['canonical_url'] ?? null,
+/*
+                 * This is the controller that actually served the category-
+                 * style URL on cloudhim.com, and it never emitted a canonical
+                 * tag unless an editor set one by hand. A manual override still
+                 * wins; otherwise the canonical is derived from the same
+                 * postUrl() logic this method already uses above to validate
+                 * the category segment, so the tag can never disagree with the
+                 * redirect rules that govern this same row.
+                 */
+                'canonical'   => !empty($seoMeta['canonical_url'])
+                    ? $seoMeta['canonical_url']
+                    : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
+                        . '://' . ($_SERVER['HTTP_HOST'] ?? '')
+                        . rtrim((defined('BASEHIM_BASE') ? BASEHIM_BASE : ''), '/') . Helpers::postUrl($row),
                 'robots'      => $seoMeta['robots'] ?? 'index,follow',
             ],
         ]);
