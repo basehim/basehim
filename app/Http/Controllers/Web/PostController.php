@@ -46,16 +46,27 @@ class PostController extends Controller
         // /posts/{slug} when no primary category exists, so we only issue a
         // redirect when the canonical URL actually differs from the URL the
         // visitor asked for.
+        //
+        // Not for a preview. An unpublished post has no public address to
+        // consolidate on, and a 301 is cached by the browser permanently, so
+        // redirecting a draft is wrong twice over. It also broke Preview
+        // outright: with category permalinks and a category assigned, or with
+        // flat permalinks at all, the draft was sent to a URL that did not
+        // serve previews and answered 404. The admin's Preview button links
+        // here, so this is where a preview renders.
         $structure = $settings->get('permalinks', 'structure', 'pretty');
-        if ($structure === 'flat' || $structure === 'category') {
+        if (!$isPreview && ($structure === 'flat' || $structure === 'category')) {
             $canonical = \App\Core\Helpers::postUrl($post);
             if ($canonical !== '' && $canonical !== '/posts/' . $post['slug']) {
                 return Response::redirect($canonical, 301);
             }
         }
 
-        // Track view (best-effort, non-blocking-ish)
-        try { $posts->incrementViewCount((int)$post['id']); } catch (\Throwable $e) {}
+        // Track view (best-effort, non-blocking-ish). An editor checking a
+        // draft is not a reader.
+        if (!$isPreview) {
+            try { $posts->incrementViewCount((int)$post['id']); } catch (\Throwable $e) {}
+        }
 
         /** @var CommentService $comments */
         $comments = $this->app->make(CommentService::class);

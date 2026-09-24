@@ -90,7 +90,10 @@ class MediaService
         return $mb > 0 ? $mb * 1024 * 1024 : $configDefault;
     }
 
-    // ── Upload ────────────────────────────────────────────────────────────────
+    // ── Upload ────────────────────────────────────────────────────────────
+
+    /** Longest stem a generated file name may have, before any "-N" suffix. */
+    private const NAME_STEM_MAX = 100;
 
     /**
      * Upload a single file from PHP's $_FILES array entry.
@@ -103,6 +106,36 @@ class MediaService
         if (!isset($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
             throw new \RuntimeException('No file uploaded.');
         }
+        return $this->store($file, $authorId, $allowed, $maxBytes, $meta, true);
+    }
+
+    /**
+     * Add a file that is already on this server to the library.
+     *
+     * For code that produced the file itself — an app rendering a chart, an
+     * editor saving a copy. upload() cannot take these: it insists on
+     * is_uploaded_file(), which is only true for a file PHP received in the
+     * current HTTP request, so every such call used to fail with
+     * "No file uploaded." The source is copied, never moved, and is left for
+     * the caller to clean up.
+     *
+     * @throws \RuntimeException
+     */
+    public function importFile(string $path, string $name, int $authorId, array $allowed, int $maxBytes, array $meta = []): array
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            throw new \RuntimeException('File not found or not readable.');
+        }
+        return $this->store([
+            'name'     => $name,
+            'tmp_name' => $path,
+            'error'    => UPLOAD_ERR_OK,
+            'size'     => (int) filesize($path),
+        ], $authorId, $allowed, $maxBytes, $meta, false);
+    }
+
+    private function store(array $file, int $authorId, array $allowed, int $maxBytes, array $meta, bool $isHttpUpload): array
+    {
         if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
             throw new \RuntimeException('Upload error: ' . ($file['error'] ?? 'unknown'));
         }
@@ -111,7 +144,7 @@ class MediaService
             throw new \RuntimeException('File exceeds maximum size of ' . Helpers::bytesFormat($maxBytes) . '.');
         }
 
-        $originalName = $file['name'] ?? 'upload';
+        $originalName = (string) ($file['name'] ?? 'upload');
         $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
         if (!in_array($ext, $allowed, true)) {
             throw new \RuntimeException('File type ".' . $ext . '" not allowed.');
@@ -124,7 +157,7 @@ class MediaService
 
         $ms = $this->mediaSettings();
 
-        // Build storage path: /YYYY/MM/{uuid}.{ext} (or flat if organising is off)
+        // Build storage path: /YYYY/MM/{name}.{ext} (or flat if organising is off)
         if (!empty($ms['organize_uploads'])) {
             $relDir = date('Y') . '/' . date('m');
         } else {
@@ -137,12 +170,20 @@ class MediaService
             }
         }
 
+        // The uuid stays the row's identity; the file name is now readable.
         $uuid = Helpers::uuid();
-        $safeName = $uuid . '.' . $ext;
+        $safeName = $this->reserveFileName($absDir, $relDir, $originalName, $ext, $mime);
         $absPath = $absDir . '/' . $safeName;
         $relPath = ($relDir !== '' ? $relDir . '/' : '') . $safeName;
 
-        if (!@move_uploaded_file($file['tmp_name'], $absPath)) {
+        // reserveFileName() left an empty placeholder at $absPath; both calls
+        // below replace it. On failure the placeholder is removed, so a failed
+        // upload does not keep a name taken.
+        $placed = $isHttpUpload
+            ? @move_uploaded_file($file['tmp_name'], $absPath)
+            : @copy($file['tmp_name'], $absPath);
+        if (!$placed) {
+            @unlink($absPath);
             throw new \RuntimeException('Could not move uploaded file.');
         }
         @chmod($absPath, 0644);
@@ -177,10 +218,179 @@ class MediaService
             'sizes' => $sizes ? json_encode($sizes) : null,
         ];
 
-        $id = $this->repo->create($row);
+        try {
+            $id = $this->repo->create($row);
+        } catch (\Throwable $e) {
+            // No row means nothing refers to these files; do not leave them
+            // holding the name.
+            @unlink($absPath);
+            foreach ($sizes as $v) {
+                if (!empty($v['file'])) @unlink($absDir . '/' . $v['file']);
+            }
+            throw $e;
+        }
         $created = $this->repo->find($id);
         $this->hooks->doAction('media.uploaded', $created);
         return $created;
+    }
+
+    // ── File names ────────────────────────────────────────────────────────
+
+    /**
+     * Turn an uploaded file's name into a URL-friendly stem.
+     *
+     *     "My Awesome Image.png"  →  "my-awesome-image"
+     *     "Café Crème (1).JPG"    →  "cafe-creme-1"
+     *
+     * A name with nothing transliterable in it (Urdu, Chinese, emoji) falls
+     * back to "image" or "file" rather than Helpers::slug()'s "n-a".
+     */
+    public function fileStem(string $originalName, string $mime = ''): string
+    {
+        // Strip any client-side directory, then the extension. Done by hand:
+        // pathinfo() and basename() are locale-dependent and can drop leading
+        // multibyte characters.
+        $name = str_replace('\\', '/', $originalName);
+        $slash = strrpos($name, '/');
+        if ($slash !== false) $name = substr($name, $slash + 1);
+        $dot = strrpos($name, '.');
+        if ($dot !== false && $dot > 0) $name = substr($name, 0, $dot);
+
+        // Apostrophes vanish rather than splitting a word: "don't" → "dont".
+        $name = str_replace(["'", '’', '`'], '', $name);
+        if (function_exists('iconv')) {
+            $t = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
+            if ($t !== false) $name = $t;
+        }
+        $stem = trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower($name)), '-');
+
+        if (strlen($stem) > self::NAME_STEM_MAX) {
+            $stem = rtrim(substr($stem, 0, self::NAME_STEM_MAX), '-');
+        }
+        if ($stem === '') {
+            $stem = str_starts_with($mime, 'image/') ? 'image' : 'file';
+        }
+        return $stem;
+    }
+
+    /**
+     * Choose a free name in $absDir and claim it with an empty placeholder.
+     *
+     * "my-image.png" is taken first, then "my-image-2.png", "-3", and so on.
+     *
+     * A name is free only if its stem is unused in that directory by any file
+     * or media row, whatever the extension, and none of the names its
+     * thumbnails will get ("my-image-medium.webp") exist either. Stems are
+     * unique regardless of extension because with WebP conversion on,
+     * photo.png and photo.jpg would both write photo-medium.webp.
+     *
+     * The reverse also holds: "photo-thumbnail.png" is not free while
+     * "photo.*" exists, since that file's thumbnail may land on it.
+     *
+     * Choosing and claiming happen under an exclusive lock, and the claim
+     * itself is an exclusive create ('x'), so two uploads of the same name at
+     * the same moment get different names. Without the lock the 'x' create
+     * still prevents two originals sharing a name.
+     */
+    private function reserveFileName(string $absDir, string $relDir, string $originalName, string $ext, string $mime): string
+    {
+        $base = $this->fileStem($originalName, $mime);
+        $variants = array_keys($this->sizeDefinitions());
+
+        $lock = $this->acquireNameLock();
+        try {
+            $taken = $this->takenStems($absDir, $relDir, $base);
+
+            for ($n = 1; $n <= 100000; $n++) {
+                $stem = $n === 1 ? $base : $base . '-' . $n;
+                if (!$this->stemIsFree($stem, $taken, $variants)) continue;
+
+                $name = $stem . '.' . $ext;
+                $h = @fopen($absDir . '/' . $name, 'x');
+                if ($h === false) {
+                    if (!file_exists($absDir . '/' . $name)) {
+                        // Not a collision: the directory refused the write.
+                        throw new \RuntimeException('Could not write to the upload directory.');
+                    }
+                    // Appeared since the directory was read.
+                    $taken[$stem] = true;
+                    continue;
+                }
+                fclose($h);
+                return $name;
+            }
+        } finally {
+            if ($lock) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
+        }
+        throw new \RuntimeException('Could not find a free file name for "' . $base . '.' . $ext . '".');
+    }
+
+    /** @param array<string,bool> $taken */
+    private function stemIsFree(string $stem, array $taken, array $variants): bool
+    {
+        if (isset($taken[$stem])) return false;
+        foreach ($variants as $v) {
+            // This file's own thumbnails would overwrite something.
+            if (isset($taken[$stem . '-' . $v])) return false;
+            // Something else's thumbnails would overwrite this file.
+            $suffix = '-' . $v;
+            if (str_ends_with($stem, $suffix) && isset($taken[substr($stem, 0, -strlen($suffix))])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Every stem already used in a directory: files on disk plus media rows,
+     * including rows whose file has gone missing. Only names that share the
+     * candidate's prefix matter for the database, which keeps the query small.
+     *
+     * @return array<string,bool>
+     */
+    private function takenStems(string $absDir, string $relDir, string $base): array
+    {
+        $taken = [];
+        foreach (@scandir($absDir) ?: [] as $f) {
+            if ($f === '.' || $f === '..') continue;
+            $dot = strrpos($f, '.');
+            $taken[$dot === false || $dot === 0 ? $f : substr($f, 0, $dot)] = true;
+        }
+
+        // Prefix-matched in the query because a stem's suffixed forms and the
+        // owner of a "-thumbnail" name both start with a common prefix. The
+        // owner of "x-thumbnail" is "x", a shorter prefix, so match on the
+        // stem with any variant suffix removed.
+        $prefix = $base;
+        foreach (array_keys($this->sizeDefinitions()) as $v) {
+            if (str_ends_with($prefix, '-' . $v)) { $prefix = substr($prefix, 0, -strlen($v) - 1); break; }
+        }
+        $dirPart = $relDir !== '' ? $relDir . '/' : '';
+        try {
+            foreach ($this->repo->storagePathsLike($dirPart . $prefix) as $p) {
+                $file = substr($p, strlen($dirPart));
+                if (str_contains($file, '/')) continue;
+                $dot = strrpos($file, '.');
+                $taken[$dot === false ? $file : substr($file, 0, $dot)] = true;
+            }
+        } catch (\Throwable) {
+            // The directory listing alone still prevents overwriting a file.
+        }
+        return $taken;
+    }
+
+    /** @return resource|null */
+    private function acquireNameLock()
+    {
+        $dir = BASEHIM_ROOT . '/storage/locks';
+        if (!is_dir($dir)) @mkdir($dir, 0775, true);
+        $h = @fopen($dir . '/media-names.lock', 'c');
+        if ($h === false) return null;
+        if (!flock($h, LOCK_EX)) { fclose($h); return null; }
+        return $h;
     }
 
     // ── Thumbnail generation ──────────────────────────────────────────────────

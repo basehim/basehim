@@ -33,6 +33,19 @@ class ResolveController extends Controller
 
         $row = $posts->findBySlug($slug);
 
+        // Visibility first. An unpublished row is shown only to someone who may
+        // preview it; to everyone else it is a 404 like any missing slug. This
+        // used to come after the redirects below, so a draft post answered a
+        // public visitor with a redirect instead of a 404 — enough to confirm
+        // that an unpublished slug existed.
+        $isPreview = false;
+        if ($row && $row['status'] !== 'published') {
+            if (!$this->canPreview($row)) {
+                return $this->notFound('Page not found');
+            }
+            $isPreview = true;
+        }
+
         if ($structure === 'flat') {
             // posts AND pages live at /{slug} — accept either
         } elseif ($structure === 'category') {
@@ -47,13 +60,15 @@ class ResolveController extends Controller
             }
         }
 
-        if (!$row || $row['status'] !== 'published' || !in_array($row['type'] ?? '', ['post', 'page'], true)) {
+        if (!$row || !in_array($row['type'] ?? '', ['post', 'page'], true)) {
             return $this->notFound('Page not found');
         }
 
-        try { $posts->incrementViewCount((int)$row['id']); } catch (\Throwable) {}
+        if (!$isPreview) {
+            try { $posts->incrementViewCount((int)$row['id']); } catch (\Throwable) {}
+        }
 
-        return $this->renderPost($row, $posts);
+        return $this->renderPost($row, $posts, $isPreview);
     }
 
     /**
@@ -70,15 +85,31 @@ class ResolveController extends Controller
 
         $row = $posts->findBySlug($slug, 'post');
 
+        // Visibility first, as in show(). Previews are served here as well as
+        // at /posts/{slug}: this is the canonical address of a categorised
+        // post, and a browser that followed the old 301 from /posts/{slug} for
+        // a draft has cached that redirect and will keep coming here.
+        $isPreview = false;
+        if ($row && $row['status'] !== 'published') {
+            if (!$this->canPreview($row)) {
+                return $this->notFound('Post not found');
+            }
+            $isPreview = true;
+        }
+
+        // A preview's address is not permanent, so it is never answered with a
+        // 301 that the browser would cache.
+        $moved = $isPreview ? 302 : 301;
+
         // If the structure changed away from 'category', redirect to the canonical URL.
         if ($structure !== 'category') {
             if ($row) {
-                return Response::redirect(Helpers::postUrl($row), 301);
+                return Response::redirect(Helpers::postUrl($row), $moved);
             }
             return $this->notFound('Post not found');
         }
 
-        if (!$row || $row['status'] !== 'published') {
+        if (!$row) {
             return $this->notFound('Post not found');
         }
 
@@ -86,16 +117,18 @@ class ResolveController extends Controller
         // (e.g. post was re-categorised).
         $primaryCat = Helpers::lookupPrimaryCategory((int)$row['id']);
         if ($primaryCat !== '' && $primaryCat !== $category) {
-            return Response::redirect(Helpers::postUrl($row), 301);
+            return Response::redirect(Helpers::postUrl($row), $moved);
         }
 
-        try { $posts->incrementViewCount((int)$row['id']); } catch (\Throwable) {}
+        if (!$isPreview) {
+            try { $posts->incrementViewCount((int)$row['id']); } catch (\Throwable) {}
+        }
 
-        return $this->renderPost($row, $posts);
+        return $this->renderPost($row, $posts, $isPreview);
     }
 
     /** Shared render logic for a resolved post/page row. */
-    private function renderPost(array $row, PostService $posts): Response
+    private function renderPost(array $row, PostService $posts, bool $isPreview = false): Response
     {
         /** @var SeoService $seo */
         $seo     = $this->app->make(SeoService::class);
@@ -126,6 +159,7 @@ class ResolveController extends Controller
             'comments'       => [],
             'comments_count' => 0,
             'comments_open'  => ($row['comment_status'] ?? 'closed') === 'open',
+            'is_preview'     => $isPreview,
             'csrf'           => $this->app->make(\App\Core\Session::class)->csrfToken(),
             'seo'            => [
                 'title'       => !empty($seoMeta['meta_title']) ? $seoMeta['meta_title'] : $row['title'],
@@ -144,7 +178,8 @@ class ResolveController extends Controller
                     : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
                         . '://' . ($_SERVER['HTTP_HOST'] ?? '')
                         . rtrim((defined('BASEHIM_BASE') ? BASEHIM_BASE : ''), '/') . Helpers::postUrl($row),
-                'robots'      => $seoMeta['robots'] ?? 'index,follow',
+                // A preview must never be indexed, whatever the post's own setting says.
+                'robots'      => $isPreview ? 'noindex,nofollow' : ($seoMeta['robots'] ?? 'index,follow'),
             ],
         ]);
     }

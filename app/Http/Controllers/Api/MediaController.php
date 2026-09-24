@@ -36,7 +36,10 @@ class MediaController extends ApiController
         $config = $this->app->make(Config::class);
 
         try {
-            $id = $media->upload(
+            // upload() returns the created row. This used to pass that row to
+            // find(), which takes an id, so every successful upload answered
+            // 422 while the file and row had in fact been created.
+            $created = $media->upload(
                 $_FILES['file'],
                 (int)$user['id'],
                 $config->get('cms.media.allowed_types', []),
@@ -47,7 +50,7 @@ class MediaController extends ApiController
                     'caption' => $request->input('caption'),
                 ]
             );
-            return Response::json(['data' => $media->find($id)], 201);
+            return Response::json(['data' => $created], 201);
         } catch (\Throwable $e) {
             return Response::json(['error' => $e->getMessage()], 422);
         }

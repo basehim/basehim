@@ -92,18 +92,14 @@ class MediaApi extends Resource
 
         $service = $this->service();
         $config = $this->make(Config::class);
+        $name = $filename ?: basename($path);
 
-        $file = [
-            'name'     => $filename ?: basename($path),
-            'type'     => $this->mimeOf($path),
-            'tmp_name' => $path,
-            'error'    => UPLOAD_ERR_OK,
-            'size'     => (int) filesize($path),
-        ];
-
+        // importFile(), not upload(): upload() only accepts a file PHP received
+        // in this HTTP request, which a file an app generated never is.
         $result = $this->attempt(
-            fn() => $service->upload(
-                $file,
+            fn() => $service->importFile(
+                $path,
+                $name,
                 $authorId ?? 1,
                 $service->allowedTypes((array) $config->get('cms.uploads.allowed_types', [])),
                 $service->maxUploadBytes((int) $config->get('cms.uploads.max_size', 8388608)),
@@ -114,7 +110,7 @@ class MediaApi extends Resource
         );
 
         if (is_array($result) && !empty($result['id'])) {
-            $this->log("Uploaded media #{$result['id']} ({$file['name']})");
+            $this->log("Uploaded media #{$result['id']} ({$name})");
             return $result;
         }
         return null;

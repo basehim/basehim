@@ -160,4 +160,20 @@ class MediaRepository
         $r = $this->db->selectOne('SELECT COALESCE(SUM(file_size), 0) AS s FROM {media}');
         return (int)($r['s'] ?? 0);
     }
+
+    /**
+     * Storage paths beginning with $prefix, for choosing a free file name.
+     * LIKE wildcards in the prefix are escaped, so it matches literally.
+     *
+     * @return string[]
+     */
+    public function storagePathsLike(string $prefix): array
+    {
+        $like = addcslashes($prefix, '\\%_') . '%';
+        $rows = $this->db->select(
+            'SELECT storage_path FROM {media} WHERE storage_path LIKE :p',
+            ['p' => $like]
+        );
+        return array_map(fn($r) => (string) $r['storage_path'], $rows);
+    }
 }
