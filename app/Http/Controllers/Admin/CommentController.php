@@ -35,6 +35,21 @@ class CommentController extends Controller
         ]);
     }
 
+    /**
+     * Pending-comment count for the sidebar badge, polled by the admin layout
+     * so a comment submitted while a moderator has the admin open shows up
+     * without a reload. Sits under /admin/comments, so AdminAreaPolicy gives
+     * it the same capability requirement as the Comments screen itself.
+     */
+    public function pendingCount(Request $request): Response
+    {
+        /** @var CommentService $comments */
+        $comments = $this->app->make(CommentService::class);
+        $r = Response::json(['pending' => $comments->pendingCount()]);
+        $r->header('Cache-Control', 'no-store');
+        return $r;
+    }
+
     public function approve(Request $request, string $id): Response
     {
         return $this->setStatus($request, $id, 'approved', 'approved');

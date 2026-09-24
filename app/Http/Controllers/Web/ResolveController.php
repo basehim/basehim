@@ -152,12 +152,25 @@ class ResolveController extends Controller
         $seoMeta = $seo->forPost((int)$row['id']);
         $template = $row['type'] === 'post' ? 'single' : 'page';
 
+        /*
+         * The approved comments, exactly as PostController loads them.
+         *
+         * This used to pass an empty list and a count of 0. This controller
+         * serves the canonical URL of every post under category and flat
+         * permalinks, so on those sites no post ever showed its comments or
+         * its comment count — a comment could be approved and still never
+         * appear, and a theme's "Comments (N)" heading stayed at zero.
+         */
+        $approvedComments = $row['type'] === 'post'
+            ? $this->app->make(\App\Services\CommentService::class)->forPost((int)$row['id'], 'approved')
+            : [];
+
         return $this->renderTheme($template, [
             'post'           => $row,
             'page'           => $row,
             'terms'          => $row['type'] === 'post' ? $posts->terms((int)$row['id']) : [],
-            'comments'       => [],
-            'comments_count' => 0,
+            'comments'       => $approvedComments,
+            'comments_count' => count($approvedComments),
             'comments_open'  => ($row['comment_status'] ?? 'closed') === 'open',
             'is_preview'     => $isPreview,
             'csrf'           => $this->app->make(\App\Core\Session::class)->csrfToken(),

@@ -16,7 +16,7 @@ $navItems = [
     ]],
     ['url' => '/admin/pages',         'label' => 'Pages',       'icon' => 'document-text',  'cap' => 'edit_pages', 'section' => 'content'],
     ['url' => '/admin/media',         'label' => 'Media',       'icon' => 'photo',  'cap' => 'upload_media', 'section' => 'content'],
-    ['url' => '/admin/comments',      'label' => 'Comments',    'icon' => 'chat-bubble-left-right',    'cap' => 'moderate_comments', 'section' => 'content'],
+    ['url' => '/admin/comments',      'label' => 'Comments',    'icon' => 'chat-bubble-left-right',    'cap' => 'moderate_comments', 'section' => 'content', 'badge' => 'comments'],
     ['url' => '/admin/menus',         'label' => 'Menus',       'icon' => 'bars-3',        'cap' => 'manage_menus', 'section' => 'appearance'],
     ['url' => '/admin/users',         'label' => 'Users',       'icon' => 'users',       'cap' => 'manage_users', 'section' => 'people'],
     ['url' => '/admin/roles',         'label' => 'Roles',       'icon' => 'shield-check',  'cap' => 'manage_users', 'section' => 'people'],
@@ -522,18 +522,35 @@ try {
                     <?= icon($item['icon'], 'bh-nav-icon w-5 h-5 shrink-0 ' . ($active ? 'text-blue-600' : 'text-slate-400')) ?>
                     <span class="bh-nav-label flex-1 truncate"><?= $item['label'] ?></span>
                     <?php
-                    // Optional count badge (e.g. available updates). Values come
-                    // from cached settings — never a remote call during render.
-                    // Always emitted (hidden at zero) so the background update
-                    // check can reveal it without a page reload.
-                    if (($item['badge'] ?? '') === 'updates') {
+                    // Optional count badge. Always emitted (hidden at zero) so a
+                    // background refresh can reveal it without a page reload.
+                    //
+                    //   updates   — from cached settings, never a remote call
+                    //               during render
+                    //   comments  — comments awaiting moderation
+                    //
+                    // Any item may name a badge; an app supplies the number for
+                    // its own key through the `admin.badge` filter, which
+                    // receives (int $count, string $key).
+                    $navBadgeKey = (string) ($item['badge'] ?? '');
+                    if ($navBadgeKey !== '') {
+                        $navBadgeN = 0;
                         try {
-                            $navBadgeN = (int) \App\Core\Application::getInstance()
-                                ->make(\App\Services\SettingService::class)
-                                ->get('updates', 'available_count', 0);
+                            $__app = \App\Core\Application::getInstance();
+                            if ($navBadgeKey === 'updates') {
+                                $navBadgeN = (int) $__app->make(\App\Services\SettingService::class)
+                                    ->get('updates', 'available_count', 0);
+                            } elseif ($navBadgeKey === 'comments') {
+                                $navBadgeN = $__app->make(\App\Services\CommentService::class)->pendingCount();
+                            }
+                            $navBadgeN = (int) $__app->make(\App\Core\HookRegistry::class)
+                                ->applyFilters('admin.badge', $navBadgeN, $navBadgeKey);
                         } catch (\Throwable $e) { $navBadgeN = 0; }
+                        $navBadgeTitle = $navBadgeKey === 'comments'
+                            ? ($navBadgeN === 1 ? '1 comment awaiting moderation' : $navBadgeN . ' comments awaiting moderation')
+                            : '';
                         ?>
-                    <span class="bh-nav-badge bh-hide-collapsed" data-bh-badge="updates"<?= $navBadgeN > 0 ? '' : ' hidden' ?>><?= $navBadgeN > 99 ? '99+' : $navBadgeN ?></span>
+                    <span class="bh-nav-badge bh-hide-collapsed" data-bh-badge="<?= htmlspecialchars($navBadgeKey) ?>"<?= $navBadgeTitle !== '' ? ' title="' . htmlspecialchars($navBadgeTitle) . '"' : '' ?><?= $navBadgeN > 0 ? '' : ' hidden' ?>><?= $navBadgeN > 99 ? '99+' : $navBadgeN ?></span>
                     <?php } ?>
                 </a>
                 <?php endif; ?>
@@ -870,6 +887,39 @@ try {
                 if (p) p.classList.add('hidden');
             });
         }
+    });
+})();
+</script>
+<script>
+/*
+ * Keep the pending-comments badge current while the admin is open. Moderating
+ * reloads the page and redraws it anyway; this covers a comment arriving while
+ * a moderator is looking at some other screen. One COUNT query a minute, and
+ * none while the tab is hidden.
+ */
+(function () {
+    var badge = document.querySelector('[data-bh-badge="comments"]');
+    if (!badge || !window.fetch) return;
+    var url = <?= json_encode(($base ?? '') . '/admin/comments/pending.json') ?>;
+    var busy = false;
+    function paint(n) {
+        n = parseInt(n, 10) || 0;
+        badge.textContent = n > 99 ? '99+' : String(n);
+        badge.hidden = n <= 0;
+        badge.title = n === 1 ? '1 comment awaiting moderation' : n + ' comments awaiting moderation';
+    }
+    function refresh() {
+        if (busy || document.visibilityState === 'hidden') return;
+        busy = true;
+        fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { if (d && typeof d.pending !== 'undefined') paint(d.pending); })
+            .catch(function () { /* signed out, offline: leave the badge as it is */ })
+            .finally(function () { busy = false; });
+    }
+    setInterval(refresh, 60000);
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') refresh();
     });
 })();
 </script>

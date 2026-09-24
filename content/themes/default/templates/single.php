@@ -75,7 +75,7 @@
     <section id="comments" class="mt-12 pt-8 border-t border-slate-200">
         <h2 class="text-2xl font-bold text-slate-900 mb-6">
             <?= icon('chat-bubble-left-right', 'w-4 h-4 text-brand-500 mr-2') ?>
-            Comments <span class="text-slate-400 font-medium"><?= $comments_count ?></span>
+            Comments <span class="text-slate-400 font-medium" data-bh-comment-count="<?= (int) $post['id'] ?>"><?= (int) $comments_count ?></span>
         </h2>
 
         <?php if (empty($comments)): ?>
@@ -89,7 +89,7 @@
                     $byParent[$pid][] = $c;
                 }
                 // Recursive renderer (capped indent so deep threads stay readable).
-                $renderComment = function ($c, int $depth) use (&$renderComment, $byParent) {
+                $renderComment = function ($c, int $depth) use (&$renderComment, $byParent, $comments_open) {
                     $email = trim((string) ($c['author_email'] ?? ''));
                     $avatar = $email !== ''
                         ? 'https://www.gravatar.com/avatar/' . md5(strtolower($email)) . '?s=80&d=mp'
@@ -119,7 +119,7 @@
                             </div>
                             <?php if ($comments_open): ?>
                                 <button type="button" class="comment-reply-btn text-xs text-slate-500 hover:text-brand-600 mt-1 ml-1"
-                                        data-id="<?= $c['id'] ?>" data-name="<?= htmlspecialchars($c['author_name'] ?? '') ?>">Reply</button>
+                                        data-bh-reply data-id="<?= $c['id'] ?>" data-name="<?= htmlspecialchars($c['author_name'] ?? '') ?>">Reply</button>
                             <?php endif; ?>
                             <?php foreach ($byParent[(int) $c['id']] ?? [] as $child) { echo '<div class="mt-4">'; $renderComment($child, $depth + 1); echo '</div>'; } ?>
                         </div>
@@ -132,135 +132,20 @@
             </div>
         <?php endif; ?>
 
-        <!-- Comment form -->
-        <?php if ($comments_open): ?>
-        <div id="comment-form" class="bg-white border border-slate-200 rounded-2xl p-6">
-            <h3 class="font-semibold text-slate-900 mb-4">Leave a comment</h3>
-
-            <!-- Replying-to indicator (shown when replying) -->
-            <div id="comment-reply-notice" class="hidden mb-4 text-sm bg-brand-50 border border-brand-200 text-brand-800 rounded-lg px-4 py-2 flex items-center justify-between">
-                <span>Replying to <strong id="comment-reply-name"></strong></span>
-                <button type="button" id="comment-reply-cancel" class="text-brand-600 hover:text-brand-800 text-xs font-medium">Cancel</button>
-            </div>
-
-            <!-- AJAX status box (initially hidden) -->
-            <div id="comment-status" class="hidden mb-4"></div>
-
-            <form id="comment-form-el" method="POST" action="<?= $base ?>/comments" class="space-y-4">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf ?? '') ?>">
-                <input type="hidden" name="post_id" value="<?= $post['id'] ?>">
-                <input type="hidden" name="redirect_to" value="<?= htmlspecialchars(\App\Core\Helpers::postUrl($post)) ?>">
-                <input type="hidden" name="parent_id" id="comment-parent-id" value="">
-                <!-- Honeypot: hidden from humans; bots that fill it are silently dropped. -->
-                <div aria-hidden="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">
-                    <label>Leave this field empty<input type="text" name="hp_comment_field" tabindex="-1" autocomplete="off" value=""></label>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Name *</label>
-                        <input type="text" name="author_name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-500 outline-none text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Email *</label>
-                        <input type="email" name="author_email" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-500 outline-none text-sm">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Comment *</label>
-                    <textarea name="content" rows="4" required placeholder="Share your thoughts..." class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-500 outline-none text-sm"></textarea>
-                </div>
-                <button type="submit" id="comment-submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-medium shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed">
-                    <?= icon('paper-airplane', 'w-4 h-4 mr-1') ?>
-                    <span class="label">Post Comment</span>
-                </button>
-            </form>
-        </div>
-
-        <script>
-        (function () {
-            var form = document.getElementById('comment-form-el');
-            var statusBox = document.getElementById('comment-status');
-            var submitBtn = document.getElementById('comment-submit');
-            if (!form) return;
-
-            // ── Reply handling ──────────────────────────────────────────────
-            var parentField = document.getElementById('comment-parent-id');
-            var replyNotice = document.getElementById('comment-reply-notice');
-            var replyName   = document.getElementById('comment-reply-name');
-            function clearReply() {
-                if (parentField) parentField.value = '';
-                if (replyNotice) replyNotice.classList.add('hidden');
-            }
-            document.querySelectorAll('.comment-reply-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    if (parentField) parentField.value = btn.getAttribute('data-id') || '';
-                    if (replyName) replyName.textContent = btn.getAttribute('data-name') || 'comment';
-                    if (replyNotice) replyNotice.classList.remove('hidden');
-                    document.getElementById('comment-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    var ta = form.querySelector('textarea[name="content"]');
-                    if (ta) ta.focus();
-                });
-            });
-            var cancelBtn = document.getElementById('comment-reply-cancel');
-            if (cancelBtn) cancelBtn.addEventListener('click', clearReply);
-
-            function showStatus(type, message) {
-                var classes = {
-                    success: 'bg-green-50 border-green-200 text-green-800',
-                    pending: 'bg-blue-50 border-blue-200 text-blue-800',
-                    error: 'bg-red-50 border-red-200 text-red-800'
-                };
-                // SVG markup rendered server-side so the theme needs no icon font.
-                var icons = {
-                    success: <?= json_encode(icon('check-circle', 'w-4 h-4 inline-block align-text-bottom mr-2')) ?>,
-                    pending: <?= json_encode(icon('clock', 'w-4 h-4 inline-block align-text-bottom mr-2')) ?>,
-                    error: <?= json_encode(icon('exclamation-circle', 'w-4 h-4 inline-block align-text-bottom mr-2')) ?>
-                };
-                statusBox.className = 'mb-4 px-4 py-3 rounded-lg border text-sm ' + (classes[type] || classes.error);
-                statusBox.innerHTML = (icons[type] || icons.error) + message;
-                statusBox.classList.remove('hidden');
-                statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-
-            form.addEventListener('submit', function (e) {
-                e.preventDefault();
-                submitBtn.disabled = true;
-                submitBtn.querySelector('.label').textContent = 'Submitting...';
-                statusBox.classList.add('hidden');
-
-                fetch(form.action, {
-                    method: 'POST',
-                    body: new FormData(form),
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    },
-                    credentials: 'same-origin'
-                }).then(function (r) {
-                    return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
-                }).then(function (res) {
-                    if (!res.ok) {
-                        showStatus('error', (res.data && (res.data.error || res.data.message)) || 'Submission failed. Please try again.');
-                        return;
-                    }
-                    if (res.data.pending) {
-                        showStatus('pending', res.data.message || 'Thanks! Your comment is awaiting moderation.');
-                    } else {
-                        showStatus('success', res.data.message || 'Comment posted successfully.');
-                    }
-                    form.reset();
-                }).catch(function () {
-                    showStatus('error', 'Network error. Please try again.');
-                }).finally(function () {
-                    submitBtn.disabled = false;
-                    submitBtn.querySelector('.label').textContent = 'Post Comment';
-                });
-            });
-        })();
-        </script>
-        <?php else: ?>
-        <p class="text-sm text-slate-500 italic">Comments are closed.</p>
-        <?php endif; ?>
+        <!-- Comment form: core's standard form, styled for this theme. Signed-in
+             members are not asked for a name or email. -->
+        <?= bh_comment_form($post, [
+            'class'          => 'bg-white border border-slate-200 rounded-2xl p-6',
+            'title_class'    => 'font-semibold text-slate-900 mb-4',
+            'label_class'    => 'block text-xs font-medium text-slate-600',
+            'input_class'    => 'w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-500 outline-none text-sm',
+            'textarea_class' => 'w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-500 outline-none text-sm',
+            'button_class'   => 'px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-medium shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed',
+            'label_submit'   => 'Post Comment',
+            'placeholder'    => 'Share your thoughts...',
+            'show_url'       => false,
+            'closed_text'    => 'Comments are closed.',
+        ]) ?>
     </section>
 </article>
 

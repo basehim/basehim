@@ -433,6 +433,322 @@ if (!function_exists('bh_setting')) {
 }
 
 /**
+ * Approved comments on a post — the number a visitor should see.
+ *
+ *   Comments <span data-bh-comment-count="<?= $post['id'] ?>"><?= bh_comment_count($post) ?></span>
+ *
+ * The `data-bh-comment-count` attribute is optional. With it, the standard
+ * comment form updates the number in place when a comment is published
+ * straight away.
+ */
+if (!function_exists('bh_comment_count')) {
+    function bh_comment_count(array $post): int {
+        static $cache = [];
+        $id = (int) ($post['id'] ?? 0);
+        if ($id <= 0) return 0;
+        if (!isset($cache[$id])) {
+            try {
+                $cache[$id] = \App\Core\Application::getInstance()
+                    ->make(\App\Services\CommentService::class)->approvedCount($id);
+            } catch (\Throwable) { $cache[$id] = 0; }
+        }
+        return $cache[$id];
+    }
+}
+
+/**
+ * The standard comment form.
+ *
+ *   <?= bh_comment_form($post) ?>
+ *
+ * One call, anywhere a template has the post. Core supplies everything the
+ * comment handler checks — the CSRF token, the post id, the reply target, the
+ * honeypot — and the submission script, so a theme cannot get any of them
+ * wrong or leave one out.
+ *
+ * Signed-in members are not asked who they are. The name, email and website
+ * fields appear only for guests; a member sees "Commenting as <name>" and the
+ * comment is recorded under their account. The server enforces the same rule
+ * (CommentController::store), so it does not depend on the form.
+ *
+ * Returns the "closed" text instead of a form when comments are off for the
+ * site or the post, or the post is not published.
+ *
+ * Replies: any element with `data-bh-reply` and `data-id` / `data-name`
+ * attributes turns the form into a reply to that comment when clicked.
+ *
+ *   <button type="button" data-bh-reply data-id="<?= $c['id'] ?>"
+ *           data-name="<?= htmlspecialchars($c['author_name']) ?>">Reply</button>
+ *
+ * Styling: the form carries `bh-comment-form__*` classes and a small default
+ * stylesheet at zero specificity, so any rule a theme writes wins. Pass
+ * `'styles' => false` to drop it, and `form_class`, `input_class`,
+ * `textarea_class`, `button_class` and friends to put the theme's own classes
+ * on each element.
+ *
+ * Events: the form's wrapper dispatches `bh:comment-posted` (cancelable, with
+ * detail {status, pending, message, comment, count, postId}) after a
+ * successful submission. When a comment is published straight away the page
+ * reloads to show it in the theme's own markup; call preventDefault() on the
+ * event to handle it yourself instead.
+ *
+ * Filters: `comment_form.args` (array $args, array $post) and
+ * `comment_form.html` (string $html, array $post, array $args).
+ */
+if (!function_exists('bh_comment_form')) {
+    function bh_comment_form(array $post, array $args = []): string {
+        $e = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES);
+
+        try {
+            $app = \App\Core\Application::getInstance();
+            $settings = $app->make(\App\Services\SettingService::class);
+            $hooks = $app->make(\App\Core\HookRegistry::class);
+        } catch (\Throwable) {
+            return '';
+        }
+
+        $defaults = [
+            'id'               => 'comment-form',
+            'title'            => 'Leave a comment',
+            'title_tag'        => 'h3',
+            'label_name'       => 'Name',
+            'label_email'      => 'Email',
+            'label_url'        => 'Website',
+            'label_comment'    => 'Comment',
+            'placeholder'      => 'Share your thoughts…',
+            'label_submit'     => 'Post comment',
+            'label_submitting' => 'Posting…',
+            'label_reply'      => 'Replying to',
+            'label_cancel'     => 'Cancel',
+            'logged_in_text'   => 'Commenting as %s.',
+            'show_logout'      => false,
+            'label_logout'     => 'Log out',
+            'closed_text'      => 'Comments are closed.',
+            'show_url'         => true,
+            'rows'             => 4,
+            'class'            => '',
+            'title_class'      => '',
+            'form_class'       => '',
+            'field_class'      => '',
+            'label_class'      => '',
+            'input_class'      => '',
+            'textarea_class'   => '',
+            'button_class'     => '',
+            'styles'           => true,
+            'reload_on_publish'=> true,
+        ];
+        $args = array_merge($defaults, $args);
+        try {
+            $filtered = $hooks->applyFilters('comment_form.args', $args, $post);
+            if (is_array($filtered)) $args = array_merge($defaults, $filtered);
+        } catch (\Throwable) {}
+
+        $postId = (int) ($post['id'] ?? 0);
+        $open = $postId > 0
+            && ($post['status'] ?? '') === 'published'
+            && ($post['comment_status'] ?? 'closed') === 'open'
+            && (bool) $settings->get('discussion', 'allow_comments', true);
+        if (!$open) {
+            return $args['closed_text'] === '' || $args['closed_text'] === null
+                ? ''
+                : '<p class="bh-comments-closed">' . $e($args['closed_text']) . '</p>';
+        }
+
+        // Who is commenting — the same rule the handler applies.
+        $user = null;
+        try {
+            $user = $app->make(\App\Services\AuthService::class)->currentUser();
+            if ($user && ($user['status'] ?? '') !== 'active') $user = null;
+        } catch (\Throwable) {}
+        $userName = $user ? (trim((string) ($user['display_name'] ?? '')) ?: (string) ($user['username'] ?? '')) : '';
+
+        try {
+            $csrf = $app->make(\App\Core\Session::class)->csrfToken();
+        } catch (\Throwable) { $csrf = ''; }
+
+        $base     = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
+        $required = (bool) $settings->get('discussion', 'require_email', true);
+        $id       = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $args['id']) ?: 'comment-form';
+        $tag      = in_array($args['title_tag'], ['h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div'], true) ? $args['title_tag'] : 'h3';
+        $cls      = static fn(string $core, $extra): string => trim($core . ' ' . (string) $extra);
+
+        $field = function (string $name, string $type, string $label, string $auto, bool $req) use ($args, $e, $id, $cls): string {
+            $fid = $id . '-' . $name;
+            return '<p class="' . $e($cls('bh-comment-form__field bh-comment-form__field--' . $name, $args['field_class'])) . '">'
+                 . '<label for="' . $e($fid) . '" class="' . $e($cls('bh-comment-form__label', $args['label_class'])) . '">'
+                 . $e($label) . ($req ? ' <span class="bh-comment-form__req" aria-hidden="true">*</span>' : '') . '</label>'
+                 . '<input id="' . $e($fid) . '" type="' . $type . '" name="author_' . $name . '" autocomplete="' . $auto . '"'
+                 . ($req ? ' required' : '') . ' class="' . $e($cls('bh-comment-form__input', $args['input_class'])) . '">'
+                 . '</p>';
+        };
+
+        $h  = '<div class="' . $e($cls('bh-comment-form', $args['class'])) . '" id="' . $e($id) . '" data-bh-comment-form'
+            . ($args['reload_on_publish'] ? ' data-bh-reload' : '') . '>';
+        if ((string) $args['title'] !== '') {
+            $h .= '<' . $tag . ' class="' . $e($cls('bh-comment-form__title', $args['title_class'])) . '">' . $e($args['title']) . '</' . $tag . '>';
+        }
+        $h .= '<div class="bh-comment-form__reply" data-bh-reply-notice hidden>'
+            . '<span>' . $e($args['label_reply']) . ' <strong data-bh-reply-name></strong></span>'
+            . '<button type="button" class="bh-comment-form__cancel" data-bh-reply-cancel>' . $e($args['label_cancel']) . '</button>'
+            . '</div>';
+        $h .= '<div class="bh-comment-form__status" data-bh-comment-status role="status" aria-live="polite" hidden></div>';
+        $h .= '<form method="post" action="' . $e($base . '/comments') . '" class="' . $e($cls('bh-comment-form__form', $args['form_class'])) . '"'
+            . ' data-bh-comment-form-el data-label-busy="' . $e($args['label_submitting']) . '">';
+        $h .= '<input type="hidden" name="_csrf" value="' . $e($csrf) . '">'
+            . '<input type="hidden" name="post_id" value="' . $postId . '">'
+            . '<input type="hidden" name="redirect_to" value="' . $e($base . \App\Core\Helpers::postUrl($post)) . '">'
+            . '<input type="hidden" name="parent_id" value="" data-bh-parent>';
+        // Hidden from people; a bot that fills it is silently dropped by CommentService::guard().
+        $h .= '<div aria-hidden="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">'
+            . '<label>Leave this field empty<input type="text" name="hp_comment_field" tabindex="-1" autocomplete="off" value=""></label></div>';
+
+        if ($user) {
+            $h .= '<p class="bh-comment-form__identity">'
+                . str_replace('%s', '<strong>' . $e($userName) . '</strong>', $e($args['logged_in_text']));
+            if ($args['show_logout']) {
+                $h .= ' <a href="' . $e($base . '/admin/logout') . '">' . $e($args['label_logout']) . '</a>';
+            }
+            $h .= '</p>';
+        } else {
+            $h .= '<div class="bh-comment-form__fields">'
+                . $field('name', 'text', (string) $args['label_name'], 'name', $required)
+                . $field('email', 'email', (string) $args['label_email'], 'email', $required)
+                . '</div>';
+            if ($args['show_url']) {
+                $h .= $field('url', 'url', (string) $args['label_url'], 'url', false);
+            }
+        }
+
+        $h .= '<p class="' . $e($cls('bh-comment-form__field bh-comment-form__field--comment', $args['field_class'])) . '">'
+            . '<label for="' . $e($id . '-content') . '" class="' . $e($cls('bh-comment-form__label', $args['label_class'])) . '">'
+            . $e($args['label_comment']) . ' <span class="bh-comment-form__req" aria-hidden="true">*</span></label>'
+            . '<textarea id="' . $e($id . '-content') . '" name="content" rows="' . max(2, (int) $args['rows']) . '" required'
+            . ' placeholder="' . $e($args['placeholder']) . '" class="' . $e($cls('bh-comment-form__textarea', $args['textarea_class'])) . '"></textarea>'
+            . '</p>';
+        $h .= '<p class="bh-comment-form__actions"><button type="submit" class="' . $e($cls('bh-comment-form__submit', $args['button_class'])) . '"'
+            . ' data-bh-comment-submit>' . $e($args['label_submit']) . '</button></p>';
+        $h .= '</form></div>';
+
+        $h .= bh_comment_form_assets((bool) $args['styles']);
+
+        try {
+            $out = $hooks->applyFilters('comment_form.html', $h, $post, $args);
+            if (is_string($out)) $h = $out;
+        } catch (\Throwable) {}
+        return $h;
+    }
+}
+
+/**
+ * The comment form's stylesheet and script, once per page. Called by
+ * bh_comment_form(); a theme never needs to call it.
+ */
+if (!function_exists('bh_comment_form_assets')) {
+    function bh_comment_form_assets(bool $styles = true): string {
+        static $scriptDone = false, $styleDone = false;
+        $out = '';
+
+        if ($styles && !$styleDone) {
+            $styleDone = true;
+            // :where() keeps every rule at zero specificity: a theme's own
+            // class on the same element always wins.
+            $out .= '<style id="bh-comment-form-css">'
+                . ':where(.bh-comment-form [hidden]){display:none!important}'
+                . ':where(.bh-comment-form__form){display:grid;gap:.9rem;margin:0}'
+                . ':where(.bh-comment-form__title){margin:0 0 .9rem}'
+                . ':where(.bh-comment-form__fields){display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))}'
+                . ':where(.bh-comment-form__field){display:grid;gap:.35rem;margin:0}'
+                . ':where(.bh-comment-form__label){font-size:.85em;font-weight:600}'
+                . ':where(.bh-comment-form__req){opacity:.6}'
+                . ':where(.bh-comment-form__input,.bh-comment-form__textarea){box-sizing:border-box;width:100%;font:inherit;color:inherit;'
+                .   'background:transparent;border:1px solid rgba(127,127,127,.45);border-radius:.5rem;padding:.6em .75em}'
+                . ':where(.bh-comment-form__textarea){resize:vertical;min-height:6rem}'
+                . ':where(.bh-comment-form__identity){margin:0;font-size:.9em;opacity:.85}'
+                . ':where(.bh-comment-form__actions){margin:0}'
+                . ':where(.bh-comment-form__submit){font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:.5rem;'
+                .   'padding:.65em 1.2em;color:#fff;background:var(--bh-accent,#2563eb)}'
+                . ':where(.bh-comment-form__submit:disabled){opacity:.6;cursor:progress}'
+                . ':where(.bh-comment-form__reply,.bh-comment-form__status){display:flex;align-items:center;justify-content:space-between;'
+                .   'gap:.75rem;margin:0 0 .9rem;padding:.6em .85em;border-radius:.5rem;font-size:.9em;border:1px solid rgba(127,127,127,.3)}'
+                . ':where(.bh-comment-form__cancel){font:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}'
+                . ':where(.bh-comment-form__status--success){background:rgba(22,163,74,.1);border-color:rgba(22,163,74,.35)}'
+                . ':where(.bh-comment-form__status--pending){background:rgba(37,99,235,.1);border-color:rgba(37,99,235,.35)}'
+                . ':where(.bh-comment-form__status--error){background:rgba(220,38,38,.1);border-color:rgba(220,38,38,.35)}'
+                . '</style>';
+        }
+
+        if (!$scriptDone) {
+            $scriptDone = true;
+            $out .= <<<'JS'
+<script id="bh-comment-form-js">
+(function () {
+ if (window.__bhCommentForm) return; window.__bhCommentForm = true;
+ function wrapOf(el) { return el && el.closest('[data-bh-comment-form]'); }
+ function status(wrap, type, msg) {
+  var box = wrap.querySelector('[data-bh-comment-status]'); if (!box) return;
+  box.className = 'bh-comment-form__status bh-comment-form__status--' + type;
+  box.textContent = msg; box.hidden = false;
+ }
+ function clearReply(wrap) {
+  var p = wrap.querySelector('[data-bh-parent]'); if (p) p.value = '';
+  var n = wrap.querySelector('[data-bh-reply-notice]'); if (n) n.hidden = true;
+ }
+ document.addEventListener('click', function (e) {
+  var cancel = e.target.closest('[data-bh-reply-cancel]');
+  if (cancel) { var w0 = wrapOf(cancel); if (w0) clearReply(w0); return; }
+  var btn = e.target.closest('[data-bh-reply]'); if (!btn) return;
+  var target = btn.getAttribute('data-bh-reply-form');
+  var wrap = target ? document.getElementById(target) : document.querySelector('[data-bh-comment-form]');
+  if (!wrap) return;
+  e.preventDefault();
+  var p = wrap.querySelector('[data-bh-parent]'); if (p) p.value = btn.getAttribute('data-id') || '';
+  var name = wrap.querySelector('[data-bh-reply-name]'); if (name) name.textContent = btn.getAttribute('data-name') || '';
+  var n = wrap.querySelector('[data-bh-reply-notice]'); if (n) n.hidden = false;
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  var ta = wrap.querySelector('textarea[name="content"]'); if (ta) ta.focus({ preventScroll: true });
+ });
+ document.addEventListener('submit', function (e) {
+  var form = e.target;
+  if (!form.matches || !form.matches('[data-bh-comment-form-el]') || !window.fetch || !window.FormData) return;
+  e.preventDefault();
+  var wrap = wrapOf(form); var btn = form.querySelector('[data-bh-comment-submit]');
+  var idle = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = form.getAttribute('data-label-busy') || idle; }
+  fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin',
+                       headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+   .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+   .then(function (res) {
+    var d = res.d || {};
+    if (!res.ok || d.success === false) { status(wrap, 'error', d.error || d.message || 'Your comment could not be posted. Please try again.'); return; }
+    status(wrap, d.pending ? 'pending' : 'success', d.message || (d.pending ? 'Your comment is awaiting moderation.' : 'Comment posted.'));
+    var postId = (form.querySelector('[name="post_id"]') || {}).value || '';
+    if (typeof d.count === 'number') {
+     document.querySelectorAll('[data-bh-comment-count]').forEach(function (el) {
+      var for_ = el.getAttribute('data-bh-comment-count');
+      if (for_ === '' || for_ === postId) el.textContent = String(d.count);
+     });
+    }
+    var content = form.querySelector('textarea[name="content"]'); if (content) content.value = '';
+    clearReply(wrap);
+    var ev = new CustomEvent('bh:comment-posted', { bubbles: true, cancelable: true,
+      detail: { status: d.status, pending: !!d.pending, message: d.message, comment: d.comment || null, count: d.count, postId: postId } });
+    var go = wrap.dispatchEvent(ev);
+    if (go && !d.pending && d.comment && d.comment.id && wrap.hasAttribute('data-bh-reload')) {
+     setTimeout(function () { location.hash = 'comment-' + d.comment.id; location.reload(); }, 900);
+    }
+   })
+   .catch(function () { status(wrap, 'error', 'Network error. Please try again.'); })
+   .then(function () { if (btn) { btn.disabled = false; btn.textContent = idle; } });
+ });
+})();
+</script>
+JS;
+        }
+        return $out;
+    }
+}
+
+/**
  * Items for a menu location, for themes that declare their own.
  *
  * Core passes `$primary_menu` and `$footer_menu` into every template, which

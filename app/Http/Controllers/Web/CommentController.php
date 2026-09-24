@@ -44,25 +44,50 @@ class CommentController extends Controller
         }
 
         $content = trim((string)$request->input('content', ''));
-        $authorName = trim((string)$request->input('author_name', ''));
-        $authorEmail = trim((string)$request->input('author_email', ''));
 
         if ($content === '') {
             return $this->respond($isAjax, 'error', 'Please write a comment.', Helpers::postUrl($post) . '#comment-form', 422);
         }
 
-        if ($settings->get('discussion', 'require_email', true)) {
-            if ($authorName === '' || $authorEmail === '') {
-                return $this->respond($isAjax, 'error', 'Name and email are required.', Helpers::postUrl($post) . '#comment-form', 422);
-            }
-            if (!filter_var($authorEmail, FILTER_VALIDATE_EMAIL)) {
-                return $this->respond($isAjax, 'error', 'Please enter a valid email.', Helpers::postUrl($post) . '#comment-form', 422);
-            }
-        }
-
+        /*
+         * Who is commenting. Resolved before any validation, because it
+         * decides what needs validating.
+         *
+         * A signed-in, active account comments as itself: its display name
+         * (or username) and its email, whatever the form sent. Nothing typed
+         * into a name or email field is used, so a theme still showing those
+         * fields cannot let a member post under someone else's name.
+         *
+         * The required-fields check used to run first, before the user was
+         * even looked up — so a signed-in member was refused with "Name and
+         * email are required" unless they typed both again, and a theme
+         * could not hide those fields without breaking commenting for them.
+         */
         /** @var AuthService $auth */
         $auth = $this->app->make(AuthService::class);
         $currentUser = $auth->currentUser();
+        if ($currentUser && ($currentUser['status'] ?? '') !== 'active') {
+            $currentUser = null;
+        }
+
+        if ($currentUser) {
+            $authorName  = trim((string) ($currentUser['display_name'] ?? '')) ?: (string) ($currentUser['username'] ?? '');
+            $authorEmail = (string) ($currentUser['email'] ?? '');
+            $authorUrl   = null;
+        } else {
+            $authorName  = trim((string)$request->input('author_name', ''));
+            $authorEmail = trim((string)$request->input('author_email', ''));
+            $authorUrl   = $request->input('author_url');
+
+            if ($settings->get('discussion', 'require_email', true)) {
+                if ($authorName === '' || $authorEmail === '') {
+                    return $this->respond($isAjax, 'error', 'Name and email are required.', Helpers::postUrl($post) . '#comment-form', 422);
+                }
+                if (!filter_var($authorEmail, FILTER_VALIDATE_EMAIL)) {
+                    return $this->respond($isAjax, 'error', 'Please enter a valid email.', Helpers::postUrl($post) . '#comment-form', 422);
+                }
+            }
+        }
 
         /** @var CommentService $comments */
         $comments = $this->app->make(CommentService::class);
@@ -72,9 +97,9 @@ class CommentController extends Controller
         // Anti-spam gate (honeypot, flood, duplicates, blocklist/moderation words).
         $decision = $comments->guard([
             'content'      => $content,
-            'author_name'  => $currentUser['display_name'] ?? $authorName,
-            'author_email' => $currentUser['email'] ?? $authorEmail,
-            'author_url'   => $request->input('author_url'),
+            'author_name'  => $authorName,
+            'author_email' => $authorEmail,
+            'author_url'   => $authorUrl,
             'honeypot'     => $request->input('hp_comment_field', ''),
             'post_id'      => $postId,
             'status'       => $defaultStatus,
@@ -97,9 +122,9 @@ class CommentController extends Controller
         $id = $comments->create([
             'post_id' => $postId,
             'author_id' => $currentUser['id'] ?? null,
-            'author_name' => $currentUser['display_name'] ?? $authorName,
-            'author_email' => $currentUser['email'] ?? $authorEmail,
-            'author_url' => $request->input('author_url'),
+            'author_name' => $authorName,
+            'author_email' => $authorEmail,
+            'author_url' => $authorUrl,
             'content' => $content,
             'parent_id' => $request->input('parent_id') ?: null,
             'status' => $status,
@@ -117,6 +142,9 @@ class CommentController extends Controller
                 'pending' => $status !== 'approved',
                 'message' => $msg,
                 'comment' => $status === 'approved' ? $comments->find($id) : null,
+                // The post's approved total after this comment, so a page can
+                // update its count without reloading.
+                'count' => $comments->approvedCount($postId),
             ], 201);
         }
 

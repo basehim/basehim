@@ -137,6 +137,7 @@ $router->group(['prefix' => '/admin'], function ($router) {
 
         // Comments
         $router->get('/comments', ['App\\Http\\Controllers\\Admin\\CommentController', 'index']);
+        $router->get('/comments/pending.json', ['App\\Http\\Controllers\\Admin\\CommentController', 'pendingCount']);
         $router->post('/comments/{id}/approve', ['App\\Http\\Controllers\\Admin\\CommentController', 'approve']);
         $router->post('/comments/{id}/spam', ['App\\Http\\Controllers\\Admin\\CommentController', 'spam']);
         $router->post('/comments/{id}/delete', ['App\\Http\\Controllers\\Admin\\CommentController', 'destroy']);

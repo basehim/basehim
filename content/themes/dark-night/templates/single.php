@@ -58,7 +58,7 @@
 
     <!-- Comments -->
     <section id="comments" class="dn-comments">
-        <h2><i class="fa-regular fa-comments"></i>Comments <span><?= $comments_count ?></span></h2>
+        <h2><i class="fa-regular fa-comments"></i>Comments <span data-bh-comment-count="<?= (int) $post['id'] ?>"><?= (int) $comments_count ?></span></h2>
 
         <?php if (empty($comments)): ?>
             <p style="color:var(--dn-text-dim);margin:0 0 1.8rem;">The night is quiet — be the first to comment.</p>
@@ -81,75 +81,18 @@
             </div>
         <?php endif; ?>
 
+        <?php // Core's standard form, in this theme's classes. Signed-in members
+              // are not asked for a name or email. ?>
         <?php if ($comments_open): ?>
-        <div id="comment-form" class="dn-form-card">
-            <h3>Leave a comment</h3>
-            <div id="comment-status" class="dn-status dn-hidden"></div>
-            <form id="comment-form-el" method="POST" action="<?= $base ?>/comments">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf ?? '') ?>">
-                <input type="hidden" name="post_id" value="<?= $post['id'] ?>">
-                <input type="hidden" name="redirect_to" value="<?= htmlspecialchars(\App\Core\Helpers::postUrl($post)) ?>">
-                <div class="dn-form-grid" style="margin-bottom:.95rem;">
-                    <div class="dn-field">
-                        <label>Name *</label>
-                        <input type="text" name="author_name" required>
-                    </div>
-                    <div class="dn-field">
-                        <label>Email *</label>
-                        <input type="email" name="author_email" required>
-                    </div>
-                </div>
-                <div class="dn-field">
-                    <label>Comment *</label>
-                    <textarea name="content" rows="4" required placeholder="Share your thoughts..."></textarea>
-                </div>
-                <button type="submit" id="comment-submit" class="dn-btn dn-btn-gold">
-                    <i class="fa-regular fa-paper-plane"></i>
-                    <span class="label">Post Comment</span>
-                </button>
-            </form>
-        </div>
-
-        <script>
-        (function () {
-            var form = document.getElementById('comment-form-el');
-            var statusBox = document.getElementById('comment-status');
-            var submitBtn = document.getElementById('comment-submit');
-            if (!form) return;
-
-            function showStatus(type, message) {
-                statusBox.className = 'dn-status ' + (type === 'success' || type === 'pending' || type === 'error' ? type : 'error');
-                var icons = { success: 'fa-circle-check', pending: 'fa-clock', error: 'fa-circle-exclamation' };
-                statusBox.innerHTML = '<i class="fa-solid ' + (icons[type] || icons.error) + '" style="margin-right:.45rem;"></i>' + message;
-                statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-
-            form.addEventListener('submit', function (e) {
-                e.preventDefault();
-                submitBtn.disabled = true;
-                fetch(form.action, {
-                    method: 'POST',
-                    body: new FormData(form),
-                    credentials: 'same-origin',
-                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-                }).then(function (r) { return r.json(); }).then(function (d) {
-                    submitBtn.disabled = false;
-                    if (d.error) {
-                        showStatus('error', d.error);
-                    } else if (d.success) {
-                        showStatus('success', d.message || 'Comment posted.');
-                        form.reset();
-                    } else {
-                        showStatus('pending', d.message || 'Comment submitted and awaiting moderation.');
-                        form.reset();
-                    }
-                }).catch(function () {
-                    submitBtn.disabled = false;
-                    showStatus('error', 'Something went wrong — please try again.');
-                });
-            });
-        })();
-        </script>
+        <?= bh_comment_form($post, [
+            'class'        => 'dn-form-card',
+            'field_class'  => 'dn-field',
+            'button_class' => 'dn-btn dn-btn-gold',
+            'label_submit' => 'Post Comment',
+            'placeholder'  => 'Share your thoughts...',
+            'show_url'     => false,
+            'closed_text'  => '',
+        ]) ?>
         <?php else: ?>
         <p style="color:var(--dn-text-dim);font-size:.9rem;"><i class="fa-solid fa-lock" style="margin-right:.4rem;"></i>Comments are closed on this post.</p>
         <?php endif; ?>

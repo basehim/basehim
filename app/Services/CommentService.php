@@ -139,6 +139,27 @@ class CommentService
         return true;
     }
 
+    /**
+     * Approved comments on one post — the number a visitor sees.
+     */
+    public function approvedCount(int $postId): int
+    {
+        $r = $this->db->selectOne(
+            "SELECT COUNT(*) AS c FROM {comments} WHERE post_id = :pid AND status = 'approved'",
+            ['pid' => $postId]
+        );
+        return (int) ($r['c'] ?? 0);
+    }
+
+    /**
+     * Comments waiting for a moderator — the admin sidebar badge.
+     */
+    public function pendingCount(): int
+    {
+        $r = $this->db->selectOne("SELECT COUNT(*) AS c FROM {comments} WHERE status = 'pending'");
+        return (int) ($r['c'] ?? 0);
+    }
+
     public function counts(): array
     {
         $rows = $this->db->select('SELECT status, COUNT(*) AS c FROM {comments} GROUP BY status');
