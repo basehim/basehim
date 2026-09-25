@@ -25,7 +25,7 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
         </div>
         <div class="flex items-center gap-2">
             <?php if ($isEdit && $post['status'] === 'published'): ?>
-                <a href="<?= $base ?>/<?= $type === 'post' ? 'posts/' : 'page/' ?><?= htmlspecialchars($post['slug']) ?>" target="_blank"
+                <a href="<?= htmlspecialchars(\App\Core\Helpers::postUrl($post, (string) $base)) ?>" target="_blank"
                     class="px-4 py-2 border border-slate-300 hover:bg-slate-50 rounded-lg text-sm font-medium text-slate-700">
                     <?= icon('eye', 'w-4 h-4 mr-1') ?> View
                 </a>

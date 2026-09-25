@@ -283,6 +283,16 @@ class PostController extends Controller
         if ($guard = $this->guardOwnership($existing, 'edit')) return $guard;
 
         $data = $this->extractData($request);
+        if ($request->input('_post_settings') === null) {
+            /*
+             * The settings panel did not arrive, so its fields are simply
+             * absent — not set to their defaults. extractData() would read them
+             * as status "draft", no categories, no featured image and comments
+             * open, and a save from an editor that had lost the panel would
+             * unpublish the post and strip it. Keep what the post already has.
+             */
+            unset($data['status'], $data['term_ids'], $data['featured_media_id'], $data['comment_status']);
+        }
         $data = $this->gatePublishing($data);
         $posts->update((int)$id, $data);
 

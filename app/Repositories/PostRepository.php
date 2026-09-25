@@ -65,6 +65,101 @@ class PostRepository
         return $this->decorate($this->db->selectOne($sql, $params));
     }
 
+    /**
+     * Whether any row of the given types already holds $slug.
+     *
+     * Trashed rows count: a slug stays reserved while its content is in the
+     * Trash, so restoring it can never collide. A permanently deleted row is
+     * gone from the table, so its slug is free again.
+     *
+     * @param string[] $types
+     */
+    public function slugTaken(string $slug, array $types, ?int $excludeId = null): bool
+    {
+        if ($types === []) return false;
+        $params = ['slug' => $slug];
+        $in = [];
+        foreach (array_values($types) as $i => $t) { $in[] = ':t' . $i; $params['t' . $i] = $t; }
+        $sql = 'SELECT id FROM {posts} WHERE slug = :slug AND type IN (' . implode(',', $in) . ')';
+        if ($excludeId !== null) {
+            $sql .= ' AND id <> :exclude';
+            $params['exclude'] = $excludeId;
+        }
+        return $this->db->selectOne($sql . ' LIMIT 1', $params) !== null;
+    }
+
+    /**
+     * Serialise slug allocation across requests, so two saves at the same
+     * moment cannot both claim the same free slug — a post and a page share
+     * one namespace, which no database index covers. Returns false if the
+     * lock could not be taken; the caller proceeds regardless, and the
+     * (type, slug) unique index still prevents a same-type duplicate.
+     */
+    public function lockSlugs(): bool
+    {
+        try {
+            $r = $this->db->selectOne('SELECT GET_LOCK(:n, 5) AS l', ['n' => $this->slugLockName()]);
+            return (int) ($r['l'] ?? 0) === 1;
+        } catch (\Throwable) { return false; }
+    }
+
+    public function unlockSlugs(): void
+    {
+        try { $this->db->selectOne('SELECT RELEASE_LOCK(:n) AS l', ['n' => $this->slugLockName()]); } catch (\Throwable) {}
+    }
+
+    private function slugLockName(): string
+    {
+        // Per install: several sites may share one MySQL server.
+        return 'basehim_slugs_' . substr(md5(defined('BASEHIM_ROOT') ? BASEHIM_ROOT : __DIR__), 0, 16);
+    }
+
+    /** Whether the post has at least one term in the category taxonomy. */
+    public function hasCategory(int $postId): bool
+    {
+        return $this->db->selectOne(
+            "SELECT 1 AS x FROM {post_term} pt
+               JOIN {terms} t ON t.id = pt.term_id
+               JOIN {taxonomies} x ON x.id = t.taxonomy_id AND x.slug = 'category'
+              WHERE pt.post_id = :pid LIMIT 1",
+            ['pid' => $postId]
+        ) !== null;
+    }
+
+    /** @return int[] every term id attached to the post, any taxonomy */
+    public function termIds(int $postId): array
+    {
+        return array_map('intval', array_column(
+            $this->db->select('SELECT term_id FROM {post_term} WHERE post_id = :pid', ['pid' => $postId]),
+            'term_id'
+        ));
+    }
+
+    /** A category term by id or slug, or null. */
+    public function categoryTerm(int $id = 0, string $slug = ''): ?array
+    {
+        $where = $id > 0 ? 't.id = :v' : 't.slug = :v';
+        return $this->db->selectOne(
+            "SELECT t.id, t.slug, t.name FROM {terms} t
+               JOIN {taxonomies} x ON x.id = t.taxonomy_id AND x.slug = 'category'
+              WHERE {$where} LIMIT 1",
+            ['v' => $id > 0 ? $id : $slug]
+        );
+    }
+
+    /** Create a category; returns its id, or 0 if there is no category taxonomy. */
+    public function createCategory(string $name, string $slug): int
+    {
+        $tax = $this->db->selectOne("SELECT id FROM {taxonomies} WHERE slug = 'category' LIMIT 1");
+        if (!$tax) return 0;
+        return (int) $this->db->insert('terms', [
+            'taxonomy_id' => (int) $tax['id'],
+            'name'        => $name,
+            'slug'        => $slug,
+            'count'       => 0,
+        ]);
+    }
+
     public function slugExists(string $slug, string $type, ?int $excludeId = null): bool
     {
         // The unique index uq_type_slug covers ALL rows including soft-deleted
@@ -181,7 +276,33 @@ class PostRepository
 
     public function forceDelete(int $id): int
     {
+        $this->releaseTermCounts('p.id = :id', ['id' => $id]);
         return $this->db->delete('posts', ['id' => $id]);
+    }
+
+    /**
+     * Take the posts about to be deleted out of their terms' counts.
+     *
+     * Their post_term rows go with them through the foreign key, but
+     * attachTerms() maintains `count` by hand, and nothing lowered it on a
+     * permanent delete — so every emptied Trash left category and tag counts
+     * too high, for good.
+     */
+    private function releaseTermCounts(string $where, array $params): void
+    {
+        try {
+            $this->db->execute(
+                "UPDATE {terms} t
+                   JOIN (SELECT pt.term_id, COUNT(*) AS n
+                           FROM {post_term} pt JOIN {posts} p ON p.id = pt.post_id
+                          WHERE {$where}
+                          GROUP BY pt.term_id) d ON d.term_id = t.id
+                    SET t.count = GREATEST(0, t.count - d.n)",
+                $params
+            );
+        } catch (\Throwable) {
+            // A stale count must never stop a deletion.
+        }
     }
 
     /** Count of items currently in the trash for a type. */
@@ -206,6 +327,7 @@ class PostRepository
     /** Permanently delete every trashed item of a type. Returns rows removed. */
     public function emptyTrash(string $type = 'post'): int
     {
+        $this->releaseTermCounts('p.type = :type AND p.deleted_at IS NOT NULL', ['type' => $type]);
         return $this->db->execute(
             'DELETE FROM {posts} WHERE type = :type AND deleted_at IS NOT NULL',
             ['type' => $type]

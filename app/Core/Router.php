@@ -88,6 +88,29 @@ final class Router
         return $this;
     }
 
+    /** @var string[]|null Cached reservedSegments(); cleared whenever a route is added. */
+    private ?array $reservedCache = null;
+
+    /**
+     * The literal first path segment of every registered route: "admin",
+     * "search", "feed", and those of installed apps. A page or post whose slug
+     * is one of these could never be reached at /{slug} — the route answers
+     * first — so PostService never hands one out, and Helpers::postUrl() keeps
+     * such a legacy page at /page/{slug}.
+     *
+     * @return string[]
+     */
+    public function reservedSegments(): array
+    {
+        if ($this->reservedCache !== null) return $this->reservedCache;
+        $out = [];
+        foreach ($this->routes as $r) {
+            $seg = explode('/', trim((string) ($r['pattern'] ?? ''), '/'))[0] ?? '';
+            if ($seg !== '' && $seg[0] !== '{') $out[strtolower($seg)] = true;
+        }
+        return $this->reservedCache = array_keys($out);
+    }
+
     public function add(array $methods, string $pattern, callable|array|string $handler): self
     {
         // Apply group stack
@@ -104,6 +127,7 @@ final class Router
             $fullPattern = rtrim($fullPattern, '/');
         }
 
+        $this->reservedCache = null;
         $this->routes[] = [
             'methods'    => $methods,
             'pattern'    => $fullPattern,

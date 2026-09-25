@@ -94,10 +94,10 @@ class MenuController extends Controller
             /** @var \App\Services\PostService $posts */
             $posts = $this->app->make(\App\Services\PostService::class);
             foreach (($posts->paginate(['type' => 'page', 'status' => 'published'], 1, 100)['data'] ?? []) as $p) {
-                $out['pages'][] = ['id' => (int) $p['id'], 'title' => $p['title'], 'url' => '/page/' . $p['slug']];
+                $out['pages'][] = ['id' => (int) $p['id'], 'title' => $p['title'], 'url' => \App\Core\Helpers::postUrl($p)];
             }
             foreach (($posts->paginate(['type' => 'post', 'status' => 'published'], 1, 100)['data'] ?? []) as $p) {
-                $out['posts'][] = ['id' => (int) $p['id'], 'title' => $p['title'], 'url' => '/posts/' . $p['slug']];
+                $out['posts'][] = ['id' => (int) $p['id'], 'title' => $p['title'], 'url' => \App\Core\Helpers::postUrl($p)];
             }
         } catch (\Throwable) {}
         try {

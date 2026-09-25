@@ -85,7 +85,7 @@ $csrf = $session->csrfToken();
                             <?= icon('pencil', 'w-4 h-4') ?>
                         </a>
                         <?php if ($post['status'] === 'published'): ?>
-                        <a href="<?= $base ?>/<?= $type === 'post' ? 'posts/' : 'page/' ?><?= htmlspecialchars($post['slug']) ?>" target="_blank" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded">
+                        <a href="<?= htmlspecialchars(\App\Core\Helpers::postUrl($post, (string) $base)) ?>" target="_blank" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded">
                             <?= icon('eye', 'w-4 h-4') ?>
                         </a>
                         <?php endif; ?>

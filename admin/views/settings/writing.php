@@ -34,6 +34,29 @@
                     </select>
                 </div>
 
+                <?php
+                    // Categories for the default-category picker.
+                    $bhCats = [];
+                    try {
+                        $bhCats = \App\Core\Application::getInstance()->make(\App\Core\Database::class)->select(
+                            "SELECT t.id, t.name FROM {terms} t JOIN {taxonomies} x ON x.id = t.taxonomy_id AND x.slug = 'category' ORDER BY t.name"
+                        );
+                    } catch (\Throwable) {}
+                    $bhDefaultCat = (int) ($values['default_category'] ?? 0);
+                    if ($bhDefaultCat <= 0) {
+                        foreach ($bhCats as $bhc) { if (strcasecmp((string) $bhc['name'], 'Uncategorized') === 0) { $bhDefaultCat = (int) $bhc['id']; break; } }
+                    }
+                ?>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Default Post Category</label>
+                    <select name="default_category" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+                        <?php foreach ($bhCats as $bhc): ?>
+                        <option value="<?= (int) $bhc['id'] ?>" <?= (int) $bhc['id'] === $bhDefaultCat ? 'selected' : '' ?>><?= htmlspecialchars((string) $bhc['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="text-xs text-slate-500 mt-1">A post saved without a category is filed here, so it always has a category address.</p>
+                </div>
+
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1.5">Auto-save Interval (seconds)</label>
                     <input type="number" name="autosave_interval" min="0" value="<?= htmlspecialchars($values['autosave_interval'] ?? 60) ?>"

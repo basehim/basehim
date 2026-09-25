@@ -18,21 +18,45 @@ class PageController extends Controller
     {
         /** @var PostService $posts */
         $posts = $this->app->make(PostService::class);
-        $page = $posts->findBySlug($slug);
+        $page = $posts->findBySlug($slug, 'page');
 
-        $isPreview = false;
-        if ($page && $page['status'] !== 'published' && $this->canPreview($page)) {
-            $isPreview = true;
-        } elseif (!$page || $page['status'] !== 'published') {
+        if (!$page) {
+            // An old /page/{slug} link to what is now a post: send it on.
+            $post = $posts->findBySlug($slug, 'post');
+            if ($post && $post['status'] === 'published') {
+                return Response::redirect(Helpers::postUrl($post), 301);
+            }
             return $this->notFound('Page not found');
         }
 
-        // Bump views
-        try { $posts->incrementViewCount((int)$page['id']); } catch (\Throwable $e) {}
+        // Visibility first: to anyone who may not preview it, an unpublished
+        // page is a 404, the same as a missing one.
+        $isPreview = false;
+        if ($page['status'] !== 'published') {
+            if (!$this->canPreview($page)) {
+                return $this->notFound('Page not found');
+            }
+            $isPreview = true;
+        }
 
-        // For 'post' types, redirect to canonical URL (so /{slug} doesn't compete with /posts/{slug})
-        if ($page['type'] === 'post') {
-            return Response::redirect(Helpers::postUrl($page), 301);
+        /*
+         * Pages live at the site root, /{slug}. This address is kept only so
+         * links to it keep working: menus, bookmarks and search results from
+         * before 1.2.7. It answers with a permanent redirect for a published
+         * page, and a temporary one for a preview, whose address must not be
+         * cached.
+         *
+         * It renders here only for a page whose slug a route has claimed
+         * ("search", "feed"), which cannot be served at /{slug}.
+         */
+        $canonical = Helpers::postUrl($page);
+        if ($canonical !== '/page/' . $page['slug']) {
+            $qs = (string) ($_SERVER['QUERY_STRING'] ?? '');
+            return Response::redirect($canonical . ($qs !== '' ? '?' . $qs : ''), $isPreview ? 302 : 301);
+        }
+
+        if (!$isPreview) {
+            try { $posts->incrementViewCount((int)$page['id']); } catch (\Throwable $e) {}
         }
 
         /** @var SeoService $seo */
@@ -66,7 +90,7 @@ class PageController extends Controller
                     : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
                         . '://' . ($_SERVER['HTTP_HOST'] ?? '')
                         . rtrim((defined('BASEHIM_BASE') ? BASEHIM_BASE : ''), '/')
-                        . \App\Core\Helpers::postUrl($row),
+                        . \App\Core\Helpers::postUrl($page),
                 // A preview must never be indexed, whatever the page's own setting says.
                 'robots' => $isPreview ? 'noindex,nofollow' : ($seoMeta['robots'] ?? 'index,follow'),
             ],

@@ -26,7 +26,9 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
         <div class="flex items-center gap-2">
             <?php if ($isEdit && !empty($post['slug'])):
                 $isLive = ($post['status'] ?? '') === 'published';
-                $viewUrl = $base . '/' . ($type === 'post' ? 'posts/' : 'page/') . rawurlencode((string) $post['slug']);
+                // The canonical address under the current permalink structure; drafts
+                // preview there too.
+                $viewUrl = \App\Core\Helpers::postUrl($post, (string) $base);
             ?>
                 <?php // Drafts get a Preview link — visible only to signed-in users who may edit. ?>
                 <a href="<?= htmlspecialchars($viewUrl) ?>" target="_blank" rel="noopener"
@@ -118,21 +120,63 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
                     var mountEl = document.getElementById('bh-block-editor');
                     var raw = document.getElementById('nbe-raw');
                     if (!sel || !mountEl || !raw) return;
-                    sel.addEventListener('change', function () {
-                        var isBlocks = sel.value === 'blocks';
+                    var cfg = window.BasehimEditorConfig || {};
+                    var current = sel.value;
+
+                    function show(isBlocks) {
                         mountEl.style.display = isBlocks ? '' : 'none';
                         raw.style.display = isBlocks ? 'none' : '';
-                        if (isBlocks && window.BasehimEditor && BasehimEditor.setBlocks) {
-                            // Re-sync editor from whatever is now in the textarea.
-                            var val = raw.value || '';
-                            try {
-                                var doc = JSON.parse(val);
-                                if (doc && Array.isArray(doc.blocks)) { BasehimEditor.setBlocks(doc.blocks); return; }
-                            } catch (e) { /* not JSON */ }
-                            BasehimEditor.setBlocks(val.trim() !== ''
-                                ? [{ type: 'html', data: { html: val } }]
-                                : [{ type: 'paragraph', data: {} }]);
+                    }
+
+                    sel.addEventListener('change', function () {
+                        var from = current, to = sel.value;
+                        current = to;
+                        var isBlocks = to === 'blocks';
+                        show(isBlocks);
+
+                        if (isBlocks) {
+                            if (window.BasehimEditor && BasehimEditor.setBlocks) {
+                                // Re-sync editor from whatever is now in the textarea.
+                                var val = raw.value || '';
+                                try {
+                                    var doc = JSON.parse(val);
+                                    if (doc && Array.isArray(doc.blocks)) { BasehimEditor.setBlocks(doc.blocks); return; }
+                                } catch (e) { /* not JSON */ }
+                                BasehimEditor.setBlocks(val.trim() !== ''
+                                    ? [{ type: 'html', data: { html: val } }]
+                                    : [{ type: 'paragraph', data: {} }]);
+                            }
+                            return;
                         }
+
+                        // Leaving the visual editor: the source box gets the
+                        // post as HTML, rendered by the same code that renders
+                        // it for visitors — not the editor's internal JSON.
+                        if (from !== 'blocks' || !window.BasehimEditor || !BasehimEditor.serialize || !cfg.renderUrl) return;
+                        var json = BasehimEditor.serialize();
+                        var body = new FormData();
+                        body.append('_csrf', cfg.csrf || '');
+                        body.append('content', json);
+                        raw.readOnly = true;
+                        raw.value = '';
+                        raw.placeholder = 'Converting…';
+                        fetch(cfg.renderUrl, { method: 'POST', body: body, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                            .then(function (r) { return r.json(); })
+                            .then(function (d) {
+                                if (!d || !d.ok || typeof d.html !== 'string') throw new Error((d && d.error) || 'render failed');
+                                raw.value = d.html;
+                            })
+                            .catch(function () {
+                                // Never leave block JSON in a source box that will
+                                // be saved as HTML: stay in the visual editor.
+                                sel.value = current = 'blocks';
+                                show(true);
+                                alert('Could not convert the content to ' + to.toUpperCase() + '. The visual editor has been kept.');
+                            })
+                            .then(function () {
+                                raw.readOnly = false;
+                                raw.placeholder = 'Write your content here...';
+                            });
                     });
                 })();
                 </script>
@@ -200,6 +244,11 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
             </div>
             <div id="bh-editor-sidebar" class="bg-white rounded-xl border border-slate-200 overflow-hidden"></div>
             <div id="bh-post-settings" class="space-y-5">
+            <?php // Present whenever this panel is submitted. The server only
+                  // updates status, categories, tags, featured image and comment
+                  // setting when it arrives, so a save that somehow misses the
+                  // panel can never reset them. ?>
+            <input type="hidden" name="_post_settings" value="1">
             <div class="bg-white rounded-xl border border-slate-200 p-5">
                 <h3 class="text-sm font-semibold text-slate-900 mb-3">Publish</h3>
                 <div class="space-y-3 text-sm">

@@ -43,6 +43,11 @@ class PostService
         $type = $data['type'] ?? 'post';
         $title = trim($data['title'] ?? 'Untitled');
         $slug = !empty($data['slug']) ? Helpers::slug($data['slug']) : Helpers::slug($title);
+
+        // Held from choosing the slug until the row exists, so two saves at
+        // once cannot both take the same free slug.
+        $locked = $this->repo->lockSlugs();
+        try {
         $slug = $this->resolveSlug($slug, $type);
 
         $payload = [
@@ -63,10 +68,16 @@ class PostService
         ];
 
         $id = $this->repo->create($payload);
+        } finally {
+            if ($locked) $this->repo->unlockSlugs();
+        }
 
         // Attach terms (categories / tags)
         if (!empty($data['term_ids']) && is_array($data['term_ids'])) {
             $this->repo->attachTerms($id, $data['term_ids']);
+        }
+        if ($type === 'post') {
+            $this->ensureCategory($id);
         }
 
         $post = $this->repo->find($id);
@@ -96,8 +107,10 @@ class PostService
         if (array_key_exists('parent_id', $data)) {
             $payload['parent_id'] = $data['parent_id'] ? (int)$data['parent_id'] : null;
         }
+        $locked = false;
         if (isset($data['slug'])) {
             $slug = Helpers::slug($data['slug']);
+            $locked = $this->repo->lockSlugs();
             $payload['slug'] = $this->resolveSlug($slug, $existing['type'], $id);
         }
         if (isset($data['status'])) {
@@ -112,13 +125,25 @@ class PostService
             if (isset($data['term_ids']) && is_array($data['term_ids'])) {
                 $this->repo->attachTerms($id, $data['term_ids']);
             }
+            if ($existing['type'] === 'post') {
+                $this->ensureCategory($id);
+            }
             return true;
         }
 
-        $this->repo->update($id, $payload);
+        try {
+            $this->repo->update($id, $payload);
+        } finally {
+            if ($locked) $this->repo->unlockSlugs();
+        }
 
         if (isset($data['term_ids']) && is_array($data['term_ids'])) {
             $this->repo->attachTerms($id, $data['term_ids']);
+        }
+        if ($existing['type'] === 'post') {
+            // Covers a post saved with every category unticked, and a post
+            // from before 1.2.7 that never had one.
+            $this->ensureCategory($id);
         }
 
         $post = $this->repo->find($id);
@@ -222,14 +247,69 @@ class PostService
         $this->repo->incrementViewCount($id);
     }
 
+    /** Types that live at the site root and therefore share one slug namespace. */
+    private const ROOT_TYPES = ['post', 'page'];
+
+    /**
+     * A free slug: $base, or $base-2, $base-3, and so on.
+     *
+     * Posts and pages share one namespace. A page at /about-us and a post whose
+     * canonical URL is /about-us (flat permalinks) would collide, and even
+     * under other structures /{slug} is resolved without knowing the type. So a
+     * post can never take a page's slug, nor the reverse.
+     *
+     * Slugs held by trashed content stay taken until it is permanently deleted
+     * (PostRepository::slugTaken). Slugs a route has claimed — "search",
+     * "feed", an app's prefix — are skipped, since /{slug} would never reach
+     * the content. Other types keep their own namespace, as before.
+     */
     private function resolveSlug(string $base, string $type, ?int $excludeId = null): string
     {
-        $base = $base !== '' ? $base : 'untitled';
+        // Leave room for a "-N" suffix inside the 200-character column.
+        $base = rtrim(substr($base !== '' ? $base : 'untitled', 0, 190), '-') ?: 'untitled';
+        $global   = in_array($type, self::ROOT_TYPES, true);
+        $types    = $global ? self::ROOT_TYPES : [$type];
+        $reserved = $global ? Helpers::reservedSlugs() : [];
+
         $slug = $base;
         $i = 2;
-        while ($this->repo->slugExists($slug, $type, $excludeId)) {
+        while (in_array($slug, $reserved, true) || $this->repo->slugTaken($slug, $types, $excludeId)) {
             $slug = $base . '-' . $i++;
         }
         return $slug;
+    }
+
+    /**
+     * Give a post the default category if it has none, so every post has a
+     * category URL (/{category}/{slug}) under category permalinks.
+     */
+    private function ensureCategory(int $postId): void
+    {
+        try {
+            if ($this->repo->hasCategory($postId)) return;
+            $termId = $this->defaultCategoryId();
+            if ($termId > 0) {
+                $this->repo->attachTerms($postId, array_merge($this->repo->termIds($postId), [$termId]));
+            }
+        } catch (\Throwable) {
+            // A post without a category still has a valid URL (/posts/{slug}).
+        }
+    }
+
+    /**
+     * The default category: Settings → Writing → Default Category if it still
+     * exists, else "Uncategorized", which is created if it has been deleted.
+     */
+    public function defaultCategoryId(): int
+    {
+        try {
+            $chosen = (int) \App\Core\Application::getInstance()
+                ->make(\App\Services\SettingService::class)->get('writing', 'default_category', 0);
+        } catch (\Throwable) { $chosen = 0; }
+        if ($chosen > 0 && $this->repo->categoryTerm($chosen)) return $chosen;
+
+        $u = $this->repo->categoryTerm(0, 'uncategorized');
+        if ($u) return (int) $u['id'];
+        return $this->repo->createCategory('Uncategorized', 'uncategorized');
     }
 }

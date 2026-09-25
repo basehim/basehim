@@ -31,7 +31,9 @@ class ResolveController extends Controller
         $posts     = $this->app->make(PostService::class);
         $structure = $settings->get('permalinks', 'structure', 'pretty');
 
-        $row = $posts->findBySlug($slug);
+        // Pages first. Slugs are unique across posts and pages since 1.2.7, but
+        // a site may still hold an older clash; a page is what /{slug} means.
+        $row = $posts->findBySlug($slug, 'page') ?? $posts->findBySlug($slug, 'post');
 
         // Visibility first. An unpublished row is shown only to someone who may
         // preview it; to everyone else it is a 404 like any missing slug. This

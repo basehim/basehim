@@ -110,7 +110,16 @@
     doc = applyFilters('save.data', doc);
     return JSON.stringify(doc);
   }
-  function syncField() { if (contentField) contentField.value = serialize(); }
+  // The content field belongs to the block editor only while the post's
+  // format is Blocks. In HTML or Markdown mode it is the author's own source,
+  // edited in the textarea. Writing block JSON into it then — on load, on
+  // every change, and again on submit — replaced whatever the author had
+  // typed, so source edits were never saved.
+  function isBlocksMode() {
+    var f = form ? form.querySelector('[name="content_format"]') : null;
+    return !f || f.value === 'blocks';
+  }
+  function syncField() { if (contentField && isBlocksMode()) contentField.value = serialize(); }
 
   function load(json) {
     var doc = null;
@@ -309,7 +318,20 @@
     body.className = 'nbe-side__body';
     sidebarEl.appendChild(body);
 
-    if (sideTab === 'block') { renderBlockTab(body); }
+    if (sideTab === 'block') {
+      renderBlockTab(body);
+      // The adopted post-settings cards hold real form fields: status,
+      // categories, tags, featured image, comments. Clearing the sidebar above
+      // took them out of the document, and fields outside the document are not
+      // submitted — so saving from the Block tab (which opens whenever a block
+      // is clicked) sent none of them, and the server fell back to its
+      // defaults: Draft, no categories, no featured image. Keep them in the
+      // form, hidden, whichever tab is showing.
+      if (adoptedSettings) {
+        adoptedSettings.hidden = true;
+        body.appendChild(adoptedSettings);
+      }
+    }
     else { renderPostTab(body); }
   }
 
@@ -375,6 +397,7 @@
       }
     }
     if (adoptedSettings) {
+      adoptedSettings.hidden = false;
       body.appendChild(adoptedSettings);
     } else {
       var box = document.createElement('div');
@@ -955,7 +978,11 @@
     load(contentField ? contentField.value : '');
     renderAll();
     syncField();
-    if (form) form.addEventListener('submit', function () { emit('save', getBlocks()); syncField(); });
+    if (form) form.addEventListener('submit', function () {
+      if (!isBlocksMode()) return;
+      emit('save', getBlocks());
+      syncField();
+    });
 
     emit('init', api);
     document.dispatchEvent(new CustomEvent('bh-editor:ready', { detail: api }));

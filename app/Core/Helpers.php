@@ -163,9 +163,23 @@ final class Helpers
         $type      = $post['type'] ?? 'post';
         $structure = static::permalinkStructure();
 
-        // Pages and non-post types are always /{slug}.
-        if ($type !== 'post' || $structure === 'flat') {
+        // Pages live at the site root, /{slug}, under every permalink
+        // structure. The one exception is a page whose slug a route has
+        // claimed ("search", "feed", an app's prefix): /{slug} would reach the
+        // route instead, so that page keeps /page/{slug}. New content never
+        // gets such a slug; PostService skips reserved slugs.
+        if ($type === 'page') {
+            return $base . (in_array($slug, static::reservedSlugs(), true) ? '/page/' : '/') . $slug;
+        }
+
+        // Other non-post types are /{slug}.
+        if ($type !== 'post') {
             return $base . '/' . $slug;
+        }
+
+        if ($structure === 'flat') {
+            // Same exception for a legacy post under flat permalinks.
+            return $base . (in_array($slug, static::reservedSlugs(), true) ? '/posts/' : '/') . $slug;
         }
 
         if ($structure === 'category') {
@@ -175,8 +189,9 @@ final class Helpers
             if ($catSlug !== '') {
                 return $base . '/' . $catSlug . '/' . $slug;
             }
-            // No category attached — fall back to /posts/{slug} so the URL
-            // stays valid rather than producing an ambiguous /{slug}.
+            // No category attached. Since 1.2.7 every post is given the
+            // default category when saved, so this only covers a post not yet
+            // re-saved; /posts/{slug} keeps its URL valid meanwhile.
         }
 
         return $base . '/posts/' . $slug;
@@ -223,6 +238,28 @@ final class Helpers
      * Read the permalink structure setting once and cache it statically.
      * Falls back to 'pretty' if the DB is not available.
      */
+    /**
+     * Slugs no post or page may use: the first segment of every registered
+     * route, which would answer /{slug} before the content could. Read from
+     * the live router, so an installed app's routes count too.
+     *
+     * @return string[]
+     */
+    public static function reservedSlugs(): array
+    {
+        $list = ['admin', 'api', 'posts', 'page', 'category', 'tag', 'author', 'search',
+                 'comments', 'feed', 'uploads', 'content', 'mcp', 'oauth', 'install'];
+        try {
+            $router = Application::getInstance()->make(Router::class);
+            if (method_exists($router, 'reservedSegments')) {
+                $list = array_merge($list, $router->reservedSegments());
+            }
+        } catch (\Throwable) {
+            // The fixed list above still covers core's own routes.
+        }
+        return array_values(array_unique($list));
+    }
+
     private static ?string $permalinkStructure = null;
 
     public static function permalinkStructure(): string

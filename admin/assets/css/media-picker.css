@@ -924,17 +924,43 @@
 
 /* Below 760px the panes stack, and the details pane is capped in height so the
    grid never collapses to one row with everything else pushed off-screen. */
+/*
+ * Rows are as tall as their cards, and the grid scrolls.
+ *
+ * A card has aspect-ratio and overflow:hidden, which gives it an automatic
+ * minimum height of zero. When the grid's height was limited — every phone,
+ * and any desktop library with a few rows — the rows were squeezed below the
+ * cards' height and the cards were drawn over each other.
+ */
+.nm-grid { align-content: start; grid-auto-rows: max-content; }
+/* The preview keeps its size; the details pane scrolls instead of squashing it. */
+.nm-details-preview { flex-shrink: 0; }
+
 @media (max-width: 760px) {
     .nm-dialog { max-height: 94vh; }
     .nm-body { flex-direction: column; }
+    /*
+     * Stacked under the grid, the details pane puts the selected image beside
+     * its name and size, as a square about 40% of the width, with alt text and
+     * caption below. The old 16:7 strip was squeezed to a sliver, leaving the
+     * selected image a few dozen pixels tall.
+     */
     .nm-details {
         width: auto;
         border-left: 0;
         border-top: 1px solid #e2e8f0;
         max-height: 46vh;
+        display: grid;
+        grid-template-columns: minmax(120px, 40%) minmax(0, 1fr);
+        grid-auto-rows: max-content;   /* as in the grid: never squeeze the preview's row */
+        align-content: start;
+        align-items: center;
+        gap: 0.75rem 0.85rem;
     }
-    .nm-details-preview { aspect-ratio: 16 / 7; }
-    .nm-grid { padding: 0.75rem; }
+    .nm-details > * { grid-column: 1 / -1; }
+    .nm-details-preview { grid-column: 1; aspect-ratio: 1 / 1; }
+    .nm-details-meta { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+    .nm-grid { padding: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 0.6rem; }
     .nm-toolbar { flex-wrap: wrap; }
 }
 
