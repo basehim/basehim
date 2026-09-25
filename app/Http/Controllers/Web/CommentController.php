@@ -92,7 +92,15 @@ class CommentController extends Controller
         /** @var CommentService $comments */
         $comments = $this->app->make(CommentService::class);
 
-        $defaultStatus = $settings->get('discussion', 'moderate_first', true) ? 'pending' : 'approved';
+        /*
+         * Someone who can approve comments is not held for approval. Their
+         * comment went into the moderation queue like a stranger's, where
+         * they then had to approve it themselves. "Can approve" is the
+         * moderate_comments capability (by default: super admin, admin,
+         * editor), so a site that gives it to more roles trusts them too.
+         */
+        $trusted = $currentUser !== null && $auth->userCan($currentUser, 'moderate_comments');
+        $defaultStatus = ($trusted || !$settings->get('discussion', 'moderate_first', true)) ? 'approved' : 'pending';
 
         // Anti-spam gate (honeypot, flood, duplicates, blocklist/moderation words).
         $decision = $comments->guard([
@@ -103,6 +111,7 @@ class CommentController extends Controller
             'honeypot'     => $request->input('hp_comment_field', ''),
             'post_id'      => $postId,
             'status'       => $defaultStatus,
+            'trusted'      => $trusted,
         ]);
 
         if ($decision['action'] === 'reject') {

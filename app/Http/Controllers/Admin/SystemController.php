@@ -115,59 +115,12 @@ class SystemController extends Controller
     }
 
     /**
-     * Apply any *.sql migrations not yet recorded in the `migrations` table,
-     * in filename order, each inside the shared PDO connection. Mirrors
-     * database/migrate.php but runs in-process for the admin button.
+     * Apply pending migrations. The runner lives in MigrationService, shared
+     * with the updater; this copy used to be a separate duplicate of it.
      */
     private function applyPendingMigrations(): array
     {
-        $applied = [];
-        try {
-            /** @var \App\Core\Database $db */
-            $db = $this->app->make(\App\Core\Database::class);
-            $pdo = $db->connection();
-
-            /*
-             * This runner talks to PDO directly, so Database::query() — which
-             * normally expands {table} tokens — is not in the path. Every
-             * statement has to be expanded here, including the contents of each
-             * migration file, or MySQL receives the literal string "{migrations}"
-             * and fails on a syntax error.
-             *
-             * UpdateService::applyPendingMigrations() does exactly this. This
-             * copy was written without it, so the System page's Run migrations
-             * button had never worked.
-             */
-            $px = fn(string $sql): string => $db->expand($sql);
-
-            $pdo->exec($px(
-                'CREATE TABLE IF NOT EXISTS {migrations} (
-                    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                    `migration` VARCHAR(255) NOT NULL,
-                    `applied_at` DATETIME NOT NULL
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
-            ));
-
-            $ran = $pdo->query($px('SELECT migration FROM {migrations}'))->fetchAll(\PDO::FETCH_COLUMN);
-            $dir = BASEHIM_ROOT . '/database/migrations';
-            $files = glob($dir . '/*.sql') ?: [];
-            sort($files);
-
-            foreach ($files as $file) {
-                $key = preg_replace('/\.sql$/', '', basename($file));
-                if (in_array($key, $ran, true)) continue;
-
-                $sql = file_get_contents($file);
-                if ($sql === false || trim($sql) === '') continue;
-
-                $pdo->exec($px($sql));
-                $stmt = $pdo->prepare($px('INSERT INTO {migrations} (migration, applied_at) VALUES (?, ?)'));
-                $stmt->execute([$key, date('Y-m-d H:i:s')]);
-                $applied[] = $key;
-            }
-            return ['applied' => $applied, 'error' => null];
-        } catch (\Throwable $e) {
-            return ['applied' => $applied, 'error' => $e->getMessage()];
-        }
+        return $this->app->make(\App\Services\MigrationService::class)->run();
     }
+
 }

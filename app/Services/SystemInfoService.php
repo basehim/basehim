@@ -214,7 +214,12 @@ class SystemInfoService
         }
     }
 
-    /** Applied vs available migrations. */
+    /**
+     * Applied vs available migrations, with names compared the way
+     * MigrationService compares them: without ".sql". The installer and the
+     * runners used to record different forms, so each migration was listed
+     * twice as applied.
+     */
     public function migrations(): array
     {
         $dir = BASEHIM_ROOT . '/database/migrations';
@@ -228,12 +233,15 @@ class SystemInfoService
         $applied = [];
         try {
             $rows = $this->db()->select('SELECT migration FROM {migrations} ORDER BY migration');
-            $applied = array_map(fn($r) => $r['migration'], $rows);
+            foreach ($rows as $r) {
+                $applied[\App\Services\MigrationService::key((string) $r['migration'])] = true;
+            }
+            $applied = array_keys($applied);
         } catch (\Throwable) {
             // migrations table may not exist yet
         }
         $pending = array_values(array_diff(
-            array_map(fn($f) => preg_replace('/\.sql$/', '', $f), $available),
+            array_map(fn($f) => \App\Services\MigrationService::key($f), $available),
             $applied
         ));
         return ['available' => $available, 'applied' => $applied, 'pending' => $pending];

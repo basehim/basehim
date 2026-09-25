@@ -597,39 +597,13 @@ class UpdateService
         return null;
     }
 
-    /** Same behaviour as the System page's migration runner. */
+    /**
+     * Apply pending migrations after an update. The runner itself lives in
+     * MigrationService, shared with the System page.
+     */
     public function applyPendingMigrations(): array
     {
-        $applied = [];
-        try {
-            $pdo = $this->db->connection();
-            // The runner talks to PDO directly, so {table} tokens have to be
-            // expanded here — Database::query() is not in the path.
-            $px  = fn(string $sql): string => $this->db->expand($sql);
-            $pdo->exec($px(
-                'CREATE TABLE IF NOT EXISTS {migrations} (
-                    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                    `migration` VARCHAR(255) NOT NULL,
-                    `applied_at` DATETIME NOT NULL
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
-            ));
-            $ran = $pdo->query($px('SELECT migration FROM {migrations}'))->fetchAll(\PDO::FETCH_COLUMN);
-            $files = glob(BASEHIM_ROOT . '/database/migrations/*.sql') ?: [];
-            sort($files);
-            foreach ($files as $file) {
-                $key = preg_replace('/\.sql$/', '', basename($file));
-                if (in_array($key, $ran, true)) continue;
-                $sql = file_get_contents($file);
-                if ($sql === false || trim($sql) === '') continue;
-                $pdo->exec($px($sql));
-                $stmt = $pdo->prepare($px('INSERT INTO {migrations} (migration, applied_at) VALUES (?, ?)'));
-                $stmt->execute([$key, date('Y-m-d H:i:s')]);
-                $applied[] = $key;
-            }
-            return ['applied' => $applied, 'error' => null];
-        } catch (\Throwable $e) {
-            return ['applied' => $applied, 'error' => $e->getMessage()];
-        }
+        return (new MigrationService($this->db))->run();
     }
 
     private function clearCaches(): void

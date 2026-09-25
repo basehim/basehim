@@ -221,11 +221,16 @@ class AuthService
     /**
      * Check if user has a capability.
      */
+    /**
+     * Whether the user holds a capability — the same answer the admin area
+     * gives (CheckCapability), including per-user grants and denials.
+     *
+     * This used to read `capabilities.<role>` from the config, but roles live
+     * under `capabilities.roles.<role>`, so it found no capabilities and
+     * returned false for every user, the super admin included.
+     */
     public function userCan(?array $user, string $capability): bool
     {
-        if (!$user) return false;
-        $caps = $this->config->get('capabilities.' . $user['role'], []);
-        if (in_array('*', $caps, true)) return true;
-        return in_array($capability, $caps, true);
+        return \App\Http\Middleware\CheckCapability::userCan($user, $capability);
     }
 }

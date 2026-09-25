@@ -20,7 +20,7 @@ declare(strict_types=1);
 // App\Core\BASEHIM_ROOT" — PHP resolves an unknown bare constant against the
 // current namespace before giving up.
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.2.10');
+define('BASEHIM_VERSION', '1.2.11');
 define('BASEHIM_INSTALLING', true);
 
 
@@ -200,8 +200,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $pdo->exec(pxSql($stmt, $cfg));
                     }
 
-                    $record->execute([basename($file), date('Y-m-d H:i:s')]);
-                    $applied[] = basename($file);
+                    // Recorded without ".sql", the form the runners use. Recording
+                    // the file name made the first update after an install run
+                    // every migration a second time.
+                    $key = preg_replace('/\\.sql$/', '', basename($file));
+                    $record->execute([$key, date('Y-m-d H:i:s')]);
+                    $applied[] = $key;
                 }
 
                 $_SESSION['install_migrations'] = $applied;
@@ -274,9 +278,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Seed the default taxonomies (Categories + Tags). Without these the
                 // Categories/Tags admin screens 404 and posts can't be classified.
+                // "tag", as migration 001 creates and all of core uses: seeding
+                // "post_tag" left every install with a second, unused Tags taxonomy.
                 $pdo->exec(pxSql("INSERT INTO {taxonomies} (slug, label, singular, hierarchical, show_in_api, post_types) VALUES
                     ('category', 'Categories', 'Category', 1, 1, '[\"post\"]'),
-                    ('post_tag', 'Tags', 'Tag', 0, 1, '[\"post\"]')
+                    ('tag', 'Tags', 'Tag', 0, 1, '[\"post\"]')
                     ON DUPLICATE KEY UPDATE label = VALUES(label)", $cfg));
                 $catTaxId = (int) $pdo->query(pxSql("SELECT id FROM {taxonomies} WHERE slug='category'", $cfg))->fetchColumn();
 

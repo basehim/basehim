@@ -201,6 +201,11 @@ class CommentService
             return ['action' => 'drop'];
         }
 
+        // A moderator's comment skips the checks meant for strangers (flood,
+        // blocklist, links, moderation words) — they could approve it anyway.
+        // The duplicate check still applies: it catches a double submission.
+        $trusted = !empty($in['trusted']);
+
         $ip      = (string)($in['ip'] ?? ($_SERVER['REMOTE_ADDR'] ?? ''));
         $content = trim((string)($in['content'] ?? ''));
         $email   = trim((string)($in['author_email'] ?? ''));
@@ -208,7 +213,7 @@ class CommentService
 
         // 2. Flood control — reject rapid-fire posting from one IP.
         $flood = (int)$this->settings->get('discussion', 'comment_flood_seconds', 15);
-        if ($flood > 0 && $ip !== '') {
+        if (!$trusted && $flood > 0 && $ip !== '') {
             $last = $this->db->selectOne(
                 'SELECT created_at FROM {comments} WHERE author_ip = :ip ORDER BY id DESC LIMIT 1',
                 ['ip' => $ip]
@@ -227,6 +232,10 @@ class CommentService
             if ($dupe) {
                 return ['action' => 'reject', 'message' => 'Looks like you already said that — duplicate comment detected.'];
             }
+        }
+
+        if ($trusted) {
+            return ['action' => 'accept', 'status' => $status];
         }
 
         // 4. Content rules. Blocklist → spam; moderation words / too many links → hold.
