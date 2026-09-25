@@ -127,9 +127,9 @@ $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
                                     <?php
                                     /* Not an input. The widget editor already exists at
                                        Appearance → Widgets with drag-and-drop ordering and
-                                       per-widget settings; rebuilding it inside a 340px panel
-                                       would be a worse version of a working screen. What is
-                                       useful here is knowing which areas are empty. */
+                                       per-widget settings; a version of that in a 340px panel
+                                       would be worse. What is useful here is knowing which
+                                       areas are empty. */
                                     $n = (int) ($opt['count'] ?? 0);
                                     ?>
                                     <a class="bh-cz__area" href="<?= $base ?>/admin/widgets/areas#<?= htmlspecialchars($opt['area'] ?? '') ?>">

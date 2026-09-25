@@ -295,8 +295,8 @@
 }
 
 /* ── widget areas ────────────────────────────────────────────────────────────
-   A row per area rather than an editor. It says what is in each one and
-   links to the screen that already manages them. */
+   A row per area rather than an editor. It says what is in each one and links
+   to the screen that already manages them. */
 .bh-cz__area {
     display: flex; align-items: center; justify-content: space-between; gap: .6rem;
     padding: .6rem .7rem;

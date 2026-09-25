@@ -335,6 +335,40 @@ final class Application
      * A small set of always-available frontend widgets so a fresh install can
      * populate its sidebars immediately. Apps/themes add more via the registry.
      */
+    /**
+     * Default styling (and, for the dropdown, the script) for the category
+     * and tag widgets, once per page.
+     *
+     * Every rule is wrapped in :where(), so it has zero specificity: any
+     * theme rule for the same element wins, and a theme that already styles
+     * these widgets is unaffected.
+     */
+    private static function termWidgetAssets(bool $withScript): string
+    {
+        static $styled = false, $scripted = false;
+        $out = '';
+        if (!$styled) {
+            $styled = true;
+            $out .= '<style id="bh-term-widget-css">'
+                . ':where(.widget-terms){list-style:none;margin:0;padding:0}'
+                . ':where(.widget-terms > li){display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;margin:0;padding:.2rem 0}'
+                . ':where(.widget-terms > li > a){min-width:0;overflow-wrap:anywhere}'
+                . ':where(.widget-count){flex:0 0 auto;min-width:1.9em;padding:.05em .55em;border-radius:999px;'
+                .   'font-size:.8em;line-height:1.6;text-align:center;font-variant-numeric:tabular-nums;background:rgba(127,127,127,.14)}'
+                . ':where(.widget-terms-select select){box-sizing:border-box;width:100%;padding:.5em .6em;font:inherit;color:inherit;'
+                .   'background-color:transparent;border:1px solid rgba(127,127,127,.4);border-radius:.5rem}'
+                . ':where(.bh-visually-hidden){position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}'
+                . '</style>';
+        }
+        if ($withScript && !$scripted) {
+            $scripted = true;
+            $out .= '<script id="bh-term-widget-js">document.addEventListener("change",function(e){'
+                . 'var s=e.target;if(!s||!s.matches||!s.matches("select[data-bh-term-nav]"))return;'
+                . 'if(s.value)window.location.href=s.value;});</script>';
+        }
+        return $out;
+    }
+
     private function registerCoreWidgets(): void
     {
         /** @var WidgetRegistry $reg */
@@ -428,16 +462,16 @@ final class Application
         /*
          * Categories and tags.
          *
-         * One registration for both: the two differ only in which taxonomy
-         * they read and where they link, and two near-identical copies would
-         * drift the first time one of them was fixed.
+         * One registration for both: they differ only in which taxonomy they
+         * read and where they link, and two near-identical copies would drift
+         * the first time one of them was fixed.
          *
-         * The post count comes from the term row, which core already
-         * maintains — counting posts per term here would be one query per
-         * term on every page render.
+         * The post count comes from the term row, which core already keeps up
+         * to date. Counting posts per term here would be one query per term on
+         * every page render.
          */
-        $termList = function (string $taxonomy, string $urlPrefix) use ($title): callable {
-            return function (array $s) use ($taxonomy, $urlPrefix, $title): string {
+        $termList = function (string $taxonomy, string $urlPrefix, string $noun) use ($title): callable {
+            return function (array $s) use ($taxonomy, $urlPrefix, $noun, $title): string {
                 $limit = (int) ($s['count'] ?? 10);
                 if ($limit < 1) $limit = 10;
                 if ($limit > 50) $limit = 50;
@@ -445,6 +479,7 @@ final class Application
                 $showCounts = !empty($s['show_counts']);
                 $hideEmpty  = !empty($s['hide_empty']);
                 $order      = (string) ($s['order'] ?? 'count');
+                $dropdown   = ($s['display'] ?? 'list') === 'dropdown';
 
                 try {
                     /** @var \App\Services\TaxonomyService $tax */
@@ -452,6 +487,30 @@ final class Application
                     $terms = $tax->termsByTaxonomySlug($taxonomy);
                 } catch (\Throwable) {
                     $terms = [];
+                }
+
+                /*
+                 * Counts are published posts only — what a visitor finds on
+                 * the archive page. The term row's own count includes
+                 * drafts, private and trashed posts, so a category could show
+                 * 4 and list 1. One grouped query for the whole taxonomy.
+                 */
+                try {
+                    $rows = $this->make(\App\Core\Database::class)->select(
+                        "SELECT pt.term_id, COUNT(*) AS c
+                           FROM {post_term} pt
+                           JOIN {posts} p ON p.id = pt.post_id
+                                         AND p.type = 'post' AND p.status = 'published' AND p.deleted_at IS NULL
+                           JOIN {terms} t ON t.id = pt.term_id
+                           JOIN {taxonomies} x ON x.id = t.taxonomy_id AND x.slug = :tax
+                          GROUP BY pt.term_id",
+                        ['tax' => $taxonomy]
+                    );
+                    $published = array_column($rows, 'c', 'term_id');
+                    foreach ($terms as &$t) $t['count'] = (int) ($published[$t['id']] ?? 0);
+                    unset($t);
+                } catch (\Throwable) {
+                    // Fall back to the stored count.
                 }
 
                 if ($hideEmpty) {
@@ -468,30 +527,51 @@ final class Application
                         return $d !== 0 ? $d : strcasecmp((string) $a['name'], (string) $b['name']);
                     });
                 }
+                $terms = array_slice($terms, 0, $limit);
 
+                $e = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES);
                 $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+                $url = fn(array $t): string => $base . $urlPrefix . rawurlencode((string) ($t['slug'] ?? ''));
+
+                // The list: name on the left, count on the right.
                 $items = '';
-                foreach (array_slice($terms, 0, $limit) as $t) {
-                    $url = $base . $urlPrefix . rawurlencode((string) ($t['slug'] ?? ''));
-                    $items .= '<li><a href="' . htmlspecialchars($url, ENT_QUOTES) . '">'
-                        . htmlspecialchars((string) ($t['name'] ?? ''))
-                        . '</a>'
-                        . ($showCounts
-                            ? '<span class="widget-count">' . (int) ($t['count'] ?? 0) . '</span>'
-                            : '')
+                foreach ($terms as $t) {
+                    $items .= '<li><a href="' . $e($url($t)) . '">' . $e($t['name'] ?? '') . '</a>'
+                        . ($showCounts ? '<span class="widget-count">' . (int) ($t['count'] ?? 0) . '</span>' : '')
                         . '</li>';
                 }
-
                 if ($items === '') {
                     $items = '<li class="widget-empty">Nothing yet.</li>';
                 }
+                $list = '<ul class="widget-terms widget-terms--' . $taxonomy . ($showCounts ? ' widget-terms--counts' : '') . '">' . $items . '</ul>';
 
-                return $title($s) . '<ul class="widget-terms widget-terms--' . $taxonomy . '">' . $items . '</ul>';
+                if (!$dropdown || !$terms) {
+                    return $title($s) . $list . self::termWidgetAssets(false);
+                }
+
+                // The dropdown: choosing an entry opens its archive. Without
+                // JavaScript the plain list is shown instead.
+                static $n = 0;
+                $id = 'bh-terms-' . $taxonomy . '-' . (++$n);
+                $opts = '<option value="">' . $e('Select ' . $noun) . '</option>';
+                foreach ($terms as $t) {
+                    $opts .= '<option value="' . $e($url($t)) . '">' . $e($t['name'] ?? '')
+                        . ($showCounts ? ' (' . (int) ($t['count'] ?? 0) . ')' : '') . '</option>';
+                }
+                return $title($s)
+                    . '<div class="widget-terms-select">'
+                    . '<label for="' . $id . '" class="bh-visually-hidden">' . $e('Select ' . $noun) . '</label>'
+                    . '<select id="' . $id . '" data-bh-term-nav>' . $opts . '</select>'
+                    . '<noscript>' . $list . '</noscript>'
+                    . '</div>'
+                    . self::termWidgetAssets(true);
             };
         };
 
         $termFields = [
             ['key' => 'title',       'label' => 'Title', 'type' => 'text'],
+            ['key' => 'display',     'label' => 'Display as', 'type' => 'select', 'default' => 'list',
+             'options' => ['list' => 'List', 'dropdown' => 'Dropdown']],
             ['key' => 'count',       'label' => 'How many to show', 'type' => 'number'],
             ['key' => 'order',       'label' => 'Order by', 'type' => 'select',
              'options' => ['count' => 'Most used', 'name' => 'Name']],
@@ -506,7 +586,7 @@ final class Application
             'source'      => 'core',
             'surfaces'    => ['frontend'],
             'fields'      => $termFields,
-            'render'      => $termList('category', '/category/'),
+            'render'      => $termList('category', '/category/', 'category'),
         ]);
 
         $reg->register('core.tags', [
@@ -516,7 +596,7 @@ final class Application
             'source'      => 'core',
             'surfaces'    => ['frontend'],
             'fields'      => $termFields,
-            'render'      => $termList('tag', '/tag/'),
+            'render'      => $termList('tag', '/tag/', 'tag'),
         ]);
     }
 
