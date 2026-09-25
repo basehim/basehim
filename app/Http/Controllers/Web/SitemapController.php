@@ -63,6 +63,21 @@ class SitemapController extends Controller
             }
         }
 
+        // Author archives, when switched on: one per author with a published
+        // post (the only authors that have a page).
+        try {
+            /** @var \App\Services\AuthorService $authors */
+            $authors = $this->app->make(\App\Services\AuthorService::class);
+            if ($authors->archivesEnabled()) {
+                foreach ($authors->authors() as $u) {
+                    $path = $authors->url($u);
+                    if ($path !== '') $xml .= $this->urlNode($base . $path, null, 'weekly', '0.5');
+                }
+            }
+        } catch (\Throwable $e) {
+            // A sitemap without author pages beats no sitemap.
+        }
+
         $xml .= '</urlset>';
 
         return Response::make($xml, 200, ['Content-Type' => 'application/xml; charset=utf-8']);

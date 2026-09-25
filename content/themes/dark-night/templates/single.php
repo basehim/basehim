@@ -15,7 +15,12 @@
             <?php if (!empty($post['author_name'])): ?>
             <span style="display:inline-flex;align-items:center;gap:.55rem;">
                 <span class="dn-avatar"><?= strtoupper(substr($post['author_name'], 0, 1)) ?></span>
+                <?php $authorUrl = function_exists('bh_author_url') ? bh_author_url($post) : ''; ?>
+                <?php if ($authorUrl !== ''): ?>
+                <b><a href="<?= htmlspecialchars(($base ?? '') . $authorUrl) ?>" rel="author" style="color:inherit;text-decoration:none;"><?= htmlspecialchars($post['author_name']) ?></a></b>
+                <?php else: ?>
                 <b><?= htmlspecialchars($post['author_name']) ?></b>
+                <?php endif; ?>
             </span>
             <?php endif; ?>
             <time><i class="fa-regular fa-calendar" style="margin-right:.35rem;"></i><?= date('F j, Y', strtotime($post['published_at'] ?? $post['created_at'])) ?></time>
@@ -45,15 +50,14 @@
         ?>
     </div>
 
-    <!-- Author bio -->
-    <?php if (!empty($post['author_bio'])): ?>
-    <div class="dn-bio">
-        <span class="dn-avatar"><?= strtoupper(substr($post['author_name'], 0, 1)) ?></span>
-        <div>
-            <b><?= htmlspecialchars($post['author_name']) ?></b>
-            <p><?= htmlspecialchars($post['author_bio']) ?></p>
-        </div>
-    </div>
+    <!-- Author box: core's, in this theme's classes. Controlled by
+         Settings → Reading → Author box on posts. -->
+    <?php if (function_exists('bh_author_box')): ?>
+    <?= bh_author_box($post, [
+        'class'        => 'dn-bio',
+        'avatar_class' => 'dn-avatar',
+        'avatar_size'  => 52,
+    ]) ?>
     <?php endif; ?>
 
     <!-- Comments -->

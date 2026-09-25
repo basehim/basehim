@@ -11,6 +11,15 @@
                 <?= icon('user', 'w-4 h-4 mr-1') ?> Author
             <?php endif; ?>
         </p>
+        <?php if ($archive_type === 'author' && !empty($author)): ?>
+            <div class="flex justify-center mb-3">
+                <?php if (!empty($author['avatar_url'])): ?>
+                <img src="<?= htmlspecialchars($author['avatar_url']) ?>" alt="" class="w-20 h-20 rounded-full object-cover">
+                <?php else: ?>
+                <span class="w-20 h-20 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 grid place-items-center text-white text-2xl font-semibold"><?= htmlspecialchars(mb_strtoupper(mb_substr((string) $author['display_name'], 0, 1))) ?></span>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
         <h1 class="text-3xl md:text-4xl font-bold text-slate-900 mb-2 tracking-tight">
             <?php if ($archive_type === 'author' && !empty($author)): ?>
                 <?= htmlspecialchars($author['display_name'] ?? $author['username']) ?>
@@ -20,8 +29,13 @@
                 Archive
             <?php endif; ?>
         </h1>
-        <?php if ($archive_type === 'author' && !empty($author['bio'])): ?>
+        <?php if ($archive_type === 'author'): ?>
+            <?php if (!empty($author['bio'])): ?>
             <p class="text-slate-600 max-w-2xl mx-auto"><?= htmlspecialchars($author['bio']) ?></p>
+            <?php endif; ?>
+            <?php if (isset($author['post_count'])): ?>
+            <p class="text-sm text-slate-500 mt-2"><?= (int) $author['post_count'] ?> <?= (int) $author['post_count'] === 1 ? 'post' : 'posts' ?></p>
+            <?php endif; ?>
         <?php elseif (!empty($term['description'])): ?>
             <p class="text-slate-600 max-w-2xl mx-auto"><?= htmlspecialchars($term['description']) ?></p>
         <?php endif; ?>
@@ -43,7 +57,12 @@
                 <time><?= date('M j, Y', strtotime($p['published_at'] ?? $p['created_at'])) ?></time>
                 <?php if (!empty($p['author_name'])): ?>
                     <span class="text-slate-300">·</span>
+                    <?php $pAuthorUrl = function_exists('bh_author_url') ? bh_author_url($p) : ''; ?>
+                    <?php if ($pAuthorUrl !== '' && $archive_type !== 'author'): ?>
+                    <a href="<?= htmlspecialchars(($base ?? '') . $pAuthorUrl) ?>" class="hover:text-brand-600"><?= htmlspecialchars($p['author_name']) ?></a>
+                    <?php else: ?>
                     <span><?= htmlspecialchars($p['author_name']) ?></span>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
             <h2 class="text-xl font-semibold text-slate-900 mb-2">

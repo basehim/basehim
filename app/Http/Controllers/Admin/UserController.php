@@ -215,6 +215,18 @@ class UserController extends Controller
 
         $users->update((int)$id, $data);
 
+        // Public author address. Cleaned and made unique by AuthorService; an
+        // unusable value keeps the current one.
+        $slugIn = trim((string) $request->input('author_slug', ''));
+        if ($slugIn !== '') {
+            /** @var \App\Services\AuthorService $authorSvc */
+            $authorSvc = $this->app->make(\App\Services\AuthorService::class);
+            $currentSlug = ($u = $authorSvc->find((int)$id)) ? $authorSvc->slugFor($u) : '';
+            if ($slugIn !== $currentSlug && $authorSvc->setSlug((int)$id, $slugIn) === null) {
+                $this->flash('error', 'That author page address could not be used; the previous one was kept.');
+            }
+        }
+
         $actor = (string) ($this->user()['display_name'] ?? $this->user()['username'] ?? 'admin');
         if (isset($data['role']) && $data['role'] !== $existing['role']) {
             \App\Services\ActivityLogService::record((int)$id, 'user.role_changed', 'user', (int)$id,

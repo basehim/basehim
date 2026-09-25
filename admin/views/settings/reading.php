@@ -43,11 +43,35 @@
                     </div>
                 </div>
 
+                <?php /* The hidden 0 is what an unticked box sends. Without it the
+                         setting was never saved as off: once ticked, it could not
+                         be unticked. */ ?>
                 <label class="flex items-center gap-2">
+                    <input type="hidden" name="discourage_search" value="0">
                     <input type="checkbox" name="discourage_search" value="1" <?= !empty($values['discourage_search']) ? 'checked' : '' ?>
                         class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
                     <span class="text-sm text-slate-700">Discourage search engines from indexing this site</span>
                 </label>
+
+                <div class="pt-4 border-t border-slate-200 space-y-3">
+                    <h3 class="text-sm font-semibold text-slate-900">Authors</h3>
+                    <label class="flex items-start gap-2">
+                        <input type="hidden" name="author_archives" value="0">
+                        <input type="checkbox" name="author_archives" value="1" <?= (string) ($values['author_archives'] ?? '1') !== '0' ? 'checked' : '' ?>
+                            class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        <span class="text-sm text-slate-700">Author archive pages
+                            <span class="block text-xs text-slate-500">Each author who has published a post gets a page listing their posts, at /author/their-name. The address uses the author's display name, never their login name.</span>
+                        </span>
+                    </label>
+                    <label class="flex items-start gap-2">
+                        <input type="hidden" name="author_box" value="0">
+                        <input type="checkbox" name="author_box" value="1" <?= (string) ($values['author_box'] ?? '1') !== '0' ? 'checked' : '' ?>
+                            class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        <span class="text-sm text-slate-700">Author box on posts
+                            <span class="block text-xs text-slate-500">Shows the author's name, picture and bio under each post, in themes that support it.</span>
+                        </span>
+                    </label>
+                </div>
 
                 <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm">
                     <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save Changes

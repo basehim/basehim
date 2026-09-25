@@ -41,6 +41,21 @@
                     <label class="block text-xs text-slate-500 mb-1">Bio</label>
                     <textarea name="bio" rows="3" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none"><?= htmlspecialchars($currentUser['bio'] ?? '') ?></textarea>
                 </div>
+
+                <?php
+                    // Public author address: display-name based, never the login name.
+                    $bhAuthorSvc = \App\Core\Application::getInstance()->make(\App\Services\AuthorService::class);
+                    $bhAuthorSlug = !empty($currentUser['id']) ? $bhAuthorSvc->slugFor($currentUser) : '';
+                ?>
+                <div class="md:col-span-2">
+                    <label class="block text-xs text-slate-500 mb-1">Author page address</label>
+                    <div class="flex items-center rounded-lg border border-slate-300 focus-within:ring-2 focus-within:ring-blue-200 focus-within:border-blue-500 overflow-hidden">
+                        <span class="px-3 py-2 text-sm text-slate-500 bg-slate-50 border-r border-slate-300 whitespace-nowrap">/author/</span>
+                        <input type="text" name="author_slug" value="<?= htmlspecialchars($bhAuthorSlug) ?>" pattern="[a-z0-9-]+" maxlength="180"
+                            class="flex-1 min-w-0 px-3 py-2 outline-none text-sm">
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">Lowercase letters, numbers and hyphens. Shown publicly; it should not be the login name.</p>
+                </div>
             </div>
         </div>
 

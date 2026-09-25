@@ -22,7 +22,12 @@
                 <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 grid place-items-center text-white text-xs font-semibold">
                     <?= strtoupper(substr($post['author_name'], 0, 1)) ?>
                 </div>
+                <?php $authorUrl = function_exists('bh_author_url') ? bh_author_url($post) : ''; ?>
+                <?php if ($authorUrl !== ''): ?>
+                <a href="<?= htmlspecialchars(($base ?? '') . $authorUrl) ?>" rel="author" class="font-medium text-slate-700 hover:text-brand-600"><?= htmlspecialchars($post['author_name']) ?></a>
+                <?php else: ?>
                 <span class="font-medium text-slate-700"><?= htmlspecialchars($post['author_name']) ?></span>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
             <span class="text-slate-300">·</span>
@@ -58,17 +63,17 @@
         ?>
     </div>
 
-    <!-- Author bio -->
-    <?php if (!empty($post['author_bio'])): ?>
-    <div class="mt-12 p-5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-4">
-        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 grid place-items-center text-white text-lg font-semibold flex-shrink-0">
-            <?= strtoupper(substr($post['author_name'], 0, 1)) ?>
-        </div>
-        <div>
-            <div class="font-semibold text-slate-900"><?= htmlspecialchars($post['author_name']) ?></div>
-            <p class="text-sm text-slate-600 mt-1"><?= htmlspecialchars($post['author_bio']) ?></p>
-        </div>
-    </div>
+    <!-- Author box: core's, in this theme's classes. Controlled by
+         Settings → Reading → Author box on posts. -->
+    <?php if (function_exists('bh_author_box')): ?>
+    <?= bh_author_box($post, [
+        'class'        => 'mt-12 p-5 rounded-2xl bg-slate-50 border border-slate-200',
+        'avatar_class' => 'bg-gradient-to-br from-brand-400 to-brand-600',
+        'name_class'   => 'text-slate-900',
+        'bio_class'    => 'text-sm text-slate-600',
+        'link_class'   => 'text-sm font-medium text-brand-600 hover:text-brand-700',
+        'avatar_size'  => 56,
+    ]) ?>
     <?php endif; ?>
 
     <!-- Comments -->

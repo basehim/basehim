@@ -56,6 +56,18 @@ class ProfileController extends Controller
         }
 
         $users->update($userId, $data);
+
+        // Public author address. Cleaned and made unique by AuthorService; an
+        // unusable value keeps the current one.
+        $slugIn = trim((string) $request->input('author_slug', ''));
+        if ($slugIn !== '') {
+            /** @var \App\Services\AuthorService $authorSvc */
+            $authorSvc = $this->app->make(\App\Services\AuthorService::class);
+            $currentSlug = ($u = $authorSvc->find($userId)) ? $authorSvc->slugFor($u) : '';
+            if ($slugIn !== $currentSlug && $authorSvc->setSlug($userId, $slugIn) === null) {
+                $this->flash('error', 'That author page address could not be used; the previous one was kept.');
+            }
+        }
         $this->flash('success', 'Profile updated.');
         return $this->redirect('/admin/profile');
     }

@@ -749,6 +749,150 @@ JS;
 }
 
 /**
+ * The public profile of a post's author (or of a user row): display name, bio,
+ * public slug, archive URL, avatar URL, published-post count. Never the email,
+ * role or login name. Null when there is no such author.
+ */
+if (!function_exists('bh_author')) {
+    function bh_author(array $postOrUser): ?array {
+        static $cache = [];
+        // A post names its author in author_id; a user row or a profile from
+        // bh_author() is identified by id (and has no post title).
+        if (isset($postOrUser['author_id'])) {
+            $id = (int) $postOrUser['author_id'];
+        } elseif (!isset($postOrUser['title']) && (isset($postOrUser['username']) || isset($postOrUser['display_name']))) {
+            $id = (int) ($postOrUser['id'] ?? 0);
+        } else {
+            $id = 0;
+        }
+        if ($id <= 0) return null;
+        if (!array_key_exists($id, $cache)) {
+            try {
+                $svc  = \App\Core\Application::getInstance()->make(\App\Services\AuthorService::class);
+                $user = $svc->find($id);
+                $cache[$id] = $user ? $svc->publicProfile($user) : null;
+            } catch (\Throwable) { $cache[$id] = null; }
+        }
+        return $cache[$id];
+    }
+}
+
+/**
+ * Link to an author's archive, /author/{slug}: for a post, its author.
+ * Empty when author archives are switched off or the author has no published
+ * posts — so a theme can write:
+ *
+ *   <?php if ($u = bh_author_url($post)): ?><a href="<?= $base . $u ?>">…</a><?php endif; ?>
+ */
+if (!function_exists('bh_author_url')) {
+    function bh_author_url(array $postOrUser): string {
+        $a = bh_author($postOrUser);
+        return $a ? (string) $a['url'] : '';
+    }
+}
+
+/**
+ * The author box for a single post:
+ *
+ *   <?= bh_author_box($post) ?>
+ *
+ * Avatar (the uploaded one, else initials), name linked to the author's
+ * archive, bio, and a link to their other posts. Returns '' when Settings →
+ * Reading → Author box is off, or the post has no author.
+ *
+ * Styling works like bh_comment_form(): `bh-author-box__*` classes, a small
+ * default stylesheet at zero specificity, `'styles' => false` to drop it, and
+ * `class`, `avatar_class`, `name_class`, `bio_class`, `link_class` for the
+ * theme's own. Other arguments: `title` (e.g. 'About the author'; empty by
+ * default), `title_tag`, `show_bio`, `show_link`, `link_text` (%d is the post
+ * count), `avatar_size` (px). Filter: `author_box.html` ($html, $author, $post).
+ */
+if (!function_exists('bh_author_box')) {
+    function bh_author_box(array $post, array $args = []): string {
+        $e = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES);
+        try {
+            $app = \App\Core\Application::getInstance();
+            if (!$app->make(\App\Services\AuthorService::class)->boxEnabled()) return '';
+        } catch (\Throwable) { return ''; }
+
+        $a = bh_author($post);
+        if (!$a) return '';
+
+        $args = array_merge([
+            'title'        => '',
+            'title_tag'    => 'h2',
+            'show_bio'     => true,
+            'show_link'    => true,
+            'link_text'    => 'View all %d posts',
+            'avatar_size'  => 64,
+            'class'        => '',
+            'avatar_class' => '',
+            'name_class'   => '',
+            'bio_class'    => '',
+            'link_class'   => '',
+            'styles'       => true,
+        ], $args);
+
+        $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
+        $cls  = static fn(string $core, $extra): string => trim($core . ' ' . (string) $extra);
+        $size = max(24, min(256, (int) $args['avatar_size']));
+        $name = (string) $a['display_name'];
+        $url  = $a['url'] !== '' ? $base . $a['url'] : '';
+        $tag  = in_array($args['title_tag'], ['h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div'], true) ? $args['title_tag'] : 'h2';
+
+        // Initials: first letter of the first two words.
+        $initials = '';
+        foreach (preg_split('/\s+/u', trim($name)) ?: [] as $w) {
+            if ($w !== '' && mb_strlen($initials) < 2) $initials .= mb_strtoupper(mb_substr($w, 0, 1));
+        }
+
+        $avatar = $a['avatar_url']
+            ? '<img src="' . $e($a['avatar_url']) . '" alt="" width="' . $size . '" height="' . $size . '" loading="lazy" class="' . $e($cls('bh-author-box__avatar', $args['avatar_class'])) . '">'
+            : '<span class="' . $e($cls('bh-author-box__avatar bh-author-box__avatar--initials', $args['avatar_class'])) . '" aria-hidden="true">' . $e($initials ?: '?') . '</span>';
+
+        $h  = '<aside class="' . $e($cls('bh-author-box', $args['class'])) . '" style="--bh-author-avatar:' . $size . 'px">';
+        if ((string) $args['title'] !== '') {
+            $h .= '<' . $tag . ' class="bh-author-box__title">' . $e($args['title']) . '</' . $tag . '>';
+        }
+        $h .= '<div class="bh-author-box__inner">' . ($url ? '<a href="' . $e($url) . '" tabindex="-1" aria-hidden="true">' . $avatar . '</a>' : $avatar);
+        $h .= '<div class="bh-author-box__body">';
+        $nameHtml = $url ? '<a href="' . $e($url) . '" rel="author">' . $e($name) . '</a>' : $e($name);
+        $h .= '<p class="' . $e($cls('bh-author-box__name', $args['name_class'])) . '">' . $nameHtml . '</p>';
+        if ($args['show_bio'] && trim($a['bio']) !== '') {
+            $h .= '<p class="' . $e($cls('bh-author-box__bio', $args['bio_class'])) . '">' . nl2br($e(trim($a['bio']))) . '</p>';
+        }
+        if ($args['show_link'] && $url) {
+            $h .= '<a class="' . $e($cls('bh-author-box__link', $args['link_class'])) . '" href="' . $e($url) . '">'
+                . $e(str_replace('%d', (string) $a['post_count'], (string) $args['link_text'])) . '</a>';
+        }
+        $h .= '</div></div></aside>';
+
+        static $styled = false;
+        if ($args['styles'] && !$styled) {
+            $styled = true;
+            $h .= '<style id="bh-author-box-css">'
+                . ':where(.bh-author-box){margin:2.5rem 0;padding:1.25rem;border:1px solid rgba(127,127,127,.25);border-radius:1rem}'
+                . ':where(.bh-author-box__title){margin:0 0 .85rem;font-size:.8em;text-transform:uppercase;letter-spacing:.06em;opacity:.7}'
+                . ':where(.bh-author-box__inner){display:flex;gap:1rem;align-items:flex-start}'
+                . ':where(.bh-author-box__avatar){flex:0 0 auto;width:var(--bh-author-avatar,64px);height:var(--bh-author-avatar,64px);border-radius:50%;object-fit:cover;display:block}'
+                . ':where(.bh-author-box__avatar--initials){display:grid;place-items:center;font-weight:700;font-size:calc(var(--bh-author-avatar,64px) * .36);color:#fff;background:var(--bh-accent,#2563eb)}'
+                . ':where(.bh-author-box__body){min-width:0}'
+                . ':where(.bh-author-box__name){margin:0;font-weight:700}'
+                . ':where(.bh-author-box__name a){color:inherit;text-decoration:none}'
+                . ':where(.bh-author-box__bio){margin:.35rem 0 0;opacity:.85}'
+                . ':where(.bh-author-box__link){display:inline-block;margin-top:.6rem;font-size:.9em}'
+                . '</style>';
+        }
+
+        try {
+            $out = $app->make(\App\Core\HookRegistry::class)->applyFilters('author_box.html', $h, $a, $post);
+            if (is_string($out)) $h = $out;
+        } catch (\Throwable) {}
+        return $h;
+    }
+}
+
+/**
  * Items for a menu location, for themes that declare their own.
  *
  * Core passes `$primary_menu` and `$footer_menu` into every template, which
