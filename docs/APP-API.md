@@ -52,9 +52,14 @@ $recent = $this->api()->posts()->all(['status' => 'published'], limit: 20);
 // Tagging, without the usual race
 $term = $this->api()->terms()->firstOrCreate('tag', 'Release Notes');
 
-// Media from a file your app generated
-$item = $this->api()->media()->uploadFromPath('/tmp/chart.png', 'chart.png');
-$this->api()->media()->update($item['id'], ['alt_text' => 'Revenue by month']);
+// Media from a file your app generated. $meta takes title, alt_text (or its
+// short form alt) and caption.
+$item = $this->api()->media()->uploadFromPath('/tmp/chart.png', 'chart.png', null,
+    ['alt_text' => 'Revenue by month', 'caption' => 'Q3 report']);
+
+// Later changes: title, alt_text/alt, caption, description — and, after
+// rewriting the file in place, its width, height and file_size.
+$this->api()->media()->update($item['id'], ['width' => 1600, 'height' => 900, 'file_size' => 245112]);
 
 // Moderation
 foreach ($this->api()->comments()->all(['status' => 'pending']) as $c) {

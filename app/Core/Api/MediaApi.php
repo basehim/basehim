@@ -54,11 +54,23 @@ class MediaApi extends Resource
         return $out;
     }
 
-    /** Update metadata (title, alt_text, caption, description). */
+    /**
+     * Update a media item's details.
+     *
+     * Text: `title`, `alt_text` (or `alt`), `caption`, `description`.
+     * File facts, for an app that rewrote the file in place: `width`,
+     * `height`, `file_size` — whole numbers, zero or more. These used to be
+     * dropped silently, so an image edited in place kept its old dimensions.
+     */
     public function update(int $id, array $data): bool
     {
-        $allowed = ['title', 'alt_text', 'caption', 'description'];
-        $clean = array_intersect_key($data, array_flip($allowed));
+        $data  = self::normalizeMeta($data);
+        $clean = array_intersect_key($data, array_flip(['title', 'alt_text', 'caption', 'description']));
+        foreach (['width', 'height', 'file_size'] as $k) {
+            if (array_key_exists($k, $data) && is_numeric($data[$k]) && (int) $data[$k] >= 0) {
+                $clean[$k] = (int) $data[$k];
+            }
+        }
         if (!$clean) return false;
 
         $ok = ((int) $this->attempt(fn() => $this->service()->update($id, $clean), 0, 'update')) > 0;
@@ -75,11 +87,29 @@ class MediaApi extends Resource
     }
 
     /**
+     * `alt` is accepted as the short form of `alt_text`. Every app that saves
+     * to the library passed `alt`, which core never read, so everything those
+     * apps saved had no alt text. `alt_text` wins if both are given.
+     */
+    private static function normalizeMeta(array $meta): array
+    {
+        if (array_key_exists('alt', $meta)) {
+            if (!isset($meta['alt_text']) || $meta['alt_text'] === '') {
+                $meta['alt_text'] = (string) $meta['alt'];
+            }
+            unset($meta['alt']);
+        }
+        return $meta;
+    }
+
+    /**
      * Add a file already on disk to the media library.
      *
      * The core uploader expects a $_FILES-shaped array, which an app generating
      * a file itself (a rendered chart, a fetched remote image) does not have.
      * This builds that shape from a plain path.
+     *
+     * $meta: `title`, `alt_text` (or `alt`), `caption`.
      *
      * @return array|null The created media row, or null on failure.
      */
@@ -93,6 +123,7 @@ class MediaApi extends Resource
         $service = $this->service();
         $config = $this->make(Config::class);
         $name = $filename ?: basename($path);
+        $meta = self::normalizeMeta($meta);
 
         // importFile(), not upload(): upload() only accepts a file PHP received
         // in this HTTP request, which a file an app generated never is.
