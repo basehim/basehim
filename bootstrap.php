@@ -1156,3 +1156,117 @@ JS;
              . "<script id=\"bh-menu-js\">" . $js . "</script>\n";
     }
 }
+
+
+// ── Featured image sizes ─────────────────────────────────────────────────────
+//
+// Core makes a thumbnail (square crop), medium and large version of every
+// uploaded image. Posts carry them in featured_sizes; these helpers pick one
+// and build a responsive <img> from them.
+
+if (!function_exists('bh_image_sizes')) {
+    /**
+     * A post's featured image in every available size, smallest first:
+     * name => ['url', 'width', 'height']. "full" is the original upload.
+     * Returns [] when the post has no featured image.
+     */
+    function bh_image_sizes(array $post): array
+    {
+        static $cache = [];
+        $sizes = $post['featured_sizes'] ?? null;
+        $full  = ['url' => (string) ($post['featured_url'] ?? ''), 'width' => (int) ($post['featured_width'] ?? 0), 'height' => (int) ($post['featured_height'] ?? 0)];
+        if (!is_array($sizes) || ($full['url'] !== '' && $full['width'] === 0)) {
+            // A post loaded some other way: look its image up once per request.
+            $mid = (int) ($post['featured_media_id'] ?? 0);
+            if ($mid > 0) {
+                if (!array_key_exists($mid, $cache)) {
+                    $cache[$mid] = null;
+                    try {
+                        $row = \App\Core\Application::getInstance()->make(\App\Core\Database::class)
+                            ->selectOne('SELECT url, width, height, sizes FROM {media} WHERE id = :id', ['id' => $mid]);
+                        if ($row) {
+                            $list = [];
+                            foreach ((array) json_decode((string) ($row['sizes'] ?? ''), true) as $n => $v) {
+                                if (is_array($v) && !empty($v['url'])) $list[(string) $n] = ['url' => \App\Repositories\PostRepository::mediaUrl((string) $v['url']), 'width' => (int) ($v['width'] ?? 0), 'height' => (int) ($v['height'] ?? 0)];
+                            }
+                            $cache[$mid] = ['sizes' => $list, 'full' => ['url' => \App\Repositories\PostRepository::mediaUrl((string) $row['url']), 'width' => (int) $row['width'], 'height' => (int) $row['height']]];
+                        }
+                    } catch (\Throwable) {}
+                }
+                if (is_array($cache[$mid])) {
+                    if (!is_array($sizes)) $sizes = $cache[$mid]['sizes'];
+                    if ($full['url'] === '') $full['url'] = $cache[$mid]['full']['url'];
+                    if ($full['width'] === 0) { $full['width'] = $cache[$mid]['full']['width']; $full['height'] = $cache[$mid]['full']['height']; }
+                }
+            }
+        }
+        $out = [];
+        foreach (is_array($sizes) ? $sizes : [] as $n => $v) if (!empty($v['url'])) $out[(string) $n] = $v;
+        if ($full['url'] !== '') $out['full'] = $full;
+        uasort($out, fn($a, $b) => ($a['width'] ?: PHP_INT_MAX) <=> ($b['width'] ?: PHP_INT_MAX));
+        return $out;
+    }
+}
+
+if (!function_exists('bh_image_url')) {
+    /**
+     * The URL of a post's featured image in one size: thumbnail, medium,
+     * large or full. A size that was never made (the original was smaller, or
+     * thumbnails have not been generated yet) falls back to the original.
+     * Returns '' when the post has no featured image.
+     */
+    function bh_image_url(array $post, string $size = 'full'): string
+    {
+        $all = bh_image_sizes($post);
+        return (string) (($all[$size] ?? $all['full'] ?? [])['url'] ?? '');
+    }
+}
+
+if (!function_exists('bh_post_image')) {
+    /**
+     * A responsive <img> for a post's featured image, or '' if it has none.
+     *
+     * The chosen $size is the src; the other sizes with the same shape go into
+     * srcset, so the browser downloads the smallest file that is sharp enough
+     * for the slot. The square-cropped "thumbnail" never mixes with the others.
+     *
+     * $args: class, alt (default: the image's alt text), sizes (the srcset
+     * "sizes" attribute, default "100vw"), loading (default "lazy"),
+     * fetchpriority, and any other attribute as key => value.
+     */
+    function bh_post_image(array $post, string $size = 'medium', array $args = []): string
+    {
+        $all = bh_image_sizes($post);
+        if (!$all) return '';
+        $pick = $all[$size] ?? $all['full'] ?? reset($all);
+
+        $srcset = [];
+        if ($size !== 'thumbnail' && !empty($pick['width']) && !empty($pick['height'])) {
+            $ratio = $pick['width'] / $pick['height'];
+            foreach ($all as $name => $v) {
+                if ($name === 'thumbnail' || empty($v['width']) || empty($v['height'])) continue;
+                if (abs($v['width'] / $v['height'] - $ratio) / $ratio > 0.02) continue; // a different shape
+                $srcset[$v['width']] = $v['url'] . ' ' . $v['width'] . 'w';
+            }
+            ksort($srcset);
+        }
+
+        $attrs = [
+            'src'      => $pick['url'],
+            'srcset'   => count($srcset) > 1 ? implode(', ', $srcset) : null,
+            'sizes'    => count($srcset) > 1 ? (string) ($args['sizes'] ?? '100vw') : null,
+            'width'    => !empty($pick['width']) ? (int) $pick['width'] : null,
+            'height'   => !empty($pick['height']) ? (int) $pick['height'] : null,
+            'alt'      => (string) ($args['alt'] ?? $post['featured_alt'] ?? ''),
+            'loading'  => (string) ($args['loading'] ?? 'lazy'),
+            'decoding' => 'async',
+        ];
+        foreach ($args as $k => $v) if (!in_array($k, ['sizes', 'alt', 'loading'], true)) $attrs[$k] = $v;
+        $html = '<img';
+        foreach ($attrs as $k => $v) {
+            if ($v === null || $v === false || ($v === '' && $k !== 'alt')) continue;
+            $html .= ' ' . $k . '="' . htmlspecialchars((string) $v, ENT_QUOTES) . '"';
+        }
+        return $html . '>';
+    }
+}

@@ -23,6 +23,24 @@ class SettingController extends Controller
     public function email(Request $request): Response     { return $this->renderTab('email'); }
     public function authorization(Request $request): Response { return $this->renderTab('authorization'); }
 
+    /**
+     * POST /admin/settings/media/regenerate-batch — one batch of thumbnail
+     * regeneration, as JSON. The media settings screen calls it repeatedly,
+     * passing back `next`, until `done`; each call stops after a few seconds,
+     * so no call can outlast the web server's time limit.
+     */
+    public function regenerateThumbnailsBatch(Request $request): Response
+    {
+        if (!$this->verifyCsrf($request)) return $this->json(['error' => 'Security check failed. Reload the page and try again.'], 419);
+        if (!\extension_loaded('gd')) return $this->json(['error' => 'The GD image extension is not available on this server.'], 422);
+        @set_time_limit(60);
+        /** @var \App\Services\MediaService $media */
+        $media = $this->app->make(\App\Services\MediaService::class);
+        $after = max(0, (int) $request->input('after', 0));
+        $onlyMissing = (string) $request->input('scope', 'missing') !== 'all';
+        return $this->json($media->regenerateBatch($after, $onlyMissing));
+    }
+
     /** POST /admin/settings/email — persisted via the generic tab saver. */
     public function saveEmail(Request $request): Response  { return $this->saveTab($request, 'email'); }
     public function saveAuthorization(Request $request): Response { return $this->saveTab($request, 'authorization'); }
@@ -148,6 +166,7 @@ class SettingController extends Controller
             $extra['gdAvailable'] = \extension_loaded('gd');
             $extra['gdWebp'] = \function_exists('imagewebp');
             $extra['mediaCount'] = $media->totalCount();
+            $extra['imageCounts'] = $media->imageCounts();
         }
 
         return $this->view('settings.' . $tab, array_merge([

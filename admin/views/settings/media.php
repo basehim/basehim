@@ -133,17 +133,76 @@
         </form>
 
         <!-- Regenerate thumbnails -->
-        <div class="bg-white rounded-xl border border-slate-200 p-6">
+        <?php $ic = $imageCounts ?? ['images' => 0, 'missing' => 0]; ?>
+        <div class="bg-white rounded-xl border border-slate-200 p-6" id="bh-regen">
             <h3 class="font-semibold text-slate-900 mb-1">Regenerate thumbnails</h3>
-            <p class="text-sm text-slate-500 mb-4">Rebuild every image's thumbnails using the sizes above — useful after changing them. Currently <strong><?= (int)($mediaCount ?? 0) ?></strong> item(s) in the Media Library.</p>
-            <form method="POST" action="<?= $base ?>/admin/settings/media/regenerate" onsubmit="return confirm('Regenerate thumbnails for all images? This may take a while on large libraries.')">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                <button type="submit" <?= empty($gdAvailable) ? 'disabled' : '' ?>
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-                    <?= icon('arrow-path', 'w-4 h-4') ?> Regenerate all thumbnails
+            <p class="text-sm text-slate-500 mb-4">
+                Builds the thumbnail, medium and large versions themes use for cards, lists and widgets.
+                <strong><?= number_format((int) $ic['images']) ?></strong> image<?= (int) $ic['images'] === 1 ? '' : 's' ?> in the library;
+                <strong><?= number_format((int) $ic['missing']) ?></strong> without thumbnails.
+            </p>
+            <div class="flex flex-wrap gap-x-6 gap-y-2 mb-4 text-sm text-slate-700">
+                <label class="inline-flex items-center gap-2"><input type="radio" name="regen_scope" value="missing" checked class="text-blue-600"> Only images without thumbnails</label>
+                <label class="inline-flex items-center gap-2"><input type="radio" name="regen_scope" value="all" class="text-blue-600"> All images <span class="text-slate-400">(after changing the sizes above)</span></label>
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="button" data-regen-start <?= empty($gdAvailable) ? 'disabled' : '' ?>
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                    <?= icon('arrow-path', 'w-4 h-4') ?> Regenerate
                 </button>
-            </form>
+                <button type="button" data-regen-stop hidden class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">Stop</button>
+                <?php if (empty($gdAvailable)): ?><span class="text-sm text-amber-700">The GD image extension is not available on this server.</span><?php endif; ?>
+            </div>
+            <div data-regen-progress hidden class="mt-4">
+                <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div data-regen-bar class="h-full bg-blue-600 transition-all" style="width:0%"></div></div>
+                <p data-regen-status class="mt-2 text-sm text-slate-600" aria-live="polite"></p>
+            </div>
+            <noscript>
+                <form method="POST" action="<?= $base ?>/admin/settings/media/regenerate" class="mt-3" onsubmit="return confirm('Regenerate thumbnails for all images in one request? On a large library this can time out.')">
+                    <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
+                    <button type="submit" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm">Regenerate all (one request)</button>
+                </form>
+            </noscript>
         </div>
+        <script>
+        (function () {
+            // Regenerate in batches: each request works for a few seconds and
+            // says where to continue, so a large library never times out.
+            var box = document.getElementById('bh-regen'); if (!box) return;
+            var start = box.querySelector('[data-regen-start]'), stop = box.querySelector('[data-regen-stop]');
+            var wrap = box.querySelector('[data-regen-progress]'), bar = box.querySelector('[data-regen-bar]'), status = box.querySelector('[data-regen-status]');
+            var url = <?= json_encode($base . '/admin/settings/media/regenerate-batch') ?>, csrf = <?= json_encode($csrf) ?>;
+            var running = false, stopped = false;
+            start.addEventListener('click', function () {
+                if (running) return;
+                var scope = (box.querySelector('input[name=regen_scope]:checked') || {}).value || 'missing';
+                if (scope === 'all' && !confirm('Rebuild the thumbnails of every image? Existing thumbnails are replaced.')) return;
+                running = true; stopped = false; start.disabled = true; stop.hidden = false; wrap.hidden = false;
+                var tot = { processed: 0, skipped: 0, failed: 0, variants: 0 }, total = null, after = 0;
+                var finish = function (msg) { running = false; start.disabled = false; stop.hidden = true; status.textContent = msg; };
+                var step = function () {
+                    if (stopped) return finish('Stopped after ' + (tot.processed + tot.skipped + tot.failed) + ' images. Start again to continue where it left off.');
+                    var body = new FormData(); body.append('_csrf', csrf); body.append('after', after); body.append('scope', scope);
+                    fetch(url, { method: 'POST', body: body, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); })
+                        .then(function (j) {
+                            ['processed', 'skipped', 'failed', 'variants'].forEach(function (k) { tot[k] += j[k] || 0; });
+                            after = j.next;
+                            var done = tot.processed + tot.skipped + tot.failed;
+                            if (total === null) total = done + j.remaining;
+                            bar.style.width = (total ? Math.round(done / total * 100) : 100) + '%';
+                            var line = done + ' of ' + total + ' images · ' + tot.variants + ' thumbnails made'
+                                + (tot.failed ? ' · ' + tot.failed + ' failed' : '')
+                                + (tot.skipped ? ' · ' + tot.skipped + ' skipped (file missing or not resizable)' : '');
+                            if (j.done) finish('Done. ' + line); else { status.textContent = line; step(); }
+                        })
+                        .catch(function (e) { finish('Stopped: ' + e.message + '. Start again to continue.'); });
+                };
+                step();
+            });
+            stop.addEventListener('click', function () { stopped = true; stop.hidden = true; });
+        })();
+        </script>
 
     </div>
 </div>

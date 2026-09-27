@@ -9,27 +9,91 @@ class PostRepository
 {
     public function __construct(private Database $db) {}
 
-    /** Decorate a row: normalize featured_url for the install location. */
+    /**
+     * Decorate a row: normalize featured_url for the install location, and
+     * decode the featured image's generated sizes (thumbnail, medium, large)
+     * into featured_sizes: name => ['url', 'width', 'height'], URLs normalized
+     * the same way. Themes read them through bh_image_url() / bh_post_image().
+     */
     private function decorate(?array $row): ?array
     {
         if (!$row) return $row;
-        if (!empty($row['featured_url']) && $row['featured_url'][0] === '/') {
-            // Legacy: /storage/uploads/... → /uploads/...
-            if (str_starts_with($row['featured_url'], '/storage/uploads/')) {
-                $row['featured_url'] = '/uploads/' . substr($row['featured_url'], strlen('/storage/uploads/'));
+        if (!empty($row['featured_url'])) {
+            $row['featured_url'] = self::mediaUrl((string) $row['featured_url']);
+        }
+        if (array_key_exists('featured_sizes', $row)) {
+            $sizes = [];
+            $raw = is_string($row['featured_sizes']) ? json_decode($row['featured_sizes'], true) : $row['featured_sizes'];
+            foreach (is_array($raw) ? $raw : [] as $name => $v) {
+                if (!is_array($v) || empty($v['url'])) continue;
+                $sizes[(string) $name] = [
+                    'url'    => self::mediaUrl((string) $v['url']),
+                    'width'  => (int) ($v['width'] ?? 0),
+                    'height' => (int) ($v['height'] ?? 0),
+                ];
             }
-            $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
-            if ($base !== '' && !str_starts_with($row['featured_url'], $base . '/')) {
-                $row['featured_url'] = $base . $row['featured_url'];
-            }
+            $row['featured_sizes'] = $sizes;
         }
         return $row;
+    }
+
+    /** /storage/uploads/… (legacy) → /uploads/…, and prefix the install's base path. */
+    public static function mediaUrl(string $url): string
+    {
+        if ($url === '' || $url[0] !== '/') return $url;
+        if (str_starts_with($url, '/storage/uploads/')) {
+            $url = '/uploads/' . substr($url, strlen('/storage/uploads/'));
+        }
+        $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+        if ($base !== '' && !str_starts_with($url, $base . '/')) {
+            $url = $base . $url;
+        }
+        return $url;
+    }
+
+    /**
+     * Published posts for a list widget.
+     *
+     * $opts: limit (1–50), order (latest | popular | commented),
+     *        category (a category slug, '' for all).
+     */
+    public function widgetList(array $opts): array
+    {
+        $limit = max(1, min(50, (int) ($opts['limit'] ?? 5)));
+        $order = match ((string) ($opts['order'] ?? 'latest')) {
+            'popular'   => 'p.view_count DESC, p.published_at DESC',
+            'commented' => 'comment_total DESC, p.published_at DESC',
+            default     => 'p.published_at DESC, p.id DESC',
+        };
+        $where  = "p.type = 'post' AND p.status = 'published' AND p.deleted_at IS NULL";
+        $params = [];
+        $cat = trim((string) ($opts['category'] ?? ''));
+        if ($cat !== '') {
+            $where .= " AND EXISTS (SELECT 1 FROM {post_term} pt
+                                      JOIN {terms} t ON t.id = pt.term_id
+                                      JOIN {taxonomies} x ON x.id = t.taxonomy_id AND x.slug = 'category'
+                                     WHERE pt.post_id = p.id AND t.slug = :cat)";
+            $params['cat'] = $cat;
+        }
+        $rows = $this->db->select(
+            "SELECT p.*, u.display_name AS author_name,
+                    m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height,
+                    (SELECT COUNT(*) FROM {comments} c WHERE c.post_id = p.id AND c.status = 'approved') AS comment_total
+               FROM {posts} p
+               LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} m ON m.id = p.featured_media_id
+              WHERE {$where}
+              ORDER BY {$order}
+              LIMIT {$limit}",
+            $params
+        );
+        return array_map(fn($r) => $this->decorate($r), $rows);
     }
 
     public function find(int $id): ?array
     {
         $sql = 'SELECT p.*, u.display_name AS author_name, u.username AS author_username,
-                       m.url AS featured_url, m.alt_text AS featured_alt
+                       m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
                 LEFT JOIN {media} m ON m.id = p.featured_media_id
@@ -40,7 +104,7 @@ class PostRepository
     public function findByUuid(string $uuid): ?array
     {
         $sql = 'SELECT p.*, u.display_name AS author_name, u.username AS author_username,
-                       m.url AS featured_url, m.alt_text AS featured_alt
+                       m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
                 LEFT JOIN {media} m ON m.id = p.featured_media_id
@@ -51,7 +115,7 @@ class PostRepository
     public function findBySlug(string $slug, ?string $type = null): ?array
     {
         $sql = 'SELECT p.*, u.display_name AS author_name, u.username AS author_username,
-                       m.url AS featured_url, m.alt_text AS featured_alt
+                       m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
                 LEFT JOIN {media} m ON m.id = p.featured_media_id
@@ -218,7 +282,7 @@ class PostRepository
 
         $offset = max(0, ($page - 1) * $perPage);
         $sql = "SELECT p.*, u.display_name AS author_name, u.username AS author_username,
-                       m.url AS featured_url, m.alt_text AS featured_alt
+                       m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
                 LEFT JOIN {media} m ON m.id = p.featured_media_id
@@ -359,7 +423,7 @@ class PostRepository
         $limit = (int)$limit;
         $items = $this->db->select(
             "SELECT p.*, u.display_name AS author_name,
-                    m.url AS featured_url, m.alt_text AS featured_alt
+                    m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
              FROM {posts} p
              LEFT JOIN {users} u ON u.id = p.author_id
              LEFT JOIN {media} m ON m.id = p.featured_media_id
@@ -445,7 +509,7 @@ class PostRepository
 
         $items = $this->db->select(
             "SELECT p.*, u.display_name AS author_name,
-                    m.url AS featured_url, m.alt_text AS featured_alt
+                    m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
              FROM {post_term} pt
              JOIN {posts} p ON p.id = pt.post_id
              LEFT JOIN {users} u ON u.id = p.author_id

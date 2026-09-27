@@ -343,6 +343,41 @@ final class Application
      * theme rule for the same element wins, and a theme that already styles
      * these widgets is unaffected.
      */
+    /**
+     * Default styles for the Recent Posts widget's richer layouts, once per
+     * page. Every rule is inside :where(), so it has no specificity and any
+     * rule a theme writes for the same element wins.
+     */
+    private static function recentPostsAssets(): string
+    {
+        static $done = false;
+        if ($done) return '';
+        $done = true;
+        return '<style id="bh-recent-posts-css">'
+            . ':where(.widget-recent-posts--rich){list-style:none;margin:0;padding:0;display:grid;gap:14px}'
+            . ':where(.widget-recent-posts__item){display:flex;gap:12px;align-items:flex-start;margin:0;min-width:0}'
+            . ':where(.widget-recent-posts__thumb){flex:0 0 auto;display:block;overflow:hidden;border-radius:8px;background:#e8edf3}'
+            . ':where(.widget-recent-posts__noimg){display:block;width:100%;height:100%;min-height:48px}'
+            . ':where(.widget-recent-posts__body){min-width:0;display:flex;flex-direction:column;gap:3px}'
+            . ':where(.widget-recent-posts__title){font-weight:600;line-height:1.35;text-decoration:none}'
+            . ':where(.widget-recent-posts__date){font-size:.8em;opacity:.7}'
+            . ':where(.widget-recent-posts__excerpt){margin:0;font-size:.85em;line-height:1.45;opacity:.8}'
+            // Small: a fixed-size box beside the title.
+            . ':where(.widget-recent-posts--thumbnail.widget-recent-posts--shape-square .widget-recent-posts__thumb){width:64px;height:64px}'
+            . ':where(.widget-recent-posts--thumbnail.widget-recent-posts--shape-wide .widget-recent-posts__thumb){width:96px;aspect-ratio:16/9}'
+            . ':where(.widget-recent-posts--thumbnail.widget-recent-posts--shape-original .widget-recent-posts__thumb){width:88px}'
+            // Medium: a full-width image above the title.
+            . ':where(.widget-recent-posts--medium .widget-recent-posts__item){flex-direction:column;gap:8px}'
+            . ':where(.widget-recent-posts--medium .widget-recent-posts__thumb){width:100%}'
+            . ':where(.widget-recent-posts--medium.widget-recent-posts--shape-square .widget-recent-posts__thumb){aspect-ratio:1/1}'
+            . ':where(.widget-recent-posts--medium.widget-recent-posts--shape-wide .widget-recent-posts__thumb){aspect-ratio:16/9}'
+            // The image itself: fill the box and crop (cover), or keep its own shape.
+            // Not in :where(), so a theme reset such as img{height:auto} cannot undo it.
+            . '.widget-recent-posts__thumb img{display:block;width:100%;height:100%;max-width:none;object-fit:cover}'
+            . '.widget-recent-posts--shape-original .widget-recent-posts__thumb img{height:auto;object-fit:contain}'
+            . '</style>';
+    }
+
     private static function termWidgetAssets(bool $withScript): string
     {
         static $styled = false, $scripted = false;
@@ -425,37 +460,111 @@ final class Application
         // Recent posts.
         $reg->register('core.recent-posts', [
             'title'       => 'Recent Posts',
-            'description' => 'A list of your most recent published posts.',
+            'description' => 'Your latest, most viewed or most discussed posts, with optional thumbnails, dates and excerpts.',
             'icon'        => 'newspaper',
             'source'      => 'core',
             'surfaces'    => ['frontend'],
             'fields'      => [
                 ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
-                ['key' => 'count', 'label' => 'Number of posts', 'type' => 'number'],
+                ['key' => 'count', 'label' => 'Number of posts', 'type' => 'number', 'default' => 5],
+                ['key' => 'order', 'label' => 'Show', 'type' => 'select', 'default' => 'latest',
+                 'options' => ['latest' => 'Latest posts', 'popular' => 'Most viewed', 'commented' => 'Most commented']],
+                ['key' => 'category', 'label' => 'From category', 'type' => 'select', 'default' => '',
+                 // Looked up only when the widget form is shown, not on every page.
+                 'options' => function (): array {
+                     $opts = ['' => 'All categories'];
+                     try {
+                         $rows = $this->make(\App\Core\Database::class)->select(
+                             "SELECT t.slug, t.name FROM {terms} t JOIN {taxonomies} x ON x.id = t.taxonomy_id AND x.slug = 'category' ORDER BY t.name"
+                         );
+                         foreach ($rows as $r) $opts[(string) $r['slug']] = html_entity_decode((string) $r['name'], ENT_QUOTES);
+                     } catch (\Throwable) {}
+                     return $opts;
+                 }],
+                ['key' => 'show_thumbnail', 'label' => 'Show thumbnails', 'type' => 'checkbox', 'default' => '0'],
+                ['key' => 'thumbnail_size', 'label' => 'Thumbnail size', 'type' => 'select', 'default' => 'thumbnail',
+                 'options' => ['thumbnail' => 'Small — beside the title', 'medium' => 'Medium — above the title']],
+                ['key' => 'thumbnail_shape', 'label' => 'Thumbnail shape', 'type' => 'select', 'default' => 'square',
+                 'options' => [
+                     'square'   => 'Square — cropped to fill',
+                     'original' => 'Original shape — the whole image, nothing cropped',
+                     'wide'     => 'Wide 16:9 — cropped to fill',
+                 ]],
+                ['key' => 'show_date', 'label' => 'Show the date', 'type' => 'checkbox', 'default' => '0'],
+                ['key' => 'show_excerpt', 'label' => 'Show a short excerpt', 'type' => 'checkbox', 'default' => '0'],
+                ['key' => 'hide_current', 'label' => 'Leave out the post being read', 'type' => 'checkbox', 'default' => '1'],
             ],
             'render' => function (array $s) use ($title): string {
                 $count = (int) ($s['count'] ?? 5);
                 if ($count < 1) $count = 5;
                 if ($count > 20) $count = 20;
+                $thumbs  = !empty($s['show_thumbnail']);
+                $size    = ($s['thumbnail_size'] ?? 'thumbnail') === 'medium' ? 'medium' : 'thumbnail';
+                $shape   = in_array($s['thumbnail_shape'] ?? '', ['square', 'original', 'wide'], true) ? $s['thumbnail_shape'] : 'square';
+                // The "thumbnail" file is already cropped square, so it only suits a small
+                // square. Every other combination uses the uncropped medium image.
+                $file    = ($size === 'thumbnail' && $shape === 'square') ? 'thumbnail' : 'medium';
+                $date    = !empty($s['show_date']);
+                $excerpt = !empty($s['show_excerpt']);
+                $hideCur = (string) ($s['hide_current'] ?? '1') !== '0';
                 try {
                     /** @var \App\Repositories\PostRepository $posts */
                     $posts = $this->make(\App\Repositories\PostRepository::class);
-                    $rows = $posts->recent($count + 10, 'post');
+                    $rows = $posts->widgetList([
+                        'limit'    => $count + 1, // one spare, in case the post being read is among them
+                        'order'    => (string) ($s['order'] ?? 'latest'),
+                        'category' => (string) ($s['category'] ?? ''),
+                    ]);
                 } catch (\Throwable) {
                     $rows = [];
                 }
                 $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+                $here = rtrim((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH), '/');
+                // The plain list of links, exactly as before, unless an option asks for more.
+                $rich = $thumbs || $date || $excerpt;
                 $items = '';
                 $shown = 0;
                 foreach ($rows as $p) {
-                    if (($p['status'] ?? '') !== 'published') continue;
                     $url = \App\Core\Helpers::postUrl($p, $base);
-                    $items .= '<li><a href="' . htmlspecialchars($url, ENT_QUOTES) . '">'
-                        . htmlspecialchars((string) ($p['title'] ?? 'Untitled')) . '</a></li>';
+                    if ($hideCur && $here !== '' && rtrim((string) parse_url($url, PHP_URL_PATH), '/') === $here) continue;
+                    $t = htmlspecialchars((string) ($p['title'] ?? 'Untitled'));
+                    $u = htmlspecialchars($url, ENT_QUOTES);
+                    if (!$rich) {
+                        $items .= '<li><a href="' . $u . '">' . $t . '</a></li>';
+                    } else {
+                        $img = '';
+                        if ($thumbs) {
+                            $tag = function_exists('bh_post_image') ? bh_post_image($p, $file, [
+                                'alt'   => '', // decorative: the title beside it says the same
+                                'sizes' => $size === 'medium' ? '(max-width: 600px) 100vw, 320px' : '96px',
+                            ]) : '';
+                            $img = '<a class="widget-recent-posts__thumb" href="' . $u . '" tabindex="-1" aria-hidden="true">'
+                                 . ($tag !== '' ? $tag : '<span class="widget-recent-posts__noimg"></span>') . '</a>';
+                        }
+                        $meta = '';
+                        if ($date && !empty($p['published_at'])) {
+                            $ts = strtotime((string) $p['published_at']);
+                            if ($ts) $meta = '<time class="widget-recent-posts__date" datetime="' . date('c', $ts) . '">' . date('j M Y', $ts) . '</time>';
+                        }
+                        $ex = '';
+                        if ($excerpt) {
+                            $text = trim((string) ($p['excerpt'] ?? ''));
+                            if ($text === '') {
+                                $body = ltrim((string) ($p['content'] ?? ''));
+                                if ($body !== '' && $body[0] !== '{' && $body[0] !== '[') $text = trim((string) preg_replace('/\s+/', ' ', html_entity_decode(strip_tags($body), ENT_QUOTES)));
+                            }
+                            if (mb_strlen($text) > 110) $text = rtrim(mb_substr($text, 0, 110), " ,.;:-") . '…';
+                            if ($text !== '') $ex = '<p class="widget-recent-posts__excerpt">' . htmlspecialchars($text) . '</p>';
+                        }
+                        $items .= '<li class="widget-recent-posts__item">' . $img
+                            . '<div class="widget-recent-posts__body"><a class="widget-recent-posts__title" href="' . $u . '">' . $t . '</a>' . $meta . $ex . '</div></li>';
+                    }
                     if (++$shown >= $count) break;
                 }
                 if ($items === '') $items = '<li class="widget-empty">No posts yet.</li>';
-                return $title($s) . '<ul class="widget-recent-posts">' . $items . '</ul>';
+                $cls = 'widget-recent-posts';
+                if ($rich) $cls .= ' widget-recent-posts--rich' . ($thumbs ? ' widget-recent-posts--thumbs widget-recent-posts--' . $size . ' widget-recent-posts--shape-' . $shape : '');
+                return ($rich ? self::recentPostsAssets() : '') . $title($s) . '<ul class="' . $cls . '">' . $items . '</ul>';
             },
         ]);
 

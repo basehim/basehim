@@ -118,6 +118,31 @@ class MediaRepository
         ];
     }
 
+    /** Where-clause for raster images; with $onlyMissing, those with no generated sizes yet. */
+    private function imageWhere(bool $onlyMissing): string
+    {
+        $w = "mime_type LIKE 'image/%' AND mime_type <> 'image/svg+xml'";
+        if ($onlyMissing) $w .= " AND (sizes IS NULL OR sizes = '' OR sizes = '[]' OR sizes = '{}')";
+        return $w;
+    }
+
+    /** The next images after $afterId, oldest first: one batch of thumbnail regeneration. */
+    public function imageBatch(int $afterId, int $limit, bool $onlyMissing): array
+    {
+        $limit = max(1, min(100, $limit));
+        return $this->db->select(
+            'SELECT * FROM {media} WHERE id > :after AND ' . $this->imageWhere($onlyMissing) . " ORDER BY id ASC LIMIT {$limit}",
+            ['after' => $afterId]
+        );
+    }
+
+    /** How many images (after $afterId) a regeneration run still has to visit. */
+    public function imageCount(bool $onlyMissing, int $afterId = 0): int
+    {
+        $r = $this->db->selectOne('SELECT COUNT(*) AS c FROM {media} WHERE id > :after AND ' . $this->imageWhere($onlyMissing), ['after' => $afterId]);
+        return (int) ($r['c'] ?? 0);
+    }
+
     public function totalCount(): int
     {
         $r = $this->db->selectOne('SELECT COUNT(*) AS c FROM {media}');

@@ -190,6 +190,7 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->post('/settings/permalinks', ['App\\Http\\Controllers\\Admin\\SettingController', 'savePermalinks']);
         $router->get('/settings/media', ['App\\Http\\Controllers\\Admin\\SettingController', 'media']);
         $router->post('/settings/media/regenerate', ['App\\Http\\Controllers\\Admin\\SettingController', 'regenerateThumbnails']);
+$router->post('/settings/media/regenerate-batch', ['App\\Http\\Controllers\\Admin\\SettingController', 'regenerateThumbnailsBatch']);
         $router->post('/settings/media', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveMedia']);
 
         // API Management

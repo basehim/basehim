@@ -435,46 +435,95 @@ class MediaService
      * Regenerate variants for every stored image using the current settings.
      * Old variants are removed first. Returns a counts summary.
      */
+    /**
+     * Rebuild the thumbnails of every image in one call. Fine for the command
+     * line or a small library; the admin screen uses regenerateBatch(), which
+     * cannot outlast a web server's time limit.
+     */
     public function regenerateAll(): array
     {
         $ms = $this->mediaSettings();
-        $processed = 0; $skipped = 0; $failed = 0; $variants = 0;
-
+        $tot = ['processed' => 0, 'skipped' => 0, 'failed' => 0, 'variants' => 0];
         $page = 1;
         do {
             $res   = $this->repo->paginate([], $page, 50);
-            $items = $res['data'] ?? [];
             $last  = (int) ($res['meta']['last_page'] ?? 1);
-
-            foreach ($items as $row) {
-                $mime = (string) ($row['mime_type'] ?? '');
-                $abs  = rtrim($this->uploadPath, '/') . '/' . $row['storage_path'];
-                if (!$this->images->supports($mime) || !is_file($abs)) { $skipped++; continue; }
-
-                $dir = dirname($abs);
-                // Remove any previously generated variants.
-                foreach ($this->decodeSizes($row['sizes'] ?? null) as $v) {
-                    if (!empty($v['file'])) { $f = $dir . '/' . $v['file']; if (is_file($f)) @unlink($f); }
-                }
-
-                $relDir = dirname((string) $row['storage_path']);
-                $relDir = ($relDir === '.' || $relDir === '') ? '' : $relDir;
-
-                try {
-                    $sizes = !empty($ms['generate_thumbnails'])
-                        ? $this->buildSizes($dir, $relDir, basename((string) $row['storage_path']), $mime, $ms)
-                        : [];
-                    $this->repo->update((int) $row['id'], ['sizes' => $sizes ? json_encode($sizes) : null]);
-                    $processed++;
-                    $variants += count($sizes);
-                } catch (\Throwable) {
-                    $failed++;
-                }
+            foreach ($res['data'] ?? [] as $row) {
+                [$outcome, $n] = $this->regenerateOne($row, $ms);
+                $tot[$outcome]++;
+                $tot['variants'] += $n;
             }
             $page++;
         } while ($page <= $last);
+        return $tot;
+    }
 
-        return ['processed' => $processed, 'skipped' => $skipped, 'failed' => $failed, 'variants' => $variants];
+    /**
+     * Rebuild thumbnails for the next images after $afterId, oldest first,
+     * for at most $seconds (default 8) or $limit images, whichever comes first.
+     *
+     * With $onlyMissing, images that already have generated sizes are left
+     * alone, so an interrupted run can simply be started again.
+     *
+     * Returns processed / skipped / failed / variants for this batch, `next`
+     * (the id to continue after), `remaining` and `done`.
+     */
+    public function regenerateBatch(int $afterId = 0, bool $onlyMissing = true, int $limit = 50, float $seconds = 8.0): array
+    {
+        $ms = $this->mediaSettings();
+        $started = microtime(true);
+        $tot = ['processed' => 0, 'skipped' => 0, 'failed' => 0, 'variants' => 0];
+        $next = $afterId;
+        $visited = 0;
+        while ($visited < $limit && microtime(true) - $started < $seconds) {
+            $rows = $this->repo->imageBatch($next, min(10, $limit - $visited), $onlyMissing);
+            if (!$rows) break;
+            foreach ($rows as $row) {
+                [$outcome, $n] = $this->regenerateOne($row, $ms);
+                $tot[$outcome]++;
+                $tot['variants'] += $n;
+                $next = (int) $row['id'];
+                $visited++;
+                if (microtime(true) - $started >= $seconds) break;
+            }
+        }
+        $remaining = $this->repo->imageCount($onlyMissing, $next);
+        return $tot + ['next' => $next, 'remaining' => $remaining, 'done' => $remaining === 0];
+    }
+
+    /** Images the regenerate screen reports on: all, and those still without thumbnails. */
+    public function imageCounts(): array
+    {
+        return ['images' => $this->repo->imageCount(false), 'missing' => $this->repo->imageCount(true)];
+    }
+
+    /**
+     * Rebuild one image's thumbnails. Returns [outcome, variants made], the
+     * outcome being processed, skipped (not a resizable image, or its file is
+     * gone) or failed.
+     */
+    private function regenerateOne(array $row, array $ms): array
+    {
+        $mime = (string) ($row['mime_type'] ?? '');
+        $abs  = rtrim($this->uploadPath, '/') . '/' . $row['storage_path'];
+        if (!$this->images->supports($mime) || !is_file($abs)) return ['skipped', 0];
+
+        $dir = dirname($abs);
+        // Remove any previously generated variants.
+        foreach ($this->decodeSizes($row['sizes'] ?? null) as $v) {
+            if (!empty($v['file'])) { $f = $dir . '/' . $v['file']; if (is_file($f)) @unlink($f); }
+        }
+        $relDir = dirname((string) $row['storage_path']);
+        $relDir = ($relDir === '.' || $relDir === '') ? '' : $relDir;
+        try {
+            $sizes = !empty($ms['generate_thumbnails'])
+                ? $this->buildSizes($dir, $relDir, basename((string) $row['storage_path']), $mime, $ms)
+                : [];
+            $this->repo->update((int) $row['id'], ['sizes' => $sizes ? json_encode($sizes) : null]);
+            return ['processed', count($sizes)];
+        } catch (\Throwable) {
+            return ['failed', 0];
+        }
     }
 
     // ── Delete ────────────────────────────────────────────────────────────────

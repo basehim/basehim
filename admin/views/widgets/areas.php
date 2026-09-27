@@ -93,6 +93,13 @@
                         ?>
                         <div>
                             <label class="block text-xs text-slate-500 mb-1"><?= htmlspecialchars($flabel) ?></label>
+                            <?php
+                                // A widget may supply its choices as a function (a category list, say),
+                                // so they are only looked up when this form is shown.
+                                if ($ftype === 'select' && ($f['options'] ?? null) instanceof \Closure) {
+                                    try { $f['options'] = ($f['options'])(); } catch (\Throwable) { $f['options'] = []; }
+                                }
+                            ?>
                             <?php if ($ftype === 'textarea'): ?>
                                 <textarea name="<?= htmlspecialchars($inputName) ?>" rows="3" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none"><?= htmlspecialchars((string) $val) ?></textarea>
                             <?php elseif ($ftype === 'checkbox'): ?>
