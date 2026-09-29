@@ -20,6 +20,18 @@
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // The picker shows the generated medium copy of an image (falling back to
+    // the original); what it inserts is always the original's URL.
+    function previewUrl(m) {
+        var s = m.sizes;
+        if (typeof s === 'string') { try { s = JSON.parse(s); } catch (e) { s = null; } }
+        if (s && typeof s === 'object') {
+            if (s.medium && s.medium.url) return s.medium.url;
+            if (s.large && s.large.url) return s.large.url;
+        }
+        return m.url;
+    }
+
     function el(tag, attrs, html) {
         var node = document.createElement(tag);
         if (attrs) {
@@ -227,7 +239,7 @@
             var isImg = m.mime_type && m.mime_type.indexOf('image/') === 0;
 
             dPreview.innerHTML = isImg
-                ? '<img src="' + escapeHtml(m.url) + '" alt="">'
+                ? '<img src="' + escapeHtml(previewUrl(m)) + '" alt="">'
                 : '<div class="nm-details-file">' + BasehimIcon('document', 'w-8 h-8') + '</div>';
 
             var bits = [];
@@ -331,7 +343,7 @@
                     var isImg = m.mime_type && m.mime_type.indexOf('image/') === 0;
                     var card = el('div', { class: 'nm-card', dataset: { id: m.id, url: m.url } });
                     if (isImg) {
-                        card.innerHTML = '<img src="' + escapeHtml(m.url) + '" alt="' + escapeHtml(m.alt_text || '') + '">';
+                        card.innerHTML = '<img src="' + escapeHtml(previewUrl(m)) + '" alt="' + escapeHtml(m.alt_text || '') + '" loading="lazy" decoding="async">';
                     } else {
                         card.innerHTML =
                             '<div class="nm-card-file">' +

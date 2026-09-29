@@ -133,5 +133,5 @@ function fmtSize($b) {
     }
 })();
 </script>
-<script src="<?= htmlspecialchars($base) ?>/admin/assets/js/media-library.js?v=2"></script>
+<script src="<?= htmlspecialchars($base) ?>/admin/assets/js/media-library.js?v=<?= htmlspecialchars(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '2') ?>"></script>
 <?php $this->endSection(); ?>

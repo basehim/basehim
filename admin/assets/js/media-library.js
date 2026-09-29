@@ -29,6 +29,30 @@
   function fmtDate(s){ if(!s) return '—'; var d=new Date(String(s).replace(' ','T')); return isNaN(d)?s:d.toLocaleString(); }
   function absUrl(u){ if(!u) return ''; if(/^https?:\/\//.test(u)) return u; return window.location.origin + u; }
 
+  // ---- generated sizes ----
+  // Core makes thumbnail (a 150 px square), medium and large copies of each
+  // image; the library shows those instead of downloading every original.
+  function sizesOf(m){
+    if (m._sz) return m._sz;
+    var s = m.sizes;
+    if (typeof s === 'string'){ try { s = JSON.parse(s); } catch(e){ s = null; } }
+    m._sz = (s && typeof s === 'object' && !Array.isArray(s)) ? s : {};
+    return m._sz;
+  }
+  // src (and srcset) for an image preview. 'thumbnail' is the small square;
+  // anything else is medium, with large and the original in srcset so a dense
+  // screen still gets a sharp picture. An image without generated sizes (an
+  // SVG, or one never regenerated) falls back to the original.
+  function imgSrc(m, pref, sizesAttr){
+    var s = sizesOf(m);
+    if (pref === 'thumbnail' && s.thumbnail && s.thumbnail.url) return 'src="'+esc(s.thumbnail.url)+'"';
+    var set = [];
+    ['medium','large'].forEach(function(n){ if (s[n] && s[n].url && s[n].width) set.push(esc(s[n].url)+' '+s[n].width+'w'); });
+    var src = (s.medium && s.medium.url) || (s.large && s.large.url) || m.url;
+    if (set.length && m.width) set.push(esc(m.url)+' '+m.width+'w');
+    return 'src="'+esc(src)+'"' + (set.length > 1 ? ' srcset="'+set.join(', ')+'" sizes="'+(sizesAttr||'240px')+'"' : '');
+  }
+
   function kind(mime){
     mime = String(mime||'');
     if (mime === 'image/svg+xml') return 'svg';
@@ -91,7 +115,7 @@
       // Preserve aspect ratio: set the box ratio from width/height when known.
       var ratio = (m.width && m.height) ? (' style="aspect-ratio:'+m.width+'/'+m.height+'"') : '';
       inner = '<div class="nml-card__media nml-card__media--img"'+ratio+'>'
-            + '<img src="'+esc(m.url)+'" alt="'+esc(m.alt_text||'')+'" loading="lazy">'
+            + '<img '+imgSrc(m, 'medium', '(max-width: 640px) 50vw, 240px')+' alt="'+esc(m.alt_text||'')+'" loading="lazy" decoding="async">'
             + (k==='svg'?'<span class="nml-badge nml-badge--svg">SVG</span>':'')
             + '</div>';
     } else if (k === 'video'){
@@ -115,7 +139,7 @@
     var k = kind(m.mime_type);
     var name = m.title || m.original_name || m.file_name || 'untitled';
     var thumb;
-    if (k==='image'||k==='svg') thumb = '<img src="'+esc(m.url)+'" alt="">';
+    if (k==='image'||k==='svg') thumb = '<img '+imgSrc(m, 'thumbnail')+' alt="" loading="lazy" decoding="async">';
     else { var di=docIcon(String(m.mime_type||'')); thumb=BasehimIcon(k==='video'?'fa-circle-play':k==='audio'?'fa-music':di[0],'w-5 h-5'); }
     var dims = (m.width&&m.height)?(m.width+'×'+m.height):'—';
     var sel = String(m.id)===String(state.selectedId)?' is-selected':'';
@@ -158,7 +182,13 @@
 
     var k = kind(m.mime_type);
     var preview;
-    if (k==='image'||k==='svg') preview = '<img src="'+esc(m.url)+'" alt="'+esc(m.alt_text||'')+'">';
+    var sz = sizesOf(m), quick = '';
+    if (k==='image'){ quick = (sz.medium && sz.medium.url) || (sz.large && sz.large.url) || (sz.thumbnail && sz.thumbnail.url) || ''; }
+    if (k==='image'||k==='svg'){
+      // Show a generated copy at once, blurred, while the original loads.
+      preview = '<img id="nml-pane-img" src="'+esc(quick || m.url)+'" alt="'+esc(m.alt_text||'')+'">'
+              + '<span class="nml-pane__loader" aria-live="polite"><span class="nml-spin"></span>Loading original…</span>';
+    }
     else if (k==='video') preview = '<video src="'+esc(m.url)+'" controls></video>';
     else if (k==='audio') preview = '<div class="nml-pane__audio">'+BasehimIcon('musical-note','w-4 h-4')+'</div><audio src="'+esc(m.url)+'" controls></audio>';
     else { var di=docIcon(String(m.mime_type||'')); preview='<div class="nml-pane__doc"><span style="color:'+di[1]+'">'+BasehimIcon(di[0],'w-16 h-16')+'</span></div>'; }
@@ -167,7 +197,7 @@
     var full = absUrl(m.url);
 
     paneBody.innerHTML =
-      '<div class="nml-pane__preview nml-pane__preview--'+k+'">'+preview+'</div>'
+      '<div class="nml-pane__preview nml-pane__preview--'+k+((k==='image'||k==='svg')?' is-loading':'')+'" id="nml-pane-preview">'+preview+'</div>'
       // Everything except the preview lives in one column, so the modal can go
       // preview-left / details-right on desktop and stack on mobile.
       + '<div class="nml-pane__side">'
@@ -190,6 +220,9 @@
       +   '<div class="nml-pane__meta"><span>Type</span><span>'+esc(m.mime_type||'—')+'</span></div>'
       +   '<div class="nml-pane__meta"><span>Dimensions</span><span>'+dims+'</span></div>'
       +   '<div class="nml-pane__meta"><span>Size</span><span>'+fmtSize(m.file_size)+'</span></div>'
+      +   (k==='image' ? '<div class="nml-pane__meta nml-pane__sizes"><span>Sizes</span><span>'+(['thumbnail','medium','large'].filter(function(n){ return sz[n] && sz[n].url; }).map(function(n){
+            return '<a href="'+esc(sz[n].url)+'" target="_blank" rel="noopener">'+n+'</a> '+(sz[n].width||'?')+'×'+(sz[n].height||'?');
+          }).join('<br>') || 'none yet — Settings → Media → Regenerate')+'</span></div>' : '')
       +   '<div class="nml-pane__meta"><span>Uploaded</span><span>'+esc(fmtDate(m.created_at))+'</span></div>'
       +   (m.updated_at?'<div class="nml-pane__meta"><span>Modified</span><span>'+esc(fmtDate(m.updated_at))+'</span></div>':'')
       +   '<div class="nml-pane__meta"><span>ID</span><span>'+esc(String(m.id))+'</span></div>'
@@ -211,6 +244,26 @@
     pane.setAttribute('aria-hidden','false');
     paneBackdrop.classList.remove('hidden');
     wirePane(m);
+    if (k==='image'||k==='svg') loadOriginal(m, quick);
+  }
+
+  // Swap the quick preview for the original once it has downloaded. A newer
+  // pane (the user clicked another file meanwhile) wins: its token differs.
+  var paneToken = 0;
+  function loadOriginal(m, quick){
+    var token = ++paneToken;
+    var img = document.getElementById('nml-pane-img'), box = document.getElementById('nml-pane-preview');
+    if (!img || !box) return;
+    var done = function(){ if (token === paneToken) box.classList.remove('is-loading'); };
+    if (!quick || quick === m.url){
+      // Nothing smaller to show first: the original itself is loading.
+      if (img.complete && img.naturalWidth) done(); else { img.addEventListener('load', done); img.addEventListener('error', done); }
+      return;
+    }
+    var full = new Image();
+    full.onload = function(){ if (token !== paneToken) return; img.src = m.url; done(); };
+    full.onerror = function(){ if (token !== paneToken) return; done(); var l = box.querySelector('.nml-pane__loader'); if (l){ l.textContent = 'Original could not be loaded'; box.classList.add('is-error'); } };
+    full.src = m.url;
   }
 
   function wirePane(m){
@@ -271,19 +324,30 @@
   }
 
   // ---- events ----
+  // The item a Shift+click range starts from: the last one clicked while selecting.
+  var anchorId = null;
+  gridEl.addEventListener('mousedown', function(ev){ if (ev.shiftKey) ev.preventDefault(); }); // no text selection on Shift+click
   gridEl.addEventListener('click', function(ev){
-    // Clicking the checkbox toggles selection and enters select mode if needed.
     var check = ev.target.closest('.nml-check');
-    if (check){
-      ev.stopPropagation();
+    var card = ev.target.closest('.nml-card,.nml-row');
+    var id = check ? check.getAttribute('data-check') : (card ? card.getAttribute('data-id') : null);
+    if (!id) return;
+    if (check) ev.stopPropagation();
+    // Shift+click: everything between the last clicked item and this one
+    // takes the last clicked item's state — selected, or not.
+    if (ev.shiftKey){
       if (!selectMode) setSelectMode(true);
-      toggleChosen(check.getAttribute('data-check'));
+      if (anchorId === null || !selectRange(anchorId, id)) toggleChosen(id);
+      anchorId = id;
       return;
     }
-    var card = ev.target.closest('.nml-card,.nml-row');
-    if (!card) return;
-    var id = card.getAttribute('data-id');
-    if (selectMode){ toggleChosen(id); }
+    // Clicking the checkbox toggles selection and enters select mode if needed.
+    if (check){
+      if (!selectMode) setSelectMode(true);
+      toggleChosen(id); anchorId = id;
+      return;
+    }
+    if (selectMode){ toggleChosen(id); anchorId = id; }
     else { openPane(id); }
   });
   gridEl.addEventListener('keydown', function(ev){
@@ -298,11 +362,10 @@
 
   function setSelectMode(on){
     selectMode = on;
-    root.querySelector('.nml').classList; // no-op guard
     document.querySelector('.nml').classList.toggle('nml--selecting', on);
     bulkbar.classList.toggle('hidden', !on);
     selectToggle.classList.toggle('is-active', on);
-    if (!on){ chosen = {}; if(selectAllCb) selectAllCb.checked = false; renderGrid(); }
+    if (!on){ chosen = {}; anchorId = null; if(selectAllCb) selectAllCb.checked = false; renderGrid(); }
     updateBulkCount();
   }
   function toggleChosen(id){
@@ -310,6 +373,16 @@
     var card = gridEl.querySelector('[data-id="'+CSS.escape(String(id))+'"]');
     if (card) card.classList.toggle('is-chosen', !!chosen[id]);
     updateBulkCount();
+  }
+  function selectRange(fromId, toId){
+    var ids = state.items.map(function(x){ return String(x.id); });   // the order on screen
+    var a = ids.indexOf(String(fromId)), b = ids.indexOf(String(toId));
+    if (a < 0 || b < 0) return false;
+    var on = !!chosen[fromId];
+    for (var i = Math.min(a, b); i <= Math.max(a, b); i++){ if (on) chosen[ids[i]] = true; else delete chosen[ids[i]]; }
+    gridEl.querySelectorAll('.nml-card,.nml-row').forEach(function(c){ c.classList.toggle('is-chosen', !!chosen[c.getAttribute('data-id')]); });
+    updateBulkCount();
+    return true;
   }
   function chosenIds(){ return Object.keys(chosen); }
   function updateBulkCount(){

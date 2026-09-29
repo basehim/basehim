@@ -128,6 +128,32 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
                         raw.style.display = isBlocks ? 'none' : '';
                     }
 
+                    // HTML → blocks: paragraphs, headings, images, lists… so an image
+                    // can be put between two paragraphs. What blocks cannot hold
+                    // without loss (a table, a form, an embed script) stays a
+                    // Custom HTML block of its own. A note says what happened.
+                    function convertInto(html) {
+                        var blocks = [];
+                        try { blocks = BasehimEditor.htmlToBlocks ? BasehimEditor.htmlToBlocks(html) : []; } catch (e) { blocks = []; }
+                        if (!blocks.length) blocks = [{ type: 'html', data: { html: html } }];
+                        BasehimEditor.setBlocks(blocks);
+                        var kept = blocks.filter(function (b) { return b.type === 'html'; }).length;
+                        note('Converted into ' + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') + '.'
+                            + (kept ? ' ' + kept + ' part' + (kept === 1 ? '' : 's') + ' that blocks can\'t represent (tables, embeds, scripts…) ' + (kept === 1 ? 'was' : 'were') + ' kept as Custom HTML.' : '')
+                            + ' Not what you expected? Leave without saving to keep the original.');
+                    }
+                    function note(msg) {
+                        var n = document.getElementById('nbe-convert-note');
+                        if (!n) {
+                            n = document.createElement('div'); n.id = 'nbe-convert-note'; n.setAttribute('role', 'status');
+                            n.className = 'mb-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800';
+                            mountEl.parentNode.insertBefore(n, mountEl);
+                        }
+                        n.innerHTML = '<span style="flex:1"></span><button type="button" aria-label="Dismiss" style="margin-left:auto;opacity:.6">&times;</button>';
+                        n.firstChild.textContent = msg;
+                        n.lastChild.onclick = function () { n.remove(); };
+                    }
+
                     sel.addEventListener('change', function () {
                         var from = current, to = sel.value;
                         current = to;
@@ -142,9 +168,18 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
                                     var doc = JSON.parse(val);
                                     if (doc && Array.isArray(doc.blocks)) { BasehimEditor.setBlocks(doc.blocks); return; }
                                 } catch (e) { /* not JSON */ }
-                                BasehimEditor.setBlocks(val.trim() !== ''
-                                    ? [{ type: 'html', data: { html: val } }]
-                                    : [{ type: 'paragraph', data: {} }]);
+                                if (val.trim() === '') { BasehimEditor.setBlocks([{ type: 'paragraph', data: {} }]); return; }
+                                if (from === 'markdown' && cfg.renderUrl) {
+                                    // Markdown becomes HTML on the server, then blocks here.
+                                    var mb = new FormData();
+                                    mb.append('_csrf', cfg.csrf || ''); mb.append('from', 'markdown'); mb.append('content', val);
+                                    fetch(cfg.renderUrl, { method: 'POST', body: mb, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                                        .then(function (r) { return r.json(); })
+                                        .then(function (d) { convertInto(d && d.ok && typeof d.html === 'string' ? d.html : val); })
+                                        .catch(function () { convertInto(val); });
+                                    return;
+                                }
+                                convertInto(val);
                             }
                             return;
                         }

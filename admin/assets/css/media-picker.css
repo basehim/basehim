@@ -970,3 +970,20 @@
     .nm-upload-btn span { display: none; }   /* the icon carries it at this width */
     .nm-footer { padding: 0.75rem; }
 }
+
+/* ── Media library: the original loads over a generated preview (1.2.16) ── */
+.nml-pane__preview { position:relative; }
+.nml-pane__preview img { transition:filter .35s ease; }
+.nml-pane__preview.is-loading img { filter:blur(5px); }
+.nml-pane__loader { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:none; align-items:center; gap:8px; padding:6px 12px; border-radius:999px; background:rgba(15,23,42,.72); color:#fff; font-size:12px; font-weight:500; white-space:nowrap; pointer-events:none; }
+.nml-pane__preview.is-loading .nml-pane__loader { display:inline-flex; }
+.nml-pane__preview.is-error img { filter:none; }
+.nml-pane__preview.is-error .nml-pane__loader { display:inline-flex; background:rgba(185,28,28,.85); }
+.nml-spin { width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,.35); border-top-color:#fff; animation:nml-spin .7s linear infinite; flex:0 0 auto; }
+@keyframes nml-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .nml-spin { animation-duration:2s; } }
+.nml-pane__sizes span:last-child { text-align:right; line-height:1.6; }
+.nml-pane__sizes a { color:#2563eb; text-decoration:none; }
+.nml-pane__sizes a:hover { text-decoration:underline; }
+/* Shift+click range selection: no stray text highlight while selecting. */
+.nml--selecting .nml-grid { user-select:none; }

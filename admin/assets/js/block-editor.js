@@ -121,6 +121,211 @@
   }
   function syncField() { if (contentField && isBlocksMode()) contentField.value = serialize(); }
 
+  // ---------------- HTML → blocks ----------------
+  //
+  // Turns HTML (a post written in HTML mode, a WordPress import, pasted markup)
+  // into editable blocks, instead of one "Custom HTML" box nobody can edit.
+  //
+  // What the paragraph renderer keeps (BlockRenderer::inline): b, strong, i, em,
+  // u, s, code, a, br, mark, sub, sup. Anything else inside rich text is either
+  // harmless to flatten (span, font, small… keep their text) or would be lost —
+  // an <img> in a paragraph would vanish. So images are lifted out into image
+  // blocks, and anything a block cannot hold without loss (tables, forms,
+  // scripts, video, nested lists…) is kept as a Custom HTML block of its own.
+  var BH_KEEP_AS_HTML = /^(TABLE|FORM|SCRIPT|STYLE|NOSCRIPT|VIDEO|AUDIO|OBJECT|EMBED|SVG|CANVAS|DETAILS|DL|SELECT|TEXTAREA|INPUT|BUTTON|MAP|TEMPLATE|MATH)$/;
+  var BH_BLOCK_TAGS = /^(P|H[1-6]|UL|OL|BLOCKQUOTE|PRE|HR|FIGURE|TABLE|DIV|SECTION|ARTICLE|MAIN|HEADER|FOOTER|ASIDE|NAV|CENTER|ADDRESS|FIELDSET|IFRAME|VIDEO|AUDIO|FORM|DETAILS|DL|SCRIPT|STYLE|NOSCRIPT|OBJECT|EMBED|SVG|CANVAS|TEMPLATE|MATH|HGROUP)$/;
+
+  function bhYoutubeEmbed(url) {
+    var m = String(url || '').match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/i);
+    return m ? 'https://www.youtube.com/embed/' + m[1] : '';
+  }
+  function bhIsImageUrl(u) { return /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?.*)?$/i.test(String(u || '')); }
+  function bhAlignOf(el) {
+    if (!el || !el.getAttribute) return '';
+    var st = (el.getAttribute('style') || '').match(/text-align\s*:\s*(left|center|right)/i);
+    if (st) return st[1].toLowerCase();
+    var cls = ' ' + (el.getAttribute('class') || '') + ' ';
+    var c = cls.match(/\s(?:has-text-align-|align)(left|center|right)\s/);
+    if (c) return c[1];
+    if (el.getAttribute('align')) return String(el.getAttribute('align')).toLowerCase().replace(/[^a-z]/g, '');
+    if (el.nodeName === 'CENTER') return 'center';
+    return '';
+  }
+  // Rich text for a block: whitespace collapsed as a browser would, no leading or
+  // trailing <br>, and nothing left if all that remains is spaces.
+  function bhInline(html) {
+    var h = String(html || '').replace(/\s*\n\s*/g, ' ').replace(/[ \t]{2,}/g, ' ');
+    h = h.replace(/^(\s|&nbsp;|<br\s*\/?>)+/i, '').replace(/(\s|&nbsp;|<br\s*\/?>)+$/i, '');
+    var probe = h.replace(/<[^>]+>/g, '').replace(/&nbsp;|\u00a0/g, ' ').trim();
+    return probe === '' && !/<(img|iframe)\b/i.test(h) ? '' : h;
+  }
+  function bhImageFrom(img) {
+    // Lazy-loading plugins park the real address in data-src and put a
+    // placeholder (often a data: URI) in src.
+    var src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || img.getAttribute('data-original') || '';
+    if (!src) src = img.getAttribute('src') || '';
+    if (/^data:/i.test(src) && img.getAttribute('data-src')) src = img.getAttribute('data-src');
+    return src;
+  }
+
+  function htmlToBlocks(source) {
+    var html = String(source || '');
+    // WordPress block delimiters and every other comment.
+    html = html.replace(/<!--[\s\S]*?-->/g, '');
+    // WordPress [caption] shortcode → a real figure with a caption.
+    html = html.replace(/\[caption([^\]]*)\]([\s\S]*?)\[\/caption\]/gi, function (_, attrs, inner) {
+      var m = inner.match(/^\s*((?:<a\b[^>]*>\s*)?<img\b[^>]*>(?:\s*<\/a>)?)([\s\S]*)$/i);
+      var al = (attrs.match(/align\s*=\s*["']?align(left|center|right)/i) || [])[1];
+      return m ? '<figure' + (al ? ' class="align' + al + '"' : '') + '>' + m[1] + '<figcaption>' + m[2].trim() + '</figcaption></figure>' : inner;
+    });
+    if (html.trim() === '') return [];
+
+    var doc = new DOMParser().parseFromString('<!doctype html><html><body>' + html + '</body></html>', 'text/html');
+    var out = [], run = [];
+    var push = function (type, data) { out.push({ type: type, data: data }); };
+    var keepHtml = function (el) { push('html', { html: el.outerHTML }); };
+
+    // A pending run of inline content becomes one or more paragraphs: a blank
+    // line in plain text, or two <br> in a row, starts a new paragraph.
+    function flush(align) {
+      if (!run.length) return;
+      var h = run.map(function (n) {
+        return n.nodeType === 3 ? n.textContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : n.outerHTML;
+      }).join('');
+      run = [];
+      h.split(/(?:<br\s*\/?>\s*){2,}|\n[ \t]*\n/i).forEach(function (part) {
+        var t = bhInline(part);
+        if (t !== '') push('paragraph', { text: t, align: align || '' });
+      });
+    }
+
+    function image(img, link, align) {
+      var url = bhImageFrom(img);
+      // An image with no address (a broken import) becomes an empty image block:
+      // the editor shows "Choose from Media Library" exactly where it belongs,
+      // and an empty image block renders nothing on the site.
+      if (!url) { push('image', { url: '', alt: img.getAttribute('alt') || '', caption: '', align: align || '' }); return; }
+      // An image linked to another page keeps its link only as HTML.
+      if (link && link.getAttribute('href') && !bhIsImageUrl(link.getAttribute('href'))) { keepHtml(link); return; }
+      // WordPress shows a resized copy linked to the full-size file: use the full size.
+      if (link && bhIsImageUrl(link.getAttribute('href'))) url = link.getAttribute('href');
+      push('image', { url: url, alt: img.getAttribute('alt') || '', caption: '', align: align || bhAlignOf(img) || '' });
+    }
+
+    function walk(container, align) {
+      Array.prototype.forEach.call(container.childNodes, function (n) {
+        if (n.nodeType === 3) { run.push(n); return; }
+        if (n.nodeType !== 1) return;
+        var tag = n.nodeName;
+        if (tag === 'BR') { run.push(n); return; }
+        if (tag === 'IMG') { flush(align); image(n, null, align); return; }
+        if (tag === 'A' && n.querySelector('img') && n.textContent.trim() === '') { flush(align); image(n.querySelector('img'), n, align); return; }
+        if (!BH_BLOCK_TAGS.test(tag)) {
+          // Inline element. One that wraps an image or a block (<span><img></span>,
+          // <a><div>…) is opened up so its contents are converted too.
+          if (n.querySelector('img,iframe,p,div,ul,ol,table,h1,h2,h3,h4,h5,h6,figure,blockquote,pre')) { walk(n, align); return; }
+          run.push(n);
+          return;
+        }
+        flush(align);
+        block(n, align);
+      });
+    }
+
+    function block(el, parentAlign) {
+      var tag = el.nodeName, align = bhAlignOf(el) || parentAlign || '';
+      if (BH_KEEP_AS_HTML.test(tag)) { keepHtml(el); return; }
+      if (tag === 'P' || tag === 'ADDRESS') {
+        if (el.querySelector('table,form,script,video,audio,object,embed,svg,canvas,select,textarea,input')) { keepHtml(el); return; }
+        walk(el, align); flush(align); return;
+      }
+      if (/^H[1-6]$/.test(tag)) {
+        var level = Math.max(2, parseInt(tag.charAt(1), 10)); // the post title is the h1
+        var imgs = el.querySelectorAll('img');
+        push('heading', { text: bhInline(el.innerHTML.replace(/<img\b[^>]*>/gi, '')), level: level, align: align });
+        Array.prototype.forEach.call(imgs, function (i) { image(i, null, align); });
+        return;
+      }
+      if (tag === 'UL' || tag === 'OL') {
+        var lis = Array.prototype.filter.call(el.children, function (c) { return c.nodeName === 'LI'; });
+        // A nested list, or an image inside an item, would be flattened away.
+        if (!lis.length || el.querySelector('ul ul,ul ol,ol ul,ol ol,img,table,iframe,pre')) { keepHtml(el); return; }
+        push('list', { style: tag === 'OL' ? 'ol' : 'ul', items: lis.map(function (li) {
+          return bhInline(li.innerHTML.replace(/<\/p>\s*<p[^>]*>/gi, '<br>').replace(/<\/?p[^>]*>/gi, ''));
+        }), align: align });
+        return;
+      }
+      if (tag === 'BLOCKQUOTE') {
+        // Social-media embeds are blockquotes with a script: keep them whole.
+        if (/twitter-tweet|instagram-media|tiktok-embed/.test(el.getAttribute('class') || '') || el.querySelector('img,ul,ol,table,pre,iframe')) { keepHtml(el); return; }
+        var citeEl = el.querySelector('cite,footer');
+        var cite = citeEl ? bhInline(citeEl.innerHTML) : '';
+        if (citeEl) citeEl.parentNode.removeChild(citeEl);
+        var paras = el.querySelectorAll('p');
+        var text = paras.length ? Array.prototype.map.call(paras, function (p) { return bhInline(p.innerHTML); }).filter(Boolean).join('<br><br>') : bhInline(el.innerHTML);
+        push('quote', { text: text, cite: cite });
+        return;
+      }
+      if (tag === 'PRE') {
+        var code = el.querySelector('code') || el;
+        var cls = (code.getAttribute('class') || '') + ' ' + (el.getAttribute('class') || '');
+        var lang = (cls.match(/(?:language|lang)-([\w+#-]+)/) || cls.match(/brush:\s*([\w+#-]+)/) || [])[1] || '';
+        push('code', { code: code.textContent.replace(/^\n/, ''), language: lang });
+        return;
+      }
+      if (tag === 'HR') { push('divider', {}); return; }
+      if (tag === 'IFRAME') {
+        var src = el.getAttribute('src') || el.getAttribute('data-src') || '';
+        if (src) push('embed', { url: src, align: align }); else keepHtml(el);
+        return;
+      }
+      if (tag === 'FIGURE') {
+        var fimg = el.querySelector('img'), fcap = el.querySelector('figcaption');
+        var fif = el.querySelector('iframe');
+        if (fimg && !el.querySelector('table,video,iframe')) {
+          var link = fimg.closest('a');
+          if (link && link.getAttribute('href') && !bhIsImageUrl(link.getAttribute('href'))) { keepHtml(el); return; }
+          var src2 = bhImageFrom(fimg);
+          if (link && bhIsImageUrl(link.getAttribute('href'))) src2 = link.getAttribute('href');
+          // No address: an empty image block marks the spot (see image() above).
+          push('image', { url: src2, alt: fimg.getAttribute('alt') || '', caption: fcap ? bhInline(fcap.innerHTML) : '', align: align || bhAlignOf(fimg) });
+          return;
+        }
+        if (fif) { push('embed', { url: fif.getAttribute('src') || '', align: align }); return; }
+        // WordPress embed figure: the video's address as plain text.
+        var yt = bhYoutubeEmbed(el.textContent);
+        if (yt && /wp-block-embed/.test(el.getAttribute('class') || '')) { push('embed', { url: yt, align: align }); return; }
+        keepHtml(el);
+        return;
+      }
+      // Containers: DIV, SECTION, ARTICLE… WordPress buttons first.
+      var cl = el.getAttribute('class') || '';
+      if (/\bwp-block-buttons?\b/.test(cl) && el.querySelector('a')) {
+        Array.prototype.forEach.call(el.querySelectorAll('a'), function (a) {
+          push('button', { text: bhInline(a.innerHTML) || 'Click here', url: a.getAttribute('href') || '', align: align });
+        });
+        return;
+      }
+      // A box that is styled as a box (a background, border or padding) is kept as
+      // it is; plain wrappers — groups, columns, sections — are opened up.
+      var style = el.getAttribute('style') || '';
+      if (/background|border|padding|box-shadow|display\s*:\s*(grid|flex)/i.test(style) || /\b(alert|notice|callout|note|warning|box)\b/i.test(cl)) { keepHtml(el); return; }
+      walk(el, align); flush(align);
+    }
+
+    walk(doc.body, '');
+    flush('');
+
+    // Neighbouring Custom HTML pieces read better as one box.
+    var merged = [];
+    out.forEach(function (b) {
+      var last = merged[merged.length - 1];
+      if (b.type === 'html' && last && last.type === 'html') last.data.html += '\n' + b.data.html;
+      else merged.push(b);
+    });
+    return merged;
+  }
+
   function load(json) {
     var doc = null;
     try { doc = JSON.parse(json); } catch (e) { doc = null; }
@@ -128,8 +333,12 @@
       doc = applyFilters('load.data', doc);
       blocks = doc.blocks.map(function (b) { return { id: b.id || uid(), type: b.type || 'paragraph', data: b.data || {} }; });
     } else if (json && json.trim() !== '') {
-      // Legacy HTML/markdown content: wrap in a single html block so nothing is lost.
-      blocks = [makeBlock('html', { html: json })];
+      // HTML content (an older post, an import): convert it into real blocks.
+      var converted = [];
+      try { converted = htmlToBlocks(json); } catch (err) { console.error('[BasehimEditor] HTML conversion failed', err); }
+      blocks = converted.length
+        ? converted.map(function (b) { return makeBlock(b.type, b.data); })
+        : [makeBlock('html', { html: json })];
     } else {
       blocks = [makeBlock('paragraph', {})];
     }
@@ -606,6 +815,7 @@
     getSelected: function () { return blockById(selectedId); },
     deselect: function () { select(null); },
     serialize: serialize, refresh: renderAll,
+    htmlToBlocks: htmlToBlocks,
     config: CONFIG, version: '1.1.0'
   };
 

@@ -317,6 +317,11 @@ class PostController extends Controller
         }
         $content = (string) $request->input('content', '');
         try {
+            // Markdown → HTML, for switching a Markdown post to the visual editor:
+            // the editor then turns the HTML into blocks.
+            if ((string) $request->input('from', '') === 'markdown') {
+                return Response::json(['ok' => true, 'html' => \App\Services\Markdown::toHtml($content)]);
+            }
             $hooks = $this->app->make(\App\Core\HookRegistry::class);
             $html = \App\Services\BlockRenderer::render($content, $hooks);
             return Response::json(['ok' => true, 'html' => $html]);
