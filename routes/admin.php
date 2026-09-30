@@ -171,6 +171,8 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->get('/settings/discussion', ['App\\Http\\Controllers\\Admin\\SettingController', 'discussion']);
         $router->post('/settings/discussion', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveDiscussion']);
         $router->get('/settings/seo', ['App\\Http\\Controllers\\Admin\\SettingController', 'seo']);
+        $router->get('/settings/ai', ['App\\Http\\Controllers\\Admin\\SettingController', 'ai']);
+        $router->post('/settings/ai', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveAi']);
         $router->post('/settings/seo', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveSeo']);
         // Appearance moved into the Customizer. The route stays as a redirect
         // rather than a 404, because it is the sort of URL people bookmark.

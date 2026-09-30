@@ -266,6 +266,9 @@ if (!function_exists('bh_head')) {
         uasort($scripts, fn($a, $b) => $a['priority'] <=> $b['priority']);
         foreach ($scripts as $a) $out .= bh_asset_tag('script', $a);
 
+        // AI agents: origin-trial token, discovery links, WebSite structured data.
+        try { $out .= bh_ai()->headMarkup(); } catch (\Throwable) {}
+
         return $out . bh_hook_output('bh.head');
     }
 }
@@ -285,7 +288,11 @@ if (!function_exists('bh_footer')) {
         uasort($scripts, fn($a, $b) => $a['priority'] <=> $b['priority']);
         foreach ($scripts as $a) $out .= bh_asset_tag('script', $a);
 
-        return $out . bh_hook_output('bh.footer');
+        $out .= bh_hook_output('bh.footer');
+        // AI agents: WebMCP tools and form annotations. Last, so forms that
+        // apps add in bh.footer are annotated too.
+        try { $out .= bh_ai()->footerMarkup(); } catch (\Throwable) {}
+        return $out;
     }
 }
 
@@ -572,13 +579,20 @@ if (!function_exists('bh_comment_form')) {
         $tag      = in_array($args['title_tag'], ['h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div'], true) ? $args['title_tag'] : 'h3';
         $cls      = static fn(string $core, $extra): string => trim($core . ' ' . (string) $extra);
 
-        $field = function (string $name, string $type, string $label, string $auto, bool $req) use ($args, $e, $id, $cls): string {
+        // What each field is for, for AI agents that fill the form in (WebMCP).
+        $agentHelp = [
+            'name'  => 'Your name, shown with the comment.',
+            'email' => 'Your email address. It is not published.',
+            'url'   => 'Your website address, if you want your name to link to it. Optional.',
+        ];
+        $field = function (string $name, string $type, string $label, string $auto, bool $req) use ($args, $e, $id, $cls, $agentHelp): string {
             $fid = $id . '-' . $name;
             return '<p class="' . $e($cls('bh-comment-form__field bh-comment-form__field--' . $name, $args['field_class'])) . '">'
                  . '<label for="' . $e($fid) . '" class="' . $e($cls('bh-comment-form__label', $args['label_class'])) . '">'
                  . $e($label) . ($req ? ' <span class="bh-comment-form__req" aria-hidden="true">*</span>' : '') . '</label>'
                  . '<input id="' . $e($fid) . '" type="' . $type . '" name="author_' . $name . '" autocomplete="' . $auto . '"'
-                 . ($req ? ' required' : '') . ' class="' . $e($cls('bh-comment-form__input', $args['input_class'])) . '">'
+                 . ($req ? ' required' : '') . bh_webmcp_param($agentHelp[$name] ?? $label)
+                 . ' class="' . $e($cls('bh-comment-form__input', $args['input_class'])) . '">'
                  . '</p>';
         };
 
@@ -593,14 +607,19 @@ if (!function_exists('bh_comment_form')) {
             . '</div>';
         $h .= '<div class="bh-comment-form__status" data-bh-comment-status role="status" aria-live="polite" hidden></div>';
         $h .= '<form method="post" action="' . $e($base . '/comments') . '" class="' . $e($cls('bh-comment-form__form', $args['form_class'])) . '"'
-            . ' data-bh-comment-form-el data-label-busy="' . $e($args['label_submitting']) . '">';
+            . ' data-bh-comment-form-el data-label-busy="' . $e($args['label_submitting']) . '"'
+            . (function_exists('bh_ai_on') && bh_ai_on('webmcp_comments')
+                ? bh_webmcp_form('post_comment', 'Post a comment on "' . html_entity_decode((string) ($post['title'] ?? 'this article'), ENT_QUOTES) . '". Comments may be held for moderation. The visitor reviews the comment and sends it.')
+                : '')
+            . '>';
         $h .= '<input type="hidden" name="_csrf" value="' . $e($csrf) . '">'
             . '<input type="hidden" name="post_id" value="' . $postId . '">'
             . '<input type="hidden" name="redirect_to" value="' . $e($base . \App\Core\Helpers::postUrl($post)) . '">'
             . '<input type="hidden" name="parent_id" value="" data-bh-parent>';
         // Hidden from people; a bot that fills it is silently dropped by CommentService::guard().
         $h .= '<div aria-hidden="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">'
-            . '<label>Leave this field empty<input type="text" name="hp_comment_field" tabindex="-1" autocomplete="off" value=""></label></div>';
+            . '<label>Leave this field empty<input type="text" name="hp_comment_field" tabindex="-1" autocomplete="off" value=""'
+            . bh_webmcp_param('Anti-spam check that must stay empty. Never put anything in this field.') . '></label></div>';
 
         if ($user) {
             $h .= '<p class="bh-comment-form__identity">'
@@ -623,7 +642,8 @@ if (!function_exists('bh_comment_form')) {
             . '<label for="' . $e($id . '-content') . '" class="' . $e($cls('bh-comment-form__label', $args['label_class'])) . '">'
             . $e($args['label_comment']) . ' <span class="bh-comment-form__req" aria-hidden="true">*</span></label>'
             . '<textarea id="' . $e($id . '-content') . '" name="content" rows="' . max(2, (int) $args['rows']) . '" required'
-            . ' placeholder="' . $e($args['placeholder']) . '" class="' . $e($cls('bh-comment-form__textarea', $args['textarea_class'])) . '"></textarea>'
+            . ' placeholder="' . $e($args['placeholder']) . '"' . bh_webmcp_param('The text of the comment.')
+            . ' class="' . $e($cls('bh-comment-form__textarea', $args['textarea_class'])) . '"></textarea>'
             . '</p>';
         $h .= '<p class="bh-comment-form__actions"><button type="submit" class="' . $e($cls('bh-comment-form__submit', $args['button_class'])) . '"'
             . ' data-bh-comment-submit>' . $e($args['label_submit']) . '</button></p>';
@@ -1270,3 +1290,101 @@ if (!function_exists('bh_post_image')) {
         return $html . '>';
     }
 }
+
+
+// ── AI agents (Settings → AI Agents) ─────────────────────────────────────────
+//
+// Core serves /robots.txt, /llms.txt, /llms-full.txt and the Agentic Resource
+// Discovery manifest (/.well-known/ard.json, /.well-known/ai-catalog.json),
+// and bh_head()/bh_footer() add the discovery links and WebMCP. These helpers
+// let a theme or app take part. See docs/AI-AGENTS.md.
+
+if (!function_exists('bh_ai')) {
+    /** The AiAccessService: settings and builders for everything agent-facing. */
+    function bh_ai(): \App\Services\AiAccessService
+    {
+        return \App\Core\Application::getInstance()->make(\App\Services\AiAccessService::class);
+    }
+}
+
+if (!function_exists('bh_ai_on')) {
+    /**
+     * Whether an AI-agent setting is on (see Settings → AI Agents). Never
+     * throws: if anything is wrong it answers false, so a page that asks
+     * always renders.
+     */
+    function bh_ai_on(string $key): bool
+    {
+        try { return bh_ai()->on($key); } catch (\Throwable) { return false; }
+    }
+}
+
+if (!function_exists('bh_webmcp_form')) {
+    /**
+     * Declarative WebMCP attributes for a <form>, ready to print inside the
+     * tag: ` toolname="…" tooldescription="…"`. Returns '' while WebMCP is off.
+     *
+     *   <form action="/subscribe"<?= bh_webmcp_form('subscribe_newsletter', 'Subscribe an email address to the newsletter.') ?>>
+     *
+     * $opts['autosubmit'] = true adds toolautosubmit: the agent's call submits
+     * the form. Use it only for harmless, read-only forms such as search —
+     * never for anything that sends, buys, posts or signs in.
+     */
+    function bh_webmcp_form(string $name, string $description, array $opts = []): string
+    {
+        if (!bh_ai_on('webmcp_enabled')) return '';
+        $name = preg_replace('/[^A-Za-z0-9_.-]+/', '_', $name) ?: 'form';
+        if (!preg_match('/^[A-Za-z]/', $name)) $name = 'f_' . $name;
+        $e = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        return ' toolname="' . $e(substr($name, 0, 64)) . '" tooldescription="' . $e($description) . '"'
+             . (!empty($opts['autosubmit']) ? ' toolautosubmit' : '');
+    }
+}
+
+if (!function_exists('bh_webmcp_param')) {
+    /**
+     * ` toolparamdescription="…"` for a form field, telling an agent what to
+     * put in it. Returns '' while WebMCP is off.
+     */
+    function bh_webmcp_param(string $description): string
+    {
+        if (!bh_ai_on('webmcp_enabled')) return '';
+        return ' toolparamdescription="' . htmlspecialchars($description, ENT_QUOTES, 'UTF-8') . '"';
+    }
+}
+
+if (!function_exists('bh_webmcp_tool')) {
+    /**
+     * Register a WebMCP tool on every public page. Call it from an app's boot
+     * (or anywhere before bh_footer() runs):
+     *
+     *   bh_webmcp_tool([
+     *       'name'        => 'check_stock',
+     *       'description' => 'Check whether a product is in stock.',
+     *       'inputSchema' => ['type' => 'object',
+     *                         'properties' => ['sku' => ['type' => 'string', 'description' => 'Product code']],
+     *                         'required' => ['sku']],
+     *       'annotations' => ['readOnlyHint' => true],
+     *       'endpoint'    => '/shop/stock.json',   // GET, same origin; input → query string; returns its JSON
+     *   ]);
+     *
+     * Instead of 'endpoint', 'result' returns a fixed value. A definition that
+     * is not valid (see AiAccessService::validTool) is left out, so a mistake
+     * cannot break the page's other tools. Keep tools few and read-only where
+     * you can; anything consequential should say so with
+     * 'annotations' => ['consequentialHint' => true].
+     */
+    function bh_webmcp_tool(array $definition): void
+    {
+        $GLOBALS['__bh_webmcp_tools'][] = $definition;
+    }
+}
+
+if (!function_exists('bh_webmcp_tools_registered')) {
+    /** Tools registered with bh_webmcp_tool() during this request. */
+    function bh_webmcp_tools_registered(): array
+    {
+        return (array) ($GLOBALS['__bh_webmcp_tools'] ?? []);
+    }
+}
+

@@ -33,6 +33,14 @@ $router->post('/comments', ['App\\Http\\Controllers\\Web\\CommentController', 's
 $router->get('/sitemap.xml', ['App\\Http\\Controllers\\Web\\SitemapController', 'index']);
 $router->get('/feed', ['App\\Http\\Controllers\\Web\\FeedController', 'rss']);
 
+// AI agents and crawlers (Settings → AI Agents)
+$router->get('/robots.txt', ['App\\Http\\Controllers\\Web\\AiAccessController', 'robots']);
+$router->get('/llms.txt', ['App\\Http\\Controllers\\Web\\AiAccessController', 'llms']);
+$router->get('/llms-full.txt', ['App\\Http\\Controllers\\Web\\AiAccessController', 'llmsFull']);
+$router->get('/.well-known/ard.json', ['App\\Http\\Controllers\\Web\\AiAccessController', 'catalog']);
+$router->get('/.well-known/ai-catalog.json', ['App\\Http\\Controllers\\Web\\AiAccessController', 'catalog']);
+$router->get('/ai/recent-articles.json', ['App\\Http\\Controllers\\Web\\AiAccessController', 'recent']);
+
 // Serve uploaded media via PHP (fallback for hosts that block /storage/uploads)
 // URL: /uploads/{path}  →  storage/uploads/{path}
 $router->get('/uploads/{path:*}', ['App\\Http\\Controllers\\Web\\UploadController', 'serve']);

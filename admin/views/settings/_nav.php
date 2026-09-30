@@ -17,6 +17,7 @@ $this->include('partials.tabs', [
         'permalinks'    => ['label' => 'Permalinks',    'icon' => 'link'],
         'media'         => ['label' => 'Media',         'icon' => 'photo'],
         'seo'           => ['label' => 'SEO',           'icon' => 'document-magnifying-glass'],
+        'ai'            => ['label' => 'AI Agents',     'icon' => 'cpu-chip'],
         'email'         => ['label' => 'Email',         'icon' => 'envelope'],
         'appearance'    => ['label' => 'Appearance',    'icon' => 'swatch'],
         'authorization' => ['label' => 'Authorization', 'icon' => 'shield-check'],

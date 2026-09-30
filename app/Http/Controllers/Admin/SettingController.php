@@ -17,6 +17,7 @@ class SettingController extends Controller
     public function writing(Request $request): Response   { return $this->renderTab('writing'); }
     public function discussion(Request $request): Response{ return $this->renderTab('discussion'); }
     public function seo(Request $request): Response       { return $this->renderTab('seo'); }
+    public function ai(Request $request): Response        { return $this->renderTab('ai'); }
     public function appearance(Request $request): Response{ return $this->renderTab('appearance'); }
     public function permalinks(Request $request): Response{ return $this->renderTab('permalinks'); }
     public function media(Request $request): Response     { return $this->renderTab('media'); }
@@ -159,6 +160,19 @@ class SettingController extends Controller
             );
             $extra['currentHost'] = $_SERVER['HTTP_HOST'] ?? '';
         }
+        if ($tab === 'ai') {
+            /** @var \App\Services\AiAccessService $agents */
+            $agents = $this->app->make(\App\Services\AiAccessService::class);
+            $extra['values'] = $agents->settings();
+            $extra['robotsRules'] = (string) $settings->get('seo', 'robots_txt', "User-agent: *\nAllow: /\nDisallow: /admin/");
+            $extra['origin'] = $agents->origin();
+            $extra['bots'] = ['training' => \App\Services\AiAccessService::TRAINING_BOTS, 'search' => \App\Services\AiAccessService::SEARCH_BOTS, 'user' => \App\Services\AiAccessService::USER_BOTS];
+            $extra['tools'] = $agents->tools();
+            $extra['catalogCount'] = count($agents->catalog()['entries']);
+            $extra['customInvalid'] = trim($agents->get('catalog_extra')) !== '' && $agents->customEntries() === [];
+            $extra['staticRobots'] = is_file(BASEHIM_ROOT . '/robots.txt') || is_file(BASEHIM_ROOT . '/public/robots.txt');
+            $extra['staticLlms'] = is_file(BASEHIM_ROOT . '/llms.txt') || is_file(BASEHIM_ROOT . '/public/llms.txt');
+        }
         if ($tab === 'media') {
             /** @var \App\Services\MediaService $media */
             $media = $this->app->make(\App\Services\MediaService::class);
@@ -178,6 +192,59 @@ class SettingController extends Controller
             'activeTheme' => $themes->activeSlug(),
             'csrf' => $session->csrfToken(),
         ], $extra));
+    }
+
+    /**
+     * POST /admin/settings/ai — AI agent accessibility. Its own saver:
+     * unchecked boxes are stored as off, numbers are clamped, the origin-trial
+     * token keeps only token characters, and custom catalog entries must be
+     * valid JSON or they are not saved.
+     */
+    public function saveAi(Request $request): Response
+    {
+        if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }
+        /** @var SettingService $settings */
+        $settings = $this->app->make(SettingService::class);
+        $in = $request->all();
+        $flags = ['enabled', 'robots_enabled', 'llms_enabled', 'llms_pages', 'llms_categories', 'llms_full', 'catalog_enabled',
+                  'webmcp_enabled', 'webmcp_forms', 'webmcp_comments', 'tool_recent', 'tool_categories', 'jsonld_website', 'robots_agentmap'];
+        foreach ($flags as $k) $settings->set('ai', $k, !empty($in[$k]) ? '1' : '0');
+        foreach (['ai_training', 'ai_search', 'ai_user'] as $k) $settings->set('ai', $k, (($in[$k] ?? 'allow') === 'block') ? 'block' : 'allow');
+        $settings->set('ai', 'llms_posts', (string) max(0, min(500, (int) ($in['llms_posts'] ?? 30))));
+        $settings->set('ai', 'llms_full_limit', (string) max(1, min(500, (int) ($in['llms_full_limit'] ?? 50))));
+        $clip = static fn($v, int $max) => mb_substr(str_replace("\r", '', trim((string) $v)), 0, $max);
+        $settings->set('ai', 'llms_intro', $clip($in['llms_intro'] ?? '', 4000));
+        $settings->set('ai', 'llms_extra', $clip($in['llms_extra'] ?? '', 20000));
+        $settings->set('ai', 'catalog_queries', $clip($in['catalog_queries'] ?? '', 2000));
+        $settings->set('ai', 'webmcp_token', preg_replace('/[^A-Za-z0-9+\/=]/', '', (string) ($in['webmcp_token'] ?? '')) ?? '');
+        $settings->set('seo', 'robots_txt', $clip($in['robots_rules'] ?? '', 20000));
+
+        $extra = trim((string) ($in['catalog_extra'] ?? ''));
+        $message = 'AI agent settings saved.';
+        $type = 'success';
+        if ($extra === '') {
+            $settings->set('ai', 'catalog_extra', '');
+        } else {
+            $decoded = json_decode($extra, true);
+            if (!is_array($decoded)) {
+                $type = 'error';
+                $message = 'Settings saved, except the extra catalog entries: they are not valid JSON (' . json_last_error_msg() . '). The previous entries were kept.';
+            } else {
+                /** @var \App\Services\AiAccessService $agents */
+                $agents = $this->app->make(\App\Services\AiAccessService::class);
+                $list = array_is_list($decoded) ? $decoded : [$decoded];
+                $bad = 0;
+                foreach ($list as $entry) if (!is_array($entry) || $agents->normalizeEntry($entry) === null) $bad++;
+                $settings->set('ai', 'catalog_extra', json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                if ($bad) {
+                    $type = 'error';
+                    $message = 'Settings saved. ' . $bad . ' of the extra catalog entries ' . ($bad === 1 ? 'is' : 'are') . ' not valid ARD entries and will be left out: each needs an identifier like urn:air:' . $agents->publisher() . ':namespace:name, a displayName, a type, and exactly one of url or data.';
+                }
+            }
+        }
+        try { $this->app->make(\App\Services\AiAccessService::class)->reset(); } catch (\Throwable) {}
+        $this->flash($type, $message);
+        return $this->redirect('/admin/settings/ai');
     }
 
     private function saveTab(Request $request, string $tab): Response
