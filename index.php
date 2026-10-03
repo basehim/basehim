@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 define('BASEHIM_START', microtime(true));
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.2.24');
+define('BASEHIM_VERSION', '1.2.26');
 
 /*
  * Detect the URL prefix where Basehim is installed.

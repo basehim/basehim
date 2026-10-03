@@ -101,9 +101,17 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->get('/pages', ['App\\Http\\Controllers\\Admin\\PageController', 'index']);
         $router->get('/pages/create', ['App\\Http\\Controllers\\Admin\\PageController', 'create']);
         $router->post('/pages', ['App\\Http\\Controllers\\Admin\\PageController', 'store']);
+        // PageController inherits these from PostController (type 'page'); the
+        // shared list screen calls them, but pages never had the routes, so
+        // Empty Trash, bulk actions, Restore and Delete permanently all 404'd.
+        // Before /pages/{id}, as for posts: the first matching route wins.
+        $router->post('/pages/empty-trash', ['App\\Http\\Controllers\\Admin\\PageController', 'emptyTrash']);
+        $router->post('/pages/bulk', ['App\\Http\\Controllers\\Admin\\PageController', 'bulk']);
         $router->get('/pages/{id}/edit', ['App\\Http\\Controllers\\Admin\\PageController', 'edit']);
         $router->post('/pages/{id}', ['App\\Http\\Controllers\\Admin\\PageController', 'update']);
         $router->post('/pages/{id}/delete', ['App\\Http\\Controllers\\Admin\\PageController', 'destroy']);
+        $router->post('/pages/{id}/restore', ['App\\Http\\Controllers\\Admin\\PageController', 'restore']);
+        $router->post('/pages/{id}/force-delete', ['App\\Http\\Controllers\\Admin\\PageController', 'forceDelete']);
 
         // Media
         $router->get('/media', ['App\\Http\\Controllers\\Admin\\MediaController', 'index']);

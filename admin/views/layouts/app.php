@@ -346,6 +346,31 @@ try {
     .bh-sidebar { transition: width .2s ease, transform .32s cubic-bezier(.4, 0, .2, 1); }
     @media (max-width: 1023px) { .bh-sidebar { will-change: transform; } }
 
+    /* ===== Tables scroll sideways on narrow screens (see the script) ===== */
+    .bh-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+    .bh-table-scroll > table { min-width: 100%; }
+
+    /* ===== Confirm / alert dialog (bhConfirm, bhAlert) ===== */
+    .bh-ask { border: 0; padding: 0; border-radius: .9rem; width: min(26rem, calc(100vw - 2rem)); color: #0f172a; box-shadow: 0 30px 70px -25px rgba(2, 6, 23, .55); }
+    .bh-ask::backdrop { background: rgba(15, 23, 42, .4); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+    .bh-ask[open] { animation: bh-ask-in .16s cubic-bezier(.2, .7, .3, 1); }
+    @keyframes bh-ask-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+    .bh-ask__body { display: flex; gap: .9rem; padding: 1.25rem 1.25rem .5rem; }
+    .bh-ask__icon { flex: none; width: 2.5rem; height: 2.5rem; border-radius: 50%; display: grid; place-items: center; background: #eff6ff; color: #2563eb; }
+    .bh-ask.is-danger .bh-ask__icon { background: #fef2f2; color: #dc2626; }
+    .bh-ask__icon svg { width: 1.25rem; height: 1.25rem; }
+    .bh-ask__msg { margin: .35rem 0 0; font-size: .9rem; line-height: 1.55; color: #334155; white-space: pre-line; overflow-wrap: anywhere; }
+    .bh-ask__foot { display: flex; justify-content: flex-end; gap: .5rem; padding: 1rem 1.25rem 1.15rem; }
+    .bh-ask__btn { padding: .5rem 1rem; border-radius: .55rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+    .bh-ask__btn--ok { background: #2563eb; color: #fff; }
+    .bh-ask__btn--ok:hover { background: #1d4ed8; }
+    .bh-ask.is-danger .bh-ask__btn--ok { background: #dc2626; }
+    .bh-ask.is-danger .bh-ask__btn--ok:hover { background: #b91c1c; }
+    .bh-ask__btn--cancel { background: #fff; color: #0f172a; border-color: #cbd5e1; font-weight: 500; }
+    .bh-ask__btn--cancel:hover { background: #f8fafc; }
+    .bh-ask__btn:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { .bh-ask[open] { animation: none; } }
+
     /* ===== Sidebar footer: version and update status ===== */
     .bh-sidebar.is-collapsed .bh-foot-row { padding-left: 0; padding-right: 0; justify-content: center; gap: 0; }
     .bh-foot-card {
@@ -1024,6 +1049,164 @@ try {
     document.addEventListener('keydown', function (ev) {
         if (ev.key === 'Escape') menus.forEach(closeMenu);
     });
+})();
+</script>
+<script>
+/*
+ * Admin-wide fixes that every screen (and every app screen) gets for free:
+ *
+ *  1. Tables that are not already in a scrolling box get one, so a wide
+ *     table scrolls sideways on a phone instead of breaking the page.
+ *  2. bhConfirm() / bhAlert(): the admin's own dialog. Forms that ask with
+ *     onsubmit="return confirm('…')" are switched to it automatically, and
+ *     alert() shows it too. (confirm() itself has to answer at once, so code
+ *     that calls it in a script keeps the browser's box for now.)
+ *  3. A label without for= that is followed by its field is linked to it,
+ *     so clicking the label focuses the field and screen readers name it.
+ */
+(function () {
+    'use strict';
+    var main = document.querySelector('.bh-main') || document.body;
+
+    // ── 1. tables ────────────────────────────────────────────────────────
+    function scrolls(el) {
+        for (var p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+            var o = getComputedStyle(p).overflowX;
+            if (o === 'auto' || o === 'scroll') return true;
+        }
+        return false;
+    }
+    function wrapTables(root) {
+        (root.querySelectorAll ? root.querySelectorAll('table') : []).forEach(function (t) {
+            if (t.closest('.bh-table-scroll') || scrolls(t)) return;
+            var w = document.createElement('div');
+            w.className = 'bh-table-scroll';
+            t.parentNode.insertBefore(w, t);
+            w.appendChild(t);
+        });
+    }
+
+    // ── 3. labels ────────────────────────────────────────────────────────
+    var uid = 0;
+    function linkLabels(root) {
+        (root.querySelectorAll ? root.querySelectorAll('label:not([for])') : []).forEach(function (l) {
+            if (l.querySelector('input, select, textarea')) return;          // wraps its field already
+            var next = l.nextElementSibling, field = null;
+            if (next && /^(INPUT|SELECT|TEXTAREA)$/.test(next.tagName)) field = next;
+            else if (next && next.tagName === 'DIV') {
+                var inside = next.querySelectorAll('input:not([type=hidden]), select, textarea');
+                if (inside.length === 1) field = inside[0];
+            }
+            if (!field || field.type === 'hidden') return;
+            if (!field.id) field.id = 'bh-field-' + (++uid);
+            l.htmlFor = field.id;
+        });
+    }
+
+    // ── 2. dialogs ───────────────────────────────────────────────────────
+    var nativeConfirm = window.confirm.bind(window), nativeAlert = window.alert.bind(window);
+    var ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>';
+    var ICON_INFO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"/></svg>';
+    var DANGER = /\b(delete|remove|revoke|suspend|archive|permanently|cannot be undone|empty)\b/i;
+    var VERBS = { delete: 'Delete', remove: 'Remove', revoke: 'Revoke', suspend: 'Suspend', archive: 'Archive', transfer: 'Transfer',
+                  permanently: 'Delete', apply: 'Apply', regenerate: 'Regenerate', rebuild: 'Rebuild', empty: 'Empty', install: 'Install', send: 'Send' };
+
+    function ask(message, opts) {
+        opts = opts || {};
+        var d = document.createElement('dialog');
+        if (typeof d.showModal !== 'function') {
+            return Promise.resolve(opts.alert ? (nativeAlert(message), true) : nativeConfirm(message));
+        }
+        var danger = opts.danger != null ? !!opts.danger : (!opts.alert && DANGER.test(message));
+        var verb = (String(message).trim().split(/\s+/)[0] || '').toLowerCase().replace(/[^a-z]/g, '');
+        var okText = opts.confirmLabel || (opts.alert ? 'OK' : (VERBS[verb] || 'Confirm'));
+        d.className = 'bh-ask' + (danger ? ' is-danger' : '');
+        d.setAttribute('aria-labelledby', 'bh-ask-msg');
+        d.innerHTML = '<div class="bh-ask__body"><span class="bh-ask__icon">' + (danger || !opts.alert ? ICON_WARN : ICON_INFO) + '</span>'
+            + '<p class="bh-ask__msg" id="bh-ask-msg"></p></div><div class="bh-ask__foot">'
+            + (opts.alert ? '' : '<button type="button" class="bh-ask__btn bh-ask__btn--cancel" value="cancel"></button>')
+            + '<button type="button" class="bh-ask__btn bh-ask__btn--ok" value="ok"></button></div>';
+        d.querySelector('.bh-ask__msg').textContent = String(message);
+        d.querySelector('.bh-ask__btn--ok').textContent = okText;
+        var cancel = d.querySelector('.bh-ask__btn--cancel');
+        if (cancel) cancel.textContent = opts.cancelLabel || 'Cancel';
+        document.body.appendChild(d);
+        return new Promise(function (resolve) {
+            var answered = false;
+            function finish(ok) { if (answered) return; answered = true; d.close(); d.remove(); resolve(ok); }
+            d.addEventListener('click', function (e) {
+                if (e.target === d) finish(!!opts.alert);                     // backdrop
+                var b = e.target.closest('button'); if (b) finish(b.value === 'ok');
+            });
+            d.addEventListener('cancel', function (e) { e.preventDefault(); finish(!!opts.alert); });   // Escape
+            d.showModal();
+            // A destructive question starts on Cancel, so Enter cannot delete.
+            (danger && cancel ? cancel : d.querySelector('.bh-ask__btn--ok')).focus();
+        });
+    }
+    window.bhConfirm = function (message, opts) { return ask(message, opts); };
+    window.bhAlert = function (message, opts) { return ask(message, Object.assign({}, opts, { alert: true })); };
+    // alert() has nothing to answer, so it can always use the admin's dialog.
+    window.alert = function (message) { window.bhAlert(message == null ? '' : String(message)); };
+
+    // onsubmit / onclick = "return confirm('…')" [&& confirm('…')] → bhConfirm.
+    var LIT = "('(?:[^'\\\\]|\\\\.)*'|\"(?:[^\"\\\\]|\\\\.)*\")";
+    var WHOLE = new RegExp('^\\s*return\\s+confirm\\(\\s*' + LIT + '\\s*\\)(\\s*&&\\s*confirm\\(\\s*' + LIT + '\\s*\\))*\\s*;?\\s*$');
+    var EACH = new RegExp('confirm\\(\\s*' + LIT + '\\s*\\)', 'g');
+    function unquote(lit) {
+        var body = lit.slice(1, -1);
+        return body.replace(/\\(u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)/g, function (m, c) {
+            if (c[0] === 'u' || c[0] === 'x') return String.fromCharCode(parseInt(c.slice(1), 16));
+            return { n: '\n', t: '\t', r: '', b: '', f: '', v: '', '0': '' }[c] !== undefined ? { n: '\n', t: '\t', r: '', b: '', f: '', v: '', '0': '' }[c] : c;
+        });
+    }
+    function messagesOf(code) {
+        if (!code || !WHOLE.test(code)) return null;
+        var out = [], m; EACH.lastIndex = 0;
+        while ((m = EACH.exec(code))) out.push(unquote(m[1]));
+        return out.length ? out : null;
+    }
+    function askAll(list) {
+        return list.reduce(function (p, msg) { return p.then(function (ok) { return ok ? ask(msg) : false; }); }, Promise.resolve(true));
+    }
+    function upgradeConfirms(root) {
+        (root.querySelectorAll ? root.querySelectorAll('form[onsubmit]') : []).forEach(function (f) {
+            var list = messagesOf(f.getAttribute('onsubmit')); if (!list) return;
+            f.removeAttribute('onsubmit');
+            f.addEventListener('submit', function (e) {
+                if (f._bhOk) { f._bhOk = false; return; }
+                e.preventDefault();
+                var by = e.submitter;
+                askAll(list).then(function (ok) {
+                    if (!ok) return;
+                    f._bhOk = true;
+                    if (typeof f.requestSubmit === 'function') f.requestSubmit(by && by.form === f ? by : undefined); else f.submit();
+                });
+            });
+        });
+        (root.querySelectorAll ? root.querySelectorAll('a[onclick], button[onclick]') : []).forEach(function (el) {
+            var list = messagesOf(el.getAttribute('onclick')); if (!list) return;
+            el.removeAttribute('onclick');
+            el.addEventListener('click', function (e) {
+                if (el._bhOk) { el._bhOk = false; return; }
+                e.preventDefault();
+                askAll(list).then(function (ok) {
+                    if (!ok) return;
+                    if (el.tagName === 'A' && el.href) { window.location.href = el.href; return; }
+                    el._bhOk = true; el.click();
+                });
+            });
+        });
+    }
+
+    function enhance(root) { wrapTables(root); linkLabels(root); upgradeConfirms(root); }
+    enhance(main);
+    // Screens that build their tables and forms in a script get the same.
+    if (window.MutationObserver) {
+        new MutationObserver(function (records) {
+            records.forEach(function (r) { r.addedNodes.forEach(function (n) { if (n.nodeType === 1 && !n.classList.contains('bh-ask')) enhance(n.parentNode || n); }); });
+        }).observe(main, { childList: true, subtree: true });
+    }
 })();
 </script>
 <script>
