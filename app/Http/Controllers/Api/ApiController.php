@@ -17,6 +17,16 @@ abstract class ApiController extends Controller
     protected function safeUser(array $user): array
     {
         unset($user['password_hash'], $user['remember_token']);
+        // The profile photo, in the shape GET /users/{id}/avatar returns.
+        if (array_key_exists('avatar_media_id', $user)) {
+            try {
+                $av = $this->app->make(\App\Services\AvatarService::class)->forUser($user);
+            } catch (\Throwable) {
+                $av = null;
+            }
+            $user['avatar'] = $av;
+            $user['avatar_url'] = $av['medium_url'] ?? null;
+        }
         return $user;
     }
 

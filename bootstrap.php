@@ -543,6 +543,8 @@ if (!function_exists('bh_comment_form')) {
             'button_class'     => '',
             'styles'           => true,
             'reload_on_publish'=> true,
+            'show_avatar'      => true,
+            'avatar_size'      => 32,
         ];
         $args = array_merge($defaults, $args);
         try {
@@ -622,12 +624,24 @@ if (!function_exists('bh_comment_form')) {
             . bh_webmcp_param('Anti-spam check that must stay empty. Never put anything in this field.') . '></label></div>';
 
         if ($user) {
-            $h .= '<p class="bh-comment-form__identity">'
+            // The commenter's current profile photo beside "Commenting as …".
+            $face = '';
+            if ($args['show_avatar'] && function_exists('bh_avatar')) {
+                $thumb = null;
+                try {
+                    $av = $app->make(\App\Services\AvatarService::class)->forUser($user);
+                    $thumb = $av['thumbnail_url'] ?? null;
+                } catch (\Throwable) {}
+                $face = bh_avatar(['display_name' => $userName, 'avatar_thumbnail_url' => $thumb, 'avatar_url' => $thumb],
+                                  max(16, min(96, (int) $args['avatar_size'])), ['class' => 'bh-comment-form__avatar']);
+            }
+            $h .= '<p class="bh-comment-form__identity"' . ($face !== '' ? ' style="display:flex;align-items:center;gap:.6rem"' : '') . '>'
+                . $face . ($face !== '' ? '<span>' : '')
                 . str_replace('%s', '<strong>' . $e($userName) . '</strong>', $e($args['logged_in_text']));
             if ($args['show_logout']) {
                 $h .= ' <a href="' . $e($base . '/admin/logout') . '">' . $e($args['label_logout']) . '</a>';
             }
-            $h .= '</p>';
+            $h .= ($face !== '' ? '</span>' : '') . '</p>';
         } else {
             $h .= '<div class="bh-comment-form__fields">'
                 . $field('name', 'text', (string) $args['label_name'], 'name', $required)
@@ -827,6 +841,89 @@ if (!function_exists('bh_author_url')) {
  * default), `title_tag`, `show_bio`, `show_link`, `link_text` (%d is the post
  * count), `avatar_size` (px). Filter: `author_box.html` ($html, $author, $post).
  */
+/**
+ * An author's profile photo as <img>, or their initials when they have none.
+ *
+ * Takes a post (every core post query provides `author_avatar_url` and
+ * `author_name`), a user row, or a profile from bh_author():
+ *
+ *     <?= bh_avatar($post, 28) ?>
+ *     <?= bh_avatar($post, 40, ['class' => 'ring-2 ring-white', 'alt' => $post['author_name']]) ?>
+ *
+ * Args: class, alt (default '' — the name is usually printed beside it),
+ * styles (false to skip the small default stylesheet).
+ */
+if (!function_exists('bh_avatar')) {
+    function bh_avatar(array $subject, int $size = 32, array $args = []): string {
+        $e = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES);
+        $size = max(12, min(256, $size));
+        $isPost = isset($subject['author_id']) || isset($subject['title']);
+        $name = (string) ($isPost ? ($subject['author_name'] ?? '') : ($subject['display_name'] ?? ''));
+        if ($isPost) {
+            $src = $subject['author_avatar_url'] ?? null;
+            // A post from somewhere other than core's queries: ask once.
+            if (!array_key_exists('author_avatar_url', $subject) && function_exists('bh_author') && ($a = bh_author($subject))) {
+                $src = $size <= 75 ? ($a['avatar_thumbnail_url'] ?? $a['avatar_url']) : $a['avatar_url'];
+                if ($name === '') $name = (string) $a['display_name'];
+            }
+        } else {
+            $src = $size <= 75 ? ($subject['avatar_thumbnail_url'] ?? $subject['avatar_url'] ?? null) : ($subject['avatar_url'] ?? null);
+        }
+
+        $class = trim('bh-avatar ' . (string) ($args['class'] ?? ''));
+        $css = '';
+        static $styled = false;
+        if (($args['styles'] ?? true) && !$styled) {
+            $styled = true;
+            $css = '<style id="bh-avatar-css">'
+                 . ':where(.bh-avatar){display:inline-block;flex:0 0 auto;border-radius:50%;object-fit:cover;vertical-align:middle}'
+                 . ':where(.bh-avatar--initials){display:inline-grid;place-items:center;font-weight:700;line-height:1;color:#fff;background:var(--bh-accent,#2563eb)}'
+                 . '</style>';
+        }
+        if ($src) {
+            return $css . '<img src="' . $e($src) . '" alt="' . $e($args['alt'] ?? '') . '" width="' . $size . '" height="' . $size
+                 . '" loading="lazy" decoding="async" class="' . $e($class) . '" style="width:' . $size . 'px;height:' . $size . 'px;max-width:none;flex:none;object-fit:cover;border-radius:50%">';
+        }
+        $initials = '';
+        foreach (preg_split('/\s+/u', trim($name)) ?: [] as $w) {
+            if ($w !== '' && mb_strlen($initials) < 2) $initials .= mb_strtoupper(mb_substr($w, 0, 1));
+        }
+        return $css . '<span class="' . $e($class . ' bh-avatar--initials') . '" aria-hidden="true" style="width:' . $size . 'px;height:' . $size
+             . 'px;font-size:' . round($size * 0.4) . 'px;max-width:none;flex:none">' . $e($initials ?: '?') . '</span>';
+    }
+}
+
+/**
+ * A user's photo for admin screens, or their initial when they have none,
+ * marked with data-user-avatar="{id}" so avatar-editor.js can swap every copy
+ * on the page the moment the photo changes.
+ *
+ *     <?= bh_user_avatar($user, 'w-8 h-8 text-sm') ?>
+ *
+ * $thumb: the photo's URL when already known ('' for none); null looks it up.
+ */
+if (!function_exists('bh_user_avatar')) {
+    function bh_user_avatar(array $user, string $sizeClass = 'w-8 h-8 text-sm', ?string $thumb = null): string {
+        $e = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES);
+        if ($thumb === null) {
+            try {
+                $av = \App\Core\Application::getInstance()->make(\App\Services\AvatarService::class)->forUser($user);
+                $thumb = (string) ($av['thumbnail_url'] ?? '');
+            } catch (\Throwable) {
+                $thumb = '';
+            }
+        }
+        $name = trim((string) ($user['display_name'] ?? '')) ?: (string) ($user['username'] ?? 'U');
+        $initial = mb_strtoupper(mb_substr($name, 0, 1)) ?: 'U';
+        $attrs = ' data-user-avatar="' . (int) ($user['id'] ?? 0) . '" data-avatar-class="' . $e($sizeClass) . '" data-initial="' . $e($initial) . '"';
+        if ($thumb !== '') {
+            return '<img src="' . $e($thumb) . '" alt="" class="' . $e('rounded-full object-cover shrink-0 ' . $sizeClass) . '"' . $attrs . '>';
+        }
+        return '<span class="' . $e('rounded-full bg-gradient-to-br from-blue-400 to-blue-600 grid place-items-center text-white font-semibold shrink-0 ' . $sizeClass) . '"'
+             . $attrs . '>' . $e($initial) . '</span>';
+    }
+}
+
 if (!function_exists('bh_author_box')) {
     function bh_author_box(array $post, array $args = []): string {
         $e = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES);
@@ -866,15 +963,19 @@ if (!function_exists('bh_author_box')) {
             if ($w !== '' && mb_strlen($initials) < 2) $initials .= mb_strtoupper(mb_substr($w, 0, 1));
         }
 
-        $avatar = $a['avatar_url']
-            ? '<img src="' . $e($a['avatar_url']) . '" alt="" width="' . $size . '" height="' . $size . '" loading="lazy" class="' . $e($cls('bh-author-box__avatar', $args['avatar_class'])) . '">'
-            : '<span class="' . $e($cls('bh-author-box__avatar bh-author-box__avatar--initials', $args['avatar_class'])) . '" aria-hidden="true">' . $e($initials ?: '?') . '</span>';
+        $avSrc  = ($size <= 75 && !empty($a['avatar_thumbnail_url'])) ? $a['avatar_thumbnail_url'] : $a['avatar_url'];
+        // Inline, so a theme's `img { max-width:100%; height:auto }` (Tailwind's
+        // reset, for one) cannot shrink the photo when a long bio squeezes the row.
+        $fix    = 'width:' . $size . 'px;height:' . $size . 'px;max-width:none;flex:none;object-fit:cover;border-radius:50%';
+        $avatar = $avSrc
+            ? '<img src="' . $e($avSrc) . '" alt="" width="' . $size . '" height="' . $size . '" loading="lazy" class="' . $e($cls('bh-author-box__avatar', $args['avatar_class'])) . '" style="' . $fix . '">'
+            : '<span class="' . $e($cls('bh-author-box__avatar bh-author-box__avatar--initials', $args['avatar_class'])) . '" aria-hidden="true" style="' . $fix . '">' . $e($initials ?: '?') . '</span>';
 
         $h  = '<aside class="' . $e($cls('bh-author-box', $args['class'])) . '" style="--bh-author-avatar:' . $size . 'px">';
         if ((string) $args['title'] !== '') {
             $h .= '<' . $tag . ' class="bh-author-box__title">' . $e($args['title']) . '</' . $tag . '>';
         }
-        $h .= '<div class="bh-author-box__inner">' . ($url ? '<a href="' . $e($url) . '" tabindex="-1" aria-hidden="true">' . $avatar . '</a>' : $avatar);
+        $h .= '<div class="bh-author-box__inner">' . ($url ? '<a href="' . $e($url) . '" tabindex="-1" aria-hidden="true" style="flex:none;display:block;line-height:0">' . $avatar . '</a>' : $avatar);
         $h .= '<div class="bh-author-box__body">';
         $nameHtml = $url ? '<a href="' . $e($url) . '" rel="author">' . $e($name) . '</a>' : $e($name);
         $h .= '<p class="' . $e($cls('bh-author-box__name', $args['name_class'])) . '">' . $nameHtml . '</p>';

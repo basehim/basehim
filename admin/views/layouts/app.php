@@ -631,9 +631,8 @@ try {
 
                 <div class="relative" data-bh-menu>
                     <button type="button" data-bh-menu-btn class="flex items-center gap-2 px-1.5 sm:px-3 py-1.5 rounded-lg hover:bg-slate-100" aria-haspopup="true" aria-expanded="false">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 grid place-items-center text-white text-sm font-semibold">
-                            <?= strtoupper(substr($user['display_name'] ?? 'U', 0, 1)) ?>
-                        </div>
+                        <?php // The photo, or the initial; marked so the photo editor can swap it live. ?>
+                        <?= function_exists('bh_user_avatar') ? bh_user_avatar($user ?? [], 'w-8 h-8 text-sm') : '' ?>
                         <span class="hidden md:inline text-sm font-medium text-slate-700"><?= htmlspecialchars($user['display_name'] ?? 'User') ?></span>
                         <?= icon('chevron-down', 'w-3.5 h-3.5 text-slate-400 hidden md:inline') ?>
                     </button>

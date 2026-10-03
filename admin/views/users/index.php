@@ -43,13 +43,15 @@
             </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
+            <?php
+                // Every listed user's photo in one query, not one per row.
+                $__thumbs = \App\Core\Application::getInstance()->make(\App\Services\AvatarService::class)->thumbnails(array_column($users, 'id'));
+            ?>
             <?php foreach ($users as $u): ?>
             <tr class="hover:bg-slate-50">
                 <td class="px-5 py-3">
                     <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 grid place-items-center text-white text-sm font-semibold">
-                            <?= strtoupper(substr($u['display_name'] ?? $u['username'], 0, 1)) ?>
-                        </div>
+                        <?= bh_user_avatar($u, 'w-9 h-9 text-sm', $__thumbs[(int) $u['id']] ?? '') ?>
                         <div>
                             <a href="<?= $base ?>/admin/users/<?= $u['id'] ?>/edit" class="font-medium text-slate-900 hover:text-blue-600">
                                 <?= htmlspecialchars($u['display_name'] ?? $u['username']) ?>

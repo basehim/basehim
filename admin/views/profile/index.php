@@ -12,14 +12,13 @@
     <div class="lg:col-span-2 space-y-5">
         <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <h3 class="text-sm font-semibold text-slate-900">Account Info</h3>
-            <div class="flex items-center gap-4 pb-3 border-b border-slate-100">
-                <div class="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 grid place-items-center text-white text-xl font-semibold">
-                    <?= strtoupper(substr($currentUser['display_name'] ?? $currentUser['username'], 0, 1)) ?>
-                </div>
-                <div>
-                    <div class="font-semibold text-slate-900"><?= htmlspecialchars($currentUser['display_name'] ?? $currentUser['username']) ?></div>
-                    <div class="text-xs text-slate-500">@<?= htmlspecialchars($currentUser['username']) ?> · <?= ucwords(str_replace('_', ' ', $currentUser['role'])) ?></div>
-                </div>
+            <div class="pb-4 border-b border-slate-100">
+                <div class="text-xs text-slate-500 mb-3">Signed in as <span class="font-medium text-slate-700"><?= htmlspecialchars($currentUser['display_name'] ?? $currentUser['username']) ?></span> · @<?= htmlspecialchars($currentUser['username']) ?> · <?= ucwords(str_replace('_', ' ', $currentUser['role'])) ?></div>
+                <?php
+                    $avatarUser = $currentUser;
+                    $avatarUrl  = $base . '/admin/profile/avatar';
+                    include BASEHIM_ROOT . '/admin/views/partials/avatar-field.php';
+                ?>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>

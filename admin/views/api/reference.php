@@ -23,6 +23,9 @@ $endpoints = [
         ['POST',   '/auth/logout',   'Revoke the current refresh token family',                    true],
         ['GET',    '/me',            'Get the authenticated user\'s profile',                      true],
         ['PATCH',  '/me',            'Update the authenticated user\'s profile',                   true],
+        ['GET',    '/me/avatar',     'Your profile photo: {data:{user_id, avatar:{media_id,url,thumbnail_url,medium_url,width,height}|null}}', true],
+        ['POST',   '/me/avatar',     'Set your profile photo: multipart field avatar (JPG, PNG, GIF or WebP, up to 5 MB), or media_id of an image in the library', true],
+        ['DELETE', '/me/avatar',     'Remove your profile photo (the file stays in the media library)', true],
     ],
     'Posts' => [
         ['GET',    '/posts',          'List published posts (paginated). Supports ?page, ?per_page, ?search, ?category, ?tag', false],
@@ -62,6 +65,10 @@ $endpoints = [
         ['POST',   '/admin/users/{id}/suspend',       'Suspend (status=suspended) — blocks sign-in, reversible. CSRF (full path)', true],
         ['POST',   '/admin/users/{id}/reactivate',    'Reactivate an archived/suspended account. CSRF (full path)', true],
         ['POST',   '/admin/users/{id}/transfer',      'Transfer all authored content to another user. Body: {to_user_id}. CSRF (full path)', true],
+        ['POST',   '/admin/profile/avatar',             'Upload your profile photo (multipart avatar) or set media_id. JSON {ok, avatar}. CSRF (full path)', true],
+        ['POST',   '/admin/profile/avatar/delete',      'Remove your profile photo. JSON. CSRF (full path)', true],
+        ['POST',   '/admin/users/{id}/avatar',          'Upload or set a user\'s profile photo (users you may manage, or yourself). JSON. CSRF (full path)', true],
+        ['POST',   '/admin/users/{id}/avatar/delete',   'Remove a user\'s profile photo. JSON. CSRF (full path)', true],
     ],
     'Editor & Blocks' => [
         ['POST',   '/admin/posts/editor/render', 'Render block JSON to front-end HTML for live preview. Body: {content}. Admin session + CSRF (full path — not under /api/v1)', true],
@@ -161,6 +168,9 @@ $endpoints = [
         ['POST',   '/users',          'Create a user (admin)',                                     true],
         ['PUT',    '/users/{id}',     'Update a user (admin)',                                     true],
         ['DELETE', '/users/{id}',     'Delete a user (admin)',                                     true],
+        ['GET',    '/users/{id}/avatar', 'A user\'s profile photo. User responses (GET /me, /users, /users/{id}) carry avatar and avatar_url; post responses carry author_avatar_url', true],
+        ['POST',   '/users/{id}/avatar', 'Set a user\'s profile photo — yourself, or an administrator. Multipart avatar, or media_id', true],
+        ['DELETE', '/users/{id}/avatar', 'Remove a user\'s profile photo — yourself, or an administrator', true],
     ],
     'Settings' => [
         ['GET',    '/settings/public','Get publicly-available site settings (no auth)',             false],

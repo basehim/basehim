@@ -131,8 +131,11 @@ HTML;
 
     private static function statusFromException(\Throwable $e): int
     {
+        // Database errors carry string codes ("42S02"); only an int is a status.
+        // Comparing a string here made this int method return it: a TypeError
+        // that replaced the error page with a blank 500.
         $code = $e->getCode();
-        if ($code >= 400 && $code < 600) {
+        if (is_int($code) && $code >= 400 && $code < 600) {
             return $code;
         }
         return 500;

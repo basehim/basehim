@@ -39,7 +39,11 @@
                         <time><?= date('M j, Y', strtotime($p['published_at'] ?? $p['created_at'])) ?></time>
                         <?php if (!empty($p['author_name'])): ?>
                             <span class="text-slate-300">·</span>
+                            <?php if (!empty($p['author_avatar_url'])): ?>
+                            <img src="<?= htmlspecialchars($p['author_avatar_url']) ?>" alt="" width="20" height="20" loading="lazy" class="w-5 h-5 rounded-full object-cover">
+                            <?php else: ?>
                             <?= icon('user', 'w-4 h-4') ?>
+                            <?php endif; ?>
                             <span><?= htmlspecialchars($p['author_name']) ?></span>
                         <?php endif; ?>
                     </div>

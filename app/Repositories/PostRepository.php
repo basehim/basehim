@@ -18,6 +18,14 @@ class PostRepository
     private function decorate(?array $row): ?array
     {
         if (!$row) return $row;
+        // The author's profile photo, small: cards and post meta show it at 20–40 px.
+        if (array_key_exists('author_avatar_src', $row)) {
+            $src = (string) ($row['author_avatar_src'] ?? '');
+            $row['author_avatar_url'] = $src !== ''
+                ? \App\Services\AvatarService::pick($src, $row['author_avatar_sizes'] ?? null, 40)
+                : null;
+            unset($row['author_avatar_src'], $row['author_avatar_sizes']);
+        }
         if (!empty($row['featured_url'])) {
             $row['featured_url'] = self::mediaUrl((string) $row['featured_url']);
         }
@@ -76,11 +84,12 @@ class PostRepository
             $params['cat'] = $cat;
         }
         $rows = $this->db->select(
-            "SELECT p.*, u.display_name AS author_name,
+            "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes,
                     m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height,
                     (SELECT COUNT(*) FROM {comments} c WHERE c.post_id = p.id AND c.status = 'approved') AS comment_total
                FROM {posts} p
                LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} av ON av.id = u.avatar_media_id
                LEFT JOIN {media} m ON m.id = p.featured_media_id
               WHERE {$where}
               ORDER BY {$order}
@@ -92,10 +101,11 @@ class PostRepository
 
     public function find(int $id): ?array
     {
-        $sql = 'SELECT p.*, u.display_name AS author_name, u.username AS author_username,
+        $sql = 'SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes, u.username AS author_username,
                        m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} av ON av.id = u.avatar_media_id
                 LEFT JOIN {media} m ON m.id = p.featured_media_id
                 WHERE p.id = :id AND p.deleted_at IS NULL LIMIT 1';
         return $this->decorate($this->db->selectOne($sql, ['id' => $id]));
@@ -103,10 +113,11 @@ class PostRepository
 
     public function findByUuid(string $uuid): ?array
     {
-        $sql = 'SELECT p.*, u.display_name AS author_name, u.username AS author_username,
+        $sql = 'SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes, u.username AS author_username,
                        m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} av ON av.id = u.avatar_media_id
                 LEFT JOIN {media} m ON m.id = p.featured_media_id
                 WHERE p.uuid = :uuid AND p.deleted_at IS NULL LIMIT 1';
         return $this->decorate($this->db->selectOne($sql, ['uuid' => $uuid]));
@@ -114,10 +125,11 @@ class PostRepository
 
     public function findBySlug(string $slug, ?string $type = null): ?array
     {
-        $sql = 'SELECT p.*, u.display_name AS author_name, u.username AS author_username,
+        $sql = 'SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes, u.username AS author_username,
                        m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} av ON av.id = u.avatar_media_id
                 LEFT JOIN {media} m ON m.id = p.featured_media_id
                 WHERE p.slug = :slug AND p.deleted_at IS NULL';
         $params = ['slug' => $slug];
@@ -281,10 +293,11 @@ class PostRepository
         $total = (int)($countRow['c'] ?? 0);
 
         $offset = max(0, ($page - 1) * $perPage);
-        $sql = "SELECT p.*, u.display_name AS author_name, u.username AS author_username,
+        $sql = "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes, u.username AS author_username,
                        m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} av ON av.id = u.avatar_media_id
                 LEFT JOIN {media} m ON m.id = p.featured_media_id
                 WHERE {$whereSql}
                 ORDER BY {$orderBy}
@@ -422,10 +435,11 @@ class PostRepository
     {
         $limit = (int)$limit;
         $items = $this->db->select(
-            "SELECT p.*, u.display_name AS author_name,
+            "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes,
                     m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
              FROM {posts} p
              LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} av ON av.id = u.avatar_media_id
              LEFT JOIN {media} m ON m.id = p.featured_media_id
              WHERE p.type = :type AND p.deleted_at IS NULL
              ORDER BY p.created_at DESC
@@ -508,11 +522,12 @@ class PostRepository
         $total = (int)($countRow['c'] ?? 0);
 
         $items = $this->db->select(
-            "SELECT p.*, u.display_name AS author_name,
+            "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes,
                     m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
              FROM {post_term} pt
              JOIN {posts} p ON p.id = pt.post_id
              LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} av ON av.id = u.avatar_media_id
              LEFT JOIN {media} m ON m.id = p.featured_media_id
              WHERE pt.term_id = :tid AND p.status = 'published' AND p.deleted_at IS NULL
              ORDER BY COALESCE(p.published_at, p.created_at) DESC

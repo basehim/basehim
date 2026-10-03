@@ -71,4 +71,48 @@ class ProfileController extends Controller
         $this->flash('success', 'Profile updated.');
         return $this->redirect('/admin/profile');
     }
+
+    // ── Profile photo: your own, always allowed ──────────────────────────
+
+    public function avatar(Request $request): Response
+    {
+        $uid = $this->userId();
+        if (!$uid) return Response::json(['ok' => false, 'error' => 'Please sign in again.'], 401);
+        return $this->avatarSave($request, (int) $uid);
+    }
+
+    public function avatarDelete(Request $request): Response
+    {
+        $uid = $this->userId();
+        if (!$uid) return Response::json(['ok' => false, 'error' => 'Please sign in again.'], 401);
+        return $this->avatarRemove($request, (int) $uid);
+    }
+
+    /** POST {path} — upload a photo (multipart `avatar`) or use `media_id`. JSON. */
+    private function avatarSave(Request $request, int $userId): Response
+    {
+        if (!$this->verifyCsrf($request)) return Response::json(['ok' => false, 'error' => 'Security check failed. Reload the page and try again.'], 419);
+        /** @var \App\Services\AvatarService $svc */
+        $svc = $this->app->make(\App\Services\AvatarService::class);
+        try {
+            $file = $_FILES['avatar'] ?? null;
+            if (is_array($file) && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $av = $svc->upload($userId, $file, (int) ($this->userId() ?? $userId));
+            } elseif ((int) $request->input('media_id', 0) > 0) {
+                $av = $svc->setMedia($userId, (int) $request->input('media_id'));
+            } else {
+                return Response::json(['ok' => false, 'error' => 'Choose a photo to upload.'], 422);
+            }
+        } catch (\RuntimeException $e) {
+            return Response::json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+        return Response::json(['ok' => true, 'avatar' => $av]);
+    }
+
+    private function avatarRemove(Request $request, int $userId): Response
+    {
+        if (!$this->verifyCsrf($request)) return Response::json(['ok' => false, 'error' => 'Security check failed. Reload the page and try again.'], 419);
+        $this->app->make(\App\Services\AvatarService::class)->remove($userId);
+        return Response::json(['ok' => true, 'avatar' => null]);
+    }
 }

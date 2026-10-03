@@ -43,6 +43,11 @@ $router->group(['prefix' => '/api/v1', 'middleware' => ['App\\Http\\Middleware\\
         $router->get('/me', ['App\\Http\\Controllers\\Api\\AuthController', 'me']);
         $router->patch('/me', ['App\\Http\\Controllers\\Api\\AuthController', 'updateProfile']);
 
+        // Profile photo — yours, or (administrators) anyone's.
+        $router->get('/me/avatar', ['App\\Http\\Controllers\\Api\\AvatarController', 'showMe']);
+        $router->post('/me/avatar', ['App\\Http\\Controllers\\Api\\AvatarController', 'updateMe']);
+        $router->delete('/me/avatar', ['App\\Http\\Controllers\\Api\\AvatarController', 'destroyMe']);
+
         // Posts write
         $router->post('/posts', ['App\\Http\\Controllers\\Api\\PostController', 'store']);
         $router->put('/posts/{id}', ['App\\Http\\Controllers\\Api\\PostController', 'update']);
@@ -65,6 +70,9 @@ $router->group(['prefix' => '/api/v1', 'middleware' => ['App\\Http\\Middleware\\
         $router->post('/users', ['App\\Http\\Controllers\\Api\\UserController', 'store']);
         $router->put('/users/{id}', ['App\\Http\\Controllers\\Api\\UserController', 'update']);
         $router->delete('/users/{id}', ['App\\Http\\Controllers\\Api\\UserController', 'destroy']);
+        $router->get('/users/{id}/avatar', ['App\\Http\\Controllers\\Api\\AvatarController', 'show']);
+        $router->post('/users/{id}/avatar', ['App\\Http\\Controllers\\Api\\AvatarController', 'update']);
+        $router->delete('/users/{id}/avatar', ['App\\Http\\Controllers\\Api\\AvatarController', 'destroy']);
 
         // Taxonomies write
         $router->post('/taxonomies/{taxonomy}/terms', ['App\\Http\\Controllers\\Api\\TaxonomyController', 'storeTerm']);

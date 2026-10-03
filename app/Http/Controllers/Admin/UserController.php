@@ -172,6 +172,62 @@ class UserController extends Controller
         return $this->redirect("/admin/users/{$id}/edit");
     }
 
+    // ── Profile photo of a user you may manage (or yourself) ─────────────
+
+    public function avatar(Request $request, string $id): Response
+    {
+        if (($deny = $this->avatarDenied((int) $id)) !== null) return $deny;
+        return $this->avatarSave($request, (int) $id);
+    }
+
+    public function avatarDelete(Request $request, string $id): Response
+    {
+        if (($deny = $this->avatarDenied((int) $id)) !== null) return $deny;
+        return $this->avatarRemove($request, (int) $id);
+    }
+
+    /** The same rule as editing the user: yourself, or someone below your level. */
+    private function avatarDenied(int $id): ?Response
+    {
+        $target = $this->app->make(UserService::class)->find($id);
+        if (!$target) return Response::json(['ok' => false, 'error' => 'That user does not exist.'], 404);
+        if ($id !== (int) $this->userId()) {
+            $ac = $this->app->make(\App\Services\AccessControl::class);
+            if (!$ac->canManage($this->user(), $target)) {
+                return Response::json(['ok' => false, 'error' => 'You cannot change the photo of a user at or above your access level.'], 403);
+            }
+        }
+        return null;
+    }
+
+    /** POST {path} — upload a photo (multipart `avatar`) or use `media_id`. JSON. */
+    private function avatarSave(Request $request, int $userId): Response
+    {
+        if (!$this->verifyCsrf($request)) return Response::json(['ok' => false, 'error' => 'Security check failed. Reload the page and try again.'], 419);
+        /** @var \App\Services\AvatarService $svc */
+        $svc = $this->app->make(\App\Services\AvatarService::class);
+        try {
+            $file = $_FILES['avatar'] ?? null;
+            if (is_array($file) && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $av = $svc->upload($userId, $file, (int) ($this->userId() ?? $userId));
+            } elseif ((int) $request->input('media_id', 0) > 0) {
+                $av = $svc->setMedia($userId, (int) $request->input('media_id'));
+            } else {
+                return Response::json(['ok' => false, 'error' => 'Choose a photo to upload.'], 422);
+            }
+        } catch (\RuntimeException $e) {
+            return Response::json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+        return Response::json(['ok' => true, 'avatar' => $av]);
+    }
+
+    private function avatarRemove(Request $request, int $userId): Response
+    {
+        if (!$this->verifyCsrf($request)) return Response::json(['ok' => false, 'error' => 'Security check failed. Reload the page and try again.'], 419);
+        $this->app->make(\App\Services\AvatarService::class)->remove($userId);
+        return Response::json(['ok' => true, 'avatar' => null]);
+    }
+
     public function update(Request $request, string $id): Response
     {
         if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }

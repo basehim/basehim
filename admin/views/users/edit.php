@@ -53,6 +53,15 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
     <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
         <h3 class="text-sm font-semibold text-slate-900">Basic account information</h3>
+            <?php if (!empty($editUser['id'])): ?>
+            <div class="pb-4 mb-1 border-b border-slate-100">
+                <?php
+                    $avatarUser = $editUser;
+                    $avatarUrl  = $base . '/admin/users/' . (int) $editUser['id'] . '/avatar';
+                    include BASEHIM_ROOT . '/admin/views/partials/avatar-field.php';
+                ?>
+            </div>
+            <?php endif; ?>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
                 <label class="block text-xs text-slate-500 mb-1">Username <?= $isEdit ? '(read-only)' : '*' ?></label>

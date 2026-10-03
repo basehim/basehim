@@ -52,6 +52,9 @@ $router->group(['prefix' => '/admin'], function ($router) {
         // Profile
         $router->get('/profile', ['App\\Http\\Controllers\\Admin\\ProfileController', 'show']);
         $router->post('/profile', ['App\\Http\\Controllers\\Admin\\ProfileController', 'update']);
+    // Profile photo — saved at once, without the page's Save button.
+    $router->post('/profile/avatar', ['App\\Http\\Controllers\\Admin\\ProfileController', 'avatar']);
+    $router->post('/profile/avatar/delete', ['App\\Http\\Controllers\\Admin\\ProfileController', 'avatarDelete']);
 
         // Posts
         $router->post('/posts/editor/render', ['App\\Http\\Controllers\\Admin\\PostController', 'editorRender']);
@@ -117,6 +120,8 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->get('/users/{id}/edit', ['App\\Http\\Controllers\\Admin\\UserController', 'edit']);
         $router->post('/users/{id}', ['App\\Http\\Controllers\\Admin\\UserController', 'update']);
         $router->post('/users/{id}/delete', ['App\\Http\\Controllers\\Admin\\UserController', 'destroy']);
+    $router->post('/users/{id}/avatar', ['App\\Http\\Controllers\\Admin\\UserController', 'avatar']);
+    $router->post('/users/{id}/avatar/delete', ['App\\Http\\Controllers\\Admin\\UserController', 'avatarDelete']);
         $router->post('/users/{id}/access', ['App\\Http\\Controllers\\Admin\\UserController', 'saveAccess']);
         $router->get('/users/{id}/activity.json', ['App\\Http\\Controllers\\Admin\\UserController', 'activityJson']);
         $router->post('/users/{id}/archive', ['App\\Http\\Controllers\\Admin\\UserController', 'archive']);

@@ -19,9 +19,13 @@
         <div class="flex items-center gap-4 text-sm text-slate-500">
             <?php if (!empty($post['author_name'])): ?>
             <div class="flex items-center gap-2">
+                <?php if (!empty($post['author_avatar_url'])): ?>
+                <img src="<?= htmlspecialchars($post['author_avatar_url']) ?>" alt="" width="32" height="32" loading="lazy" class="w-8 h-8 rounded-full object-cover">
+                <?php else: ?>
                 <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 grid place-items-center text-white text-xs font-semibold">
                     <?= strtoupper(substr($post['author_name'], 0, 1)) ?>
                 </div>
+                <?php endif; ?>
                 <?php $authorUrl = function_exists('bh_author_url') ? bh_author_url($post) : ''; ?>
                 <?php if ($authorUrl !== ''): ?>
                 <a href="<?= htmlspecialchars(($base ?? '') . $authorUrl) ?>" rel="author" class="font-medium text-slate-700 hover:text-brand-600"><?= htmlspecialchars($post['author_name']) ?></a>
