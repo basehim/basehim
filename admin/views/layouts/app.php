@@ -397,6 +397,11 @@ try {
     .bh-foot-pill.is-pending { color: #b45309; }
     .bh-foot-pill.is-pending .bh-foot-dot { background: #f59e0b; animation: bh-foot-pulse 1.8s ease-in-out infinite; }
     .bh-foot-pill.is-unknown { color: #64748b; }
+    .bh-foot-count {
+        display: inline-grid; place-items: center; min-width: 1.1rem; height: 1.1rem; padding: 0 .3rem; margin-left: .1rem;
+        border-radius: 999px; background: #f59e0b; color: #fff; font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+    }
+    .bh-foot-count[hidden] { display: none; }
     .bh-foot-go { flex: none; color: #cbd5e1; transition: transform .15s ease, color .15s ease; }
     a.bh-foot-card:hover .bh-foot-go { color: #64748b; transform: translateX(2px); }
     .bh-foot-pill.is-unknown .bh-foot-dot { background: #94a3b8; }
@@ -697,8 +702,10 @@ try {
                     <?php if ($__canUpdates): ?>
                     <span class="bh-foot-pill <?= $__pill ?>" data-bh-update-line>
                         <span class="bh-foot-dot" aria-hidden="true"></span><span data-bh-update-text><?= $__pillText ?></span>
+                        <?php // The count, as a badge. The dashboard's background check and the
+                              // Updates page set its number and show/hide it (hidden at 0). ?>
+                        <span class="bh-foot-count" data-bh-badge="updates"<?= $__updN > 0 ? '' : ' hidden' ?>><?= $__updN > 99 ? '99+' : $__updN ?></span>
                     </span>
-                    <span data-bh-badge="updates" hidden><?= $__updN ?></span>
                     <?php endif; ?>
                 </span>
                 <?php if ($__canUpdates): ?>
