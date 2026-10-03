@@ -37,7 +37,6 @@ $navItems = [
         ['url' => '/admin/settings/authorization', 'label' => 'Authorization', 'cap' => 'manage_settings'],
     ]],
     ['url' => '/admin/system',         'label' => 'System',      'icon' => 'heart',  'cap' => 'manage_settings', 'section' => 'system'],
-    ['url' => '/admin/updates',        'label' => 'Updates',     'icon' => 'cloud-arrow-down', 'cap' => 'manage_settings', 'section' => 'system', 'badge' => 'updates'],
 ];
 
 // Let apps inject sidebar items via the `admin.menu` filter.
@@ -341,7 +340,56 @@ try {
     }
 
     /* ===== Collapsible sidebar ===== */
-    .bh-sidebar { transition: width .2s ease; }
+    /* Width (desktop collapse) and transform (mobile drawer) together. This rule
+       comes after the mobile one; with width alone it replaced the drawer's
+       transform transition, and the drawer jumped open and shut. */
+    .bh-sidebar { transition: width .2s ease, transform .32s cubic-bezier(.4, 0, .2, 1); }
+    @media (max-width: 1023px) { .bh-sidebar { will-change: transform; } }
+
+    /* ===== Sidebar footer: version and update status ===== */
+    .bh-sidebar.is-collapsed .bh-foot-row { padding-left: 0; padding-right: 0; justify-content: center; gap: 0; }
+    .bh-foot-card {
+        display: flex; align-items: center; gap: .65rem;
+        margin: .35rem .75rem .75rem; margin-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px));
+        padding: .5rem .65rem .5rem .75rem; border-radius: .65rem;
+        background: #f8fafc; border: 1px solid #eef2f6; text-decoration: none;
+        transition: background-color .15s ease, border-color .15s ease;
+    }
+    a.bh-foot-card:hover { background: #f1f5f9; border-color: #e2e8f0; }
+    a.bh-foot-card:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+    .bh-foot-mark { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: .5rem; background: #fff; border: 1px solid #eef2f6; }
+    .bh-foot-mark img, .bh-foot-mark svg { width: 1.25rem; height: 1.25rem; max-width: none; }
+    .bh-foot-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+    .bh-foot-ver { font-size: 12px; line-height: 1.25; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+    .bh-foot-ver strong { color: #334155; font-weight: 600; }
+    .bh-foot-pill {
+        display: inline-flex; align-items: center; gap: .35rem; min-width: 0;
+        font-size: 11px; font-weight: 500; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bh-foot-dot { width: .4rem; height: .4rem; border-radius: 50%; flex: none; background: currentColor; }
+    .bh-foot-pill.is-current { color: #047857; }
+    .bh-foot-pill.is-current .bh-foot-dot { background: #10b981; }
+    .bh-foot-pill.is-pending { color: #b45309; }
+    .bh-foot-pill.is-pending .bh-foot-dot { background: #f59e0b; animation: bh-foot-pulse 1.8s ease-in-out infinite; }
+    .bh-foot-pill.is-unknown { color: #64748b; }
+    .bh-foot-go { flex: none; color: #cbd5e1; transition: transform .15s ease, color .15s ease; }
+    a.bh-foot-card:hover .bh-foot-go { color: #64748b; transform: translateX(2px); }
+    .bh-foot-pill.is-unknown .bh-foot-dot { background: #94a3b8; }
+    @keyframes bh-foot-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .45); } 50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); } }
+    @media (prefers-reduced-motion: reduce) { .bh-foot-pill.is-pending .bh-foot-dot { animation: none; } }
+
+    /* ===== Dropdowns (Create, account) ===== */
+    [data-bh-menu-panel]:not(.hidden) { animation: bh-menu-in .16s cubic-bezier(.2, .7, .3, 1) both; transform-origin: top right; }
+    [data-bh-menu-panel].is-closing { animation: bh-menu-out .12s ease-in both; pointer-events: none; }
+    @keyframes bh-menu-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
+    @keyframes bh-menu-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.98); } }
+    [data-bh-menu-btn] > :last-child { transition: transform .2s ease; }
+    [data-bh-menu-btn][aria-expanded="true"] > :last-child { transform: rotate(180deg); }
+
+    @media (prefers-reduced-motion: reduce) {
+        .bh-sidebar, #bh-backdrop, .bh-nav-group .bh-submenu, [data-bh-menu-btn] > :last-child, .bh-sub-toggle svg, .bh-sub-toggle i { transition: none !important; }
+        [data-bh-menu-panel]:not(.hidden), [data-bh-menu-panel].is-closing { animation: none !important; }
+    }
     .bh-sidebar.is-collapsed { width: 4.5rem; overflow-x: hidden; }
     .bh-sidebar.is-collapsed .bh-hide-collapsed { display: none !important; }
     .bh-nav-badge {
@@ -392,9 +440,14 @@ try {
     /* Submenu groups */
     .bh-sub-toggle { color: #cbd5e1; font-size: 11px; padding: 2px 4px; }
     .bh-sub-toggle:hover { color: #64748b; }
-    .bh-nav-group .bh-submenu { display: none; padding: 2px 0 4px; }
-    .bh-nav-group.is-open .bh-submenu { display: block; }
-    .bh-nav-group.is-open .bh-sub-toggle i { transform: rotate(180deg); }
+    /* Height animates (see the submenu script); padding sits on the links so a
+       closed submenu is truly 0 high. */
+    .bh-nav-group .bh-submenu { display: block; height: 0; overflow: hidden; transition: height .22s cubic-bezier(.4, 0, .2, 1); }
+    .bh-nav-group.is-open .bh-submenu { height: auto; }
+    .bh-nav-group .bh-submenu > :first-child { margin-top: 2px; }
+    .bh-nav-group .bh-submenu > :last-child { margin-bottom: 4px; }
+    .bh-sub-toggle svg, .bh-sub-toggle i { transition: transform .22s ease; }
+    .bh-nav-group.is-open .bh-sub-toggle svg, .bh-nav-group.is-open .bh-sub-toggle i { transform: rotate(180deg); }
     .bh-sidebar.is-collapsed .bh-nav-group .bh-submenu { display: none !important; }
 
     /* ===== Search box (self-contained, no fragile utility classes) ===== */
@@ -431,18 +484,33 @@ try {
     <!-- Sidebar -->
     <aside id="bh-sidebar" class="bh-sidebar w-64 bg-white border-r border-slate-200 flex flex-col fixed inset-y-0 left-0 z-20">
         <div class="h-16 flex items-center gap-2 px-6 border-b border-slate-200 bh-sidebar-head">
-            <div class="shrink-0"><?= brand_logo(36) ?></div>
+            <a href="https://www.basehim.com" target="_blank" rel="noopener" class="shrink-0" title="Basehim — opens in a new tab"><?= brand_logo(36) ?></a>
             <div class="bh-hide-collapsed min-w-0 flex-1">
                 <?php
                 try {
                     $__settings = \App\Core\Application::getInstance()->make(\App\Services\SettingService::class);
                     $__siteName = $__settings->get('general', 'site_title', 'Basehim') ?: 'Basehim';
+                    $__canon = (string) $__settings->get('permalinks', 'canonical_host', 'none');
                 } catch (\Throwable) {
                     $__siteName = 'Basehim';
+                    $__canon = 'none';
                 }
+                // The site's address as visitors know it: the host it is served on,
+                // with or without www. as Settings → Permalinks says, and the folder
+                // Basehim is installed in. No www. for localhost or an IP address.
+                $__host = strtolower((string) preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')));
+                $__bare = (string) preg_replace('/^www\./', '', $__host);
+                $__dotted = str_contains($__bare, '.') && !filter_var($__bare, FILTER_VALIDATE_IP);
+                if ($__canon === 'www' && $__dotted) $__host = 'www.' . $__bare;
+                elseif ($__canon === 'root') $__host = $__bare;
+                $__siteAddr = $__host . rtrim((string) ($base ?? ''), '/');
                 ?>
-                <div class="font-semibold text-slate-900 text-sm leading-tight truncate"><?= htmlspecialchars($__siteName) ?></div>
-                <div class="text-[10px] text-slate-500 uppercase tracking-wide">Admin Panel</div>
+                <a href="<?= htmlspecialchars(($base ?? '') . '/') ?>" target="_blank" rel="noopener"
+                   class="block font-semibold text-slate-900 text-sm leading-tight truncate hover:text-blue-600"
+                   title="View <?= htmlspecialchars($__siteName) ?> — opens in a new tab"><?= htmlspecialchars($__siteName) ?></a>
+                <?php if ($__siteAddr !== ''): ?>
+                <div class="text-[11px] text-slate-400 leading-tight mt-0.5 truncate" title="<?= htmlspecialchars($__siteAddr) ?>"><?= htmlspecialchars($__siteAddr) ?></div>
+                <?php endif; ?>
             </div>
             <button type="button" id="bh-mobile-close" class="lg:hidden p-2 -mr-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100" aria-label="Close menu">
                 <?= icon('x-mark', 'w-4 h-4') ?>
@@ -565,14 +633,53 @@ try {
             </div>
         </nav>
 
-        <div class="px-3 py-2 border-t border-slate-200 flex items-center gap-1">
-            <a href="<?= $base ?>/" target="_blank" class="bh-hide-collapsed flex-1 flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600 px-3 py-2 rounded-lg hover:bg-slate-50">
-                <?= icon('arrow-top-right-on-square', 'w-4 h-4') ?>
-                <span>View Site</span>
-            </a>
-            <button type="button" id="bh-collapse-toggle" class="text-slate-500 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-slate-50" title="Collapse sidebar (Ctrl+B)">
-                <?= icon('chevron-double-left', 'w-4 h-4 bh-collapse-icon') ?>
-            </button>
+        <?php
+        // Version and update status. The count is the cached result of the last
+        // check (never a remote call while rendering); the dashboard's background
+        // check updates the hidden badge below, and the script turns that into
+        // the line people read.
+        $__canUpdates = false; $__updN = 0; $__checked = false;
+        try {
+            $__canUpdates = !empty($currentUser) && \App\Http\Middleware\CheckCapability::userCan($currentUser, 'manage_settings');
+            if ($__canUpdates) {
+                $__us = \App\Core\Application::getInstance()->make(\App\Services\SettingService::class);
+                $__updN = (int) $__us->get('updates', 'available_count', 0);
+                $__checked = (string) $__us->get('updates', 'last_check', '') !== '';
+            }
+        } catch (\Throwable) {}
+        ?>
+        <div class="border-t border-slate-200 bh-sidebar-foot">
+            <div class="px-3 pt-2 flex items-center gap-1 bh-foot-row">
+                <a href="<?= $base ?>/" target="_blank" rel="noopener" class="bh-hide-collapsed flex-1 flex items-center gap-3 text-sm font-medium text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-50">
+                    <?= icon('arrow-top-right-on-square', 'w-5 h-5 text-slate-400') ?>
+                    <span>View Site</span>
+                </a>
+                <button type="button" id="bh-collapse-toggle" class="text-slate-500 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-slate-50" title="Collapse sidebar (Ctrl+B)">
+                    <?= icon('chevron-double-left', 'w-4 h-4 bh-collapse-icon') ?>
+                </button>
+            </div>
+            <?php
+            // One compact card: the version, and for people who can install
+            // updates a status pill; the whole card then opens the Updates page.
+            $__pill = $__updN > 0 ? 'is-pending' : ($__checked ? 'is-current' : 'is-unknown');
+            $__pillText = $__updN > 0 ? 'Updates available' : ($__checked ? 'You’re up to date' : 'Check for updates');
+            $__cardTag = $__canUpdates ? 'a' : 'div';
+            ?>
+            <<?= $__cardTag ?> class="bh-hide-collapsed bh-foot-card"<?= $__canUpdates ? ' href="' . $base . '/admin/updates" title="' . ($__updN > 0 ? $__updN . ' update' . ($__updN === 1 ? '' : 's') . ' ready to install' : 'Open Updates') . '"' : '' ?>>
+                <span class="bh-foot-mark" aria-hidden="true"><?= brand_logo(20) ?></span>
+                <span class="bh-foot-info">
+                    <span class="bh-foot-ver"><strong>Basehim</strong> <span><?= htmlspecialchars(BASEHIM_VERSION) ?></span></span>
+                    <?php if ($__canUpdates): ?>
+                    <span class="bh-foot-pill <?= $__pill ?>" data-bh-update-line>
+                        <span class="bh-foot-dot" aria-hidden="true"></span><span data-bh-update-text><?= $__pillText ?></span>
+                    </span>
+                    <span data-bh-badge="updates" hidden><?= $__updN ?></span>
+                    <?php endif; ?>
+                </span>
+                <?php if ($__canUpdates): ?>
+                <?= icon('chevron-right', 'bh-foot-go w-4 h-4') ?>
+                <?php endif; ?>
+            </<?= $__cardTag ?>>
         </div>
     </aside>
 
@@ -742,17 +849,47 @@ try {
     });
 
     /* ---------- Submenu groups ---------- */
+    // Open and close by animating the height from/to the submenu's real height,
+    // then hand back to CSS (height:auto when open) so it stays right if the
+    // list changes.
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function toggleGroup(el) {
+        var sub = el.querySelector('.bh-submenu');
+        var opening = !el.classList.contains('is-open');
+        if (!sub || reduceMotion || sidebar.classList.contains('is-collapsed')) { el.classList.toggle('is-open', opening); return; }
+        var done = function (e) {
+            if (e && e.target !== sub) return;
+            sub.removeEventListener('transitionend', done);
+            sub.style.height = '';
+        };
+        sub.removeEventListener('transitionend', sub._bhDone || done);
+        sub._bhDone = done;
+        if (opening) {
+            el.classList.add('is-open');
+            var full = sub.scrollHeight;
+            sub.style.height = '0px';
+            void sub.offsetHeight;                 // start from 0
+            sub.style.height = full + 'px';
+        } else {
+            sub.style.height = sub.scrollHeight + 'px';
+            void sub.offsetHeight;                 // start from the current height
+            el.classList.remove('is-open');
+            sub.style.height = '0px';
+        }
+        sub.addEventListener('transitionend', done);
+        setTimeout(done, 400);                     // in case transitionend never fires
+    }
     items.forEach(function (el) {
         var subBtn = el.querySelector('.bh-sub-toggle');
         subBtn && subBtn.addEventListener('click', function (ev) {
             ev.preventDefault(); ev.stopPropagation();
-            el.classList.toggle('is-open');
+            toggleGroup(el);
         });
         var head = el.querySelector('.bh-group-head');
         head && head.addEventListener('click', function (ev) {
             // Clicking the row (but not a link/button inside it) toggles the submenu.
             if (ev.target.closest('a, button')) return;
-            el.classList.toggle('is-open');
+            toggleGroup(el);
         });
     });
 
@@ -853,40 +990,60 @@ try {
 
     /* ===== Click-based dropdown menus (create + user) ===== */
     // Replaces hover-only menus so they work on touch devices.
+    // Opening plays a short fade-and-drop (CSS, on removing .hidden); closing
+    // plays the reverse (.is-closing) and only then hides the panel.
     var menus = Array.prototype.slice.call(document.querySelectorAll('[data-bh-menu]'));
+    var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function closeMenu(m) {
+        var p = m.querySelector('[data-bh-menu-panel]');
+        var b = m.querySelector('[data-bh-menu-btn]');
+        if (b) b.setAttribute('aria-expanded', 'false');
+        if (!p || p.classList.contains('hidden') || p.classList.contains('is-closing')) return;
+        if (calm) { p.classList.add('hidden'); return; }
+        p.classList.add('is-closing');
+        setTimeout(function () { p.classList.add('hidden'); p.classList.remove('is-closing'); }, 120);
+    }
     menus.forEach(function (menu) {
         var btn = menu.querySelector('[data-bh-menu-btn]');
         var panel = menu.querySelector('[data-bh-menu-panel]');
         if (!btn || !panel) return;
         btn.addEventListener('click', function (e) {
             e.stopPropagation();
-            var isOpen = !panel.classList.contains('hidden');
-            // Close all others first.
-            menus.forEach(function (m) {
-                var p = m.querySelector('[data-bh-menu-panel]');
-                var b = m.querySelector('[data-bh-menu-btn]');
-                if (p) p.classList.add('hidden');
-                if (b) b.setAttribute('aria-expanded', 'false');
-            });
-            if (!isOpen) { panel.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true'); }
+            var isOpen = !panel.classList.contains('hidden') && !panel.classList.contains('is-closing');
+            menus.forEach(function (m) { if (m !== menu || isOpen) closeMenu(m); });
+            if (!isOpen) {
+                panel.classList.remove('is-closing');
+                panel.classList.remove('hidden');
+                btn.setAttribute('aria-expanded', 'true');
+            }
         });
+        // A click inside the panel (other than on a link or button) keeps it open.
+        panel.addEventListener('click', function (e) { if (!e.target.closest('a, button')) e.stopPropagation(); });
     });
-    document.addEventListener('click', function () {
-        menus.forEach(function (m) {
-            var p = m.querySelector('[data-bh-menu-panel]');
-            var b = m.querySelector('[data-bh-menu-btn]');
-            if (p) p.classList.add('hidden');
-            if (b) b.setAttribute('aria-expanded', 'false');
-        });
-    });
+    document.addEventListener('click', function () { menus.forEach(closeMenu); });
     document.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Escape') {
-            menus.forEach(function (m) {
-                var p = m.querySelector('[data-bh-menu-panel]');
-                if (p) p.classList.add('hidden');
-            });
-        }
+        if (ev.key === 'Escape') menus.forEach(closeMenu);
     });
+})();
+</script>
+<script>
+/* The sidebar's update line follows the hidden updates badge, which the
+   dashboard's background check and the Updates page keep current. */
+(function () {
+    var badge = document.querySelector('.bh-sidebar-foot [data-bh-badge="updates"]');
+    var line = document.querySelector('[data-bh-update-line]');
+    if (!badge || !line || !window.MutationObserver) return;
+    var text = line.querySelector('[data-bh-update-text]');
+    function paint() {
+        var n = parseInt(badge.textContent, 10) || 0;
+        line.classList.toggle('is-pending', n > 0);
+        line.classList.toggle('is-current', n === 0);
+        line.classList.remove('is-unknown');
+        text.textContent = n > 0 ? 'Updates available' : 'You’re up to date';
+        var card = line.closest('.bh-foot-card');
+        if (card) card.title = n > 0 ? n + ' update' + (n === 1 ? '' : 's') + ' ready to install' : 'Open Updates';
+    }
+    new MutationObserver(paint).observe(badge, { childList: true, characterData: true, subtree: true, attributes: true });
 })();
 </script>
 <script>
