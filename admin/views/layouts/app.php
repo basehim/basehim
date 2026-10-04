@@ -394,6 +394,9 @@ try {
     .bh-input:focus, .bh-select:focus, .bh-textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, .2); }
     .bh-input[aria-invalid="true"], .bh-select[aria-invalid="true"], .bh-textarea[aria-invalid="true"] { border-color: #ef4444; }
     .bh-textarea { min-height: 6rem; resize: vertical; }
+    /* Natural width (filters in a row) and a compact size (toolbars). */
+    .bh-input--auto, .bh-select--auto { display: inline-block; width: auto; }
+    .bh-input--sm, .bh-select--sm { padding: .375rem .625rem; font-size: .75rem; }
     .bh-help { font-size: .75rem; color: #64748b; margin-top: .375rem; line-height: 1.45; }
 
     .bh-badge { display: inline-flex; align-items: center; gap: .3rem; padding: .125rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; line-height: 1.4; white-space: nowrap; }

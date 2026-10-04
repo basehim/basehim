@@ -11,11 +11,11 @@
 <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 w-max max-w-none">
     <?php
     $tabs = [
-        '' => ['label' => 'All', 'icon' => 'fa-list', 'count' => $counts['total'] ?? 0],
-        'pending' => ['label' => 'Pending', 'icon' => 'fa-clock', 'count' => $counts['pending'] ?? 0],
-        'approved' => ['label' => 'Approved', 'icon' => 'fa-check', 'count' => $counts['approved'] ?? 0],
-        'spam' => ['label' => 'Spam', 'icon' => 'fa-ban', 'count' => $counts['spam'] ?? 0],
-        'trash' => ['label' => 'Trash', 'icon' => 'fa-trash', 'count' => $counts['trash'] ?? 0],
+        '' => ['label' => 'All', 'icon' => 'list-bullet', 'count' => $counts['total'] ?? 0],
+        'pending' => ['label' => 'Pending', 'icon' => 'clock', 'count' => $counts['pending'] ?? 0],
+        'approved' => ['label' => 'Approved', 'icon' => 'check', 'count' => $counts['approved'] ?? 0],
+        'spam' => ['label' => 'Spam', 'icon' => 'no-symbol', 'count' => $counts['spam'] ?? 0],
+        'trash' => ['label' => 'Trash', 'icon' => 'trash', 'count' => $counts['trash'] ?? 0],
     ];
     foreach ($tabs as $val => $tab):
         $active = $status === $val;
@@ -29,11 +29,21 @@
 </div>
 </div>
 
-<div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+<div class="bh-card overflow-hidden">
     <?php if (empty($comments)): ?>
-        <div class="text-center py-16 text-slate-500">
-            <?= icon('no-symbol', 'w-12 h-12 text-slate-300 mb-3') ?>
-            <p>No comments in this view.</p>
+        <?php
+            [$__t, $__x] = match ($status) {
+                'pending'  => ['Nothing waiting for review', 'New comments that need approval appear here.'],
+                'approved' => ['No approved comments', 'Comments you approve appear here.'],
+                'spam'     => ['No spam', 'Comments marked as spam appear here.'],
+                'trash'    => ['Trash is empty', 'Deleted comments appear here.'],
+                default    => ['No comments yet', 'Comments on your posts appear here.'],
+            };
+        ?>
+        <div class="bh-empty">
+            <span class="bh-empty__icon"><?= icon('chat-bubble-left-right') ?></span>
+            <p class="bh-empty__title"><?= $__t ?></p>
+            <p class="bh-empty__text"><?= $__x ?></p>
         </div>
     <?php else: ?>
     <div class="divide-y divide-slate-100">
@@ -48,12 +58,12 @@
                     <?php if (!empty($c['author_email'])): ?>
                         <span class="text-xs text-slate-500">&lt;<?= htmlspecialchars($c['author_email']) ?>&gt;</span>
                     <?php endif; ?>
-                    <span class="text-xs px-2 py-0.5 rounded-full font-medium <?php
+                    <span class="bh-badge <?php
                         echo match($c['status']) {
-                            'approved' => 'bg-green-50 text-green-700',
-                            'pending' => 'bg-amber-50 text-amber-700',
-                            'spam' => 'bg-red-50 text-red-700',
-                            default => 'bg-slate-100 text-slate-600',
+                            'approved' => 'bh-badge--green',
+                            'pending' => 'bh-badge--amber',
+                            'spam' => 'bh-badge--red',
+                            default => 'bh-badge--gray',
                         };
                     ?>"><?= ucfirst($c['status']) ?></span>
                 </div>

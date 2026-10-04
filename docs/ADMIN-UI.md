@@ -41,7 +41,9 @@ Wording: "Save changes" for saving a form; name other actions by what they do
 <p class="bh-help">Shown in the browser tab.</p>
 ```
 
-Also `.bh-select` and `.bh-textarea`. Mark an invalid field with
+Also `.bh-select` and `.bh-textarea`. Fields fill their container; add
+`--auto` for natural width (e.g. dropdowns in a filter row) and `--sm` for a
+compact field (toolbars). Mark an invalid field with
 `aria-invalid="true"`. Always give a label `for=` (a label right before its
 field is linked automatically, but explicit is better).
 

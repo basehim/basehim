@@ -105,7 +105,7 @@
                 </div>
 
                 <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm">
-                    <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save Changes
+                    <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save changes
                 </button>
             </form>
         </div>

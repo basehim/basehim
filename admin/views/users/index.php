@@ -6,30 +6,36 @@
         <h2 class="text-xl font-semibold text-slate-900">Users</h2>
         <p class="text-sm text-slate-500">Manage user accounts.</p>
     </div>
-    <a href="<?= $base ?>/admin/users/create" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm">
-        <?= icon('user-plus', 'w-4 h-4') ?> New User
+    <a href="<?= $base ?>/admin/users/create" class="bh-btn bh-btn--primary">
+        <?= icon('user-plus', 'w-4 h-4') ?> New user
     </a>
 </div>
 
-<div class="bg-white rounded-xl border border-slate-200 p-4 mb-5">
+<div class="bh-card bh-card--pad mb-5">
     <form method="GET" class="flex flex-wrap gap-3">
         <input type="text" name="q" value="<?= htmlspecialchars($search) ?>" placeholder="Search users..."
-            class="flex-1 min-w-[200px] px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-        <select name="role" class="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+            class="bh-input flex-1 min-w-[200px]">
+        <select name="role" class="bh-select bh-select--auto">
             <option value="">All roles</option>
             <?php foreach ($roles as $r): ?>
                 <option value="<?= $r ?>" <?= $role === $r ? 'selected' : '' ?>><?= ucwords(str_replace('_', ' ', $r)) ?></option>
             <?php endforeach; ?>
         </select>
-        <button type="submit" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">Filter</button>
+        <button type="submit" class="bh-btn bh-btn--secondary">Filter</button>
     </form>
 </div>
 
-<div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+<div class="bh-card overflow-hidden">
     <?php if (empty($users)): ?>
-        <div class="text-center py-16 text-slate-500">
-            <?= icon('user-minus', 'w-12 h-12 text-slate-300 mb-3') ?>
-            <p>No users found.</p>
+        <?php $__filtered = !empty($search) || !empty($role); ?>
+        <div class="bh-empty">
+            <span class="bh-empty__icon"><?= icon('users') ?></span>
+            <p class="bh-empty__title"><?= $__filtered ? 'No users match' : 'No users yet' ?></p>
+            <p class="bh-empty__text"><?= $__filtered ? 'Try a different search or role.' : 'People you add appear here.' ?></p>
+            <div class="bh-empty__actions">
+                <?php if ($__filtered): ?><a href="<?= $base ?>/admin/users" class="bh-btn bh-btn--secondary">Clear filters</a><?php endif; ?>
+                <a href="<?= $base ?>/admin/users/create" class="bh-btn bh-btn--primary"><?= icon('user-plus', 'w-4 h-4') ?> New user</a>
+            </div>
         </div>
     <?php else: ?>
     <table class="w-full text-sm">
@@ -62,7 +68,7 @@
                 </td>
                 <td class="px-5 py-3 text-slate-600 hidden md:table-cell"><?= htmlspecialchars($u['email']) ?></td>
                 <td class="px-5 py-3">
-                    <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700">
+                    <span class="bh-badge bh-badge--blue">
                         <?= ucwords(str_replace('_', ' ', $u['role'])) ?>
                     </span>
                 </td>
