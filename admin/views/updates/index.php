@@ -315,8 +315,8 @@ $fulls   = array_values(array_filter($updates, fn($u) => empty($u['is_patch'])))
         });
     }
 
-    if (installBtn) installBtn.addEventListener('click', function () {
-        if (!window.confirm('Install all pending updates now?\n\nThey are applied in order, oldest first. Core files are replaced (your .env, uploads, storage and .htaccess are never touched) and migrations run. A snapshot is taken before each step and restored automatically if one fails.\n\nHaving a recent host backup is still recommended.')) return;
+    if (installBtn) installBtn.addEventListener('click', async function () {
+        if (!(await bhConfirm('Install all pending updates now?\n\nThey are applied in order, oldest first. Core files are replaced (your .env, uploads, storage and .htaccess are never touched) and migrations run. A snapshot is taken before each step and restored automatically if one fails.\n\nHaving a recent host backup is still recommended.', { confirmLabel: 'Install updates' }))) return;
 
         installBtn.disabled = true;
         if (checkBtn) checkBtn.disabled = true;

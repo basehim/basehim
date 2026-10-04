@@ -464,11 +464,13 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
         if (a.target === '_blank' || a.hasAttribute('download')) return;
         var href = a.getAttribute('href') || '';
         if (href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
-        if (!window.confirm('You have unsaved changes. Leave without saving?')) {
-            e.preventDefault();
-        } else {
+        // Hold the click, ask in the admin's dialog, then go if they choose to.
+        e.preventDefault();
+        bhConfirm('You have unsaved changes. Leave without saving?', { danger: true, confirmLabel: 'Leave', cancelLabel: 'Stay' }).then(function (leave) {
+            if (!leave) return;
             saving = true;             // user chose to leave
-        }
+            window.location.href = a.href;
+        });
     });
 })();
 </script>

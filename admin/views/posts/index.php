@@ -222,9 +222,19 @@ $csrf = $session->csrfToken();
             alert('Pick a bulk action and select at least one item.');
             return;
         }
-        if (action === 'delete' && !confirm('Delete ' + n + ' item(s)? This cannot be undone.')) {
+        // Hold the submit, ask in the admin's dialog, then submit again with
+        // the same button (the second pass goes straight through).
+        if (action === 'delete' && !form._bhOk) {
             ev.preventDefault();
+            var by = ev.submitter;
+            bhConfirm('Delete ' + n + ' item(s)? This cannot be undone.').then(function (ok) {
+                if (!ok) return;
+                form._bhOk = true;
+                if (typeof form.requestSubmit === 'function') form.requestSubmit(by && by.form === form ? by : undefined); else form.submit();
+            });
+            return;
         }
+        form._bhOk = false;
     });
 })();
 </script>

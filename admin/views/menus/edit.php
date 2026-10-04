@@ -424,8 +424,8 @@
                 }).catch(function (e) { flash('err', e.message); });
             });
 
-            row.querySelector('[data-remove]').addEventListener('click', function () {
-                if (!confirm('Remove this item from the menu?\n\nIts sub-items will be removed too.')) return;
+            row.querySelector('[data-remove]').addEventListener('click', async function () {
+                if (!(await bhConfirm('Remove this item from the menu?\n\nIts sub-items will be removed too.', { confirmLabel: 'Remove' }))) return;
                 post('/admin/menus/' + MENU_ID + '/items/' + id + '/delete', {}).then(function (d) {
                     if (!d.ok) { flash('err', d.error || d.detail || 'Could not remove that item.'); return; }
                     items = d.items || [];

@@ -173,10 +173,10 @@
             var wrap = box.querySelector('[data-regen-progress]'), bar = box.querySelector('[data-regen-bar]'), status = box.querySelector('[data-regen-status]');
             var url = <?= json_encode($base . '/admin/settings/media/regenerate-batch') ?>, csrf = <?= json_encode($csrf) ?>;
             var running = false, stopped = false;
-            start.addEventListener('click', function () {
+            start.addEventListener('click', async function () {
                 if (running) return;
                 var scope = (box.querySelector('input[name=regen_scope]:checked') || {}).value || 'missing';
-                if (scope === 'all' && !confirm('Rebuild the thumbnails of every image? Existing thumbnails are replaced.')) return;
+                if (scope === 'all' && !(await bhConfirm('Rebuild the thumbnails of every image? Existing thumbnails are replaced.', { confirmLabel: 'Rebuild all' }))) return;
                 running = true; stopped = false; start.disabled = true; stop.hidden = false; wrap.hidden = false;
                 var tot = { processed: 0, skipped: 0, failed: 0, variants: 0 }, total = null, after = 0;
                 var finish = function (msg) { running = false; start.disabled = false; stop.hidden = true; status.textContent = msg; };
