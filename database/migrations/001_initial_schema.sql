@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS {media} (
     KEY `idx_author` (`author_id`),
     KEY `idx_mime` (`mime_type`),
     KEY `idx_created` (`created_at`),
-    CONSTRAINT `fk_media_author` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    CONSTRAINT `{@fk_media_author}` FOREIGN KEY (`author_id`) REFERENCES {users} (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -95,9 +95,9 @@ CREATE TABLE IF NOT EXISTS {posts} (
     KEY `idx_published` (`published_at`),
     KEY `idx_parent` (`parent_id`),
     FULLTEXT KEY `idx_ft_content` (`title`, `content`, `excerpt`),
-    CONSTRAINT `fk_posts_author` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`),
-    CONSTRAINT `fk_posts_parent` FOREIGN KEY (`parent_id`) REFERENCES `posts` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_posts_featured` FOREIGN KEY (`featured_media_id`) REFERENCES `media` (`id`) ON DELETE SET NULL
+    CONSTRAINT `{@fk_posts_author}` FOREIGN KEY (`author_id`) REFERENCES {users} (`id`),
+    CONSTRAINT `{@fk_posts_parent}` FOREIGN KEY (`parent_id`) REFERENCES {posts} (`id`) ON DELETE SET NULL,
+    CONSTRAINT `{@fk_posts_featured}` FOREIGN KEY (`featured_media_id`) REFERENCES {media} (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS {post_meta} (
     `is_json`    TINYINT(1) DEFAULT 0,
     KEY `idx_post_key` (`post_id`, `meta_key`),
     KEY `idx_key` (`meta_key`),
-    CONSTRAINT `fk_post_meta_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE
+    CONSTRAINT `{@fk_post_meta_post}` FOREIGN KEY (`post_id`) REFERENCES {posts} (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS {post_revisions} (
     `revision_number` INT UNSIGNED DEFAULT 1,
     `created_at`      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY `idx_post_revisions` (`post_id`, `revision_number`),
-    CONSTRAINT `fk_revisions_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE
+    CONSTRAINT `{@fk_revisions_post}` FOREIGN KEY (`post_id`) REFERENCES {posts} (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -160,8 +160,8 @@ CREATE TABLE IF NOT EXISTS {terms} (
     `created_at`  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY `uq_taxonomy_slug` (`taxonomy_id`, `slug`),
     KEY `idx_parent` (`parent_id`),
-    CONSTRAINT `fk_terms_taxonomy` FOREIGN KEY (`taxonomy_id`) REFERENCES `taxonomies` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_terms_parent` FOREIGN KEY (`parent_id`) REFERENCES `terms` (`id`) ON DELETE SET NULL
+    CONSTRAINT `{@fk_terms_taxonomy}` FOREIGN KEY (`taxonomy_id`) REFERENCES {taxonomies} (`id`) ON DELETE CASCADE,
+    CONSTRAINT `{@fk_terms_parent}` FOREIGN KEY (`parent_id`) REFERENCES {terms} (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -173,8 +173,8 @@ CREATE TABLE IF NOT EXISTS {post_term} (
     `term_order` INT DEFAULT 0,
     PRIMARY KEY (`post_id`, `term_id`),
     KEY `idx_term` (`term_id`),
-    CONSTRAINT `fk_pt_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_pt_term` FOREIGN KEY (`term_id`) REFERENCES `terms` (`id`) ON DELETE CASCADE
+    CONSTRAINT `{@fk_pt_post}` FOREIGN KEY (`post_id`) REFERENCES {posts} (`id`) ON DELETE CASCADE,
+    CONSTRAINT `{@fk_pt_term}` FOREIGN KEY (`term_id`) REFERENCES {terms} (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -197,9 +197,9 @@ CREATE TABLE IF NOT EXISTS {comments} (
     `updated_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY `idx_post_status` (`post_id`, `status`),
     KEY `idx_parent` (`parent_id`),
-    CONSTRAINT `fk_comments_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_comments_parent` FOREIGN KEY (`parent_id`) REFERENCES `comments` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_comments_author` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+    CONSTRAINT `{@fk_comments_post}` FOREIGN KEY (`post_id`) REFERENCES {posts} (`id`) ON DELETE CASCADE,
+    CONSTRAINT `{@fk_comments_parent}` FOREIGN KEY (`parent_id`) REFERENCES {comments} (`id`) ON DELETE SET NULL,
+    CONSTRAINT `{@fk_comments_author}` FOREIGN KEY (`author_id`) REFERENCES {users} (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS {seo_meta} (
     `focus_keyword`   VARCHAR(200),
     `created_at`      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at`      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT `fk_seo_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE
+    CONSTRAINT `{@fk_seo_post}` FOREIGN KEY (`post_id`) REFERENCES {posts} (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -263,8 +263,8 @@ CREATE TABLE IF NOT EXISTS {menu_items} (
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY `idx_menu_order` (`menu_id`, `menu_order`),
     KEY `idx_mi_parent` (`parent_id`),
-    CONSTRAINT `fk_mi_menu` FOREIGN KEY (`menu_id`) REFERENCES `menus` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_mi_parent` FOREIGN KEY (`parent_id`) REFERENCES `menu_items` (`id`) ON DELETE SET NULL
+    CONSTRAINT `{@fk_mi_menu}` FOREIGN KEY (`menu_id`) REFERENCES {menus} (`id`) ON DELETE CASCADE,
+    CONSTRAINT `{@fk_mi_parent}` FOREIGN KEY (`parent_id`) REFERENCES {menu_items} (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -311,7 +311,7 @@ CREATE TABLE IF NOT EXISTS {refresh_tokens} (
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY `idx_token_hash` (`token_hash`),
     KEY `idx_user` (`user_id`),
-    CONSTRAINT `fk_rt_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    CONSTRAINT `{@fk_rt_user}` FOREIGN KEY (`user_id`) REFERENCES {users} (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -328,7 +328,7 @@ CREATE TABLE IF NOT EXISTS {notifications} (
     `read_at`    TIMESTAMP NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY `idx_user_read` (`user_id`, `read_at`),
-    CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    CONSTRAINT `{@fk_notif_user}` FOREIGN KEY (`user_id`) REFERENCES {users} (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------

@@ -20,7 +20,7 @@ declare(strict_types=1);
 // App\Core\BASEHIM_ROOT" — PHP resolves an unknown bare constant against the
 // current namespace before giving up.
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.2.29');
+define('BASEHIM_VERSION', '1.2.30');
 define('BASEHIM_INSTALLING', true);
 
 
@@ -101,6 +101,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'DB_PASSWORD' => $_POST['db_password'] ?? '',
             'APP_URL'     => trim($_POST['app_url'] ?? ''),
             'SITE_TITLE'  => trim($_POST['site_title'] ?? 'Basehim'),
+            // Up to 1.2.29 the form had no prefix field and the .env written at
+            // the end had no DB_PREFIX line, so every install was unprefixed —
+            // even with DB_PREFIX set in .env beforehand, as the README says.
+            'DB_PREFIX'   => trim($_POST['db_prefix'] ?? ''),
+            'REPLACE_EXISTING' => !empty($_POST['replace_existing']),
         ];
 
         // Test connection
@@ -109,9 +114,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = new PDO($dsn, $cfg['DB_USERNAME'], $cfg['DB_PASSWORD'], [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             ]);
-            $_SESSION['install_db_config'] = $cfg;
-            header('Location: install.php?step=3');
-            exit;
+            if (!preg_match('/^[A-Za-z0-9_]{0,32}$/', $cfg['DB_PREFIX'])) {
+                // Same rule as App\Core\Database: the prefix goes into identifiers.
+                $errors[] = 'Table prefix may only contain letters, numbers and underscores (at most 32), for example "bh_".';
+                $step = 2;
+            } else {
+                // The schema step drops every Basehim table under this prefix so a
+                // retry starts clean. In a database where another site already uses
+                // the same prefix, that would delete the other site — so ask first.
+                $check = $pdo->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
+                $check->execute([$cfg['DB_PREFIX'] . 'users']);
+                if ((int) $check->fetchColumn() > 0 && !$cfg['REPLACE_EXISTING']) {
+                    $errors[] = sprintf(
+                        'This database already contains Basehim tables %s (%susers, …). Choose a different table prefix, or tick "Replace existing tables" to delete them and install fresh.',
+                        $cfg['DB_PREFIX'] === '' ? 'without a prefix' : 'with the prefix "' . $cfg['DB_PREFIX'] . '"',
+                        $cfg['DB_PREFIX']
+                    );
+                    $step = 2;
+                } else {
+                    $_SESSION['install_db_config'] = $cfg;
+                    header('Location: install.php?step=3');
+                    exit;
+                }
+            }
         } catch (PDOException $e) {
             $errors[] = 'Database connection failed: ' . $e->getMessage();
             $step = 2;
@@ -321,6 +346,7 @@ DB_USERNAME={$cfg['DB_USERNAME']}
 DB_PASSWORD="{$cfg['DB_PASSWORD']}"
 DB_CHARSET=utf8mb4
 DB_COLLATION=utf8mb4_unicode_ci
+DB_PREFIX={$cfg['DB_PREFIX']}
 
 JWT_SECRET={$jwtSecret}
 
@@ -501,6 +527,19 @@ $allOk = $step === 1 ? !in_array(false, array_column($requirements, 'ok'), true)
                     </div>
 
                     <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Table Prefix <span class="font-normal text-slate-400">(optional)</span></label>
+                        <input name="db_prefix" maxlength="32" pattern="[A-Za-z0-9_]{0,32}" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none font-mono" value="<?= htmlspecialchars((string) ($_POST['db_prefix'] ?? \App\Core\Env::get('DB_PREFIX', ''))) ?>" placeholder="bh_">
+                        <p class="text-xs text-slate-500 mt-1">Letters, numbers and _ only. Put in front of every table name (<code>bh_users</code>, <code>bh_posts</code>…) so several sites can share one database. Choose it now — it can't be changed from the admin later.</p>
+                    </div>
+                    <div class="flex items-start md:pt-7">
+                        <label class="flex items-start gap-2 text-sm text-slate-700">
+                            <input type="checkbox" name="replace_existing" value="1" class="mt-1" <?= !empty($_POST['replace_existing']) ? 'checked' : '' ?>>
+                            <span>Replace existing tables
+                                <span class="block text-xs text-slate-500">Only to delete an earlier Basehim install that uses this same prefix.</span></span>
+                        </label>
+                    </div>
+
+                    <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1.5">Database User</label>
                         <input name="db_username" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none" value="<?= htmlspecialchars($_POST['db_username'] ?? '') ?>">
                     </div>
@@ -540,7 +579,7 @@ $allOk = $step === 1 ? !in_array(false, array_column($requirements, 'ok'), true)
                     <?php foreach (['users','posts','post_meta','post_revisions','media','taxonomies','terms','post_term','comments','settings','seo_meta','menus','menu_items','apps','refresh_tokens','notifications','activity_log'] as $t): ?>
                         <div class="flex items-center gap-2 text-slate-600">
                             <i class="fa-solid fa-table text-blue-500 text-xs"></i>
-                            <code class="text-xs"><?= $t ?></code>
+                            <code class="text-xs"><?= htmlspecialchars((string) ($_SESSION['install_db_config']['DB_PREFIX'] ?? '') . $t) ?></code>
                         </div>
                     <?php endforeach; ?>
                 </div>

@@ -21,5 +21,5 @@ CREATE TABLE IF NOT EXISTS {api_keys} (
     KEY `idx_user`      (`user_id`),
     KEY `idx_key_hash`  (`key_hash`),
     KEY `idx_active`    (`is_active`),
-    CONSTRAINT `fk_apikey_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    CONSTRAINT `{@fk_apikey_user}` FOREIGN KEY (`user_id`) REFERENCES {users} (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

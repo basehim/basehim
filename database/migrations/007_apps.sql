@@ -98,6 +98,6 @@ DEALLOCATE PREPARE stmt;
 --    than failing the migration. App::getSetting() reads the legacy group as a
 --    fallback, so a skipped row is still visible to the app either way.
 -- ----------------------------------------------------------------------------
-UPDATE IGNORE `settings`
+UPDATE IGNORE {settings}
    SET `setting_group` = CONCAT('app:', SUBSTRING(`setting_group`, 8))
  WHERE `setting_group` LIKE 'plugin:%';

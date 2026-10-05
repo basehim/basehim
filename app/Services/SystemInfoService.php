@@ -193,9 +193,11 @@ class SystemInfoService
                 "SELECT table_name AS name, table_rows AS rows_est,
                         (data_length + index_length) AS size
                  FROM information_schema.tables
-                 WHERE table_schema = :db
+                 WHERE table_schema = :db AND table_name LIKE :px
                  ORDER BY (data_length + index_length) DESC",
-                ['db' => $dbName]
+                // Only this site's tables: with DB_PREFIX the database may hold
+                // other sites too. LIKE wildcards in the prefix ("_") are escaped.
+                ['db' => $dbName, 'px' => addcslashes($db->prefix(), '\\_%') . '%']
             );
             $out = [];
             $totalSize = 0;
