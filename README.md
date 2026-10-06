@@ -12,7 +12,35 @@ files, open your site, and the installer takes it from there.
 ![License](https://img.shields.io/badge/License-MIT-green)
 [![CI](https://github.com/basehim/basehim/actions/workflows/ci.yml/badge.svg)](https://github.com/basehim/basehim/actions/workflows/ci.yml)
 
-[basehim.com](https://www.basehim.com) · [Docs](https://www.basehim.com/docs) · [API reference](https://www.basehim.com/docs/api-reference) · [Getting started](https://www.basehim.com/docs/getting-started)
+[basehim.com](https://www.basehim.com) · [Docs](https://www.basehim.com/docs) · [API reference](https://www.basehim.com/docs/api-reference) · [Getting started](https://www.basehim.com/docs/getting-started) · [**Download**](https://github.com/basehim/basehim/releases/latest/download/basehim.zip)
+
+## Quick start
+
+**On a web host** — download [`basehim.zip`](https://github.com/basehim/basehim/releases/latest/download/basehim.zip),
+upload the contents of its `basehim/` folder to `public_html/` (or any
+subfolder), and open the site. The installer asks for your database details.
+
+**On your machine** — PHP 8.1+ and a MySQL or MariaDB database:
+
+```bash
+curl -L -o basehim.zip https://github.com/basehim/basehim/releases/latest/download/basehim.zip
+unzip basehim.zip && cd basehim
+php -S localhost:8000 server.php     # then open http://localhost:8000
+```
+
+Or from source: `git clone https://github.com/basehim/basehim.git && cd basehim`
+and the same `php -S` line.
+
+No database handy? One container is enough:
+
+```bash
+docker run -d --name basehim-db -p 3306:3306 \
+  -e MARIADB_ROOT_PASSWORD=secret -e MARIADB_DATABASE=basehim mariadb:11
+# installer: host 127.0.0.1, database basehim, user root, password secret
+```
+
+`server.php` is for local development only. On a real host Apache uses the
+bundled `.htaccess`, and `server.php` answers 404 to anything else.
 
 ---
 
@@ -146,20 +174,24 @@ and mirrored in the admin at `/admin/api/reference`.
 
 ## Requirements
 
-- PHP 8.1+ with `pdo_mysql`, `mbstring`, `fileinfo`, `gd`, `zip`
+- PHP 8.1+ with `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `gd`, `zip`
 - MySQL 5.7+ or MariaDB 10.3+
-- Apache with `mod_rewrite` (works on default cPanel)
+- Apache or LiteSpeed with `mod_rewrite` (works on default cPanel). nginx works
+  too, but you must replicate the `.htaccess` rules yourself — see Security.
+- For local development, PHP's built-in server with `server.php` is enough
 - ~30 MB disk, plus space for uploads
 
 ## Install
 
-1. **Upload** the contents of this repository to your document root
-   (e.g. `public_html/`).
+1. **Upload** the contents of the `basehim/` folder from
+   [`basehim.zip`](https://github.com/basehim/basehim/releases/latest/download/basehim.zip)
+   (or of this repository) to your document root, e.g. `public_html/`.
 2. **Create a MySQL database** and grant a user full privileges.
 3. **Visit your domain** — you'll be redirected to `/install.php`.
 4. Work through the wizard: database, site details, admin account, optional
    starter content.
-5. **Delete `install.php`** when it finishes. The installer reminds you.
+5. That's it. The installer locks itself when it finishes (`INSTALLED=true` in
+   `.env`); deleting `install.php` afterwards is optional.
 
 Log in at `/admin/login`.
 
@@ -199,7 +231,8 @@ alone afterwards.
 ```
 basehim/
 ├── index.php              # Front controller (all requests funnel here)
-├── install.php            # Web installer (delete after use)
+├── install.php            # Web installer (locks itself when done)
+├── server.php             # Router for `php -S` — local development only
 ├── bootstrap.php          # Autoloader, env, sessions, boots the app
 ├── .htaccess              # Apache rewrites + security headers
 ├── .env                   # Your environment — git-ignored, NEVER commit
