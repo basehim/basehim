@@ -297,9 +297,12 @@ $methodColors = [
                     <p class="text-xs font-semibold text-slate-600 mb-1.5">JavaScript (window.BasehimEditor)</p>
                     <pre class="bg-slate-900 text-blue-200 rounded-lg p-3 text-xs overflow-x-auto">BasehimEditor.registerBlock(type, {
   title, icon, category, defaults,
-  edit(el, block, api),
-  inspector(el, block, api),  // sidebar
-  save(block)                 // html fallback
+  description, keywords, styles,
+  edit(el, block, api, ctx),  // ctx.rich() / ctx.inner()
+  toolbar(tb, block, api),    // block toolbar
+  inspector(el, block, api, ui), // Block tab
+  save(block),                // html fallback
+  container, allowedBlocks, parent, template
 });
 BasehimEditor.addToolbarButton({...});
 BasehimEditor.addBlockAction({...});
@@ -307,7 +310,15 @@ BasehimEditor.addSidebarPanel({...});
 BasehimEditor.on('change'|'save'|..., cb);
 BasehimEditor.addFilter('save.data', fn);
 BasehimEditor.getBlocks() / setBlocks()
-  / insertBlock() / updateBlock()</pre>
+  / insertBlock(type, data, index, parentId)
+  / updateBlock() / removeBlock() / moveBlock()
+
+// Core blocks: paragraph heading list quote
+// pullquote code preformatted html details
+// image gallery video audio file embed cover
+// media-text buttons button columns column
+// group divider spacer table widget
+// Containers save children in "innerBlocks".</pre>
                 </div>
                 <div>
                     <p class="text-xs font-semibold text-slate-600 mb-1.5">PHP hooks (from an app's boot())</p>
