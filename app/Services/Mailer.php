@@ -129,14 +129,60 @@ class Mailer
             $settings = $app->make(SettingService::class);
             $group = (array) $settings->getGroup('email');
             $cfg = array_merge($defaults, array_filter($group, fn($v) => $v !== '' && $v !== null));
-            if ($cfg['from_email'] === '') {
-                $cfg['from_email'] = (string) ($settings->get('general', 'admin_email', '') ?: ('noreply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost')));
+            // From Name: the saved one, else the site name; never a header break.
+            $cfg['from_name'] = trim(str_replace(["\r", "\n"], ' ', (string) $cfg['from_name'])) ?: $this->siteTitle();
+            $from = trim((string) $cfg['from_email']);
+            if ($from === '' || !filter_var($from, FILTER_VALIDATE_EMAIL)) {
+                // No usable sender saved: use noreply@ the site's own domain.
+                // (The old fallback was the admin's address — often Gmail or
+                // similar — which the host's mail server refuses to send as,
+                // so nothing went out, not even sign-in codes.)
+                $cfg['from_email'] = self::defaultFrom();
+                if ($from === '' && self::isRealDomain(self::siteDomain())) {
+                    // Save it so Settings › Email shows the address in use.
+                    try { $settings->set('email', 'from_email', $cfg['from_email']); } catch (\Throwable) {}
+                }
             }
             return $cfg;
         } catch (\Throwable) {
-            $defaults['from_email'] = 'noreply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+            $defaults['from_email'] = self::defaultFrom();
             return $defaults;
         }
+    }
+
+    /** noreply@ the domain Basehim is installed on, e.g. noreply@example.com. */
+    public static function defaultFrom(): string
+    {
+        return 'noreply@' . self::siteDomain();
+    }
+
+    /**
+     * The domain the site runs on: the host of APP_URL, or of the current
+     * request when APP_URL is unset or local. Lower-case, without port or a
+     * leading "www.".
+     */
+    public static function siteDomain(): string
+    {
+        $host = '';
+        try { $host = (string) (parse_url((string) (\App\Core\Env::get('APP_URL', '') ?? ''), PHP_URL_HOST) ?: ''); } catch (\Throwable) {}
+        if (!self::isRealDomain(strtolower($host))) {
+            $req = (string) ($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? '');
+            $req = (string) (parse_url('http://' . $req, PHP_URL_HOST) ?: '');
+            if ($host === '' || self::isRealDomain(strtolower($req))) {
+                if ($req !== '' && preg_match('/^[a-z0-9.-]+$/i', $req)) $host = $req;
+            }
+        }
+        $host = strtolower(rtrim(trim($host, '[]'), '.'));
+        if (str_starts_with($host, 'www.')) $host = substr($host, 4);
+        return $host !== '' && preg_match('/^[a-z0-9.-]+$/', $host) ? $host : 'localhost';
+    }
+
+    /** True for a public domain name (not localhost, an IP address or a bare name). */
+    public static function isRealDomain(string $host): bool
+    {
+        $host = strtolower($host);
+        if ($host === '' || !str_contains($host, '.') || filter_var(trim($host, '[]'), FILTER_VALIDATE_IP)) return false;
+        return !preg_match('/(^|\.)(localhost|local|test|invalid|example)$/', $host);
     }
 
     // ------------------------------------------------------------------
@@ -149,7 +195,20 @@ class Mailer
         [$headers, $body] = $this->buildMime($mail, forPhpMail: true);
         $subject = $this->encodeHeader($mail['subject']);
         $to = implode(', ', $mail['to']);
-        $ok = @mail($to, $subject, $body, implode("\r\n", $headers));
+        // Envelope sender (Return-Path) = the From address when it is on this
+        // site's own domain, so SPF checks line up and bounces come back here
+        // instead of to the hosting account's default address.
+        $params = '';
+        $from = (string) $mail['from'];
+        $domain = strtolower((string) substr(strrchr($from, '@') ?: '', 1));
+        $site = self::siteDomain();
+        if (filter_var($from, FILTER_VALIDATE_EMAIL) && preg_match('/^[A-Za-z0-9._+@-]+$/', $from)
+            && ($domain === $site || str_ends_with($domain, '.' . $site) || str_ends_with($site, '.' . $domain))) {
+            $params = '-f' . $from;
+        }
+        $ok = $params !== ''
+            ? @mail($to, $subject, $body, implode("\r\n", $headers), $params)
+            : @mail($to, $subject, $body, implode("\r\n", $headers));
         return [$ok, $ok ? '' : 'PHP mail() returned false — check the server mail log.'];
     }
 
@@ -186,7 +245,7 @@ class Mailer
             $greeting = $read();
             if ((int) substr($greeting, 0, 3) !== 220) return [false, 'SMTP greeting failed: ' . trim($greeting)];
 
-            $me = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $me = self::siteDomain();
             [$ok, $r] = $cmd('EHLO ' . $me, [250]);
             if (!$ok) return [false, 'EHLO failed: ' . trim($r)];
 

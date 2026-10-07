@@ -38,7 +38,7 @@ class UserService
             'display_name' => $data['display_name'] ?? $data['username'],
             'bio' => $data['bio'] ?? null,
             'role' => $data['role'] ?? 'subscriber',
-            'status' => $data['status'] ?? 'active',
+            'status' => self::validStatus($data['status'] ?? 'active'),
             'locale' => $data['locale'] ?? 'en_US',
             'timezone' => $data['timezone'] ?? 'UTC',
         ];
@@ -65,12 +65,43 @@ class UserService
         if (!empty($data['password'])) {
             $payload['password_hash'] = password_hash($data['password'], PASSWORD_BCRYPT, ['cost' => 12]);
         }
+        if (array_key_exists('status', $payload)) {
+            $payload['status'] = self::validStatus($payload['status'] ?? 'active', (string) ($existing['status'] ?? 'active'));
+        }
 
         if (!empty($payload)) {
             $this->repo->update($id, $payload);
         }
+
+        // A new password ends every other way in: remember-me cookies and API
+        // refresh tokens are revoked here, and browser sessions end on their
+        // next request because they carry a fingerprint of the old hash
+        // (AuthService::sessionUser). The same when the account is blocked.
+        $blocked = isset($payload['status']) && $payload['status'] !== 'active' && ($existing['status'] ?? '') === 'active';
+        if (isset($payload['password_hash']) || $blocked) {
+            try {
+                $app = \App\Core\Application::getInstance();
+                $app->make(AuthSecurityService::class)->revokeAllForUser($id);
+                AuthService::revokeTokens($app->make(\App\Core\Database::class), $id);
+            } catch (\Throwable) {}
+        }
         $this->hooks->doAction('user.updated', $this->repo->find($id), $existing);
         return true;
+    }
+
+    /**
+     * Account statuses the users table can hold. Anything else ("pending" was
+     * offered by the New User form) used to be stored as an empty string on
+     * MySQL without strict mode, leaving an account nobody could sign in to
+     * or see the status of.
+     */
+    public const STATUSES = ['active', 'inactive', 'suspended'];
+
+    public static function validStatus(mixed $status, string $fallback = 'active'): string
+    {
+        $s = strtolower(trim((string) $status));
+        if ($s === 'pending') $s = 'inactive';
+        return in_array($s, self::STATUSES, true) ? $s : (in_array($fallback, self::STATUSES, true) ? $fallback : 'active');
     }
 
     public function delete(int $id): bool

@@ -220,11 +220,9 @@ final class OAuthController
     private function currentUser(): ?array
     {
         try {
-            $session = $this->app()->make(Session::class);
-            $uid = $session->get('user_id');
-            if (!$uid) return null;
-            $u = $this->app()->make(UserRepository::class)->find((int) $uid);
-            return ($u && ($u['status'] ?? '') === 'active') ? $u : null;
+            // The same check the admin uses: a session revoked by a password
+            // change or "sign out everywhere" cannot approve an AI client.
+            return $this->app()->make(\App\Services\AuthService::class)->sessionUser();
         } catch (\Throwable) { return null; }
     }
 

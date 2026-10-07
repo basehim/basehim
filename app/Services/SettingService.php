@@ -160,8 +160,14 @@ class SettingService
     public function publicSettings(): array
     {
         $all = $this->all();
+        // Whole groups used to be returned, which published the administrator's
+        // email address (general.admin_email) — the usual sign-in name — to
+        // anyone. General settings are now limited to what a site shows anyway.
+        $general = array_intersect_key($all['general'] ?? [], array_flip([
+            'site_title', 'tagline', 'language', 'timezone', 'date_format', 'time_format', 'week_starts_on', 'logo_url', 'favicon_url',
+        ]));
         return [
-            'general' => $all['general'] ?? [],
+            'general' => $general,
             'appearance' => $all['appearance'] ?? [],
             'reading' => $all['reading'] ?? [],
         ];

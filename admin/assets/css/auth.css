@@ -1,0 +1,206 @@
+/*
+   Basehim sign-in screens (login, two-step code, unlock, password reset,
+   registration, sign out).
+
+   The page belongs to the site, not to Basehim: the left panel carries the
+   site's icon or logo, name, description and address on its own colour
+   (Customizer › primary colour, set as --accent / --accent-ink inline by
+   layouts/signin.php). Everything else stays neutral so any colour works.
+   Self-contained: no Tailwind, no web fonts.
+*/
+:root {
+  --accent: #2563eb;
+  --accent-ink: #ffffff;
+  --page: #eef1f5;
+  --surface: #ffffff;
+  --ink: #18212d;
+  --muted: #5a6574;
+  --line: #d6dce4;
+  --field: #ffffff;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  --ok: #067647;
+  --ok-bg: #ecfdf3;
+  --info-bg: #f1f5fa;
+  --radius: 10px;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --name: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #12161c;
+    --surface: #1a2029;
+    --ink: #e8edf3;
+    --muted: #9aa5b3;
+    --line: #2f3a47;
+    --field: #141920;
+    --danger: #fda29b;
+    --danger-bg: #2a1614;
+    --ok: #75e0a7;
+    --ok-bg: #102419;
+    --info-bg: #18222e;
+    color-scheme: dark;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body.signin {
+  margin: 0; min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 16px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--page));
+  color: var(--ink); font: 15px/1.5 var(--ui);
+}
+.signin a { color: inherit; }
+.signin :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+
+/* -- The two-part card */
+.si-card {
+  width: 100%; max-width: 880px;
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  background: var(--surface); border-radius: 18px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 24px 48px -24px rgba(16, 24, 40, .28);
+}
+
+/* Site panel */
+.si-site {
+  position: relative; display: flex; flex-direction: column; gap: 22px;
+  padding: 40px 36px 28px;
+  background: var(--accent); color: var(--accent-ink);
+}
+.si-mark { display: flex; align-items: center; min-height: 56px; }
+.si-mark__logo { display: block; max-width: 220px; max-height: 56px; width: auto; height: auto; object-fit: contain; }
+.si-mark__icon {
+  width: 56px; height: 56px; border-radius: 14px; object-fit: cover;
+  background: var(--surface); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-ink) 25%, transparent);
+}
+.si-mark__initial {
+  display: grid; place-items: center; width: 56px; height: 56px; border-radius: 14px;
+  border: 2px solid color-mix(in srgb, var(--accent-ink) 70%, transparent);
+  font: 600 28px/1 var(--name);
+}
+.si-site__name {
+  margin: auto 0 0; font: 600 clamp(28px, 3.4vw, 40px)/1.08 var(--name);
+  letter-spacing: -.01em; overflow-wrap: anywhere;
+}
+.si-site__tagline { margin: -10px 0 0; font-size: 15px; line-height: 1.45; opacity: .85; max-width: 32ch; }
+.si-site__address {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  padding: 5px 12px 5px 10px; border-radius: 999px; font-size: 13px; text-decoration: none;
+  background: color-mix(in srgb, var(--accent-ink) 14%, transparent);
+}
+.si-site__address:hover { background: color-mix(in srgb, var(--accent-ink) 22%, transparent); }
+.si-site__address svg { width: 14px; height: 14px; flex: none; }
+.si-site__foot {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding-top: 18px; border-top: 1px solid color-mix(in srgb, var(--accent-ink) 22%, transparent);
+  font-size: 12.5px;
+}
+.si-site__foot a { text-decoration: none; opacity: .9; }
+.si-site__foot a:hover { text-decoration: underline; opacity: 1; }
+.si-site__foot span { opacity: .7; }
+
+/* Form panel */
+.si-main { padding: 44px 44px 36px; display: flex; flex-direction: column; justify-content: center; }
+.si-title { margin: 0 0 6px; font-size: 24px; line-height: 1.25; font-weight: 650; letter-spacing: -.01em; }
+.si-lede { margin: 0 0 24px; color: var(--muted); }
+.si-lede strong { color: var(--ink); font-weight: 600; }
+
+.si-notice {
+  display: flex; gap: 10px; align-items: flex-start; margin: 0 0 20px; padding: 11px 13px;
+  border-radius: var(--radius); font-size: 14px; line-height: 1.45;
+  background: var(--info-bg); color: var(--ink);
+}
+.si-notice svg { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--accent-text, var(--accent)); }
+.si-notice--error { background: var(--danger-bg); color: var(--danger); }
+.si-notice--error svg { color: currentColor; }
+.si-notice--success { background: var(--ok-bg); color: var(--ok); }
+.si-notice--success svg { color: currentColor; }
+
+.si-form { display: flex; flex-direction: column; gap: 18px; }
+.si-field { display: flex; flex-direction: column; gap: 6px; }
+.si-field__top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.si-label { font-size: 14px; font-weight: 600; }
+.si-hint { font-size: 13px; color: var(--muted); }
+.signin a.si-link { font-size: 13.5px; color: var(--accent-text, var(--accent)); text-decoration: none; font-weight: 500; }
+@media (prefers-color-scheme: dark) { .signin a.si-link { color: color-mix(in srgb, var(--accent) 55%, #ffffff); } }
+.signin a.si-link:hover { text-decoration: underline; }
+
+.si-input {
+  width: 100%; height: 46px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); color: var(--ink);
+  font: inherit; font-size: 16px; transition: border-color .15s, box-shadow .15s;
+}
+.si-input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.si-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.si-input--code {
+  height: 60px; text-align: center; font: 600 28px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: .42em; padding-left: .42em;
+}
+.si-password { position: relative; }
+.si-password .si-input { padding-right: 48px; }
+.si-reveal {
+  position: absolute; top: 0; right: 0; width: 46px; height: 46px; display: grid; place-items: center;
+  border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: var(--radius);
+}
+.si-reveal:hover { color: var(--ink); }
+.si-reveal svg { width: 20px; height: 20px; }
+
+.si-check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; cursor: pointer; }
+.si-check input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }
+.si-question {
+  padding: 14px; border-radius: var(--radius); background: var(--info-bg);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.si-question .si-label { font-weight: 500; }
+.si-question b { font-variant-numeric: tabular-nums; font-size: 16px; }
+
+.signin .si-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 46px; padding: 0 20px; border: 0; border-radius: var(--radius);
+  background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; font-size: 15px;
+  cursor: pointer; text-decoration: none; transition: filter .15s;
+}
+.si-btn:hover { filter: brightness(1.08); }
+.si-btn:active { filter: brightness(.95); }
+.si-btn--block { width: 100%; }
+.signin .si-btn--quiet { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.si-btn--quiet:hover { background: var(--info-bg); filter: none; }
+.si-btn[disabled] { opacity: .6; cursor: progress; }
+
+.si-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.si-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.si-after { margin: 24px 0 0; padding-top: 20px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.si-after form { display: inline; }
+.si-textbtn { border: 0; padding: 0; background: none; font: inherit; font-size: 13.5px; color: var(--accent-text, var(--accent)); font-weight: 500; cursor: pointer; }
+@media (prefers-color-scheme: dark) { .si-textbtn { color: color-mix(in srgb, var(--accent) 55%, #ffffff); } }
+.si-textbtn:hover { text-decoration: underline; }
+.si-strength { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.si-strength i { display: block; height: 100%; width: 0; background: var(--danger); transition: width .2s, background .2s; }
+
+.si-powered { margin: 18px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+.si-powered a { text-decoration: none; }
+.si-powered a:hover { text-decoration: underline; }
+
+/* Honeypot: off-screen for people, present for bots. */
+.si-hp { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* -- Narrow screens: the site panel becomes a header strip. */
+@media (max-width: 760px) {
+  body.signin { justify-content: flex-start; padding: 16px; }
+  .si-card { grid-template-columns: 1fr; border-radius: 16px; }
+  .si-site { padding: 22px 22px 18px; gap: 14px; }
+  .si-mark { min-height: 0; }
+  .si-mark__logo { max-height: 40px; max-width: 180px; }
+  .si-mark__icon, .si-mark__initial { width: 44px; height: 44px; border-radius: 11px; font-size: 22px; }
+  .si-site__name { margin: 0; font-size: 26px; }
+  .si-site__tagline { margin: -8px 0 0; font-size: 14px; }
+  .si-site__foot { padding-top: 12px; }
+  .si-main { padding: 26px 22px 24px; }
+  .si-title { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .si-input, .si-btn, .si-strength i { transition: none; }
+}

@@ -15,17 +15,30 @@
             <form method="POST" action="<?= $base ?>/admin/settings/email" class="space-y-5">
                 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
 
+                <?php if (!empty($mail['foreignFrom'])): ?>
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Emails are sent from <strong><?= htmlspecialchars($mail['from']) ?></strong>, which isn't on this site's domain.
+                    Most mail servers refuse or spam-filter mail sent as another domain, so sign-in codes and password resets may not arrive.
+                    <?php if (($values['driver'] ?? 'mail') !== 'smtp'): ?>Change it to <strong><?= htmlspecialchars($mail['defaultFrom']) ?></strong>, or send through that provider's SMTP server.<?php else: ?>Make sure your SMTP account is allowed to send as this address.<?php endif; ?>
+                </div>
+                <?php elseif (empty($mail['realDomain'])): ?>
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    This site's address (<?= htmlspecialchars($mail['domain'] ?? '') ?>) isn't a public domain, so there is no automatic sender address. Set APP_URL in .env to the site's real address, or type a From Email.
+                </div>
+                <?php endif; ?>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1.5">From Email</label>
-                        <input type="email" name="from_email" value="<?= htmlspecialchars($values['from_email'] ?? '') ?>" placeholder="noreply@yourdomain.com"
+                        <input type="email" name="from_email" value="<?= htmlspecialchars($values['from_email'] ?? '') ?>" placeholder="<?= htmlspecialchars($mail['defaultFrom'] ?? 'noreply@yourdomain.com') ?>"
                             class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                        <p class="text-xs text-slate-500 mt-1">Falls back to the Admin Email from General settings.</p>
+                        <p class="text-xs text-slate-500 mt-1">Use an address on <strong><?= htmlspecialchars($mail['domain'] ?? '') ?></strong>. Leave empty to use <?= htmlspecialchars($mail['defaultFrom'] ?? '') ?>.</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1.5">From Name</label>
-                        <input type="text" name="from_name" value="<?= htmlspecialchars($values['from_name'] ?? '') ?>" placeholder="Site name"
+                        <input type="text" name="from_name" value="<?= htmlspecialchars($values['from_name'] ?? '') ?>" placeholder="<?= htmlspecialchars($mail['siteTitle'] ?? 'Site name') ?>"
                             class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+                        <p class="text-xs text-slate-500 mt-1">The name people see next to the address. Leave empty to use your site name.</p>
                     </div>
                 </div>
 
@@ -67,8 +80,11 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1.5">SMTP Password</label>
-                            <input type="password" name="smtp_password" value="<?= htmlspecialchars($values['smtp_password'] ?? '') ?>" autocomplete="new-password"
+                            <input type="password" name="smtp_password" value="" autocomplete="new-password" placeholder="<?= !empty($mail['hasPassword']) ? 'Saved — leave empty to keep it' : '' ?>"
                                 class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
+                            <?php if (!empty($mail['hasPassword'])): ?>
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-500 mt-1.5"><input type="checkbox" name="smtp_password_clear" value="1"> Remove the saved password</label>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>

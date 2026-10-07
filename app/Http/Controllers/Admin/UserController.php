@@ -141,6 +141,21 @@ class UserController extends Controller
             $this->flash('error', 'Username, email, and 8+ character password are required.');
             return $this->back();
         }
+        if (!preg_match('/^[a-zA-Z0-9_.-]{3,60}$/', $username)) {
+            $this->flash('error', 'Username must be 3–60 characters: letters, numbers and _ . -'); return $this->back();
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->flash('error', 'Please enter a valid email address.'); return $this->back();
+        }
+        // The role must be one this administrator may hand out. Without this
+        // check an administrator could create a super administrator account,
+        // which update() and saveAccess() already refused.
+        $role = (string) $request->input('role', 'subscriber');
+        /** @var \App\Services\AccessControl $ac */
+        $ac = $this->app->make(\App\Services\AccessControl::class);
+        if (!$ac->canAssignRole($this->user(), $role)) {
+            $this->flash('error', 'You cannot create an account with a role higher than your own.'); return $this->back();
+        }
         if ($users->emailExists($email)) {
             $this->flash('error', 'Email already in use.'); return $this->back();
         }
@@ -153,8 +168,8 @@ class UserController extends Controller
             'email' => $email,
             'password' => $password,
             'display_name' => $request->input('display_name', $username),
-            'role' => $request->input('role', 'subscriber'),
-            'status' => $request->input('status', 'active'),
+            'role' => $role,
+            'status' => UserService::validStatus($request->input('status', 'active')),
             'bio' => $request->input('bio'),
         ]);
 
@@ -242,6 +257,17 @@ class UserController extends Controller
             'email' => $request->input('email'),
             'bio' => $request->input('bio'),
         ];
+        $email = strtolower(trim((string) ($data['email'] ?? '')));
+        if ($email !== '' && $email !== strtolower((string) $existing['email'])) {
+            // Checked here, not left to the unique index, which answered with
+            // an error page.
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $this->flash('error', 'Please enter a valid email address.'); return $this->redirect("/admin/users/{$id}/edit");
+            }
+            if ($users->emailExists($email, (int) $id)) {
+                $this->flash('error', 'That email address is already used by another account.'); return $this->redirect("/admin/users/{$id}/edit");
+            }
+        }
         // Role/status of your own account can't be changed here — prevents
         // accidentally locking yourself out. Another admin can change them.
         if ((int)$id !== $this->userId()) {
@@ -257,7 +283,7 @@ class UserController extends Controller
                 return $this->redirect("/admin/users/{$id}/edit");
             }
             $data['role'] = $newRole;
-            $data['status'] = $request->input('status', $existing['status']);
+            $data['status'] = UserService::validStatus($request->input('status', $existing['status']), (string) $existing['status']);
             if ($data['role'] !== $existing['role'] && $this->isLastAdmin($existing)) {
                 $this->flash('error', 'This is the last administrator account — assign another admin first.');
                 return $this->redirect("/admin/users/{$id}/edit");
@@ -268,8 +294,20 @@ class UserController extends Controller
             if (strlen($password) < 8) { $this->flash('error', 'Password must be 8+ characters.'); return $this->back(); }
             $data['password'] = $password;
         }
+        // Your own email or password: the same rule as My Profile, so an open
+        // session alone cannot take the account over through this screen.
+        if ((int) $id === $this->userId() && ($password !== '' || ($email !== '' && $email !== strtolower((string) $existing['email'])))) {
+            if (!password_verify((string) $request->input('current_password', ''), (string) $existing['password_hash'])) {
+                $this->flash('error', 'To change your own email or password, use My Profile and enter your current password.');
+                return $this->redirect('/admin/profile');
+            }
+        }
 
         $users->update((int)$id, $data);
+        if (isset($data['password']) && (int) $id === $this->userId()) {
+            // Your own new password signs out your other devices, not this one.
+            $this->app->make(\App\Services\AuthService::class)->refreshSessionFingerprint((int) $id);
+        }
 
         // Public author address. Cleaned and made unique by AuthorService; an
         // unusable value keeps the current one.
@@ -321,6 +359,35 @@ class UserController extends Controller
     // ==================================================================
     // Access control tab
     // ==================================================================
+
+    /**
+     * POST /admin/users/{id}/two-factor/reset — turn off a user's two-step
+     * verification (for someone who lost access to their mailbox) and sign
+     * them out everywhere. Only for accounts below your own level.
+     */
+    public function twoFactorReset(Request $request, string $id): Response
+    {
+        if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }
+        $users = $this->app->make(UserService::class);
+        $target = $users->find((int) $id);
+        if (!$target) return $this->abort(404);
+        if (!$this->canManageOrFail($target)) return $this->redirect("/admin/users/{$id}/edit");
+        /** @var \App\Services\TwoFactorService $tf */
+        $tf = $this->app->make(\App\Services\TwoFactorService::class);
+        $tf->disable((int) $id);
+        $required = $tf->isRequired($target);
+        // Under a policy that requires codes, turning off their own setting is
+        // not enough: let the next sign-in through once, so they can get in
+        // and correct their email address.
+        if ($required) $tf->allowOnce((int) $id);
+        $this->app->make(\App\Services\AuthService::class)->signOutEverywhere((int) $id);
+        $actor = (string) ($this->user()['display_name'] ?? $this->user()['username'] ?? 'admin');
+        \App\Services\ActivityLogService::record((int) $id, 'auth.two_factor_reset', 'user', (int) $id, "Two-step verification reset by {$actor}");
+        $this->flash('success', $required
+            ? 'They were signed out everywhere, and their next sign-in will not ask for a code. The site requires codes, so ask them to check the email address on their profile; codes resume after that sign-in.'
+            : 'Two-step verification was turned off for this user and they were signed out everywhere.');
+        return $this->redirect("/admin/users/{$id}/edit");
+    }
 
     /** POST /admin/users/{id}/access — role + per-user permission overrides. */
     public function saveAccess(Request $request, string $id): Response

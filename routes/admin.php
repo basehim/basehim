@@ -20,6 +20,11 @@ $router->group(['prefix' => '/admin'], function ($router) {
     $router->post('/register', ['App\\Http\\Controllers\\Admin\\AuthController', 'register']);
     $router->get('/login/otp', ['App\\Http\\Controllers\\Admin\\AuthController', 'showOtp']);
     $router->post('/login/otp', ['App\\Http\\Controllers\\Admin\\AuthController', 'verifyOtp']);
+    // Two-step verification: the emailed code after a correct password.
+    $router->get('/login/verify', ['App\\Http\\Controllers\\Admin\\AuthController', 'showVerify']);
+    $router->post('/login/verify', ['App\\Http\\Controllers\\Admin\\AuthController', 'verifyTwoFactor']);
+    $router->post('/login/verify/resend', ['App\\Http\\Controllers\\Admin\\AuthController', 'resendTwoFactor']);
+    $router->post('/login/unlock', ['App\\Http\\Controllers\\Admin\\AuthController', 'requestUnlock']);
 
     // ---- Authenticated admin area ----
     // AdminAreaPolicy enforces role capabilities per admin section
@@ -52,6 +57,12 @@ $router->group(['prefix' => '/admin'], function ($router) {
         // Profile
         $router->get('/profile', ['App\\Http\\Controllers\\Admin\\ProfileController', 'show']);
         $router->post('/profile', ['App\\Http\\Controllers\\Admin\\ProfileController', 'update']);
+        $router->post('/profile/two-factor/start', ['App\\Http\\Controllers\\Admin\\ProfileController', 'twoFactorStart']);
+        $router->post('/profile/two-factor/confirm', ['App\\Http\\Controllers\\Admin\\ProfileController', 'twoFactorConfirm']);
+        $router->post('/profile/two-factor/cancel', ['App\\Http\\Controllers\\Admin\\ProfileController', 'twoFactorCancel']);
+        $router->post('/profile/two-factor/disable', ['App\\Http\\Controllers\\Admin\\ProfileController', 'twoFactorDisable']);
+        $router->post('/profile/sessions/revoke', ['App\\Http\\Controllers\\Admin\\ProfileController', 'signOutOthers']);
+        $router->post('/profile/email/confirm', ['App\\Http\\Controllers\\Admin\\ProfileController', 'confirmEmail']);
     // Profile photo — saved at once, without the page's Save button.
     $router->post('/profile/avatar', ['App\\Http\\Controllers\\Admin\\ProfileController', 'avatar']);
     $router->post('/profile/avatar/delete', ['App\\Http\\Controllers\\Admin\\ProfileController', 'avatarDelete']);
@@ -131,6 +142,7 @@ $router->group(['prefix' => '/admin'], function ($router) {
     $router->post('/users/{id}/avatar', ['App\\Http\\Controllers\\Admin\\UserController', 'avatar']);
     $router->post('/users/{id}/avatar/delete', ['App\\Http\\Controllers\\Admin\\UserController', 'avatarDelete']);
         $router->post('/users/{id}/access', ['App\\Http\\Controllers\\Admin\\UserController', 'saveAccess']);
+        $router->post('/users/{id}/two-factor/reset', ['App\\Http\\Controllers\\Admin\\UserController', 'twoFactorReset']);
         $router->get('/users/{id}/activity.json', ['App\\Http\\Controllers\\Admin\\UserController', 'activityJson']);
         $router->post('/users/{id}/archive', ['App\\Http\\Controllers\\Admin\\UserController', 'archive']);
         $router->post('/users/{id}/suspend', ['App\\Http\\Controllers\\Admin\\UserController', 'suspend']);

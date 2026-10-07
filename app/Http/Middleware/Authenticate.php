@@ -33,8 +33,16 @@ final class Authenticate
         $user = null;
         $guard = $this->guard;
 
+        // Bearer credentials (API keys, JWTs) only on API requests. The admin
+        // area is for browser sessions: a key accepted there worked with all
+        // of its owner's admin rights, whatever scopes the key was limited to.
+        $path = $request->path();
+        $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+        $rel = ($base !== '' && str_starts_with($path, $base)) ? (string) substr($path, strlen($base)) : $path;
+        $isApi = $guard === 'api' || str_starts_with($rel, '/api/');
+
         // Try JWT first (API requests)
-        $token = $request->bearerToken();
+        $token = $isApi ? $request->bearerToken() : null;
         if ($token) {
             // 1. Try as a Basehim API key. Always ask the service which
             //    prefixes it accepts rather than hard-coding one here — a stray
@@ -69,13 +77,15 @@ final class Authenticate
             }
         }
 
-        // Try session next (admin)
+        // Try session next (admin). sessionUser() also ends a session whose
+        // account was suspended or deleted, whose password changed, or that
+        // was signed out everywhere — and clears it, so the login page does
+        // not bounce a dead session back to the dashboard.
         if (!$user) {
-            $session = $app->make(Session::class);
-            $uid = $session->get('user_id');
-            if ($uid) {
-                $repo = $app->make(UserRepository::class);
-                $user = $repo->find((int) $uid);
+            try {
+                $user = $app->make(\App\Services\AuthService::class)->sessionUser();
+            } catch (\Throwable) {
+                $user = null;
             }
         }
 
@@ -95,11 +105,11 @@ final class Authenticate
                         $candidate = $repo->find($rid);
                         if ($candidate && ($candidate['status'] ?? 'inactive') === 'active') {
                             $user = $candidate;
-                            // Restore the session for the rest of the request lifecycle.
-                            $session = $app->make(Session::class);
-                            $session->set('user_id', (int) $candidate['id']);
-                            $session->set('user_role', $candidate['role'] ?? null);
-                            $session->set('logged_in_at', time());
+                            // Restore a full session (new id, fingerprint) for the
+                            // rest of the request lifecycle.
+                            $app->make(\App\Services\AuthService::class)->loginSession($candidate);
+                        } else {
+                            $sec->revokeRememberCookie($cookie);
                         }
                     }
                 } catch (\Throwable) {
@@ -128,7 +138,7 @@ final class Authenticate
                 $qs = (string) ($_SERVER['QUERY_STRING'] ?? '');
                 if ($qs !== '') $relative .= '?' . $qs;
 
-                $skip = ['/admin/login', '/admin/logout', '/admin/register', '/admin/login/otp',
+                $skip = ['/admin/login', '/admin/logout', '/admin/register', '/admin/login/otp', '/admin/login/verify',
                          '/admin/forgot-password', '/admin/reset-password'];
                 $bare = explode('?', $relative)[0];
                 $isSkippable = false;

@@ -24,6 +24,9 @@ final class AuthSecurityService
     /** Max wrong OTP guesses before the code is burned. */
     private const OTP_MAX_ATTEMPTS = 5;
 
+    /** Counters untouched for this long start over. */
+    private const FORGET_AFTER = 86400;
+
     private bool $schemaReady = false;
 
     public function __construct(private Database $db) {}
@@ -90,10 +93,21 @@ final class AuthSecurityService
     private function row(string $identifier, string $ip): ?array
     {
         $this->ensureSchema();
-        return $this->db->selectOne(
+        $row = $this->db->selectOne(
             'SELECT * FROM {auth_login_attempts} WHERE identifier = :i AND ip = :ip',
             ['i' => $this->key($identifier), 'ip' => $ip]
         ) ?: null;
+        // Counters used to live forever: three typos in January meant a
+        // captcha in March. A row untouched for a day, and not locked, starts
+        // over.
+        if ($row && strtotime((string) $row['updated_at']) < time() - self::FORGET_AFTER
+            && (empty($row['locked_until']) || strtotime((string) $row['locked_until']) < time())) {
+            try {
+                $this->db->execute('DELETE FROM {auth_login_attempts} WHERE id = :id', ['id' => (int) $row['id']]);
+            } catch (\Throwable) {}
+            return null;
+        }
+        return $row;
     }
 
     /** Current failed-password count for this identifier+IP. */
@@ -107,16 +121,30 @@ final class AuthSecurityService
         return (int) (($this->row($identifier, $ip)['captcha_fails'] ?? 0));
     }
 
-    /** Record one failed password attempt. */
-    public function recordFailure(string $identifier, string $ip): void
+    /**
+     * Record one failed password attempt.
+     *
+     * With $lockAfter > 0, every $lockAfter-th failure locks password entry
+     * for this identifier from this address: $lockMinutes the first time,
+     * twice that the second, and so on up to a day. Before 1.2.33 there was no
+     * lock at all — the captcha was the only brake, and a script that solved
+     * the arithmetic could keep guessing for ever.
+     */
+    public function recordFailure(string $identifier, string $ip, int $lockAfter = 0, int $lockMinutes = 15): void
     {
         $this->ensureSchema();
         $now = date('Y-m-d H:i:s');
         $existing = $this->row($identifier, $ip);
         if ($existing) {
+            $fails = (int) $existing['fails'] + 1;
+            $lock = null;
+            if ($lockAfter > 0 && $fails % $lockAfter === 0) {
+                $minutes = min(1440, max(1, $lockMinutes) * intdiv($fails, $lockAfter));
+                $lock = date('Y-m-d H:i:s', time() + $minutes * 60);
+            }
             $this->db->execute(
-                'UPDATE {auth_login_attempts} SET fails = fails + 1, updated_at = :now WHERE id = :id',
-                ['now' => $now, 'id' => (int) $existing['id']]
+                'UPDATE {auth_login_attempts} SET fails = :f, locked_until = COALESCE(:l, locked_until), updated_at = :now WHERE id = :id',
+                ['f' => $fails, 'l' => $lock, 'now' => $now, 'id' => (int) $existing['id']]
             );
         } else {
             $this->db->insert('auth_login_attempts', [
@@ -148,6 +176,84 @@ final class AuthSecurityService
                 'updated_at' => $now,
             ]);
         }
+    }
+
+    /** Seconds until password entry unlocks for this identifier+IP (0 = not locked). */
+    public function lockedSeconds(string $identifier, string $ip): int
+    {
+        $r = $this->row($identifier, $ip);
+        if (!$r || empty($r['locked_until'])) return 0;
+        return max(0, strtotime((string) $r['locked_until']) - time());
+    }
+
+    /**
+     * Failed passwords from one address across every account in the window.
+     * Catches a script that tries a few passwords on many accounts, which
+     * per-account counters never see.
+     */
+    public function ipFailures(string $ip, int $windowSeconds = 900): int
+    {
+        $this->ensureSchema();
+        try {
+            $r = $this->db->selectOne(
+                "SELECT COALESCE(SUM(fails), 0) AS n FROM {auth_login_attempts}
+                  WHERE ip = :ip AND updated_at > :since AND identifier NOT LIKE '~%'",
+                ['ip' => $ip, 'since' => date('Y-m-d H:i:s', time() - $windowSeconds)]
+            );
+            return (int) ($r['n'] ?? 0);
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    /**
+     * A simple rate limit: true (and counted) while this address has made
+     * fewer than $max requests of this kind in the window, false once over.
+     * Used for registration and API sign-in, which have no captcha.
+     */
+    public function throttle(string $bucket, string $ip, int $max, int $windowSeconds): bool
+    {
+        $this->ensureSchema();
+        $ident = '~' . $bucket;
+        $now = time();
+        try {
+            $r = $this->db->selectOne(
+                'SELECT * FROM {auth_login_attempts} WHERE identifier = :i AND ip = :ip',
+                ['i' => $ident, 'ip' => $ip]
+            );
+            if (!$r) {
+                $this->db->insert('auth_login_attempts', [
+                    'identifier' => $ident, 'ip' => $ip, 'fails' => 1, 'captcha_fails' => 0,
+                    'locked_until' => date('Y-m-d H:i:s', $now + $windowSeconds), 'updated_at' => date('Y-m-d H:i:s', $now),
+                ]);
+                return true;
+            }
+            // locked_until doubles as the end of the current window here.
+            if (empty($r['locked_until']) || strtotime((string) $r['locked_until']) <= $now) {
+                $this->db->execute(
+                    'UPDATE {auth_login_attempts} SET fails = 1, locked_until = :w, updated_at = :now WHERE id = :id',
+                    ['w' => date('Y-m-d H:i:s', $now + $windowSeconds), 'now' => date('Y-m-d H:i:s', $now), 'id' => (int) $r['id']]
+                );
+                return true;
+            }
+            if ((int) $r['fails'] >= $max) return false;
+            $this->db->execute(
+                'UPDATE {auth_login_attempts} SET fails = fails + 1, updated_at = :now WHERE id = :id',
+                ['now' => date('Y-m-d H:i:s', $now), 'id' => (int) $r['id']]
+            );
+            return true;
+        } catch (\Throwable) {
+            return true;   // never lock people out because the table is unavailable
+        }
+    }
+
+    /** Clear counters for an identifier from every address (after a password reset). */
+    public function clearIdentifier(string $identifier): void
+    {
+        $this->ensureSchema();
+        try {
+            $this->db->execute('DELETE FROM {auth_login_attempts} WHERE identifier = :i', ['i' => $this->key($identifier)]);
+        } catch (\Throwable) {}
     }
 
     /** Clear all counters after a successful login. */
@@ -215,6 +321,14 @@ final class AuthSecurityService
             ]);
         }
         return $code;
+    }
+
+    /** Was an unlock code emailed for this identifier+IP within the last $seconds? */
+    public function otpSentWithin(string $identifier, string $ip, int $seconds, int $ttlMinutes = 10): bool
+    {
+        $r = $this->row($identifier, $ip);
+        if (!$r || empty($r['otp_expires_at'])) return false;
+        return strtotime((string) $r['otp_expires_at']) - $ttlMinutes * 60 > time() - $seconds;
     }
 
     public function hasActiveOtp(string $identifier, string $ip): bool
@@ -344,6 +458,24 @@ final class AuthSecurityService
     // ==================================================================
     // Math captcha (stateless, HMAC-signed)
     // ==================================================================
+
+    /**
+     * A math question for the login captcha: ['question' => '4 + 7', 'answer' => 11].
+     * The caller keeps the answer in the visitor's session and checks it once.
+     *
+     * The older makeCaptcha()/checkCaptcha() pair signed the answer into the
+     * form instead; a solved token could then be replayed for ten minutes, by
+     * any client, for any number of guesses.
+     */
+    public function makeChallenge(): array
+    {
+        $a = random_int(2, 9);
+        $b = random_int(1, 9);
+        $op = ['+', '-', '×'][random_int(0, 2)];
+        if ($op === '-' && $b > $a) [$a, $b] = [$b, $a];
+        $answer = match ($op) { '+' => $a + $b, '-' => $a - $b, '×' => $a * $b };
+        return ['question' => "{$a} {$op} {$b}", 'answer' => $answer];
+    }
 
     /**
      * Build a math captcha challenge. Returns [question, token] where token is

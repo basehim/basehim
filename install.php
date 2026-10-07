@@ -20,7 +20,7 @@ declare(strict_types=1);
 // App\Core\BASEHIM_ROOT" — PHP resolves an unknown bare constant against the
 // current namespace before giving up.
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.2.32');
+define('BASEHIM_VERSION', '1.2.35');
 define('BASEHIM_INSTALLING', true);
 
 
@@ -366,6 +366,15 @@ ENV;
                     ['general',    'admin_email',  $email],
                     ['appearance', 'active_theme', 'default'],
                 ];
+                // Send mail as noreply@ the site's own domain. Without a sender
+                // on this domain the host's mail server refuses or spam-files
+                // everything — password resets and sign-in codes included.
+                $mailHost = strtolower((string) (parse_url((string) ($cfg['APP_URL'] ?? ''), PHP_URL_HOST) ?: ($_SERVER['HTTP_HOST'] ?? '')));
+                $mailHost = preg_replace('/:\d+$/', '', $mailHost);
+                if (str_starts_with($mailHost, 'www.')) $mailHost = substr($mailHost, 4);
+                if ($mailHost !== '' && str_contains($mailHost, '.') && preg_match('/^[a-z0-9.-]+$/', $mailHost) && !filter_var($mailHost, FILTER_VALIDATE_IP)) {
+                    $seedSettings[] = ['email', 'from_email', 'noreply@' . $mailHost];
+                }
                 $setStmt = $pdo->prepare(pxSql(
                     "INSERT INTO {settings} (setting_group, setting_key, setting_value, is_json, autoload)
                      VALUES (?, ?, ?, 0, 1)

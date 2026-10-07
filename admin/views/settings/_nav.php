@@ -20,6 +20,6 @@ $this->include('partials.tabs', [
         'ai'            => ['label' => 'AI Agents',     'icon' => 'cpu-chip'],
         'email'         => ['label' => 'Email',         'icon' => 'envelope'],
         'appearance'    => ['label' => 'Appearance',    'icon' => 'swatch'],
-        'authorization' => ['label' => 'Authorization', 'icon' => 'shield-check'],
+        'authorization' => ['label' => 'Authentication', 'icon' => 'shield-check'],
     ],
 ]);

@@ -34,7 +34,7 @@ $navItems = [
         ['url' => '/admin/settings/media',         'label' => 'Media',         'cap' => 'manage_settings'],
         ['url' => '/admin/settings/seo',           'label' => 'SEO',           'cap' => 'manage_settings'],
         ['url' => '/admin/settings/email',         'label' => 'Email',         'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/authorization', 'label' => 'Authorization', 'cap' => 'manage_settings'],
+        ['url' => '/admin/settings/authorization', 'label' => 'Authentication', 'cap' => 'manage_settings'],
     ]],
     ['url' => '/admin/system',         'label' => 'System',      'icon' => 'heart',  'cap' => 'manage_settings', 'section' => 'system'],
 ];
@@ -877,6 +877,7 @@ try {
                         </a>
                         <div class="border-t border-slate-100 my-1"></div>
                         <form method="POST" action="<?= $base ?>/admin/logout">
+                            <input type="hidden" name="_csrf" value="<?= htmlspecialchars(\App\Core\Application::getInstance()->make(\App\Core\Session::class)->csrfToken()) ?>">
                             <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                                 <?= icon('arrow-left-start-on-rectangle', 'w-4 h-4 mr-2') ?> Log out
                             </button>

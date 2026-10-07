@@ -92,11 +92,9 @@ trait RendersTheme
     protected function canPreview(array $post): bool
     {
         try {
-            $session = $this->app->make(\App\Core\Session::class);
-            $uid = (int) ($session->get('user_id') ?? 0);
-            if ($uid <= 0) return false;
-            $user = $this->app->make(\App\Repositories\UserRepository::class)->find($uid);
-            if (!$user || ($user['status'] ?? '') !== 'active') return false;
+            $user = $this->app->make(\App\Services\AuthService::class)->sessionUser();
+            if (!$user) return false;
+            $uid = (int) $user['id'];
 
             $cap = ($post['type'] ?? 'post') === 'page' ? 'edit_pages' : 'edit_posts';
             if (!\App\Http\Middleware\CheckCapability::userCan($user, $cap)) return false;
@@ -192,11 +190,8 @@ trait RendersTheme
     private function viewerIsAdmin(): bool
     {
         try {
-            $session = $this->app->make(\App\Core\Session::class);
-            $uid = (int) ($session->get('user_id') ?? 0);
-            if ($uid <= 0) return false;
-            $user = $this->app->make(\App\Repositories\UserRepository::class)->find($uid);
-            if (!$user || ($user['status'] ?? '') !== 'active') return false;
+            $user = $this->app->make(\App\Services\AuthService::class)->sessionUser();
+            if (!$user) return false;
             return \App\Http\Middleware\CheckCapability::userCan($user, 'manage_options');
         } catch (\Throwable) {
             return false;

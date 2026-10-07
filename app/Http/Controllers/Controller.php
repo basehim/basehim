@@ -42,8 +42,17 @@ abstract class Controller
 
     protected function back(): Response
     {
-        $ref = $_SERVER['HTTP_REFERER'] ?? '/admin';
-        return Response::redirect($ref);
+        // Only back to a page of this site. The Referer header is set by the
+        // previous page, so following it blindly turned every failed form
+        // check into an open redirect to wherever the request came from.
+        $ref = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+        $p = $ref !== '' ? parse_url($ref) : false;
+        $host = strtolower((string) preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')));
+        if (!is_array($p) || empty($p['path']) || ($p['path'][0] ?? '') !== '/' || str_starts_with((string) $p['path'], '//')
+            || (isset($p['host']) && strtolower((string) $p['host']) !== $host)) {
+            return Response::redirect('/admin');
+        }
+        return new Response('', 302, ['Location' => $p['path'] . (isset($p['query']) ? '?' . $p['query'] : '') . (isset($p['fragment']) ? '#' . $p['fragment'] : '')]);
     }
 
     protected function flash(string $type, string $message): void

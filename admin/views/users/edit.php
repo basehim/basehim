@@ -118,7 +118,7 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
             <div>
                 <label class="block text-xs text-slate-500 mb-1">Status</label>
                 <select name="status" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500">
-                    <?php foreach (['active','inactive','suspended','pending'] as $s): ?>
+                    <?php foreach (['active','inactive','suspended'] as $s): ?>
                         <option value="<?= $s ?>"><?= ucfirst($s) ?></option>
                     <?php endforeach; ?>
                 </select>
@@ -132,6 +132,36 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
         </div>
     </div>
 </form>
+<?php if ($isEdit):
+    $tfaSvc = \App\Core\Application::getInstance()->make(\App\Services\TwoFactorService::class);
+    $tfaEnabled = $tfaSvc->isEnabled($editUser);
+    $tfaRequired = $tfaSvc->isRequired($editUser);
+    $tfaPolicy = $tfaSvc->policy();
+?>
+<div class="max-w-3xl mt-5 bg-white rounded-xl border border-slate-200 p-5" id="two-factor">
+    <div class="flex items-start justify-between gap-3">
+        <div>
+            <h3 class="text-sm font-semibold text-slate-900">Two-step verification</h3>
+            <p class="text-xs text-slate-500 mt-1">
+                <?php if ($tfaPolicy === 'off'): ?>Turned off for this site in Settings › Authentication.
+                <?php elseif ($tfaEnabled): ?>Turned on by this person<?= $tfaRequired ? ', and required by the site\'s settings' : '' ?>: they enter an emailed code after their password.
+                <?php elseif ($tfaRequired): ?>Required by the site's settings: they enter an emailed code after their password.
+                <?php else: ?>Not turned on. People turn it on themselves in My Profile.
+                <?php endif; ?>
+            </p>
+        </div>
+        <span class="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full <?= ($tfaPolicy !== 'off' && ($tfaEnabled || $tfaRequired)) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600' ?>"><?= ($tfaPolicy !== 'off' && ($tfaEnabled || $tfaRequired)) ? 'On' : 'Off' ?></span>
+    </div>
+    <?php if (!$isSelf && $canManageTarget && $tfaPolicy !== 'off' && ($tfaEnabled || $tfaRequired)): ?>
+    <form method="POST" action="<?= $base ?>/admin/users/<?= $uid ?>/two-factor/reset" class="mt-3"
+          onsubmit="return confirm('Reset two-step verification for this person and sign them out everywhere? Use this when they can no longer receive email at their address.');">
+        <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
+        <button type="submit" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium">Reset and sign out</button>
+        <p class="text-xs text-slate-500 mt-2"><?= $tfaRequired ? 'Their next sign-in will not ask for a code, so they can correct their email address.' : 'Turns their two-step verification off.' ?></p>
+    </form>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 </div>
 
 <?php if ($isEdit): ?>

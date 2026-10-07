@@ -42,9 +42,101 @@ class SettingController extends Controller
         return $this->json($media->regenerateBatch($after, $onlyMissing));
     }
 
-    /** POST /admin/settings/email — persisted via the generic tab saver. */
-    public function saveEmail(Request $request): Response  { return $this->saveTab($request, 'email'); }
-    public function saveAuthorization(Request $request): Response { return $this->saveTab($request, 'authorization'); }
+    /**
+     * POST /admin/settings/email.
+     *
+     * Only known keys are stored. An empty From Email becomes noreply@ the
+     * site's domain, and a malformed one is refused rather than saved.
+     */
+    public function saveEmail(Request $request): Response
+    {
+        if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->redirect('/admin/settings/email'); }
+        /** @var SettingService $settings */
+        $settings = $this->app->make(SettingService::class);
+        $in = $request->all();
+
+        $from = trim((string) ($in['from_email'] ?? ''));
+        if ($from === '') {
+            $from = \App\Services\Mailer::defaultFrom();
+        } elseif (!filter_var($from, FILTER_VALIDATE_EMAIL)) {
+            $this->flash('error', 'From Email is not a valid email address. Nothing was saved.');
+            return $this->redirect('/admin/settings/email');
+        }
+        $driver = (string) ($in['driver'] ?? 'mail') === 'smtp' ? 'smtp' : 'mail';
+        $enc = (string) ($in['smtp_encryption'] ?? 'tls');
+        if (!in_array($enc, ['tls', 'ssl', 'none'], true)) $enc = 'tls';
+        $port = (int) ($in['smtp_port'] ?? 587);
+        if ($port < 1 || $port > 65535) $port = 587;
+
+        $settings->set('email', 'from_email', $from);
+        // The From Name follows the site name unless something else is typed,
+        // so renaming the site later also renames the sender.
+        $name = trim(str_replace(["\r", "\n"], ' ', (string) ($in['from_name'] ?? '')));
+        if ($name === trim((string) $settings->get('general', 'site_title', ''))) $name = '';
+        $settings->set('email', 'from_name', $name);
+        $settings->set('email', 'driver', $driver);
+        $settings->set('email', 'smtp_host', trim((string) ($in['smtp_host'] ?? '')));
+        $settings->set('email', 'smtp_port', (string) $port);
+        $settings->set('email', 'smtp_encryption', $enc);
+        $settings->set('email', 'smtp_username', trim((string) ($in['smtp_username'] ?? '')));
+        // A blank password field keeps the saved one (it is never shown).
+        if ((string) ($in['smtp_password'] ?? '') !== '') $settings->set('email', 'smtp_password', (string) $in['smtp_password']);
+        if (!empty($in['smtp_password_clear'])) $settings->set('email', 'smtp_password', '');
+
+        $this->flash('success', 'Email settings saved. Emails are sent from ' . $from . '.');
+        return $this->redirect('/admin/settings/email');
+    }
+    /**
+     * POST /admin/settings/authorization — Authentication settings.
+     *
+     * Its own saver: only known keys are stored, numbers are clamped and the
+     * registration role can never be an administrator role. The generic tab
+     * saver stored whatever was posted.
+     */
+    public function saveAuthorization(Request $request): Response
+    {
+        if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->redirect('/admin/settings/authorization'); }
+        /** @var SettingService $settings */
+        $settings = $this->app->make(SettingService::class);
+        $in = $request->all();
+        foreach (['allow_registration', 'remember_me', 'honeypot', 'welcome_email', 'otp_enabled'] as $k) {
+            $settings->set('authorization', $k, !empty($in[$k]) ? '1' : '0');
+        }
+        $clamp = static fn($v, int $lo, int $hi, int $def): string => (string) max($lo, min($hi, is_numeric($v) ? (int) $v : $def));
+        $settings->set('authorization', 'login_attempt_limit', $clamp($in['login_attempt_limit'] ?? 3, 1, 10, 3));
+        $settings->set('authorization', 'captcha_fail_limit', $clamp($in['captcha_fail_limit'] ?? 3, 1, 10, 3));
+        $settings->set('authorization', 'lockout_after', $clamp($in['lockout_after'] ?? 10, 3, 50, 10));
+        $settings->set('authorization', 'lockout_minutes', $clamp($in['lockout_minutes'] ?? 15, 1, 1440, 15));
+        $settings->set('authorization', 'default_role',
+            \App\Http\Controllers\Admin\AuthController::registrationRole($this->app, (string) ($in['default_role'] ?? 'subscriber')));
+
+        $policy = (string) ($in['two_factor'] ?? 'optional');
+        if (!in_array($policy, \App\Services\TwoFactorService::POLICIES, true)) $policy = 'optional';
+        $previous = $this->app->make(\App\Services\TwoFactorService::class)->policy();
+        $settings->set('authorization', 'two_factor', $policy);
+        // Requiring codes for more people: their "keep me signed in" cookies
+        // were issued without a code, so they end, and the next sign-in asks.
+        $rank = array_flip(\App\Services\TwoFactorService::POLICIES);
+        if ($rank[$policy] > $rank[$previous] && in_array($policy, ['admins', 'all'], true)) {
+            try {
+                $db = $this->app->make(\App\Core\Database::class);
+                if ($policy === 'all') {
+                    $db->execute('DELETE FROM {auth_remember_tokens}');
+                } else {
+                    $db->execute("DELETE FROM {auth_remember_tokens} WHERE user_id IN (SELECT id FROM {users} WHERE role IN ('admin', 'super_admin'))");
+                }
+            } catch (\Throwable) {}
+        }
+        $settings->set('authorization', 'two_factor_trust_days', $clamp($in['two_factor_trust_days'] ?? 30, 0, 90, 30));
+
+        $msg = 'Authentication settings saved.';
+        $me = $this->user();
+        if ($me && in_array($policy, ['admins', 'all'], true) && empty(\App\Services\TwoFactorService::security($me)['two_factor'])) {
+            $msg .= ' From your next sign-in you will be asked for a code emailed to ' . \App\Http\Controllers\Admin\AuthController::maskEmail((string) ($me['email'] ?? '')) . ' — make sure the site can send email (Settings › Email › Send test).';
+        }
+        $this->flash('success', $msg);
+        return $this->redirect('/admin/settings/authorization');
+    }
 
     /** POST /admin/settings/email/test — send a test message to the current user. */
     public function testEmail(Request $request): Response
@@ -173,6 +265,56 @@ class SettingController extends Controller
             $extra['staticRobots'] = is_file(BASEHIM_ROOT . '/robots.txt') || is_file(BASEHIM_ROOT . '/public/robots.txt');
             $extra['staticLlms'] = is_file(BASEHIM_ROOT . '/llms.txt') || is_file(BASEHIM_ROOT . '/public/llms.txt');
         }
+        if ($tab === 'authorization') {
+            /** @var \App\Services\TwoFactorService $tf */
+            $tf = $this->app->make(\App\Services\TwoFactorService::class);
+            $extra['twoFactor'] = [
+                'policy'    => $tf->policy(),
+                'trustDays' => $tf->trustDays(),
+                'emergency' => $tf->emergencyDisabled(),
+                'mailer'    => (string) ($this->app->make(\App\Services\Mailer::class)->config()['driver'] ?? 'mail'),
+            ];
+            try {
+                $db = $this->app->make(\App\Core\Database::class);
+                $rows = $db->select("SELECT meta FROM {users} WHERE deleted_at IS NULL AND meta LIKE '%two_factor%'");
+                $extra['twoFactor']['users'] = count(array_filter($rows, fn($r) => !empty(\App\Services\TwoFactorService::security($r)['two_factor'])));
+                $extra['twoFactor']['noEmail'] = (int) ($db->selectOne("SELECT COUNT(*) AS n FROM {users} WHERE deleted_at IS NULL AND status = 'active' AND (email IS NULL OR email = '')")['n'] ?? 0);
+            } catch (\Throwable) {
+                $extra['twoFactor']['users'] = 0;
+                $extra['twoFactor']['noEmail'] = 0;
+            }
+            // Emailed links are built from APP_URL; without a real one they
+            // fall back to the address the request came in on.
+            $appUrl = (string) (\App\Core\Env::get('APP_URL', '') ?? '');
+            $appHost = strtolower((string) (parse_url($appUrl, PHP_URL_HOST) ?: ''));
+            $extra['twoFactor']['appUrlMissing'] = $appHost === '' || in_array($appHost, ['localhost', '127.0.0.1', '::1'], true);
+        }
+        if ($tab === 'email') {
+            $mailer = $this->app->make(\App\Services\Mailer::class);
+            $cfg = $mailer->config(); // fills in noreply@domain when none is saved
+            $domain = \App\Services\Mailer::siteDomain();
+            $from = (string) ($cfg['from_email'] ?? '');
+            $fromDomain = strtolower((string) substr(strrchr($from, '@') ?: '', 1));
+            $extra['mail'] = [
+                'domain'      => $domain,
+                'defaultFrom' => \App\Services\Mailer::defaultFrom(),
+                'from'        => $from,
+                'realDomain'  => \App\Services\Mailer::isRealDomain($domain),
+                // Sending as someone else's domain (gmail.com, outlook.com…)
+                // through this server is refused or lands in spam.
+                'foreignFrom' => $fromDomain !== '' && $fromDomain !== $domain
+                    && !str_ends_with($fromDomain, '.' . $domain) && !str_ends_with($domain, '.' . $fromDomain),
+            ];
+            $group = (array) $settings->getGroup('email');
+            // The saved SMTP password is never sent back to the browser.
+            $extra['mail']['hasPassword'] = (string) ($group['smtp_password'] ?? '') !== '';
+            $extra['mail']['siteTitle'] = (string) ($settings->get('general', 'site_title', '') ?: 'Basehim');
+            $extra['values'] = array_merge($group, [
+                'from_email'    => $from,
+                'from_name'     => (string) ($cfg['from_name'] ?? '') ?: $extra['mail']['siteTitle'],
+                'smtp_password' => '',
+            ]);
+        }
         if ($tab === 'media') {
             /** @var \App\Services\MediaService $media */
             $media = $this->app->make(\App\Services\MediaService::class);
@@ -184,7 +326,7 @@ class SettingController extends Controller
         }
 
         return $this->view('settings.' . $tab, array_merge([
-            'title' => ucfirst($tab) . ' Settings',
+            'title' => ($tab === 'authorization' ? 'Authentication' : ucfirst($tab)) . ' Settings',
             'currentUser' => $this->user(),
             'tab' => $tab,
             'values' => $settings->getGroup($tab),
