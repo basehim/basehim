@@ -34,14 +34,10 @@ class RedirectImporter extends Importer
         );
         if (!$rows) return 0;
 
-        $sourcePosts = $this->source->fetchPosts(0, PHP_INT_MAX);
+        // Old addresses from the post references — not every post body, which
+        // up to 1.2.0 was loaded again for every batch of 25.
         $byOldId = [];
-        foreach ($sourcePosts as $p) { $byOldId[(int)$p['ID']] = $p; }
-
-        $permalinkStructure = $this->db->selectOne(
-            "SELECT setting_value FROM settings WHERE setting_group='permalinks' AND setting_key='structure'"
-        );
-        $structure = $permalinkStructure ? $permalinkStructure['setting_value'] : 'pretty';
+        foreach ($this->source->postRefs() as $p) { $byOldId[(int)$p['ID']] = $p; }
 
         $siteUrl = rtrim($this->source->siteUrl(), '/');
 
@@ -51,15 +47,22 @@ class RedirectImporter extends Importer
             $wp = $byOldId[$oldId] ?? null;
             if (!$wp) continue;
 
-            $newPost = $this->db->selectOne('SELECT slug, type FROM posts WHERE id = :id', ['id' => $newId]);
+            $newPost = $this->db->selectOne('SELECT * FROM posts WHERE id = :id', ['id' => $newId]);
             if (!$newPost) continue;
 
             $fromPath = $this->extractPath((string)($wp['link'] ?? ''), $siteUrl);
             if (!$fromPath || $fromPath === '/') continue;
 
-            $toPath = $newPost['type'] === 'post' && $structure === 'pretty'
-                ? '/posts/' . $newPost['slug']
-                : '/' . $newPost['slug'];
+            // The new address as core builds it, whatever the site's permalink
+            // setting (/{slug}, /posts/{slug}, /{category}/{slug}); 1.2.0
+            // assumed /posts/{slug}.
+            try {
+                $toPath = $newPost['type'] === 'page'
+                    ? \App\Core\Helpers::pageUrl($newPost)
+                    : \App\Core\Helpers::postUrl($newPost);
+            } catch (\Throwable) {
+                $toPath = '/' . $newPost['slug'];
+            }
 
             if ($fromPath === $toPath) continue;
 

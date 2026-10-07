@@ -109,12 +109,15 @@ class App extends BaseApp
         ]);
 
         // Admin routes (auth-protected).
-        $this->adminGet('/wp-migrator',          [$this, 'showWizard']);
+        $this->adminGet('/wp-migrator',              [$this, 'showWizard']);
+        $this->adminPost('/wp-migrator/upload/init',  [$this, 'uploadInit']);
+        $this->adminPost('/wp-migrator/upload/chunk', [$this, 'uploadChunk']);
         $this->adminPost('/wp-migrator/start',   [$this, 'startJob']);
         $this->adminPost('/wp-migrator/run',     [$this, 'runBatch']);
         $this->adminGet('/wp-migrator/status',   [$this, 'jobStatus']);
         $this->adminPost('/wp-migrator/cancel',  [$this, 'cancelJob']);
         $this->adminPost('/wp-migrator/reset',   [$this, 'resetAll']);
+        $this->adminPost('/wp-migrator/repair',  [$this, 'repairLinks']);
 
         // 301 redirect dispatch — runs before catch-all routes resolve.
         $this->registerRedirectMiddleware();
@@ -151,28 +154,109 @@ class App extends BaseApp
             return;
         }
 
+        // An old WordPress upload — an image in a feed, a link from another
+        // site, anything the content step could not rewrite: send it to the
+        // imported file. Resized copies go to their full image.
+        if (stripos($path, '/wp-content/uploads/') === 0) {
+            try {
+                $mapper = new UrlMapper($this->db(), new IdMap($this->db()), [], '', false, true);
+                $to = $mapper->mapPath(rawurldecode(substr($path, strlen('/wp-content/uploads/'))));
+                if ($to !== null) {
+                    $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+                    header('Location: ' . $base . $to, true, 301);
+                    exit;
+                }
+            } catch (\Throwable) {}
+            return;
+        }
+
         try {
+            // WordPress addresses end in a slash; visitors often leave it off.
+            $norm = static fn(string $p): string => rtrim($p, '/') === '' ? '/' : rtrim($p, '/');
+            $alt = str_ends_with($path, '/') ? rtrim($path, '/') : $path . '/';
             $row = $this->db()->selectOne(
-                'SELECT to_path, status_code FROM app_wpmig_redirects WHERE from_path = :p LIMIT 1',
-                ['p' => $path]
+                'SELECT to_path, status_code FROM app_wpmig_redirects
+                  WHERE from_path IN (:p, :a) ORDER BY from_path = :p2 DESC LIMIT 1',
+                ['p' => $path, 'a' => $alt, 'p2' => $path]
             );
             if (!$row) return;
+
+            /*
+             * A migration redirect never overrides a live address.
+             *
+             * Rows are written once, with the permalink structure the site had
+             * at the time. Change the structure afterwards and a row can point
+             * at a URL that core now redirects straight back — "too many
+             * redirects". Under Flat, /my-post/ -> /my-post also matched the
+             * post's own address once the trailing slash was made optional
+             * (1.3.0) and sent it to itself. So:
+             *   1. a request for the current address of published content is
+             *      left to core;
+             *   2. the stored target is re-resolved to its content's current
+             *      address, so an old row still lands in one hop;
+             *   3. nothing is ever redirected to the address it came from.
+             */
+            // Compare without the install's base path: core's addresses omit it.
+            $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+            $here = $base !== '' && str_starts_with($path, $base . '/') ? substr($path, strlen($base)) : $path;
+
+            $current = $this->liveAddress($norm($here));
+            if ($current !== null && $norm($current) === $norm($here)) return;
+
+            $to = (string) $row['to_path'];
+            $target = $this->liveAddress($norm((string) (parse_url($to, PHP_URL_PATH) ?: '/')));
+            if ($target !== null) {
+                $q = (string) (parse_url($to, PHP_URL_QUERY) ?? '');
+                $to = $target . ($q !== '' ? '?' . $q : '');
+            }
+            if ($norm((string) (parse_url($to, PHP_URL_PATH) ?: '/')) === $norm($here)) return;
 
             // Bump hit count (best-effort).
             try {
                 $this->db()->execute(
-                    'UPDATE app_wpmig_redirects SET hits = hits + 1 WHERE from_path = :p',
-                    ['p' => $path]
+                    'UPDATE app_wpmig_redirects SET hits = hits + 1 WHERE from_path IN (:p, :a)',
+                    ['p' => $path, 'a' => $alt]
                 );
             } catch (\Throwable) {}
 
             $code = (int)($row['status_code'] ?: 301);
-            $to = $row['to_path'];
+            if ($to !== '' && $to[0] === '/' && $base !== '' && !str_starts_with($to, $base . '/')) $to = $base . $to;
 
             header('Location: ' . $to, true, $code);
             exit;
         } catch (\Throwable) {
             // Table may not exist yet, or DB is down — fall through.
+        }
+    }
+
+    /**
+     * The current address of the published post or page a path names (by its
+     * last segment), as core builds it for the site's permalink setting — or
+     * null when the path names no published content.
+     */
+    private function liveAddress(string $path): ?string
+    {
+        $seg = array_values(array_filter(explode('/', trim($path, '/')), static fn($x) => $x !== ''));
+        if (!$seg) return null;
+        $slug = rawurldecode((string) end($seg));
+        try {
+            $rows = $this->db()->select(
+                "SELECT * FROM {posts} WHERE slug = :s AND type IN ('post', 'page')
+                  AND status = 'published' AND deleted_at IS NULL",
+                ['s' => $slug]
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+        if (!$rows) return null;
+        // /{slug} means the page when a page and a post share a slug (core's order).
+        usort($rows, static fn($a, $b) => ($a['type'] === 'page' ? 0 : 1) <=> ($b['type'] === 'page' ? 0 : 1));
+        try {
+            return $rows[0]['type'] === 'page'
+                ? \App\Core\Helpers::pageUrl($rows[0])
+                : \App\Core\Helpers::postUrl($rows[0]);
+        } catch (\Throwable) {
+            return null;
         }
     }
 
@@ -183,6 +267,16 @@ class App extends BaseApp
     public function showWizard(Request $request): Response
     {
         return $this->wizard()->render($request);
+    }
+
+    public function uploadInit(Request $request): Response
+    {
+        return $this->safeJson(fn() => $this->wizard()->uploadInit($request));
+    }
+
+    public function uploadChunk(Request $request): Response
+    {
+        return $this->safeJson(fn() => $this->wizard()->uploadChunk($request));
     }
 
     public function startJob(Request $request): Response
@@ -203,6 +297,11 @@ class App extends BaseApp
     public function cancelJob(Request $request): Response
     {
         return $this->safeJson(fn() => $this->wizard()->cancel($request));
+    }
+
+    public function repairLinks(Request $request): Response
+    {
+        return $this->safeJson(fn() => $this->wizard()->repair($request));
     }
 
     public function resetAll(Request $request): Response

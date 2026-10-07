@@ -65,10 +65,25 @@ class UpdateService
         // The hub is baked in — connection is fully automatic, so stored URLs
         // from the old manual-connection era are deliberately ignored.
         return [
-            'url' => self::DEFAULT_HUB,
+            'url' => $this->hubUrl(),
             'key' => (string) $this->settings->get('updates', 'cloudhim_key', ''),
             'site_name' => (string) $this->settings->get('updates', 'site_name', ''),
         ];
+    }
+
+    /**
+     * The hub this site talks to. Always cloudhim.com, unless UPDATE_HUB_URL
+     * in .env names another — for a developer testing a hub of their own.
+     * Only the site owner can edit .env, so this is not something a visitor
+     * or an app can redirect.
+     */
+    private function hubUrl(): string
+    {
+        try {
+            $env = trim((string) (\App\Core\Env::get('UPDATE_HUB_URL', '') ?? ''));
+            if ($env !== '' && preg_match('#^https?://[^\s/]+(:\d+)?$#i', rtrim($env, '/'))) return rtrim($env, '/');
+        } catch (\Throwable) {}
+        return self::DEFAULT_HUB;
     }
 
     /**
@@ -197,7 +212,162 @@ class UpdateService
                     . ($this->lastConnectError() ?: 'unknown error');
             }
         }
+        // Apps are checked alongside core. Their check failing never fails
+        // this one: a hub that cannot answer for apps still delivers core.
+        if ($this->isConfigured()) {
+            try { $this->checkApps(); } catch (\Throwable) {}
+        }
         return $res;
+    }
+
+    // ------------------------------------------------------------------
+    // App updates (1.2.36)
+    // ------------------------------------------------------------------
+
+    /**
+     * Ask CloudHim which installed apps have a newer published version.
+     *
+     * Uses the hub's item-updates endpoint, which takes every installed app
+     * as slug@version and answers with the ones that have moved on, each with
+     * its version notes. A hub too old to have the endpoint answers 404; that
+     * is recorded as "no app updates" rather than an error, so an older hub
+     * leaves the Updates page exactly as it was.
+     *
+     * @return array{ok:bool, apps?:array, error?:string}
+     */
+    public function checkApps(): array
+    {
+        if (!$this->isConfigured()) return ['ok' => false, 'error' => 'Not connected to the Basehim update service yet.'];
+        $installed = $this->appService()->installedVersions();
+        $list = [];
+        if ($installed) {
+            $pairs = [];
+            foreach ($installed as $slug => $v) $pairs[] = $slug . '@' . $v;
+            $c = $this->config();
+            $res = $this->httpGet($c['url'] . '/api/v1/cloudhim/item-updates?' . http_build_query([
+                'key' => $c['key'], 'apps' => implode(',', $pairs),
+            ]), 20);
+            if ($res['error'] !== null) {
+                return ['ok' => false, 'error' => 'Could not reach the Basehim update service: ' . $res['error']];
+            }
+            if ($res['status'] === 404) {
+                $this->storeAppUpdates([]);
+                return ['ok' => true, 'apps' => [], 'unsupported' => true];
+            }
+            $json = json_decode($res['body'], true);
+            if (!is_array($json) || empty($json['ok'])) {
+                return ['ok' => false, 'error' => (string) ($json['error'] ?? ('The update service returned HTTP ' . $res['status']))];
+            }
+            foreach ((array) ($json['apps'] ?? []) as $u) {
+                $slug = (string) ($u['slug'] ?? '');
+                $ver  = (string) ($u['version'] ?? '');
+                if ($slug === '' || !isset($installed[$slug]) || !version_compare($ver, $installed[$slug], '>')) continue;
+                $list[] = $this->cleanAppUpdate($u, $installed[$slug]);
+            }
+            usort($list, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+        }
+        $this->storeAppUpdates($list);
+        return ['ok' => true, 'apps' => $list];
+    }
+
+    /**
+     * One hub entry, reduced to what is stored and shown. Everything that
+     * arrives from the hub is treated as text; links are kept only when they
+     * are plain http(s) addresses.
+     */
+    private function cleanAppUpdate(array $u, string $installed): array
+    {
+        $meta = AppMeta::fromHub($u);
+        $log = [];
+        foreach (array_slice((array) ($u['changelog'] ?? []), 0, 20) as $entry) {
+            if (!is_array($entry)) continue;
+            $log[] = [
+                'version'      => mb_substr((string) ($entry['version'] ?? ''), 0, 32),
+                'notes'        => mb_substr((string) ($entry['notes'] ?? ''), 0, 4000),
+                'published_at' => mb_substr((string) ($entry['published_at'] ?? ''), 0, 25),
+            ];
+        }
+        return [
+            'slug'         => $meta['slug'],
+            'name'         => $meta['name'],
+            'installed'    => $installed,
+            'version'      => $meta['version'],
+            'size'         => (int) ($u['size'] ?? 0),
+            'sha256'       => preg_match('/^[a-f0-9]{64}$/i', (string) ($u['sha256'] ?? '')) ? strtolower((string) $u['sha256']) : '',
+            'notes'        => mb_substr((string) ($u['notes'] ?? ''), 0, 4000),
+            'published_at' => mb_substr((string) ($u['published_at'] ?? ''), 0, 25),
+            'changelog'    => $log,
+            'icon_url'     => $meta['icon']['type'] === 'image' ? $meta['icon']['value'] : null,
+            'developer'    => $meta['developer'],
+            'company'      => $meta['company'],
+        ];
+    }
+
+    private function storeAppUpdates(array $list): void
+    {
+        $this->settings->set('updates', 'apps_available', json_encode(array_values($list), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $this->settings->set('updates', 'apps_available_count', count($list));
+        $this->settings->set('updates', 'apps_last_check', date('Y-m-d H:i:s'));
+    }
+
+    /**
+     * App updates from the last check, minus any already installed since —
+     * an app updated from the marketplace or by hand drops off without a
+     * fresh check. Each entry carries the app's own display metadata from its
+     * installed manifest, which describes it better than the hub can.
+     */
+    public function cachedAppUpdates(): array
+    {
+        $list = json_decode((string) $this->settings->get('updates', 'apps_available', '[]'), true);
+        if (!is_array($list) || !$list) return [];
+        $apps = $this->appService();
+        $installed = $apps->installedVersions();
+        $meta = $apps->metaAll();
+        $out = [];
+        foreach ($list as $u) {
+            $slug = (string) ($u['slug'] ?? '');
+            if (!isset($installed[$slug]) || !version_compare((string) ($u['version'] ?? '0'), $installed[$slug], '>')) continue;
+            $u['installed'] = $installed[$slug];
+            $m = $meta[$slug] ?? null;
+            if ($m) {
+                $u['name'] = $m['name'];
+                if ($m['icon']['type'] === 'image') $u['icon_url'] = $m['icon']['value'];
+                $u['icon'] = $m['icon'];
+                $u['initial'] = $m['initial'];
+                $u['developer'] = $m['developer'] ?? ($u['developer'] ?? null);
+                $u['company'] = $m['company'] ?? ($u['company'] ?? null);
+            }
+            $u['initial'] = $u['initial'] ?? (mb_strtoupper(mb_substr((string) ($u['name'] ?? $slug), 0, 1)) ?: '?');
+            $out[] = $u;
+        }
+        // Keep the badge honest when something dropped off.
+        if (count($out) !== (int) $this->settings->get('updates', 'apps_available_count', 0)) {
+            $this->settings->set('updates', 'apps_available_count', count($out));
+        }
+        return $out;
+    }
+
+    /** A pending app update by slug, or null. */
+    public function appUpdate(string $slug): ?array
+    {
+        foreach ($this->cachedAppUpdates() as $u) {
+            if ($u['slug'] === $slug) return $u;
+        }
+        return null;
+    }
+
+    /** Drop one app from the cached list after it has been updated. */
+    public function forgetAppUpdate(string $slug): void
+    {
+        $list = json_decode((string) $this->settings->get('updates', 'apps_available', '[]'), true);
+        $list = array_values(array_filter(is_array($list) ? $list : [], fn($u) => ($u['slug'] ?? '') !== $slug));
+        $this->settings->set('updates', 'apps_available', json_encode($list, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $this->settings->set('updates', 'apps_available_count', count($list));
+    }
+
+    private function appService(): AppService
+    {
+        return \App\Core\Application::getInstance()->make(AppService::class);
     }
 
     private function isInvalidKeyError(array $res): bool
@@ -251,10 +421,13 @@ class UpdateService
             isset($u['version']) && version_compare((string) $u['version'], BASEHIM_VERSION, '>')));
     }
 
-    /** Badge number for the sidebar — cached only, never a remote call. */
+    /**
+     * Badge number for the sidebar — core releases plus app updates, from
+     * the cache only, never a remote call.
+     */
     public function badgeCount(): int
     {
-        return count($this->cachedUpdates());
+        return count($this->cachedUpdates()) + count($this->cachedAppUpdates());
     }
 
     public function lastCheck(): string

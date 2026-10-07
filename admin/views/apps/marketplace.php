@@ -167,7 +167,13 @@ $csrf = \App\Core\Application::getInstance()->make(\App\Core\Session::class)->cs
             return '<div class="bg-white rounded-xl border border-slate-200 p-4 flex flex-col">'
                 + '<div class="flex items-start gap-3 mb-2">' + icon
                 + '<div class="min-w-0 flex-1"><div class="flex items-center gap-2 flex-wrap"><h4 class="text-sm font-semibold text-slate-800 truncate">' + esc(t.name) + '</h4>' + feat + '</div>'
-                + '<div class="text-[11px] text-slate-400">v' + esc(t.version) + (t.author ? ' · by ' + esc(t.author) : '') + (t.category ? ' · ' + esc(t.category) : '') + '</div></div></div>'
+                + '<div class="text-[11px] text-slate-400">v' + esc(t.version) + (function (m) {
+                    // Developer and company from the app's manifest (1.2.36); a hub
+                    // that only sends "author" still fills the developer.
+                    var dev = m && m.developer ? m.developer.name : t.author;
+                    var co  = m && m.company && (!m.developer || m.company.name !== m.developer.name) ? m.company.name : '';
+                    return (dev ? ' · by ' + esc(dev) : '') + (co ? ' · ' + esc(co) : '');
+                })(t.meta) + (t.category ? ' · ' + esc(t.category) : '') + '</div></div></div>'
                 + '<p class="text-xs text-slate-500 mb-2 line-clamp-2">' + esc(t.description || '') + '</p>'
                 + '<div class="flex flex-wrap gap-1 mb-2">' + tags + '</div>'
                 + '<div class="text-[11px] text-slate-400 mb-3"><?= icon('arrow-down-tray', 'w-4 h-4 mr-1') ?>' + (t.installs || 0) + ' installs · ' + bytes(t.size_bytes) + '</div>'

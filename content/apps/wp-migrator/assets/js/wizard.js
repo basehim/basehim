@@ -21,8 +21,15 @@ var ICO = function (n, c) {
     const csrf = root.dataset.csrf || '';
     const isRunning = root.dataset.running === '1';
 
+    // Mirrors Wizard::MAX_IMPORT_BYTES on the server — checked here too so
+    // an oversized file is rejected instantly instead of after uploading.
+    const MAX_IMPORT_BYTES = 500 * 1024 * 1024; // 500 MB
+
     const setupForm = document.getElementById('wpmig-setup');
     const setupMsg  = document.getElementById('wpmig-setup-msg');
+    const uploadWrap  = document.getElementById('wpmig-upload-progress');
+    const uploadBytes = document.getElementById('wpmig-upload-bytes');
+    const uploadBar   = document.getElementById('wpmig-upload-bar');
     const progress  = document.getElementById('wpmig-progress');
     const done      = document.getElementById('wpmig-done');
     const stepLabel = document.getElementById('wpmig-step-label');
@@ -107,6 +114,64 @@ var ICO = function (n, c) {
         return json;
     }
 
+    function formatBytes(n) {
+        const mb = n / (1024 * 1024);
+        return mb >= 1000 ? (mb / 1024).toFixed(2) + ' GB' : mb.toFixed(1) + ' MB';
+    }
+
+    // ----------------------------------------------------------------
+    // Chunked file upload
+    //
+    // Large WXR files (up to 500 MB) are uploaded in small pieces instead
+    // of one big multipart POST, so the server's per-request
+    // upload_max_filesize/post_max_size never has to be raised. The server
+    // tells us the chunk size it can accept in the upload/init response.
+    // ----------------------------------------------------------------
+    async function uploadFileInChunks(file, onProgress) {
+        const initFd = new FormData();
+        initFd.append('_csrf', csrf);
+        initFd.append('filename', file.name);
+        initFd.append('total_size', String(file.size));
+        const initRes = await postJson(base + '/admin/wp-migrator/upload/init', initFd);
+        if (!initRes.ok) throw new Error(initRes.error || 'Could not start upload.');
+
+        const uploadId = initRes.upload_id;
+        const chunkSize = initRes.chunk_size;
+        const totalChunks = Math.max(1, Math.ceil(file.size / chunkSize));
+
+        onProgress(0, file.size);
+
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const blob = file.slice(start, end);
+
+            let attempt = 0;
+            // Retry a few times with backoff before giving up — a single
+            // flaky chunk shouldn't force re-uploading the whole file.
+            for (;;) {
+                try {
+                    const fd = new FormData();
+                    fd.append('_csrf', csrf);
+                    fd.append('upload_id', uploadId);
+                    fd.append('chunk_index', String(i));
+                    fd.append('chunk', blob, file.name);
+                    const res = await postJson(base + '/admin/wp-migrator/upload/chunk', fd);
+                    if (!res.ok) throw new Error(res.error || 'Chunk upload failed.');
+                    break;
+                } catch (err) {
+                    attempt++;
+                    if (attempt >= 3) throw err;
+                    await sleep(500 * attempt);
+                }
+            }
+
+            onProgress(end, file.size);
+        }
+
+        return uploadId;
+    }
+
     // ---- Source tabs ----
     document.querySelectorAll('.wpmig-tab').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -130,11 +195,41 @@ var ICO = function (n, c) {
     if (setupForm) {
         setupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            setupMsg.textContent = 'Validating source…';
             setupMsg.classList.remove('text-red-700');
+
+            const sourceType = document.getElementById('wpmig-source').value;
+            const fileInput = setupForm.querySelector('input[name="wxr_file"]');
+            const file = (sourceType === 'wxr' && fileInput) ? fileInput.files[0] : null;
+
+            if (file && file.size > MAX_IMPORT_BYTES) {
+                setupMsg.textContent = `File is too large — max import size is 500 MB (this file is ${Math.round(file.size / 1048576)} MB).`;
+                setupMsg.classList.add('text-red-700');
+                return;
+            }
+
             const data = new FormData(setupForm);
 
             try {
+                if (file) {
+                    // Upload the file in chunks first; drop it from the
+                    // form data so /start doesn't also receive it inline.
+                    data.delete('wxr_file');
+                    uploadBar.style.width = '0%';
+                    uploadBytes.textContent = `0 MB / ${formatBytes(file.size)} (0%)`;
+                    uploadWrap.classList.remove('hidden');
+                    setupMsg.textContent = 'Uploading file…';
+
+                    const uploadId = await uploadFileInChunks(file, (uploaded, total) => {
+                        const pct = total > 0 ? Math.round((uploaded / total) * 100) : 0;
+                        uploadBar.style.width = pct + '%';
+                        uploadBytes.textContent = `${formatBytes(uploaded)} / ${formatBytes(total)} (${pct}%)`;
+                    });
+
+                    uploadWrap.classList.add('hidden');
+                    data.append('upload_id', uploadId);
+                }
+
+                setupMsg.textContent = 'Validating source…';
                 const json = await postJson(base + '/admin/wp-migrator/start', data);
                 if (!json.ok) {
                     setupMsg.textContent = '';
@@ -147,6 +242,7 @@ var ICO = function (n, c) {
                 setupMsg.textContent = '';
                 loop();
             } catch (err) {
+                uploadWrap.classList.add('hidden');
                 setupMsg.textContent = err.message;
                 setupMsg.classList.add('text-red-700');
                 console.error('wp-migrator start failed:', err);
@@ -290,3 +386,69 @@ var ICO = function (n, c) {
         loop();
     }
 })();
+
+/*
+ * Repair image links in posts already on the site. Batched: the server
+ * answers one batch at a time until `done`. Preview changes nothing.
+ */
+(function () {
+    'use strict';
+    const root = document.getElementById('wpmig-wizard');
+    const box = document.getElementById('wpmig-repair');
+    if (!root || !box) return;
+    const base = root.dataset.base || '';
+    const csrf = root.dataset.csrf || '';
+    const out = document.getElementById('wpmig-repair-out');
+    const site = document.getElementById('wpmig-repair-site');
+    const btns = [document.getElementById('wpmig-repair-preview'), document.getElementById('wpmig-repair-apply')];
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    async function run(apply) {
+        if (apply && !confirm('Repair image links in all posts and pages now? This edits post content.')) return;
+        btns.forEach((b) => (b.disabled = true));
+        out.classList.remove('hidden');
+        const sum = { changed: 0, urls: 0, unmapped: 0, galleries: 0, captions: 0, fetched: 0, samples: [], unmappedSamples: [] };
+        let cursor = 0, done = false, last = null;
+        try {
+            while (!done) {
+                const fd = new FormData();
+                fd.append('_csrf', csrf); fd.append('apply', apply ? '1' : '0');
+                fd.append('cursor', String(cursor)); fd.append('old_site', site.value.trim());
+                const res = await fetch(base + '/admin/wp-migrator/repair', { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                const d = await res.json().catch(() => null);
+                if (!d || !d.ok) throw new Error((d && (d.error || d.message)) || 'The request failed (HTTP ' + res.status + ').');
+                ['changed', 'urls', 'unmapped', 'galleries', 'captions', 'fetched'].forEach((k) => (sum[k] += d[k] || 0));
+                (d.samples || []).forEach((s) => sum.samples.length < 3 && sum.samples.push(s));
+                (d.unmapped_samples || []).forEach((u) => sum.unmappedSamples.length < 3 && sum.unmappedSamples.push(u));
+                cursor = d.cursor; done = d.done; last = d;
+                out.innerHTML = '<p class="text-slate-600">' + (apply ? 'Repairing' : 'Checking') + '… ' + d.scanned + ' of ' + d.total + ' posts and pages.</p>';
+            }
+            const verb = apply ? 'Repaired' : 'Would repair';
+            let html = '<p class="font-medium text-slate-900">' + verb + ' ' + sum.changed + (sum.changed === 1 ? ' post' : ' posts') + ': ' +
+                sum.urls + ' image ' + (sum.urls === 1 ? 'link' : 'links') +
+                (sum.galleries ? ', ' + sum.galleries + ' ' + (sum.galleries === 1 ? 'gallery' : 'galleries') : '') +
+                (sum.captions ? ', ' + sum.captions + ' ' + (sum.captions === 1 ? 'caption' : 'captions') : '') +
+                (sum.fetched ? ', ' + sum.fetched + ' resized copies fetched' : '') + '.</p>';
+            if (sum.unmapped) {
+                html += '<p class="mt-2 text-amber-700">' + sum.unmapped + ' image ' + (sum.unmapped === 1 ? 'link has' : 'links have') +
+                    ' no imported file and ' + (apply ? 'were' : 'will be') + ' left as they are' +
+                    (sum.unmappedSamples.length ? ', for example <code class="break-all">' + esc(sum.unmappedSamples[0]) + '</code>' : '') + '.</p>';
+            }
+            if (sum.samples.length) {
+                html += '<ul class="mt-2 space-y-1 text-xs text-slate-500">' + sum.samples.map((s) =>
+                    '<li><span class="text-slate-700">' + esc(s.post) + ':</span> <code class="break-all">' + esc(s.before) + '</code> → <code class="break-all">' + esc(s.after) + '</code></li>').join('') + '</ul>';
+            }
+            if (!apply && sum.changed) html += '<p class="mt-2 text-slate-600">Nothing has been changed yet. Choose Repair to apply this.</p>';
+            if (!sum.changed) html = '<p class="text-slate-700">No image links need repairing.</p>';
+            out.innerHTML = html;
+        } catch (e) {
+            out.innerHTML = '<p class="text-red-700">' + esc(e.message) + '</p>';
+        } finally {
+            btns.forEach((b) => (b.disabled = false));
+        }
+    }
+    btns[0].addEventListener('click', () => run(false));
+    btns[1].addEventListener('click', () => run(true));
+})();
+

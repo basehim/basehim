@@ -33,7 +33,7 @@ Open **WP Migrator** from the sidebar. The wizard has three steps:
 
 ### 1. Choose source
 
-- **WXR file** — In your WordPress site, go to *Tools → Export*, select "All content", and download the `.xml` file. Upload it here. Best when you don't have DB access or your old host is gone.
+- **WXR file** — In your WordPress site, go to *Tools → Export*, select "All content", and download the `.xml` file. Upload it here. Best when you don't have DB access or your old host is gone. Files up to **500 MB** are supported — the file is uploaded in small background chunks, so it isn't limited by the server's normal `upload_max_filesize`/`post_max_size` setting, and the WXR is parsed with a streaming reader so memory use stays low even on very large exports.
 - **Direct MySQL** — Connect read-only credentials to a live WP database. Faster, brings menus, more accurate for large sites.
 
 ### 2. Pick what to import
@@ -72,6 +72,10 @@ Migration steps run in this order (each must complete before the next starts):
 
 **"Could not read source: ..."** — for WXR, the file is corrupted or not valid XML. For MySQL, check credentials and that the user has read access to the `wp_*` tables.
 
+**"Unknown or expired upload session"** — the chunked upload took longer than 12 hours, or `storage/cache` was cleared mid-upload. Re-select the file and try again.
+
+**File larger than 500 MB** — this is a hard cap on WXR imports. For sites with very large exports, use the Direct MySQL source instead — no upload needed, and it’s faster anyway.
+
 **Media downloads fail** — your server can't reach the old site. Check that `curl` is enabled and that the old site is online. Failed media URLs are logged but don't abort the migration; the inline `<img>` will keep its old URL.
 
 **"users" step shows 0 imported** — every WP user already exists in Basehim (matched by email). Check the **Users** admin page; their IDs are still in the ID map, so posts will still be assigned correctly.
@@ -93,3 +97,18 @@ Uninstalling the app drops the three app tables. Imported posts, users, and medi
 - PHP 8.1+
 - Extensions: `pdo_mysql`, `simplexml`, `curl`, `mbstring`
 - Writable `storage/uploads` and `storage/cache` directories
+
+## Image links
+
+Every WordPress upload URL in imported content is rewritten to the imported
+file — including the resized copies WordPress makes (`photo-1024x683.jpg`),
+`-scaled` originals, every `srcset` candidate, and gallery `data-*` attributes.
+`[gallery]` and `[caption]` shortcodes become HTML. A URL that cannot be mapped
+is left as it was, never turned into a path that does not exist.
+
+**Repair image links** (below the wizard) applies the same fixes to posts that
+are already on the site — for migrations made with 1.2.0 or earlier. Preview it
+first; it changes nothing until you choose Repair.
+
+Requests for `/wp-content/uploads/...` are redirected to the imported file.
+

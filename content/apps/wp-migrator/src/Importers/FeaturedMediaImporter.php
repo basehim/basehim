@@ -14,32 +14,29 @@ class FeaturedMediaImporter extends Importer
 {
     public function entityType(): string { return 'featured_media'; }
 
+    /** @var list<array{post_id:int,thumb_id:int}>|null */
+    private ?array $matches = null;
+
+    /** Posts that had a featured image — from the post references, not every post body. */
+    private function matches(): array
+    {
+        if ($this->matches !== null) return $this->matches;
+        $this->matches = [];
+        foreach ($this->source->postRefs() as $p) {
+            $thumb = (int) ($p['thumbnail_id'] ?? 0);
+            if ($thumb > 0) $this->matches[] = ['post_id' => (int) $p['ID'], 'thumb_id' => $thumb];
+        }
+        return $this->matches;
+    }
+
     public function total(): int
     {
-        // Total is the number of posts that have a _thumbnail_id meta.
-        $all = $this->source->fetchPosts(0, PHP_INT_MAX);
-        $n = 0;
-        foreach ($all as $p) {
-            foreach (($p['postmeta'] ?? []) as $m) {
-                if ($m['meta_key'] === '_thumbnail_id') { $n++; break; }
-            }
-        }
-        return $n;
+        return count($this->matches());
     }
 
     public function runBatch(int $offset, int $limit): int
     {
-        $all = $this->source->fetchPosts(0, PHP_INT_MAX);
-        $matches = [];
-        foreach ($all as $p) {
-            foreach (($p['postmeta'] ?? []) as $m) {
-                if ($m['meta_key'] === '_thumbnail_id' && $m['meta_value'] !== '') {
-                    $matches[] = ['post_id' => (int)$p['ID'], 'thumb_id' => (int)$m['meta_value']];
-                    break;
-                }
-            }
-        }
-        $slice = array_slice($matches, $offset, $limit);
+        $slice = array_slice($this->matches(), $offset, $limit);
         if (!$slice) return 0;
 
         foreach ($slice as $m) {

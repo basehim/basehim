@@ -37,6 +37,7 @@ class UpdateController extends Controller
             'autoConnected' => $autoConnected,
             'connectError'  => $svc->lastConnectError(),
             'updates'       => $svc->cachedUpdates(),
+            'appUpdates'    => $this->pendingPayload($svc)['apps'],
             'lastCheck'     => $svc->lastCheck(),
             'version'       => BASEHIM_VERSION,
         ]);
@@ -55,7 +56,7 @@ class UpdateController extends Controller
         }
         $res = $svc->check();
         if ($res['ok']) {
-            $n = count($res['updates']);
+            $n = count($res['updates']) + count($svc->cachedAppUpdates());
             $this->flash($n > 0 ? 'info' : 'success', $n > 0 ? "{$n} update(s) available." : 'You are running the latest version.');
         } else {
             $this->flash('error', $res['error'] ?? 'Check failed.');
@@ -168,10 +169,89 @@ class UpdateController extends Controller
         ] + $payload);
     }
 
+    /**
+     * POST /admin/updates/app-step.json  (slug)
+     *
+     * Updates ONE app to the version the last check offered. Like the core
+     * installer it is called once per app, so each request stays short on
+     * shared hosting and the page can show progress app by app.
+     *
+     * The download is SHA-256 checked, the files are swapped as a whole (the
+     * old folder is restored if the swap fails), and the app keeps its
+     * settings, data and active state. Its onUpgrade() runs through the same
+     * path as any other upgrade. An app whose new version asks for more
+     * permissions keeps running and is flagged for review, exactly as when it
+     * is updated from the marketplace.
+     */
+    public function appStep(Request $request): Response
+    {
+        if (!$this->verifyCsrf($request)) {
+            return Response::json(['ok' => false, 'error' => 'Security check failed.'], 419);
+        }
+        /** @var UpdateService $svc */
+        $svc  = $this->app->make(UpdateService::class);
+        $slug = (string) $request->input('slug', '');
+        $u = $svc->appUpdate($slug);
+        if ($u === null) {
+            // Already up to date (updated elsewhere, or a double click).
+            return Response::json(['ok' => true, 'skipped' => true, 'slug' => $slug] + $this->pendingPayload($svc));
+        }
+
+        @set_time_limit(300);
+        /** @var \App\Services\AppService $apps */
+        $apps = $this->app->make(\App\Services\AppService::class);
+        try {
+            $res = $apps->marketplaceInstall($slug, (string) ($u['sha256'] ?? ''));
+        } catch (\Throwable $e) {
+            $res = ['ok' => false, 'error' => $e->getMessage()];
+        }
+        if (empty($res['ok'])) {
+            return Response::json([
+                'ok' => false, 'slug' => $slug,
+                'error' => $u['name'] . ' could not be updated: ' . rtrim((string) ($res['error'] ?? 'unknown error'), '. ') . '. It is still on v' . $u['installed'] . '.',
+            ] + $this->pendingPayload($svc));
+        }
+
+        // What actually landed, read back from disk rather than assumed.
+        $now = $apps->installedVersions()[$slug] ?? '';
+        if ($now === '' || !version_compare($now, (string) $u['installed'], '>')) {
+            return Response::json([
+                'ok' => false, 'slug' => $slug,
+                'error' => $u['name'] . ' was downloaded but is still on v' . ($now ?: $u['installed']) . '. The package may not carry its new version number.',
+            ] + $this->pendingPayload($svc));
+        }
+        $svc->forgetAppUpdate($slug);
+
+        $review = false;
+        try { $review = $this->app->make(\App\Services\PermissionBroker::class)->needsReview($slug) || $apps->needsConsent($slug); } catch (\Throwable) {}
+        try {
+            \App\Services\ActivityLogService::record($this->userId(), 'app.updated', 'app', null,
+                "Updated '{$slug}' from v{$u['installed']} to v{$now}");
+        } catch (\Throwable) {}
+
+        $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+        return Response::json([
+            'ok'         => true,
+            'slug'       => $slug,
+            'name'       => $u['name'],
+            'from'       => $u['installed'],
+            'installed'  => $now,
+            'review'     => $review,
+            'review_url' => $review ? $base . '/admin/apps/' . rawurlencode($slug) . '/consent' : null,
+        ] + $this->pendingPayload($svc));
+    }
+
     /** Shared shape: what is still pending, grouped for display. */
     private function pendingPayload(UpdateService $svc): array
     {
         $pending = $svc->pendingInOrder();
+        $appsPending = $svc->cachedAppUpdates();
+        // A built-in glyph icon is drawn server-side, so the page can show it
+        // however the list is re-rendered.
+        foreach ($appsPending as &$a) {
+            $a['icon_html'] = (($a['icon']['type'] ?? '') === 'glyph' && function_exists('icon')) ? icon((string) $a['icon']['value'], 'w-5 h-5') : '';
+        }
+        unset($a);
         $patches = array_values(array_filter($pending, fn($u) => !empty($u['is_patch'])));
         $full    = array_values(array_filter($pending, fn($u) => empty($u['is_patch'])));
         return [
@@ -182,6 +262,9 @@ class UpdateController extends Controller
             'full_count'    => count($full),
             'latest'        => $pending ? (string) end($pending)['version'] : null,
             'last_check'    => $svc->lastCheck(),
+            'apps'          => $appsPending,
+            'apps_count'    => count($appsPending),
+            'total_count'   => count($pending) + count($appsPending),
         ];
     }
 

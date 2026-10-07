@@ -164,7 +164,7 @@ class AppService
                     'name'        => $manifest['name'] ?? $slug,
                     'description' => $manifest['description'] ?? null,
                     'version'     => $manifest['version'] ?? '0.0.1',
-                    'author'      => $manifest['author'] ?? null,
+                    'author'      => $this->manifestAuthor($manifest),
                     'icon'        => $this->manifestIcon($manifest),
                     'permissions' => $this->manifestPermissions($manifest),
                     'status'      => 'inactive',
@@ -180,7 +180,7 @@ class AppService
                     'name'        => $manifest['name'] ?? $row['name'],
                     'description' => $manifest['description'] ?? $row['description'],
                     'version'     => $newVersion,
-                    'author'      => $manifest['author'] ?? $row['author'],
+                    'author'      => $this->manifestAuthor($manifest) ?? $row['author'],
                     'vendor'      => $manifest['vendor'] ?? $row['vendor'],
                     'icon'        => $this->manifestIcon($manifest),
                     'permissions' => $this->manifestPermissions($manifest),
@@ -264,6 +264,7 @@ class AppService
      */
     public function uninstall(string $slug, bool $deleteFiles = false): bool
     {
+        if ($deleteFiles) $this->forgetCachedUpdate($slug);
         $row = $this->find($slug);
         if (!$row) {
             // No DB row, but we may still need to remove files.
@@ -328,6 +329,7 @@ class AppService
      */
     public function delete(string $slug): bool
     {
+        $this->forgetCachedUpdate($slug);
         return $this->uninstall($slug, deleteFiles: true);
     }
 
@@ -886,6 +888,50 @@ class AppService
         }
     }
 
+    /**
+     * The name stored in the apps table's `author` column: the manifest's
+     * "author", or since 1.2.36 its developer's name. Older code and views
+     * read `author`, so it keeps meaning "who made this".
+     */
+    private function manifestAuthor(array $manifest): ?string
+    {
+        $author = $manifest['author'] ?? null;
+        if (is_string($author) && trim($author) !== '') return mb_substr(trim($author), 0, 190);
+        $dev = AppMeta::from($manifest, (string) ($manifest['slug'] ?? ''))['developer'];
+        return $dev !== null ? mb_substr($dev['name'], 0, 190) : null;
+    }
+
+    /**
+     * Display metadata for every app on disk, keyed by slug — icon, developer,
+     * company, description, and anything wrong with them. See AppMeta.
+     *
+     * @return array<string,array>
+     */
+    public function metaAll(): array
+    {
+        $out = [];
+        foreach ($this->scan() as $slug => $manifest) {
+            $out[$slug] = AppMeta::from($manifest, (string) $slug, (string) ($manifest['_path'] ?? ''));
+        }
+        return $out;
+    }
+
+    /**
+     * Installed app versions as CloudHim's item-updates endpoint wants them:
+     * slug => version, for every app with files on disk.
+     *
+     * @return array<string,string>
+     */
+    public function installedVersions(): array
+    {
+        $out = [];
+        foreach ($this->scan() as $slug => $manifest) {
+            $v = trim((string) ($manifest['version'] ?? ''));
+            if ($v !== '' && preg_match('/^[0-9A-Za-z.\-+]{1,32}$/', $v)) $out[(string) $slug] = $v;
+        }
+        return $out;
+    }
+
     /** Normalised icon string from a manifest (empty when unset). */
     private function manifestIcon(array $manifest): ?string
     {
@@ -1250,6 +1296,7 @@ class AppService
         $installed = $this->scan();
         foreach ($json[$listKey] as &$p) {
             $local = $installed[$p['slug']] ?? null;
+            $p['meta'] = AppMeta::fromHub($p);
             $p['installed'] = $local !== null;
             $p['installed_version'] = $local['version'] ?? null;
             if ($local !== null) {
@@ -1278,7 +1325,7 @@ class AppService
      * the app's DB row / active state are preserved; a new install inserts
      * the row and fires onInstall via sync().
      */
-    public function marketplaceInstall(string $slug): array
+    public function marketplaceInstall(string $slug, string $expectedSha256 = ''): array
     {
         $conn = $this->cloudhimConn();
         if (!$conn) return ['ok' => false, 'error' => 'This site is not connected to the Basehim marketplace yet — open Updates to connect.'];
@@ -1293,8 +1340,17 @@ class AppService
         $tmp = sys_get_temp_dir() . '/bh-app-' . bin2hex(random_bytes(5)) . '.zip';
         file_put_contents($tmp, $res['body']);
 
-        $expected = strtolower(trim((string) ($res['headers']['x-checksum-sha256'] ?? '')));
-        if ($expected !== '' && !hash_equals($expected, hash_file('sha256', $tmp))) {
+        // The file must match the checksum sent with the download AND, when
+        // one was offered, the checksum the update list announced for this
+        // version — a redirect cannot swap in a different file with a header
+        // to match it.
+        $actual = hash_file('sha256', $tmp);
+        $bad = false;
+        foreach ([(string) ($res['headers']['x-checksum-sha256'] ?? ''), $expectedSha256] as $expected) {
+            $expected = strtolower(trim($expected));
+            if ($expected !== '' && !hash_equals($expected, $actual)) $bad = true;
+        }
+        if ($bad) {
             @unlink($tmp);
             return ['ok' => false, 'error' => 'Checksum mismatch — download may be corrupted. Nothing was installed.'];
         }
@@ -1307,6 +1363,7 @@ class AppService
                 $result = $this->installFromZip($tmp);            // fresh install + sync()
             }
             @unlink($tmp);
+            $this->forgetCachedUpdate($slug);
             return ['ok' => true] + $result;
         } catch (\Throwable $e) {
             @unlink($tmp);
@@ -1340,9 +1397,23 @@ class AppService
         }
         if (is_dir($aside)) $this->rrmdir($aside);
 
+        // The new files sit at the old paths, so PHP's opcode cache would go
+        // on serving the previous version's code until it next revalidates —
+        // a minute on many hosts — while the new manifest is already read.
+        // Clearing it makes the next request run the version just installed.
+        if (function_exists('opcache_reset')) { @opcache_reset(); }
+
         // Refresh the DB row's version/manifest without disturbing active state.
         $this->sync();
         return ['slug' => $expectedSlug, 'manifest' => $staged['manifest'], 'replaced' => true];
+    }
+
+    /** Drop an app from the Updates page's cached list (it is current, or gone). */
+    private function forgetCachedUpdate(string $slug): void
+    {
+        try {
+            Application::getInstance()->make(\App\Services\UpdateService::class)->forgetAppUpdate($slug);
+        } catch (\Throwable) {}
     }
 
     private function cloudhimConn(): ?array

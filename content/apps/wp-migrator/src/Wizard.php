@@ -29,6 +29,16 @@ use Basehim\WpMigrator\Sources\WxrSource;
  */
 class Wizard
 {
+    /** Hard cap on total WXR import size, regardless of upload method. */
+    private const MAX_IMPORT_BYTES = 500 * 1024 * 1024; // 500 MB
+
+    /** Chunk size bounds suggested to the client for chunked uploads. */
+    private const CHUNK_MAX_BYTES = 8 * 1024 * 1024;   // 8 MB
+    private const CHUNK_MIN_BYTES = 256 * 1024;         // 256 KB
+
+    /** Abandoned chunked-upload sessions older than this are swept away. */
+    private const UPLOAD_TTL_SECONDS = 12 * 3600;
+
     private State $state;
     private IdMap $idMap;
 
@@ -90,25 +100,61 @@ class Wizard
         // Build config from request.
         $config = [];
         if ($sourceType === 'wxr') {
-            $file = $request->file('wxr_file');
-            if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-                return $this->jsonError('Please upload a WXR (.xml) file.', 422);
-            }
-            // Persist the uploaded file outside tmp so it survives across batches.
-            $cacheDir = (defined('BASEHIM_ROOT') ? BASEHIM_ROOT : dirname(__DIR__, 4)) . '/storage/cache';
-            if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0775, true) && !is_dir($cacheDir)) {
-                return $this->jsonError('Could not create storage/cache directory. Check permissions on storage/.', 500);
-            }
-            $dest = $cacheDir . '/wpmig_' . bin2hex(random_bytes(6)) . '.xml';
-            if (!@move_uploaded_file($file['tmp_name'], $dest)) {
-                // Fall back to a regular copy + unlink — some hosts disallow
-                // move_uploaded_file across filesystems.
-                if (!@copy($file['tmp_name'], $dest)) {
-                    return $this->jsonError('Could not store uploaded file. Check permissions on storage/cache/.', 500);
+            $uploadId = preg_replace('/[^a-f0-9]/', '', (string)$request->input('upload_id', ''));
+
+            if ($uploadId !== '') {
+                // File arrived via the chunked-upload flow (assets/js/wizard.js
+                // splits anything into small chunks before POSTing), used so a
+                // large WXR file never has to fit inside a single request's
+                // post_max_size/upload_max_filesize.
+                $cacheDir = $this->cacheDir();
+                if ($cacheDir === null) {
+                    return $this->jsonError('Could not access storage/cache directory. Check permissions on storage/.', 500);
                 }
-                @unlink($file['tmp_name']);
+                $partPath = $cacheDir . '/wpmig_up_' . $uploadId . '.part';
+                $metaPath = $cacheDir . '/wpmig_up_' . $uploadId . '.json';
+                $meta = $this->readUploadMeta($metaPath);
+                if ($meta === null || !is_file($partPath)) {
+                    return $this->jsonError('Unknown or expired upload session. Please re-select the file and try again.', 422);
+                }
+                clearstatcache(true, $partPath);
+                $actualSize = filesize($partPath);
+                if ($actualSize === false || $actualSize !== (int)$meta['total_size']) {
+                    return $this->jsonError('Upload is incomplete — please try again.', 422);
+                }
+                if ($actualSize > self::MAX_IMPORT_BYTES) {
+                    @unlink($partPath);
+                    @unlink($metaPath);
+                    return $this->jsonError($this->tooLargeMessage(), 422);
+                }
+                @unlink($metaPath);
+                $config['file'] = $partPath;
+            } else {
+                $file = $request->file('wxr_file');
+                if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                    return $this->jsonError('Please upload a WXR (.xml) file.', 422);
+                }
+                // Persist the uploaded file outside tmp so it survives across batches.
+                $cacheDir = $this->cacheDir();
+                if ($cacheDir === null) {
+                    return $this->jsonError('Could not create storage/cache directory. Check permissions on storage/.', 500);
+                }
+                $dest = $cacheDir . '/wpmig_' . bin2hex(random_bytes(6)) . '.xml';
+                if (!@move_uploaded_file($file['tmp_name'], $dest)) {
+                    // Fall back to a regular copy + unlink — some hosts disallow
+                    // move_uploaded_file across filesystems.
+                    if (!@copy($file['tmp_name'], $dest)) {
+                        return $this->jsonError('Could not store uploaded file. Check permissions on storage/cache/.', 500);
+                    }
+                    @unlink($file['tmp_name']);
+                }
+                clearstatcache(true, $dest);
+                if ((int)(filesize($dest) ?: 0) > self::MAX_IMPORT_BYTES) {
+                    @unlink($dest);
+                    return $this->jsonError($this->tooLargeMessage(), 422);
+                }
+                $config['file'] = $dest;
             }
-            $config['file'] = $dest;
         } else {
             $config = [
                 'host'     => (string)$request->input('mysql_host', '127.0.0.1'),
@@ -180,6 +226,130 @@ class Wizard
         return $this->json(['ok' => true, 'job_id' => $jobId]);
     }
 
+    /**
+     * Start a chunked-upload session for a WXR file. Returns an upload_id
+     * and the chunk size the client should use — kept under whatever
+     * upload_max_filesize/post_max_size the server currently allows, so
+     * each individual chunk request comfortably fits regardless of the
+     * overall 500 MB import cap.
+     */
+    public function uploadInit(Request $request): Response
+    {
+        $session = $this->app->app()->make(Session::class);
+        if (!$session->verifyCsrf((string)$request->input('_csrf'))) {
+            return $this->jsonError('Security check failed.', 403);
+        }
+
+        $this->sweepStaleUploads();
+
+        $totalSize = (int)$request->input('total_size', 0);
+        if ($totalSize <= 0) {
+            return $this->jsonError('Missing or invalid file size.', 422);
+        }
+        if ($totalSize > self::MAX_IMPORT_BYTES) {
+            return $this->jsonError($this->tooLargeMessage(), 422);
+        }
+
+        $cacheDir = $this->cacheDir();
+        if ($cacheDir === null) {
+            return $this->jsonError('Could not create storage/cache directory. Check permissions on storage/.', 500);
+        }
+
+        $uploadId = bin2hex(random_bytes(12));
+        $partPath = $cacheDir . '/wpmig_up_' . $uploadId . '.part';
+        $metaPath = $cacheDir . '/wpmig_up_' . $uploadId . '.json';
+
+        // Pre-create an empty part file so upload/chunk can fseek into it
+        // regardless of what order chunks arrive/retry in.
+        if (@file_put_contents($partPath, '') === false) {
+            return $this->jsonError('Could not create upload file. Check permissions on storage/cache/.', 500);
+        }
+
+        $chunkSize = max(self::CHUNK_MIN_BYTES, min(self::CHUNK_MAX_BYTES, $this->maxUploadBytes() - (256 * 1024)));
+
+        $meta = [
+            'total_size' => $totalSize,
+            'chunk_size' => $chunkSize,
+            'created_at' => time(),
+        ];
+        if (@file_put_contents($metaPath, json_encode($meta)) === false) {
+            @unlink($partPath);
+            return $this->jsonError('Could not create upload metadata. Check permissions on storage/cache/.', 500);
+        }
+
+        return $this->json([
+            'ok'         => true,
+            'upload_id'  => $uploadId,
+            'chunk_size' => $chunkSize,
+        ]);
+    }
+
+    /**
+     * Receive one chunk of a file started with uploadInit(). Chunks are
+     * written at their byte offset (chunk_index * chunk_size), so a
+     * retried/duplicated chunk just overwrites the same bytes instead of
+     * corrupting the file.
+     */
+    public function uploadChunk(Request $request): Response
+    {
+        $session = $this->app->app()->make(Session::class);
+        if (!$session->verifyCsrf((string)$request->input('_csrf'))) {
+            return $this->jsonError('Security check failed.', 403);
+        }
+
+        $uploadId = preg_replace('/[^a-f0-9]/', '', (string)$request->input('upload_id', ''));
+        $chunkIndex = (int)$request->input('chunk_index', -1);
+        if ($uploadId === '' || $chunkIndex < 0) {
+            return $this->jsonError('Invalid upload request.', 422);
+        }
+
+        $cacheDir = $this->cacheDir();
+        if ($cacheDir === null) {
+            return $this->jsonError('storage/cache is not writable.', 500);
+        }
+        $partPath = $cacheDir . '/wpmig_up_' . $uploadId . '.part';
+        $metaPath = $cacheDir . '/wpmig_up_' . $uploadId . '.json';
+
+        $meta = $this->readUploadMeta($metaPath);
+        if ($meta === null || !is_file($partPath)) {
+            return $this->jsonError('Unknown or expired upload session. Please re-select the file and try again.', 404);
+        }
+
+        $file = $request->file('chunk');
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            return $this->jsonError('Missing chunk data.', 422);
+        }
+
+        $chunkSize = (int)$meta['chunk_size'];
+        $offset = $chunkIndex * $chunkSize;
+        $len = (int)($file['size'] ?? 0);
+
+        // Defensive bounds check — the declared total_size was already
+        // capped at MAX_IMPORT_BYTES in uploadInit(), so a chunk landing
+        // outside [0, total_size + one chunk] means a stale/bogus request.
+        if ($offset < 0 || $offset > self::MAX_IMPORT_BYTES || $offset + $len > (int)$meta['total_size'] + $chunkSize) {
+            return $this->jsonError('Upload chunk out of range.', 422);
+        }
+
+        $data = @file_get_contents($file['tmp_name']);
+        if ($data === false) {
+            return $this->jsonError('Could not read uploaded chunk.', 500);
+        }
+
+        $fh = @fopen($partPath, 'r+b');
+        if ($fh === false) {
+            return $this->jsonError('Could not open upload file for writing.', 500);
+        }
+        try {
+            fseek($fh, $offset);
+            fwrite($fh, $data);
+        } finally {
+            fclose($fh);
+        }
+
+        return $this->json(['ok' => true]);
+    }
+
     public function run(Request $request): Response
     {
         $session = $this->app->app()->make(Session::class);
@@ -220,7 +390,10 @@ class Wizard
         }
 
         $processed = $importer->runBatch($cursor, $importer->batchSize());
-        $newCursor = $cursor + max($processed, $importer->batchSize());
+        // Advance by what was actually done. Batches may stop early to stay
+        // inside PHP's time limit; advancing by the batch size (as up to 1.2.0)
+        // would have skipped the records they did not reach.
+        $newCursor = $cursor + $processed;
 
         if ($processed === 0 || $newCursor >= $total) {
             // Step is done. Move on.
@@ -236,6 +409,89 @@ class Wizard
             'total'     => $total,
             'done'      => false,
             'counts'    => $this->state->find($job['id'])['counts'] ?? [],
+        ]);
+    }
+
+    /**
+     * POST /admin/wp-migrator/repair — fix image links in posts that are
+     * already on the site: galleries, resized copies, srcset, and the
+     * `/wp-content/uploads/...` paths 1.2.0 and earlier left behind.
+     *
+     * Batched like the import: the browser calls it until `done`. With
+     * apply=0 it only reports what would change.
+     *
+     * Every post and page is examined, not only those in the import map — an
+     * older migration's map may be gone or, from 1.2.0, cut short. So images
+     * are also matched by file name, when exactly one media item has it.
+     */
+    public function repair(Request $request): Response
+    {
+        $session = $this->app->app()->make(Session::class);
+        if (!$session->verifyCsrf((string) $request->input('_csrf'))) {
+            return $this->jsonError('Security check failed. Reload the page and try again.', 403);
+        }
+        if ($this->state->currentJob()) {
+            return $this->jsonError('A migration is running. Repair image links after it finishes.', 409);
+        }
+        @set_time_limit(120);
+
+        $db = $this->app->dbPublic();
+        $apply = (string) $request->input('apply', '0') === '1';
+        $after = max(0, (int) $request->input('cursor', 0));
+        $oldSite = trim((string) $request->input('old_site', ''));
+        if ($oldSite !== '' && !preg_match('#^https?://#i', $oldSite)) $oldSite = 'https://' . $oldSite;
+
+        $hosts = UrlMapper::hostsFrom($oldSite, (string) ($_SERVER['HTTP_HOST'] ?? ''));
+        foreach ($db->select("SELECT old_id FROM app_wpmig_idmap WHERE entity_type = 'media_host'") as $r) $hosts[] = (string) $r['old_id'];
+
+        $mapper = new UrlMapper($db, $this->idMap, array_values(array_unique($hosts)), $oldSite, $apply && $oldSite !== '', true);
+        $fixer = new ContentFixer($db, $this->idMap, $mapper, false);
+
+        $total = (int) ($db->selectOne("SELECT COUNT(*) c FROM posts WHERE type IN ('post','page') AND deleted_at IS NULL")['c'] ?? 0);
+        $rows = $db->select(
+            "SELECT id, title, content FROM posts
+              WHERE type IN ('post','page') AND deleted_at IS NULL AND id > :a
+              ORDER BY id LIMIT 25",
+            ['a' => $after]
+        );
+
+        $changed = 0; $samples = []; $cursor = $after; $started = microtime(true); $stoppedEarly = false;
+        foreach ($rows as $r) {
+            $cursor = (int) $r['id'];
+            $content = (string) $r['content'];
+            if ($content === '' || (stripos($content, 'wp-content/uploads') === false && stripos($content, '[gallery') === false && stripos($content, '[caption') === false)) continue;
+            $fixed = $fixer->fix($content, null);
+            if ($fixed === $content) continue;
+            $changed++;
+            if (count($samples) < 3 && preg_match('#[^\s"\']*wp-content/uploads/[^\s"\'<>]+#i', $content, $before)) {
+                $samples[] = ['post' => (string) $r['title'], 'before' => $before[0], 'after' => $mapper->map($before[0]) ?? '(unchanged)'];
+            }
+            if ($apply) {
+                try { $db->update('posts', ['content' => $fixed], ['id' => (int) $r['id']]); }
+                catch (\Throwable $e) { $this->app->appLog('repair failed for post ' . $r['id'] . ': ' . $e->getMessage(), [], 'warning'); }
+            }
+            if (microtime(true) - $started > 20) { $stoppedEarly = true; break; }
+        }
+
+        // Finished when this batch reached the end of the table.
+        $done = !$stoppedEarly && count($rows) < 25;
+        $scanned = (int) ($db->selectOne("SELECT COUNT(*) c FROM posts WHERE type IN ('post','page') AND deleted_at IS NULL AND id <= :c", ['c' => $cursor])['c'] ?? 0);
+
+        return $this->json([
+            'ok'        => true,
+            'apply'     => $apply,
+            'cursor'    => $cursor,
+            'done'      => $done,
+            'scanned'   => $scanned,
+            'total'     => $total,
+            'changed'   => $changed,
+            'urls'      => $fixer->stats['urls'],
+            'unmapped'  => $fixer->stats['unmapped'],
+            'galleries' => $fixer->stats['galleries'],
+            'captions'  => $fixer->stats['captions'],
+            'fetched'   => $mapper->fetched,
+            'unmapped_samples' => $fixer->unmappedSamples,
+            'samples'   => $samples,
         ]);
     }
 
@@ -387,5 +643,52 @@ class Wizard
         if ($file && str_contains($file, '/storage/cache/wpmig_') && is_file($file)) {
             @unlink($file);
         }
+        // The parsed index beside it (see WxrSource).
+        $dir = $file ? $file . '.index' : '';
+        if ($dir !== '' && str_contains($dir, '/storage/cache/wpmig_') && is_dir($dir)) {
+            foreach (glob($dir . '/{,.}*', GLOB_BRACE) ?: [] as $f) if (is_file($f)) @unlink($f);
+            @rmdir($dir);
+        }
+    }
+
+    private function cacheDir(): ?string
+    {
+        $cacheDir = (defined('BASEHIM_ROOT') ? BASEHIM_ROOT : dirname(__DIR__, 4)) . '/storage/cache';
+        if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0775, true) && !is_dir($cacheDir)) {
+            return null;
+        }
+        return $cacheDir;
+    }
+
+    /** @return array{total_size:int,chunk_size:int,created_at:int}|null */
+    private function readUploadMeta(string $path): ?array
+    {
+        if (!is_file($path)) return null;
+        $raw = @file_get_contents($path);
+        if ($raw === false) return null;
+        $meta = json_decode($raw, true);
+        if (!is_array($meta) || !isset($meta['total_size'], $meta['chunk_size'])) return null;
+        return $meta;
+    }
+
+    /** Deletes chunked-upload sessions nobody finished within the TTL. */
+    private function sweepStaleUploads(): void
+    {
+        $cacheDir = $this->cacheDir();
+        if ($cacheDir === null) return;
+        foreach (glob($cacheDir . '/wpmig_up_*.json') ?: [] as $metaPath) {
+            $meta = $this->readUploadMeta($metaPath);
+            $createdAt = (int)($meta['created_at'] ?? 0);
+            if ($meta === null || (time() - $createdAt) > self::UPLOAD_TTL_SECONDS) {
+                $id = basename($metaPath, '.json');
+                @unlink($metaPath);
+                @unlink($cacheDir . '/' . $id . '.part');
+            }
+        }
+    }
+
+    private function tooLargeMessage(): string
+    {
+        return 'File is too large — the maximum import size is ' . (int)(self::MAX_IMPORT_BYTES / 1048576) . ' MB.';
     }
 }

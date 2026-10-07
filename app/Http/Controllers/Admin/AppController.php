@@ -28,6 +28,7 @@ class AppController extends Controller
             'currentUser' => $this->user(),
             'installed'   => $installed,
             'available'   => $available,
+            'meta'        => $apps->metaAll(),
             'csrf'        => $session->csrfToken(),
             'canUpload'   => class_exists(\ZipArchive::class),
         ]);

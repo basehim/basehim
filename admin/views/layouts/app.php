@@ -729,8 +729,10 @@ try {
                         try {
                             $__app = \App\Core\Application::getInstance();
                             if ($navBadgeKey === 'updates') {
-                                $navBadgeN = (int) $__app->make(\App\Services\SettingService::class)
-                                    ->get('updates', 'available_count', 0);
+                                // Core releases plus app updates (1.2.36), both cached.
+                                $__ss = $__app->make(\App\Services\SettingService::class);
+                                $navBadgeN = (int) $__ss->get('updates', 'available_count', 0)
+                                           + (int) $__ss->get('updates', 'apps_available_count', 0);
                             } elseif ($navBadgeKey === 'comments') {
                                 $navBadgeN = $__app->make(\App\Services\CommentService::class)->pendingCount();
                             }
@@ -766,7 +768,7 @@ try {
             $__canUpdates = !empty($currentUser) && \App\Http\Middleware\CheckCapability::userCan($currentUser, 'manage_settings');
             if ($__canUpdates) {
                 $__us = \App\Core\Application::getInstance()->make(\App\Services\SettingService::class);
-                $__updN = (int) $__us->get('updates', 'available_count', 0);
+                $__updN = (int) $__us->get('updates', 'available_count', 0) + (int) $__us->get('updates', 'apps_available_count', 0);
                 $__checked = (string) $__us->get('updates', 'last_check', '') !== '';
             }
         } catch (\Throwable) {}

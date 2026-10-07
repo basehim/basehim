@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Basehim\WpMigrator\Importers;
 
 use App\Core\Helpers;
+use Basehim\WpMigrator\UrlMapper;
 
 /**
  * MediaImporter
@@ -19,6 +20,9 @@ use App\Core\Helpers;
  */
 class MediaImporter extends Importer
 {
+    /** Each download can take seconds; a small batch stays inside PHP's time limit. */
+    protected int $batchSize = 10;
+
     public function entityType(): string { return 'media'; }
     public function total(): int { return $this->source->countAttachments(); }
 
@@ -27,24 +31,38 @@ class MediaImporter extends Importer
         $rows = $this->source->fetchAttachments($offset, $limit);
         if (!$rows) return 0;
 
+        $started = microtime(true);
+        $done = 0;
         foreach ($rows as $row) {
+            $done++;
             try {
                 $this->importOne($row);
             } catch (\Throwable $e) {
                 $this->log("attachment {$row['ID']} failed: " . $e->getMessage());
             }
+            // Stop early rather than hit the PHP time limit; the next batch
+            // starts where this one stopped.
+            if (microtime(true) - $started > 20) break;
         }
-        return count($rows);
+        return $done;
     }
 
     private function importOne(array $row): void
     {
         $oldId = (int)$row['ID'];
-        $url   = trim((string)($row['attachment_url'] ?? $row['guid'] ?? ''));
+        $meta  = $this->metaOf($row);
+        $attached = ltrim((string) ($meta['_wp_attached_file'] ?? $row['attached_file'] ?? ''), '/');
+        $url   = trim((string)($row['attachment_url'] ?? ''));
+        if ($url === '' && $attached !== '') {
+            $url = rtrim($this->source->siteUrl(), '/') . '/wp-content/uploads/' . $attached;
+        }
+        if ($url === '') $url = trim((string) ($row['guid'] ?? ''));
         if ($url === '') return;
 
-        // Idempotency check.
-        if ($this->idMap->get('media', $oldId)) {
+        // Idempotency check. The paths are recorded again even so: a re-run
+        // after upgrading from 1.2.0 fills in what that version left out.
+        if ($existing = $this->idMap->get('media', $oldId)) {
+            $this->recordPaths($existing, $url, $attached, $meta, $row);
             return;
         }
 
@@ -93,7 +111,8 @@ class MediaImporter extends Importer
             'uuid'          => $uuid,
             'author_id'     => $authorId,
             'title'         => $title,
-            'alt_text'      => $row['post_title'] ?? null,
+            // WordPress keeps alt text in its own field; the title is not alt text.
+            'alt_text'      => ($meta['_wp_attachment_image_alt'] ?? '') !== '' ? (string) $meta['_wp_attachment_image_alt'] : null,
             'caption'       => $row['post_excerpt'] ?? null,
             'description'   => $row['post_content'] ?? null,
             'mime_type'     => $mime,
@@ -108,9 +127,72 @@ class MediaImporter extends Importer
         ]);
 
         $this->idMap->put('media', $oldId, $newId);
-        $this->idMap->put('media_url', $url, $newId);
+        $this->recordPaths($newId, $url, $attached, $meta, $row);
 
         $this->state->bumpCount($this->jobId, 'media');
+    }
+
+    /**
+     * Record every address this attachment can be found at in post content:
+     * the uploaded file, the original (for -scaled images) and every resized
+     * copy WordPress listed in _wp_attachment_metadata. Keys are hashed
+     * uploads-relative paths — see UrlMapper::key().
+     *
+     * Up to 1.2.0 the full URL itself was the key, in a VARCHAR(64) column:
+     * on a non-strict server it was cut at 64 characters, the rewrite step
+     * then replaced that prefix inside longer URLs and left the rest behind.
+     */
+    private function recordPaths(int $newId, string $url, string $attached, array $meta, array $row): void
+    {
+        $rel = $attached !== '' ? $attached : (string) (UrlMapper::split((string) $this->relFromUrl($url))[0] ?? '');
+        $fromUrl = $this->relFromUrl($url);
+        $paths = array_filter([$rel, $fromUrl]);
+
+        $info = $this->unserializeMeta((string) ($meta['_wp_attachment_metadata'] ?? $row['attachment_metadata'] ?? ''));
+        $dir = $rel !== '' && str_contains($rel, '/') ? dirname($rel) . '/' : '';
+        if (!empty($info['original_image'])) $paths[] = $dir . $info['original_image'];
+        foreach ((array) ($info['sizes'] ?? []) as $size) {
+            if (is_array($size) && !empty($size['file'])) $paths[] = $dir . $size['file'];
+        }
+        foreach (array_unique($paths) as $p) {
+            $this->idMap->put('media_path', UrlMapper::key((string) $p), $newId);
+        }
+
+        // Every host the files were served from, for the rewrite step.
+        $host = parse_url($url, PHP_URL_HOST);
+        if (is_string($host) && $host !== '') $this->idMap->put('media_host', strtolower(substr($host, 0, 64)), 0);
+
+        // For [gallery] without ids: the images attached to a post, in order.
+        $parent = (int) ($row['post_parent'] ?? 0);
+        if ($parent > 0) {
+            $this->idMap->put('media_parent', $parent . ':' . sprintf('%05d', (int) ($row['menu_order'] ?? 0)) . ':' . (int) $row['ID'], $newId);
+        }
+    }
+
+    /** `https://site/wp-content/uploads/2020/12/a.jpg` => `2020/12/a.jpg` */
+    private function relFromUrl(string $url): ?string
+    {
+        $path = (string) (parse_url($url, PHP_URL_PATH) ?? '');
+        $i = stripos($path, '/wp-content/uploads/');
+        return $i === false ? null : rawurldecode(substr($path, $i + 20));
+    }
+
+    /** @return array<string,string> meta_key => meta_value */
+    private function metaOf(array $row): array
+    {
+        $out = [];
+        foreach ((array) ($row['postmeta'] ?? []) as $m) {
+            if (isset($m['meta_key'])) $out[(string) $m['meta_key']] = (string) ($m['meta_value'] ?? '');
+        }
+        return $out;
+    }
+
+    /** WordPress stores attachment metadata serialized. No objects are allowed back. */
+    private function unserializeMeta(string $raw): array
+    {
+        if ($raw === '' || !preg_match('/^a:\d+:\{/', $raw)) return [];
+        $v = @unserialize($raw, ['allowed_classes' => false]);
+        return is_array($v) ? $v : [];
     }
 
     /**

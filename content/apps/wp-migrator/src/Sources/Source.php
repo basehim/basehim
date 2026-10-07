@@ -39,4 +39,11 @@ interface Source
 
     /** Source-of-truth site URL (used to recognize internal links/images). */
     public function siteUrl(): string;
+
+    /**
+     * Every post and page, without content: ID, post_type, post_name, link
+     * (its old address) and thumbnail_id. Steps that need to walk all posts
+     * (featured images, redirects) use this instead of loading every body.
+     */
+    public function postRefs(): array;
 }

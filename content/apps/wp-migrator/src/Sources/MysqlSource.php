@@ -143,8 +143,82 @@ class MysqlSource implements Source
             $p['categories'] = $this->termSlugsFor($p['ID'], 'category');
             $p['tags']       = $this->termSlugsFor($p['ID'], 'post_tag');
             $p['postmeta']   = $this->postmetaFor((int)$p['ID']);
+            // Its old address. The WXR source has this from the export; here it
+            // is rebuilt, or the redirects step (which needs it) did nothing.
+            $p['link']       = $this->permalink($p);
         }
         return $posts;
+    }
+
+    /** Every post and page without content — see Source::postRefs(). */
+    public function postRefs(): array
+    {
+        $rows = $this->pdo->query(
+            "SELECT p.ID, p.post_type, p.post_name, p.post_date, p.post_parent, p.post_author,
+                    (SELECT meta_value FROM {$this->prefix}postmeta m WHERE m.post_id = p.ID AND m.meta_key = '_thumbnail_id' LIMIT 1) AS thumbnail_id
+               FROM {$this->prefix}posts p
+              WHERE p.post_type IN ('post','page') AND p.post_status NOT IN ('auto-draft','inherit','trash')
+              ORDER BY p.ID"
+        )->fetchAll();
+        foreach ($rows as &$r) {
+            $r['link'] = $this->permalink($r);
+            $r['thumbnail_id'] = (int) ($r['thumbnail_id'] ?? 0);
+        }
+        return $rows;
+    }
+
+    private ?string $structure = null;
+    private ?string $home = null;
+
+    /**
+     * The address WordPress served a post or page at: its permalink structure
+     * (/%postname%/, /%year%/%monthnum%/%postname%/, /%category%/%postname%/,
+     * /%post_id%, ...) or ?p= / ?page_id= when it had none.
+     */
+    private function permalink(array $p): string
+    {
+        if ($this->structure === null) {
+            $opt = function (string $name): string {
+                $st = $this->pdo->prepare("SELECT option_value FROM {$this->prefix}options WHERE option_name = :n");
+                $st->execute(['n' => $name]);
+                return (string) ($st->fetchColumn() ?: '');
+            };
+            $this->structure = $opt('permalink_structure');
+            $this->home = rtrim($opt('home') ?: $this->siteUrl, '/');
+        }
+        $id = (int) $p['ID'];
+        $slug = (string) ($p['post_name'] ?? '');
+
+        if (($p['post_type'] ?? '') === 'page') {
+            if ($this->structure === '' || $slug === '') return $this->home . '/?page_id=' . $id;
+            $path = [$slug];
+            $parent = (int) ($p['post_parent'] ?? 0);
+            for ($i = 0; $parent > 0 && $i < 10; $i++) {
+                $st = $this->pdo->prepare("SELECT post_name, post_parent FROM {$this->prefix}posts WHERE ID = :id");
+                $st->execute(['id' => $parent]);
+                $row = $st->fetch();
+                if (!$row) break;
+                array_unshift($path, (string) $row['post_name']);
+                $parent = (int) $row['post_parent'];
+            }
+            return $this->home . '/' . implode('/', $path) . '/';
+        }
+
+        if ($this->structure === '' || $slug === '') return $this->home . '/?p=' . $id;
+        $ts = strtotime((string) ($p['post_date'] ?? '')) ?: time();
+        $link = strtr($this->structure, [
+            '%year%'     => date('Y', $ts),
+            '%monthnum%' => date('m', $ts),
+            '%day%'      => date('d', $ts),
+            '%hour%'     => date('H', $ts),
+            '%minute%'   => date('i', $ts),
+            '%second%'   => date('s', $ts),
+            '%postname%' => $slug,
+            '%post_id%'  => (string) $id,
+            '%category%' => str_contains($this->structure, '%category%') ? ($this->termSlugsFor($id, 'category')[0] ?? 'uncategorized') : '',
+            '%author%'   => '',
+        ]);
+        return $this->home . '/' . ltrim($link, '/');
     }
 
     private function termSlugsFor(int $postId, string $taxonomy): array
@@ -194,8 +268,21 @@ class MysqlSource implements Source
         $stmt->execute();
         $rows = $stmt->fetchAll();
         foreach ($rows as &$r) {
-            // Reconstruct attachment URL: siteUrl + wp-content/uploads/<attached_file>.
-            $r['attachment_url'] = $r['guid'] ?: ($this->siteUrl . '/wp-content/uploads/' . $r['attached_file']);
+            /*
+             * The file's address, from _wp_attached_file — where WordPress
+             * really keeps it. `guid` was used first up to 1.2.0, but WordPress
+             * never updates it: after a domain change, an http->https switch or
+             * an earlier migration it points somewhere that no longer exists.
+             */
+            $file = ltrim((string) ($r['attached_file'] ?? ''), '/');
+            $r['attachment_url'] = $file !== ''
+                ? rtrim($this->siteUrl, '/') . '/wp-content/uploads/' . $file
+                : (string) $r['guid'];
+            // Sizes, original file and alt text, for the media step.
+            $r['postmeta'] = array_values(array_filter(
+                $this->postmetaFor((int) $r['ID']),
+                static fn($m) => in_array($m['meta_key'], ['_wp_attached_file', '_wp_attachment_metadata', '_wp_attachment_image_alt'], true)
+            ));
         }
         return $rows;
     }

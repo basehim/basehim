@@ -66,7 +66,8 @@ $jsUrl  = $app->asset('js/wizard.js');
                 <input type="file" name="wxr_file" accept=".xml,application/xml,text/xml"
                        class="block w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                 <p class="text-xs text-slate-500 mt-1">
-                    In WordPress: <em>Tools &rarr; Export</em> &rarr; "All content". Max upload: <?= number_format($maxUpload / 1048576, 0) ?> MB.
+                    In WordPress: <em>Tools &rarr; Export</em> &rarr; "All content". Max import size: 500 MB —
+                    uploaded in small background chunks, so this isn't limited by the server's normal upload size setting.
                 </p>
             </div>
 
@@ -149,11 +150,24 @@ $jsUrl  = $app->asset('js/wizard.js');
             </div>
         </div>
 
-        <div class="pt-4 border-t border-slate-100 flex items-center gap-3">
-            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
-                <?= icon('play', 'w-4 h-4 mr-1') ?> Start migration
-            </button>
-            <span id="wpmig-setup-msg" class="text-sm text-slate-500"></span>
+        <div class="pt-4 border-t border-slate-100">
+            <div class="flex items-center gap-3">
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
+                    <?= icon('play', 'w-4 h-4 mr-1') ?> Start migration
+                </button>
+                <span id="wpmig-setup-msg" class="text-sm text-slate-500"></span>
+            </div>
+
+            <!-- Upload progress (chunked WXR upload only; hidden otherwise) -->
+            <div id="wpmig-upload-progress" class="mt-3 hidden">
+                <div class="flex items-center justify-between text-xs mb-1">
+                    <span class="font-medium text-slate-700">Uploading file&hellip;</span>
+                    <span id="wpmig-upload-bytes" class="text-slate-500"></span>
+                </div>
+                <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div id="wpmig-upload-bar" class="h-full bg-blue-500 transition-all" style="width:0%"></div>
+                </div>
+            </div>
         </div>
     </form>
 
@@ -208,6 +222,30 @@ $jsUrl  = $app->asset('js/wizard.js');
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- Repair image links in posts already on the site                 -->
+    <!-- ============================================================== -->
+    <div id="wpmig-repair" class="bg-white border border-slate-200 rounded-xl p-6 max-w-4xl mt-4 <?= $running ? 'hidden' : '' ?>">
+        <h3 class="font-semibold text-slate-900">Repair image links</h3>
+        <p class="text-sm text-slate-500 mt-1 max-w-2xl">
+            Fixes images in posts that are already on this site: galleries, resized copies,
+            <code>srcset</code>, <code>[gallery]</code> and <code>[caption]</code> shortcodes, and the
+            <code>/wp-content/uploads/…</code> addresses left by WP Migrator 1.2.0 and earlier.
+            Preview first — it changes nothing.
+        </p>
+        <div class="mt-4 flex flex-wrap items-end gap-3">
+            <label class="block">
+                <span class="block text-sm font-medium text-slate-700 mb-1">Old WordPress address <span class="font-normal text-slate-400">(optional)</span></span>
+                <input type="text" id="wpmig-repair-site" placeholder="https://old-site.com"
+                       class="w-72 px-3 py-2 text-sm border border-slate-300 rounded-lg">
+            </label>
+            <button type="button" id="wpmig-repair-preview" class="px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50 rounded-lg font-medium">Preview</button>
+            <button type="button" id="wpmig-repair-apply" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">Repair</button>
+        </div>
+        <p class="text-xs text-slate-500 mt-2 max-w-2xl">If the old site is still online, give its address: resized copies are then fetched so gallery thumbnails keep their crop. Without it, a resized copy links to the full image.</p>
+        <div id="wpmig-repair-out" class="mt-4 text-sm hidden"></div>
     </div>
 </div>
 

@@ -9,7 +9,30 @@
  * Anything unrecognised falls back to the generic puzzle-piece, so a typo in a
  * manifest can never break the page.
  */
-$appIcon = function (array $row) use ($base): string {
+$meta = $meta ?? [];
+$party = function (?array $p): string {
+    if (!$p || ($p['name'] ?? '') === '') return '';
+    $name = htmlspecialchars($p['name']);
+    return !empty($p['url'])
+        ? '<a href="' . htmlspecialchars($p['url'], ENT_QUOTES) . '" target="_blank" rel="noopener nofollow" class="hover:text-blue-600 hover:underline">' . $name . '</a>'
+        : $name;
+};
+$appIcon = function (array $row) use ($base, $meta): string {
+    // 1.2.36: the manifest's icon, checked and resolved by AppMeta. An image
+    // fills the tile; a glyph or an unset icon draws as before.
+    $m = $meta[(string) ($row['slug'] ?? '')] ?? null;
+    if ($m && $m['icon']['type'] === 'image') {
+        // A PNG/GIF app icon fills the tile; an older SVG/JPEG/WebP icon is
+        // drawn small, as it always was.
+        if (preg_match('#\.(png|gif)$#i', $m['icon']['value'])) {
+            return '<img src="' . htmlspecialchars($m['icon']['value'], ENT_QUOTES) . '" alt="" width="40" height="40" class="w-10 h-10 object-cover">';
+        }
+        return '<img src="' . htmlspecialchars($m['icon']['value'], ENT_QUOTES) . '" alt="" class="w-5 h-5 object-contain">';
+    }
+    if ($m && $m['icon']['type'] === 'none') {
+        // No usable icon: the generic piece, as before 1.2.36.
+        return icon('puzzle-piece', 'w-4 h-4');
+    }
     $icon = trim((string) ($row['icon'] ?? ''));
     $slug = (string) ($row['slug'] ?? '');
 
@@ -105,7 +128,25 @@ $appIcon = function (array $row) use ($base): string {
                 <?= ucfirst($p['status']) ?>
             </span>
         </div>
-        <p class="text-sm text-slate-600 flex-1 mb-3"><?= htmlspecialchars($p['description'] ?? '') ?></p>
+        <?php
+        $m = $meta[$p['slug']] ?? null;
+        $who = [];
+        if ($m && $m['developer']) $who[] = 'by ' . $party($m['developer']);
+        if ($m && $m['company'] && (!$m['developer'] || $m['company']['name'] !== $m['developer']['name'])) $who[] = $party($m['company']);
+        ?>
+        <?php if ($who): ?>
+            <div class="text-xs text-slate-500 -mt-1 mb-2"><?= implode(' · ', $who) ?></div>
+        <?php endif; ?>
+        <p class="text-sm text-slate-600 flex-1 mb-3"><?= htmlspecialchars(($m['description'] ?? '') !== '' ? $m['description'] : ($p['description'] ?? '')) ?></p>
+        <?php if ($m && $m['problems']): ?>
+            <details class="mb-3 text-xs text-amber-700">
+                <summary class="cursor-pointer">App details need attention (<?= count($m['problems']) ?>)</summary>
+                <ul class="mt-1 list-disc pl-5 space-y-0.5">
+                    <?php foreach ($m['problems'] as $problem): ?><li><?= htmlspecialchars($problem) ?></li><?php endforeach; ?>
+                </ul>
+                <p class="mt-1 text-slate-500">For the app's developer: these are fields in its <code>app.json</code>. The app works normally either way.</p>
+            </details>
+        <?php endif; ?>
 
         <?php
         $filesPresent = isset($available[$p['slug']]);
@@ -218,7 +259,7 @@ $appIcon = function (array $row) use ($base): string {
             </a>
             <?php endif; ?>
 
-            <?php if (!empty($p['author'])): ?>
+            <?php if (!$who && !empty($p['author'])): ?>
                 <span class="ml-auto text-xs text-slate-400">by <?= htmlspecialchars($p['author']) ?></span>
             <?php endif; ?>
         </div>

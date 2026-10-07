@@ -21,12 +21,13 @@ content/apps/my-app/
   "slug": "event-manager",
   "version": "1.0.0",
   "description": "Adds an Events content type with ticketing.",
-  "author": "Your Name",
+  "developer": { "name": "Your Name", "url": "https://you.example.com" },
+  "company": { "name": "Your Company", "url": "https://yourcompany.example.com" },
   "vendor": "yourcompany",
   "namespace": "YourCompany\\EventManager",
   "src": "src",
   "entry": "App",
-  "icon": "heroicon:calendar",
+  "icon": "assets/icon.png",
   "permissions": ["posts.write", "terms.write", "mail.send"],
   "requires": {
     "php": ">=8.1",
@@ -42,9 +43,47 @@ content/apps/my-app/
 | `namespace` | recommended | Without it, autoloading won't find your class |
 | `entry` | no | Defaults to `App`, falling back to `App` |
 | `src` | no | Defaults to `src` |
-| `icon` | no | `heroicon:name`, `fa-name`, or `assets/icon.svg` |
+| `icon` | no | An image: `assets/icon.png` — see **App listing details** below. `heroicon:name` and `fa-name` still work |
+| `description` | no | One or two sentences, shown on the Apps, Updates and marketplace screens. Up to 600 characters |
+| `developer` | no | `{ "name": "…", "url": "https://…" }` — the person who wrote the app. Replaces `author`, which is still read |
+| `company` | no | `{ "name": "…", "url": "https://…" }` — the business behind it, when there is one |
 | `permissions` | no | Declaring **any** opts you into enforcement — see APP-PERMISSIONS.md |
 | `requires` | no | Checked at install **and** activate |
+
+### App listing details (1.2.36)
+
+These fields are how an app introduces itself on the Apps screen, on the
+Updates page when a new version is waiting, and in the marketplace. All are
+optional; an app without them still works and shows a plain card with its
+initial.
+
+**Icon.** A PNG or GIF, square, **256×256 or 512×512**, at most **1 MB**,
+inside the app's `assets/` folder — the only folder served to the browser:
+
+```json
+"icon": "assets/icon.png"
+```
+
+An icon that breaks a rule is still shown where possible, and the Apps screen
+lists what to fix under "App details need attention". A missing file, or one
+over 1 MB, falls back to the app's initial. SVG, JPEG and WebP icons from older
+apps keep showing, with a note recommending PNG or GIF.
+
+**Developer and company.** Each is an object with a `name` and an optional
+`url`. Names link to their URL on every screen; a URL must be a full `http://`
+or `https://` address or it is ignored. Flat spellings are read too:
+
+```json
+"developer": "Your Name",
+"developer_url": "https://you.example.com",
+"company": "Your Company",
+"company_url": "https://yourcompany.example.com"
+```
+
+An app that only has `"author": "Your Name"` shows that name as its developer,
+exactly as before.
+
+**Description.** Plain text; markup is shown as text.
 
 **Version constraints** understood in `requires`: `>=1.2`, `<=`, `>`, `<`, `!=`,
 `^1.2` (>=1.2, <2.0), `1.4.*`, comma-separated (`">=1.0, <2.0"`), and a bare
@@ -173,6 +212,14 @@ Your own tables should use `$this->table('things')` → `app_myapp_things`.
 
 ZIP the app folder with `app.json` at the root (or one folder deep). Install via
 Admin → Apps → Upload, or publish through CloudHim.
+
+Once published through CloudHim, every site with the app installed sees a new
+version on **Admin → Updates** (and in the sidebar's update count) at its next
+check, with that version's notes, and can install it on its own or with
+**Update all**. An update replaces the app's files as a whole and keeps its
+settings, tables and active state; `onUpgrade()` runs as usual. A version that
+declares new permissions keeps running and is flagged for the site owner to
+review.
 
 ## Gotchas
 

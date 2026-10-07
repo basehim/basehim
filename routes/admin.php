@@ -46,6 +46,7 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->post('/updates/sync.json', ['App\\Http\\Controllers\\Admin\\UpdateController', 'sync']);
         $router->post('/updates/check.json', ['App\\Http\\Controllers\\Admin\\UpdateController', 'checkJson']);
         $router->post('/updates/install-step.json', ['App\\Http\\Controllers\\Admin\\UpdateController', 'installStep']);
+        $router->post('/updates/app-step.json', ['App\\Http\\Controllers\\Admin\\UpdateController', 'appStep']);
         $router->post('/updates/apply', ['App\\Http\\Controllers\\Admin\\UpdateController', 'apply']);
 
         $router->get('/system', ['App\\Http\\Controllers\\Admin\\SystemController', 'index']);
