@@ -33,6 +33,11 @@ $fulls   = array_values(array_filter($updates, fn($u) => empty($u['is_patch'])))
 $appUpdates = $appUpdates ?? [];
 $allCount = count($updates) + count($appUpdates);
 ?>
+<!-- Feedback sits OUTSIDE #bh-updates (hidden when the site is up to date, which
+     would swallow "checked just now") and ABOVE it: below a long app list the
+     outcome of Update all scrolled out of sight, and the page looked stuck. -->
+<div id="bh-result" class="hidden mb-4 rounded-lg px-3 py-2.5 text-sm" role="status" aria-live="polite"></div>
+
 <div id="bh-updates" data-count="<?= $allCount ?>" class="<?= $allCount === 0 ? 'hidden' : '' ?>">
 
     <!-- Install-all panel -->
@@ -76,9 +81,53 @@ $allCount = count($updates) + count($appUpdates);
     </div>
 </div>
 
-<!-- Feedback lives OUTSIDE #bh-updates: that wrapper is hidden when the site is
-     up to date, which would have swallowed the "checked just now" confirmation. -->
-<div id="bh-result" class="hidden mb-5 rounded-lg px-3 py-2.5 text-sm"></div>
+<!-- App update details (1.2.37): the list stays compact; everything else is here. -->
+<dialog id="bh-app-modal" class="bh-app-modal" aria-labelledby="bh-am-name">
+    <div class="bh-am__head">
+        <div id="bh-am-icon"></div>
+        <div class="min-w-0 flex-1">
+            <h3 id="bh-am-name" class="text-base font-semibold text-slate-900"></h3>
+            <div id="bh-am-who" class="text-sm text-slate-500"></div>
+        </div>
+        <button type="button" class="bh-am__x" data-close aria-label="Close"><?= icon('x-mark', 'w-5 h-5') ?></button>
+    </div>
+    <div class="bh-am__body">
+        <div id="bh-am-versions" class="flex items-center gap-2 text-sm mb-3"></div>
+        <p id="bh-am-desc" class="text-sm text-slate-600 mb-3"></p>
+        <dl id="bh-am-facts" class="bh-am__facts"></dl>
+        <div id="bh-am-notes"></div>
+    </div>
+    <div class="bh-am__foot">
+        <div id="bh-am-state" class="text-xs mr-auto"></div>
+        <button type="button" class="bh-am__btn bh-am__btn--cancel" data-close>Close</button>
+        <button type="button" id="bh-am-update" class="bh-am__btn bh-am__btn--ok">Update</button>
+    </div>
+</dialog>
+<style>
+    .bh-app-modal { border: 0; padding: 0; border-radius: .9rem; width: min(36rem, calc(100vw - 2rem)); max-height: min(44rem, calc(100vh - 2rem)); color: #0f172a; box-shadow: 0 30px 70px -25px rgba(2, 6, 23, .55); }
+    .bh-app-modal[open] { display: flex; flex-direction: column; animation: bh-ask-in .16s cubic-bezier(.2, .7, .3, 1); }
+    .bh-app-modal::backdrop { background: rgba(15, 23, 42, .4); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+    .bh-am__head { display: flex; align-items: center; gap: .9rem; padding: 1.25rem 1.25rem .75rem; }
+    .bh-am__x { align-self: flex-start; padding: .25rem; border-radius: .4rem; color: #64748b; }
+    .bh-am__x:hover { background: #f1f5f9; color: #0f172a; }
+    .bh-am__body { padding: 0 1.25rem; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+    .bh-am__facts { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-size: .8rem; padding: .75rem 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; margin-bottom: 1rem; }
+    .bh-am__facts dt { color: #64748b; }
+    .bh-am__facts dd { color: #0f172a; margin: 0; overflow-wrap: anywhere; }
+    .bh-am__notes h4 { font-size: .8rem; font-weight: 600; color: #0f172a; margin: 0 0 .3rem; }
+    .bh-am__notes + .bh-am__notes { margin-top: 1rem; }
+    .bh-am__notes div { font-size: .85rem; line-height: 1.55; color: #334155; white-space: pre-line; overflow-wrap: anywhere; }
+    .bh-am__foot { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; padding: 1rem 1.25rem 1.15rem; border-top: 1px solid #f1f5f9; }
+    .bh-am__btn { padding: .5rem 1rem; border-radius: .55rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+    .bh-am__btn--ok { background: #059669; color: #fff; }
+    .bh-am__btn--ok:hover { background: #047857; }
+    .bh-am__btn--ok:disabled { opacity: .6; cursor: default; }
+    .bh-am__btn--cancel { background: #fff; color: #0f172a; border-color: #cbd5e1; font-weight: 500; }
+    .bh-am__btn--cancel:hover { background: #f8fafc; }
+    .bh-am__btn:focus-visible, .bh-am__x:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+    .bh-app-open:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: .5rem; }
+    @media (prefers-reduced-motion: reduce) { .bh-app-modal[open] { animation: none; } }
+</style>
 
 <?php if ($configured): ?>
 <div id="bh-uptodate" class="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 mb-5 <?= $allCount === 0 ? '' : 'hidden' ?>">
@@ -226,6 +275,8 @@ $allCount = count($updates) + count($appUpdates);
         el('bh-sum-sub').textContent = bits.join(', ').replace(/, ([^,]*)$/, ' and $1') +
             (items.length && apps.length ? ' — Basehim first, then apps.' : (items.length ? ' — installed in order, oldest first.' : '.'));
         el('bh-install-txt').textContent = all === 1 ? 'Update now' : 'Update all';
+        installBtn.classList.remove('hidden');
+        el('bh-progress').classList.add('hidden');
 
         list.innerHTML = items.map(function (u) {
             var badge = u.is_patch
@@ -268,49 +319,116 @@ $allCount = count($updates) + count($appUpdates);
             ? '<a href="' + esc(p.url) + '" target="_blank" rel="noopener nofollow" class="hover:text-blue-600 hover:underline">' + esc(p.name) + '</a>'
             : esc(p.name);
     }
+    // The last list rendered, by slug — what the details dialog shows.
+    var appData = {};
+
+    /** One compact row per app; release notes and the rest live in the dialog. */
     function renderApps(apps) {
         if (!appsList) return;
+        appData = {};
+        apps.forEach(function (u) { appData[u.slug] = u; });
         appsList.innerHTML = apps.map(function (u) {
+            // Plain text here: the whole row is a button, and links belong in the dialog.
             var who = [];
-            if (u.developer) who.push('by ' + party(u.developer));
-            if (u.company && (!u.developer || u.company.name !== u.developer.name)) who.push(party(u.company));
-            var meta = [];
-            if (u.published_at) meta.push('Released ' + esc(String(u.published_at).slice(0, 10)));
-            if (u.size) meta.push(Math.round(u.size / 1024) + ' KB');
-            if (u.sha256) meta.push('SHA-256 verified');
-            var older = (u.changelog || []).filter(function (c) { return c.version !== u.version && c.notes; });
-            var notes = (u.notes ? '<div class="text-xs text-slate-600 whitespace-pre-line mt-2">' + esc(u.notes) + '</div>' : '') +
-                (older.length ? '<details class="mt-2 text-xs text-slate-500"><summary class="cursor-pointer hover:text-slate-700">Also in this update: ' +
-                    older.length + ' earlier version' + (older.length === 1 ? '' : 's') + '</summary>' +
-                    older.map(function (c) {
-                        return '<div class="mt-2"><div class="font-medium text-slate-700">v' + esc(c.version) + '</div><div class="whitespace-pre-line">' + esc(c.notes) + '</div></div>';
-                    }).join('') + '</details>' : '');
-            return '<div class="bg-white rounded-xl border border-slate-200 p-4" data-app="' + esc(u.slug) + '">'
-                 + '<div class="flex items-start gap-3">'
-                 +   appIcon(u)
-                 +   '<div class="min-w-0 flex-1">'
-                 +     '<div class="flex items-center gap-2 flex-wrap">'
-                 +       '<span class="bh-dot w-2 h-2 rounded-full bg-slate-300 shrink-0"></span>'
-                 +       '<h4 class="text-sm font-semibold text-slate-900">' + esc(u.name) + '</h4>'
-                 +       '<span class="text-xs text-slate-500">v' + esc(u.installed) + ' → <strong class="text-slate-700">v' + esc(u.version) + '</strong></span>'
-                 +     '</div>'
-                 +     (who.length ? '<div class="text-xs text-slate-500 mt-0.5">' + who.join(' · ') + '</div>' : '')
-                 +     (meta.length ? '<div class="text-[11px] text-slate-400 mt-0.5">' + meta.join(' · ') + '</div>' : '')
-                 +     notes
-                 +     '<div class="bh-app-msg text-xs mt-2 hidden"></div>'
-                 +   '</div>'
+            if (u.developer && u.developer.name) who.push('by ' + esc(u.developer.name));
+            if (u.company && u.company.name && (!u.developer || u.company.name !== u.developer.name)) who.push(esc(u.company.name));
+            return '<div class="bg-white rounded-xl border border-slate-200 px-4 py-3 hover:border-slate-300 transition-colors" data-app="' + esc(u.slug) + '">'
+                 + '<div class="flex items-center gap-3">'
+                 +   '<button type="button" class="bh-app-open flex items-center gap-3 min-w-0 flex-1 text-left" aria-haspopup="dialog" title="Details and release notes">'
+                 +     appIcon(u)
+                 +     '<span class="min-w-0 flex-1 block">'
+                 +       '<span class="flex items-center gap-2 flex-wrap">'
+                 +         '<span class="bh-dot w-2 h-2 rounded-full bg-slate-300 shrink-0"></span>'
+                 +         '<h4 class="text-sm font-semibold text-slate-900 truncate">' + esc(u.name) + '</h4>'
+                 +         '<span class="text-xs text-slate-500 whitespace-nowrap">v' + esc(u.installed) + ' → <strong class="text-slate-700">v' + esc(u.version) + '</strong></span>'
+                 +       '</span>'
+                 +       (who.length ? '<span class="block text-xs text-slate-500 truncate mt-0.5">' + who.join(' · ') + '</span>' : '')
+                 +     '</span>'
+                 +     '<span class="hidden sm:inline text-xs text-slate-400 shrink-0 mr-1">Details</span>'
+                 +   '</button>'
                  +   '<button type="button" class="bh-app-btn shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-slate-300 hover:bg-slate-50 disabled:opacity-60 rounded-lg font-medium text-slate-700" data-slug="' + esc(u.slug) + '">'
                  +     ICON_DOWN + '<span>Update</span></button>'
-                 + '</div></div>';
+                 + '</div>'
+                 + '<div class="bh-app-msg text-xs mt-2 hidden"></div>'
+                 + '</div>';
         }).join('');
         // A broken icon image falls back to the app's initial.
-        appsList.querySelectorAll('img[data-initial]').forEach(function (img) {
-            img.addEventListener('error', function () {
-                var d = document.createElement('div');
-                d.className = 'w-10 h-10 rounded-lg grid place-items-center bg-gradient-to-br from-blue-100 to-blue-200 text-blue-600 font-semibold shrink-0';
-                d.textContent = img.getAttribute('data-initial');
-                img.replaceWith(d);
-            }, { once: true });
+        appsList.querySelectorAll('img[data-initial]').forEach(fallbackIcon);
+    }
+    function fallbackIcon(img) {
+        img.addEventListener('error', function () {
+            var d = document.createElement('div');
+            d.className = img.className.replace('object-cover bg-slate-100', 'grid place-items-center bg-gradient-to-br from-blue-100 to-blue-200 text-blue-600 font-semibold');
+            d.textContent = img.getAttribute('data-initial');
+            img.replaceWith(d);
+        }, { once: true });
+    }
+
+    /* ---------------- app details dialog ---------------- */
+
+    var modal = el('bh-app-modal'), modalSlug = null;
+    function openApp(slug) {
+        var u = appData[slug];
+        if (!u || !modal) return;
+        modalSlug = slug;
+        var big = appIcon(u).replace(/w-10 h-10/g, 'w-14 h-14').replace('width="40" height="40"', 'width="56" height="56"');
+        el('bh-am-icon').innerHTML = big;
+        el('bh-am-icon').querySelectorAll('img[data-initial]').forEach(fallbackIcon);
+        el('bh-am-name').textContent = u.name;
+        var who = [];
+        if (u.developer && u.developer.name) who.push('by ' + party(u.developer));
+        if (u.company && u.company.name && (!u.developer || u.company.name !== u.developer.name)) who.push(party(u.company));
+        el('bh-am-who').innerHTML = who.join(' · ');
+        el('bh-am-versions').innerHTML = '<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Installed v' + esc(u.installed) + '</span>'
+            + '<span class="text-slate-400">→</span>'
+            + '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">New v' + esc(u.version) + '</span>';
+        var desc = el('bh-am-desc');
+        desc.textContent = u.description || '';
+        desc.classList.toggle('hidden', !u.description);
+        var facts = [];
+        if (u.published_at) facts.push(['Released', esc(String(u.published_at).slice(0, 10))]);
+        if (u.size) facts.push(['Download', u.size >= 1048576 ? (u.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(u.size / 1024)) + ' KB']);
+        facts.push(['Checksum', u.sha256 ? 'SHA-256, verified before installing' : 'Not provided']);
+        if (u.developer && u.developer.url) facts.push(['Developer', party({ name: u.developer.url.replace(/^https?:\/\//, ''), url: u.developer.url })]);
+        if (u.company && u.company.url) facts.push(['Company', party({ name: u.company.url.replace(/^https?:\/\//, ''), url: u.company.url })]);
+        el('bh-am-facts').innerHTML = facts.map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('');
+        // This version's notes first, then any versions in between, newest first.
+        var notes = [];
+        if (u.notes) notes.push({ version: u.version, notes: u.notes });
+        (u.changelog || []).forEach(function (c) { if (c.version !== u.version && c.notes) notes.push(c); });
+        el('bh-am-notes').innerHTML = notes.length
+            ? notes.map(function (c, i) {
+                return '<section class="bh-am__notes"><h4>' + (i === 0 && c.version === u.version ? "What's new in v" : 'v') + esc(c.version) + '</h4><div>' + esc(c.notes) + '</div></section>';
+              }).join('')
+            : '<p class="text-sm text-slate-400">No release notes were published for this version.</p>';
+        syncModal();
+        if (typeof modal.showModal === 'function') modal.showModal(); else modal.setAttribute('open', '');
+        el('bh-am-update').focus();
+    }
+    /** Keep the dialog's footer in step with the row (busy, updated, failed). */
+    function syncModal() {
+        if (!modal || !modalSlug) return;
+        var row = appsList.querySelector('[data-app="' + modalSlug + '"]');
+        var rb = row && row.querySelector('.bh-app-btn');
+        var msg = row && row.querySelector('.bh-app-msg');
+        var btn = el('bh-am-update');
+        btn.disabled = !rb || rb.disabled;
+        btn.textContent = rb ? rb.querySelector('span').textContent : 'Update';
+        btn.classList.toggle('hidden', !!(row && row.classList.contains('opacity-60')));
+        var st = el('bh-am-state');
+        st.className = 'text-xs mr-auto ' + (msg && msg.classList.contains('text-red-700') ? 'text-red-700' : 'text-emerald-700');
+        st.innerHTML = msg && !msg.classList.contains('hidden') ? msg.innerHTML : '';
+    }
+    function closeModal() { if (modal && modal.open) modal.close(); }
+    if (modal) {
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal || (e.target.closest && e.target.closest('[data-close]'))) closeModal();
+        });
+        modal.addEventListener('close', function () { modalSlug = null; });
+        el('bh-am-update').addEventListener('click', function () {
+            if (!modalSlug || this.disabled || running) return;
+            el('bh-result').classList.add('hidden');
+            updateApp(modalSlug).then(afterApps);
         });
     }
 
@@ -333,6 +451,7 @@ $allCount = count($updates) + count($appUpdates);
             box.className = 'bh-app-msg text-xs mt-2' + (msg ? '' : ' hidden') + (state === 'fail' ? ' text-red-700' : ' text-emerald-700');
             box.innerHTML = msg || '';
         }
+        if (slug === modalSlug) syncModal();
     }
 
     /** Update one app. Resolves to the server's answer; never rejects. */
@@ -365,6 +484,7 @@ $allCount = count($updates) + count($appUpdates);
         if (core) bits.push(core + ' Basehim release' + (core === 1 ? '' : 's'));
         if (apps) bits.push(apps + ' app' + (apps === 1 ? '' : 's'));
         el('bh-sum-sub').textContent = bits.length ? bits.join(' and ') + ' still to install.' : 'Everything is up to date.';
+        if (!running) installBtn.classList.toggle('hidden', d.total_count === 0);
     }
 
     var running = false;   // true while Update all is working through the list
@@ -376,6 +496,8 @@ $allCount = count($updates) + count($appUpdates);
     }
 
     if (appsList) appsList.addEventListener('click', function (e) {
+        var open = e.target.closest && e.target.closest('.bh-app-open');
+        if (open) { openApp(open.closest('[data-app]').getAttribute('data-app')); return; }
         var btn = e.target.closest && e.target.closest('.bh-app-btn');
         if (!btn || btn.disabled || running) return;
         el('bh-result').classList.add('hidden');
@@ -412,7 +534,9 @@ $allCount = count($updates) + count($appUpdates);
         var hasApps = appsList && appsList.querySelector('[data-app]:not(.opacity-60)');
         return (hasApps ? updateAllApps(appDone, appFailed) : Promise.resolve(null)).then(function (last) {
             running = false;
-            progress(100, 'Finished');
+            // Done: the bar has nothing left to say. Leaving it parked at 100%
+            // with "Keep this tab open" under it read as an update that hung.
+            el('bh-progress').classList.add('hidden');
             var parts = [];
             if (doneCount) parts.push('Basehim is now on v' + esc((coreFinished && coreFinished.current) || ''));
             if (appDone.length) parts.push(appDone.length + ' app' + (appDone.length === 1 ? '' : 's') + ' updated');
@@ -425,6 +549,8 @@ $allCount = count($updates) + count($appUpdates);
             }
             if (last) afterApps(last);
             else if (coreFinished) afterApps(coreFinished);
+            var box = el('bh-result'), r = box.getBoundingClientRect();
+            if (r.top < 0 || r.bottom > window.innerHeight) box.scrollIntoView({ block: 'center', behavior: 'smooth' });
         });
     }
 
@@ -531,6 +657,10 @@ $allCount = count($updates) + count($appUpdates);
             installBtn.disabled = false;
             if (checkBtn) checkBtn.disabled = false;
             el('bh-install-txt').textContent = 'Update all';
+            // Nothing left to install: no button inviting a second run.
+            var left = list.querySelectorAll('[data-v]:not(.opacity-60)').length +
+                       (appsList ? appsList.querySelectorAll('[data-app]:not(.opacity-60)').length : 0);
+            installBtn.classList.toggle('hidden', left === 0);
         };
         if (!list.querySelector('[data-v]')) {
             finishAll().then(restore);   // apps only

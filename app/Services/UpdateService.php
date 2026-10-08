@@ -300,6 +300,7 @@ class UpdateService
             'icon_url'     => $meta['icon']['type'] === 'image' ? $meta['icon']['value'] : null,
             'developer'    => $meta['developer'],
             'company'      => $meta['company'],
+            'description'  => $meta['description'],
         ];
     }
 
@@ -336,6 +337,8 @@ class UpdateService
                 $u['initial'] = $m['initial'];
                 $u['developer'] = $m['developer'] ?? ($u['developer'] ?? null);
                 $u['company'] = $m['company'] ?? ($u['company'] ?? null);
+                // The installed app's own words; the hub's when it has none.
+                $u['description'] = $m['description'] !== '' ? $m['description'] : (string) ($u['description'] ?? '');
             }
             $u['initial'] = $u['initial'] ?? (mb_strtoupper(mb_substr((string) ($u['name'] ?? $slug), 0, 1)) ?: '?');
             $out[] = $u;
