@@ -1325,13 +1325,27 @@ class AppService
      * the app's DB row / active state are preserved; a new install inserts
      * the row and fires onInstall via sync().
      */
-    public function marketplaceInstall(string $slug, string $expectedSha256 = ''): array
+    public function marketplaceInstall(string $slug, string $expectedSha256 = '', string $version = ''): array
     {
         $conn = $this->cloudhimConn();
         if (!$conn) return ['ok' => false, 'error' => 'This site is not connected to the Basehim marketplace yet — open Updates to connect.'];
         $slug = $this->sanitizeSlug($slug);
 
-        $url = $conn['url'] . '/api/v1/cloudhim/plugin-download?' . http_build_query(['key' => $conn['key'], 'slug' => $slug]);
+        // Pin the download to a specific version when one is given — the Updates
+        // page passes the version its (possibly cached) update entry names,
+        // along with that version's checksum. Without the pin the hub serves
+        // whatever is newest now, so once a second update was published the
+        // bytes stopped matching the cached checksum and every update failed
+        // with "Checksum mismatch", leaving the app stuck on its old version.
+        // With the pin the file, its checksum and the hub's own header all
+        // describe the same version. The hub serves the latest when no version
+        // is sent, so the marketplace "Install" button (no version) is unchanged.
+        $query = ['key' => $conn['key'], 'slug' => $slug];
+        $version = trim($version);
+        if ($version !== '' && preg_match('/^[0-9A-Za-z.\-+]{1,32}$/', $version)) {
+            $query['version'] = $version;
+        }
+        $url = $conn['url'] . '/api/v1/cloudhim/plugin-download?' . http_build_query($query);
         $res = $this->httpGet($url, 120);
         if ($res['error'] !== null || $res['status'] >= 400 || $res['body'] === '') {
             return ['ok' => false, 'error' => 'Download failed: ' . ($res['error'] ?? ('HTTP ' . $res['status']))];

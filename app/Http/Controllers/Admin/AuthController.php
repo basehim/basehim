@@ -47,6 +47,7 @@ class AuthController extends Controller
         $locked = 0;
         $sec = $this->app->make(AuthSecurityService::class);
         if (($login !== '' && $sec->captchaRequired($login, $ip, $auth['login_attempt_limit']))
+            || ($login !== '' && $sec->accountCaptchaRequired($login, $auth['account_attempt_limit']))
             || $sec->ipFailures($ip) >= self::IP_FAIL_LIMIT) {
             $captcha = $this->newCaptcha();
         }
@@ -105,7 +106,9 @@ class AuthController extends Controller
         // If a captcha is required, check it BEFORE the password. A wrong or
         // missing answer counts as a captcha failure and may escalate to an
         // emailed unlock code.
-        if ($sec->captchaRequired($login, $ip, $auth['login_attempt_limit']) || $sec->ipFailures($ip) >= self::IP_FAIL_LIMIT) {
+        if ($sec->captchaRequired($login, $ip, $auth['login_attempt_limit'])
+            || $sec->accountCaptchaRequired($login, $auth['account_attempt_limit'])
+            || $sec->ipFailures($ip) >= self::IP_FAIL_LIMIT) {
             if (!$this->checkCaptcha((string) $request->input('captcha', ''))) {
                 $sec->recordCaptchaFailure($login, $ip);
                 if (!empty($auth['otp_enabled'])
@@ -838,6 +841,10 @@ class AuthController extends Controller
             'welcome_email'       => !empty($g['welcome_email']),
             'otp_enabled'         => !isset($g['otp_enabled']) ? true : !empty($g['otp_enabled']),
             'login_attempt_limit' => max(1, (int) ($g['login_attempt_limit'] ?? 3)),
+            // Failed passwords for one account across ALL addresses (not just
+            // one) before every sign-in to it must solve a captcha. Guards a
+            // single account against a distributed/botnet guessing run.
+            'account_attempt_limit' => max(3, min(100, (int) ($g['account_attempt_limit'] ?? 10))),
             'captcha_fail_limit'  => max(1, (int) ($g['captcha_fail_limit'] ?? 3)),
             'lockout_after'       => max(3, min(50, (int) ($g['lockout_after'] ?? 10))),
             'lockout_minutes'     => max(1, min(1440, (int) ($g['lockout_minutes'] ?? 15))),

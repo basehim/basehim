@@ -25,28 +25,6 @@ class AuthService
     ) {}
 
     /**
-     * Attempt credential login. Returns user array on success, null on failure.
-     */
-    public function attempt(string $login, string $password): ?array
-    {
-        $user = $this->db->selectOne(
-            "SELECT * FROM {users}
-             WHERE (email = :email OR username = :username)
-               AND status = 'active' AND deleted_at IS NULL
-             LIMIT 1",
-            ['email' => $login, 'username' => $login]
-        );
-
-        if (!$user) return null;
-        if (!password_verify($password, $user['password_hash'])) return null;
-
-        // Touch last login
-        $this->db->update('users', ['last_login_at' => date('Y-m-d H:i:s')], ['id' => $user['id']]);
-
-        return $user;
-    }
-
-    /**
      * Credential check that reports WHY a login failed, so the UI can tell a
      * genuinely wrong password apart from a correct password on a blocked
      * account. Returns:

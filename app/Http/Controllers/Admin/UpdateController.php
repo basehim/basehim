@@ -201,7 +201,7 @@ class UpdateController extends Controller
         /** @var \App\Services\AppService $apps */
         $apps = $this->app->make(\App\Services\AppService::class);
         try {
-            $res = $apps->marketplaceInstall($slug, (string) ($u['sha256'] ?? ''));
+            $res = $apps->marketplaceInstall($slug, (string) ($u['sha256'] ?? ''), (string) ($u['version'] ?? ''));
         } catch (\Throwable $e) {
             $res = ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -220,7 +220,15 @@ class UpdateController extends Controller
                 'error' => $u['name'] . ' was downloaded but is still on v' . ($now ?: $u['installed']) . '. The package may not carry its new version number.',
             ] + $this->pendingPayload($svc));
         }
-        $svc->forgetAppUpdate($slug);
+        // Refresh the app-update list from the hub so that when an app has more
+        // than one update waiting, the next version reappears straight away
+        // instead of only after a manual "Check for updates". Updates install
+        // one version at a time (the one the entry named, so its checksum
+        // matches), and this surfaces the following one. If the hub can't be
+        // reached, just drop the entry we installed.
+        $refreshed = false;
+        try { $refreshed = !empty($svc->checkApps()['ok']); } catch (\Throwable) {}
+        if (!$refreshed) $svc->forgetAppUpdate($slug);
 
         $review = false;
         try { $review = $this->app->make(\App\Services\PermissionBroker::class)->needsReview($slug) || $apps->needsConsent($slug); } catch (\Throwable) {}

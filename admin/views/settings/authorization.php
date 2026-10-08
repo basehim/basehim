@@ -151,13 +151,19 @@ $policies = [
                         <label class="block text-sm font-medium text-slate-700 mb-1.5">Pause length (minutes)</label>
                         <input type="number" name="lockout_minutes" min="1" max="1440" value="<?= htmlspecialchars((string) ($values['lockout_minutes'] ?? 15)) ?>"
                             class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                        <p class="text-xs text-slate-500 mt-1">Doubles each further time, up to a day. Default 15.</p>
+                        <p class="text-xs text-slate-500 mt-1">Grows by this much each further time, up to a day. Default 15.</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1.5">Wrong answers before an unlock code</label>
                         <input type="number" name="captcha_fail_limit" min="1" max="10" value="<?= htmlspecialchars((string) ($values['captcha_fail_limit'] ?? 3)) ?>"
                             class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
                         <p class="text-xs text-slate-500 mt-1">Wrong answers to the security question before an unlock code is emailed. Default 3.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Account-wide failures before a security question</label>
+                        <input type="number" name="account_attempt_limit" min="3" max="100" value="<?= htmlspecialchars((string) ($values['account_attempt_limit'] ?? 10)) ?>"
+                            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+                        <p class="text-xs text-slate-500 mt-1">Wrong passwords for one account across <em>all</em> networks before everyone signing in to it answers a security question. Stops distributed guessing. Default 10.</p>
                     </div>
                 </div>
 

@@ -104,6 +104,7 @@ class SettingController extends Controller
         }
         $clamp = static fn($v, int $lo, int $hi, int $def): string => (string) max($lo, min($hi, is_numeric($v) ? (int) $v : $def));
         $settings->set('authorization', 'login_attempt_limit', $clamp($in['login_attempt_limit'] ?? 3, 1, 10, 3));
+        $settings->set('authorization', 'account_attempt_limit', $clamp($in['account_attempt_limit'] ?? 10, 3, 100, 10));
         $settings->set('authorization', 'captcha_fail_limit', $clamp($in['captcha_fail_limit'] ?? 3, 1, 10, 3));
         $settings->set('authorization', 'lockout_after', $clamp($in['lockout_after'] ?? 10, 3, 50, 10));
         $settings->set('authorization', 'lockout_minutes', $clamp($in['lockout_minutes'] ?? 15, 1, 1440, 15));

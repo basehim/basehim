@@ -125,10 +125,11 @@ final class AuthSecurityService
      * Record one failed password attempt.
      *
      * With $lockAfter > 0, every $lockAfter-th failure locks password entry
-     * for this identifier from this address: $lockMinutes the first time,
-     * twice that the second, and so on up to a day. Before 1.2.33 there was no
-     * lock at all — the captcha was the only brake, and a script that solved
-     * the arithmetic could keep guessing for ever.
+     * for this identifier from this address. The lock grows by $lockMinutes
+     * each round — $lockMinutes, then twice, then three times, and so on
+     * (15, 30, 45 minutes with the default) up to a day. Before 1.2.33 there
+     * was no lock at all — the captcha was the only brake, and a script that
+     * solved the arithmetic could keep guessing for ever.
      */
     public function recordFailure(string $identifier, string $ip, int $lockAfter = 0, int $lockMinutes = 15): void
     {
@@ -204,6 +205,41 @@ final class AuthSecurityService
         } catch (\Throwable) {
             return 0;
         }
+    }
+
+    /**
+     * Failed passwords for ONE account across every address in the window.
+     *
+     * The per-account counters elsewhere are keyed on identifier + IP, so an
+     * attacker spread across many addresses (a botnet) gets a fresh allowance
+     * from each one. This sums the account's failures over all addresses, so a
+     * distributed guessing run against a single account becomes visible.
+     */
+    public function accountFailures(string $identifier, int $windowSeconds = 900): int
+    {
+        $this->ensureSchema();
+        try {
+            $r = $this->db->selectOne(
+                "SELECT COALESCE(SUM(fails), 0) AS n FROM {auth_login_attempts}
+                  WHERE identifier = :i AND updated_at > :since",
+                ['i' => $this->key($identifier), 'since' => date('Y-m-d H:i:s', time() - $windowSeconds)]
+            );
+            return (int) ($r['n'] ?? 0);
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    /**
+     * Whether this account is under enough pressure, across all addresses,
+     * to demand a captcha from everyone signing in to it — including an
+     * address that has not failed yet. A captcha, not a lock: the account
+     * owner is only ever asked to solve one, never shut out, so a third party
+     * cannot lock them out by guessing from afar.
+     */
+    public function accountCaptchaRequired(string $identifier, int $limit, int $windowSeconds = 900): bool
+    {
+        return $this->accountFailures($identifier, $windowSeconds) >= max(1, $limit);
     }
 
     /**

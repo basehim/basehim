@@ -50,6 +50,19 @@ try {
     // Hook registry not available - keep defaults.
 }
 
+/**
+ * A sidebar item's leading icon. An app that ships an image icon gets its
+ * brand mark (an <img>, sized like the built-in glyphs); everything else
+ * renders the heroicon named in `icon`. $color styles the glyph only.
+ */
+$navIcon = static function (array $item, string $color): string {
+    if (!empty($item['icon_img'])) {
+        return '<img src="' . htmlspecialchars((string) $item['icon_img'], ENT_QUOTES)
+             . '" alt="" aria-hidden="true" class="bh-nav-icon bh-nav-appicon w-5 h-5 shrink-0">';
+    }
+    return icon((string) ($item['icon'] ?? 'puzzle-piece'), 'bh-nav-icon w-5 h-5 shrink-0 ' . $color);
+};
+
 // Attach a per-app access capability to app-injected items (those that declare
 // an 'app' slug), so app access can be granted/denied per user.
 foreach ($navItems as &$__it) {
@@ -239,6 +252,9 @@ try {
     .bh-sidebar.is-collapsed .bh-nav-heading { display: none; }
 
     /* Active item gets a soft left marker rather than a heavy fill. */
+    /* App brand icon in the sidebar: fit the glyph box without distortion.
+       object-contain / small radius aren't in the prebuilt utility sheet. */
+    .bh-nav-appicon { object-fit: contain; border-radius: 5px; }
     .bh-nav-item.bh-active > .bh-group-head,
     a.bh-nav-item.bh-active { position: relative; }
     .bh-nav-item.bh-active > .bh-group-head::before,
@@ -682,7 +698,7 @@ try {
                                 <?= $groupActive ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' ?>"
                          title="<?= htmlspecialchars($item['label']) ?>">
                         <a href="<?= htmlspecialchars($itemUrl) ?>" class="flex items-center gap-3 flex-1 min-w-0">
-                            <?= icon($item['icon'], 'bh-nav-icon w-5 h-5 shrink-0 ' . ($groupActive ? 'text-blue-600' : 'text-slate-400')) ?>
+                            <?= $navIcon($item, $groupActive ? 'text-blue-600' : 'text-slate-400') ?>
                             <span class="bh-nav-label flex-1 truncate"><?= $item['label'] ?></span>
                         </a>
                         <button type="button" class="bh-sub-toggle bh-hide-collapsed" title="Toggle submenu" aria-label="Toggle submenu">
@@ -710,7 +726,7 @@ try {
                    data-key="<?= htmlspecialchars($item['url']) ?>"
                    data-label="<?= htmlspecialchars(strtolower($item['label'])) ?>"
                    title="<?= htmlspecialchars($item['label']) ?>">
-                    <?= icon($item['icon'], 'bh-nav-icon w-5 h-5 shrink-0 ' . ($active ? 'text-blue-600' : 'text-slate-400')) ?>
+                    <?= $navIcon($item, $active ? 'text-blue-600' : 'text-slate-400') ?>
                     <span class="bh-nav-label flex-1 truncate"><?= $item['label'] ?></span>
                     <?php
                     // Optional count badge. Always emitted (hidden at zero) so a

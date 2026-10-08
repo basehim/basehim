@@ -285,6 +285,17 @@ abstract class App
         if (empty($item['icon'])) {
             $item['icon'] = $this->icon();
         }
+        // The app's own icon image (its manifest "icon", when that is a bundled
+        // image file) so the sidebar can show the app's brand mark next to its
+        // label, sized like the built-in glyphs. Only set when the app actually
+        // ships an image; a glyph-only app keeps the heroicon in `icon`. An
+        // item may override by setting its own `icon_img`.
+        if (empty($item['icon_img'])) {
+            $manifestIcon = trim((string) ($this->manifest['icon'] ?? ''));
+            if ($manifestIcon !== '' && preg_match('#\.(svg|png|jpe?g|webp|gif)$#i', $manifestIcon)) {
+                $item['icon_img'] = $this->iconUrl();
+            }
+        }
         $this->addFilter('admin.menu', function (array $items) use ($item) {
             $items[] = $item;
             return $items;
