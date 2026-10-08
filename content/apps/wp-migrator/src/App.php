@@ -19,7 +19,8 @@ use App\Core\Response;
  *   POST /admin/wp-migrator/start            - validate source + persist job
  *   POST /admin/wp-migrator/run              - run one batch, return JSON
  *   POST /admin/wp-migrator/cancel           - abort current job
- *   GET  /admin/wp-migrator/status           - poll JSON status
+ *   GET  /admin/wp-migrator/status           - poll JSON status (secrets redacted)
+ *   GET  /admin/wp-migrator/log              - download the job log as text
  *
  * Public-facing:
  *   - Registers a hook to apply 301 redirects (for old WordPress URLs).
@@ -35,7 +36,7 @@ class App extends BaseApp
         // ID mapping table — maps (entity_type, old_wp_id) to new Basehim id.
         // Critical for re-running migrations idempotently.
         $this->schema("
-            CREATE TABLE IF NOT EXISTS `app_wpmig_idmap` (
+            CREATE TABLE IF NOT EXISTS {app_wpmig_idmap} (
                 `id`           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 `entity_type`  VARCHAR(32) NOT NULL,
                 `old_id`       VARCHAR(64) NOT NULL,
@@ -49,7 +50,7 @@ class App extends BaseApp
         // Job state — one row per migration run, holds source config, options,
         // current step, batch cursor, counts.
         $this->schema("
-            CREATE TABLE IF NOT EXISTS `app_wpmig_jobs` (
+            CREATE TABLE IF NOT EXISTS {app_wpmig_jobs} (
                 `id`         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 `status`     ENUM('pending','running','completed','failed','cancelled') NOT NULL DEFAULT 'pending',
                 `source`     ENUM('wxr','mysql') NOT NULL,
@@ -68,7 +69,7 @@ class App extends BaseApp
 
         // Redirects table — old WP URL paths -> new Basehim paths, 301s.
         $this->schema("
-            CREATE TABLE IF NOT EXISTS `app_wpmig_redirects` (
+            CREATE TABLE IF NOT EXISTS {app_wpmig_redirects} (
                 `id`          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 `from_path`   VARCHAR(500) NOT NULL,
                 `to_path`     VARCHAR(500) NOT NULL,
@@ -84,9 +85,9 @@ class App extends BaseApp
 
     public function onUninstall(): void
     {
-        try { $this->schema('DROP TABLE IF EXISTS `app_wpmig_redirects`'); } catch (\Throwable) {}
-        try { $this->schema('DROP TABLE IF EXISTS `app_wpmig_jobs`'); } catch (\Throwable) {}
-        try { $this->schema('DROP TABLE IF EXISTS `app_wpmig_idmap`'); } catch (\Throwable) {}
+        try { $this->schema('DROP TABLE IF EXISTS {app_wpmig_redirects}'); } catch (\Throwable) {}
+        try { $this->schema('DROP TABLE IF EXISTS {app_wpmig_jobs}'); } catch (\Throwable) {}
+        try { $this->schema('DROP TABLE IF EXISTS {app_wpmig_idmap}'); } catch (\Throwable) {}
     }
 
     // ------------------------------------------------------------------
@@ -115,6 +116,7 @@ class App extends BaseApp
         $this->adminPost('/wp-migrator/start',   [$this, 'startJob']);
         $this->adminPost('/wp-migrator/run',     [$this, 'runBatch']);
         $this->adminGet('/wp-migrator/status',   [$this, 'jobStatus']);
+        $this->adminGet('/wp-migrator/log',      [$this, 'downloadLog']);
         $this->adminPost('/wp-migrator/cancel',  [$this, 'cancelJob']);
         $this->adminPost('/wp-migrator/reset',   [$this, 'resetAll']);
         $this->adminPost('/wp-migrator/repair',  [$this, 'repairLinks']);
@@ -175,7 +177,7 @@ class App extends BaseApp
             $norm = static fn(string $p): string => rtrim($p, '/') === '' ? '/' : rtrim($p, '/');
             $alt = str_ends_with($path, '/') ? rtrim($path, '/') : $path . '/';
             $row = $this->db()->selectOne(
-                'SELECT to_path, status_code FROM app_wpmig_redirects
+                'SELECT to_path, status_code FROM {app_wpmig_redirects}
                   WHERE from_path IN (:p, :a) ORDER BY from_path = :p2 DESC LIMIT 1',
                 ['p' => $path, 'a' => $alt, 'p2' => $path]
             );
@@ -214,7 +216,7 @@ class App extends BaseApp
             // Bump hit count (best-effort).
             try {
                 $this->db()->execute(
-                    'UPDATE app_wpmig_redirects SET hits = hits + 1 WHERE from_path IN (:p, :a)',
+                    'UPDATE {app_wpmig_redirects} SET hits = hits + 1 WHERE from_path IN (:p, :a)',
                     ['p' => $path, 'a' => $alt]
                 );
             } catch (\Throwable) {}
@@ -292,6 +294,11 @@ class App extends BaseApp
     public function jobStatus(Request $request): Response
     {
         return $this->safeJson(fn() => $this->wizard()->status($request));
+    }
+
+    public function downloadLog(Request $request): Response
+    {
+        return $this->safeJson(fn() => $this->wizard()->downloadLog($request));
     }
 
     public function cancelJob(Request $request): Response

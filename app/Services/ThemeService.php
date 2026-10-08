@@ -375,11 +375,18 @@ class ThemeService
         if (!is_array($json) || empty($json['ok'])) {
             return ['ok' => false, 'error' => (string) ($json['error'] ?? ('The Basehim marketplace returned HTTP ' . $res['status']))];
         }
-        // Flag which are already installed locally.
+        // Flag which are already installed locally, and which one is in use.
+        // An empty result set may omit the list entirely.
+        if (!isset($json['themes']) || !is_array($json['themes'])) {
+            $json['themes'] = [];
+            return $json;
+        }
         $installed = $this->scan();
+        $activeSlug = $this->activeSlug();
         foreach ($json['themes'] as &$t) {
             $t['installed'] = isset($installed[$t['slug']]);
             $t['installed_version'] = $installed[$t['slug']]['version'] ?? null;
+            $t['active'] = $t['installed'] && $t['slug'] === $activeSlug;
         }
         unset($t);
         return $json;

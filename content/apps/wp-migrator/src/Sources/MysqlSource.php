@@ -29,9 +29,9 @@ class MysqlSource implements Source
         $charset  = $config['charset']  ?? 'utf8mb4';
         $this->prefix = $config['prefix'] ?? 'wp_';
 
-        if (!$database) {
-            throw new \RuntimeException('Database name is required.');
-        }
+        $bad = self::validateConfig(['host' => $host, 'port' => $port, 'database' => $database, 'prefix' => $this->prefix]);
+        if ($bad !== null) throw new \RuntimeException($bad);
+        if (!in_array($charset, ['utf8mb4', 'utf8', 'latin1'], true)) $charset = 'utf8mb4';
 
         $dsn = "mysql:host={$host};port={$port};dbname={$database};charset={$charset}";
         try {
@@ -52,6 +52,28 @@ class MysqlSource implements Source
     }
 
     public function siteUrl(): string { return $this->siteUrl; }
+
+    /**
+     * Host, database and prefix go into the PDO DSN and into SQL as table
+     * names, where placeholders cannot reach. 1.3.1 used them as typed: a
+     * prefix of "wp_posts; DROP …" or a database of "x;unix_socket=…" was
+     * passed straight through.
+     *
+     * @return string|null an error message, or null when the config is usable
+     */
+    public static function validateConfig(array $c): ?string
+    {
+        $host = (string) ($c['host'] ?? '');
+        $db = (string) ($c['database'] ?? '');
+        $prefix = (string) ($c['prefix'] ?? '');
+        $port = (int) ($c['port'] ?? 3306);
+        if ($db === '') return 'Database name is required.';
+        if (!preg_match('/^[A-Za-z0-9_$\-]{1,64}$/', $db)) return 'Database name may contain only letters, digits, _, $ and -.';
+        if ($host === '' || !preg_match('/^(?:[A-Za-z0-9.\-]{1,253}|\[[0-9A-Fa-f:.]+\])$/', $host)) return 'Invalid database host.';
+        if ($port < 1 || $port > 65535) return 'Invalid database port.';
+        if (!preg_match('/^[A-Za-z0-9_]{0,32}$/', $prefix)) return 'Table prefix may contain only letters, digits and _.';
+        return null;
+    }
 
     // ------------------------------------------------------------------
     // Users

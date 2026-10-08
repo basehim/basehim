@@ -4,12 +4,15 @@
  *
  * @var \Basehim\WpMigrator\App $app
  * @var array|null $job
- * @var array|null $lastJob
+ * @var array|null $lastJob   (secrets redacted)
+ * @var string $lastLog
  * @var string $csrf
  * @var int $maxUpload
  * @var string $base
  */
 $running = $job && in_array($job['status'], ['pending','running'], true);
+$e = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+$lastLog = $lastLog ?? '';
 $cssUrl = $app->asset('css/wizard.css');
 $jsUrl  = $app->asset('js/wizard.js');
 ?>
@@ -23,20 +26,16 @@ $jsUrl  = $app->asset('js/wizard.js');
         <p class="text-sm text-slate-500">Move a WordPress site to Basehim — posts, pages, users, comments, media, SEO meta, redirects.</p>
     </div>
     <?php if ($lastJob && !$running): ?>
-        <form method="POST" action="<?= $base ?>/admin/wp-migrator/reset"
-              onsubmit="return confirm('Clear all migration history and start over? This wipes the ID map and removes redirects.');">
-            <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-            <button class="px-3 py-2 text-xs border border-slate-300 hover:bg-slate-50 rounded-lg font-medium text-slate-600">
-                <?= icon('arrow-uturn-left', 'w-4 h-4 mr-1') ?> Reset migration data
-            </button>
-        </form>
+        <button type="button" id="wpmig-reset" class="px-3 py-2 text-xs border border-slate-300 hover:bg-slate-50 rounded-lg font-medium text-slate-600">
+            <?= icon('arrow-uturn-left', 'w-4 h-4 mr-1') ?> Reset migration data
+        </button>
     <?php endif; ?>
 </div>
 
 <!-- Wizard panel: shows form OR progress depending on state. -->
 <div id="wpmig-wizard"
-     data-base="<?= htmlspecialchars($base) ?>"
-     data-csrf="<?= htmlspecialchars($csrf) ?>"
+     data-base="<?= $e($base) ?>"
+     data-csrf="<?= $e($csrf) ?>"
      data-running="<?= $running ? '1' : '0' ?>">
 
     <?php if (!$running): ?>
@@ -45,7 +44,7 @@ $jsUrl  = $app->asset('js/wizard.js');
     <!-- Setup form                                                     -->
     <!-- ============================================================== -->
     <form id="wpmig-setup" class="bg-white border border-slate-200 rounded-xl p-6 max-w-4xl" enctype="multipart/form-data">
-        <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
+        <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">
 
         <!-- Source tabs -->
         <div class="mb-6">
@@ -121,11 +120,63 @@ $jsUrl  = $app->asset('js/wizard.js');
                     'opt_rewrite_content'=> 'Rewrite inline URLs in content',
                 ] as $name => $label): ?>
                 <label class="flex items-center gap-2">
-                    <input type="checkbox" name="<?= $name ?>" value="1" checked class="w-4 h-4 text-blue-600 rounded border-slate-300">
-                    <span><?= htmlspecialchars($label) ?></span>
+                    <input type="checkbox" name="<?= $e($name) ?>" value="1" checked class="w-4 h-4 text-blue-600 rounded border-slate-300">
+                    <span><?= $e($label) ?></span>
                 </label>
                 <?php endforeach; ?>
             </div>
+
+            <!-- Media filter (only applies when "Media" is ticked) -->
+            <fieldset id="wpmig-media-opts" class="mt-4 border border-slate-200 rounded-lg p-4">
+                <legend class="px-1 text-sm font-medium text-slate-700">Media filter</legend>
+                <p class="text-xs text-slate-500 mb-2">Which attachments to download.</p>
+                <div class="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                    <?php foreach ([
+                        'image' => 'Images', 'video' => 'Video', 'audio' => 'Audio',
+                        'document' => 'Documents (PDF, Office…)', 'archive' => 'Archives (ZIP…)', 'other' => 'Other files',
+                    ] as $t => $label): ?>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" name="media_types[]" value="<?= $e($t) ?>" checked class="w-4 h-4 text-blue-600 rounded border-slate-300">
+                        <span><?= $e($label) ?></span>
+                    </label>
+                    <?php endforeach; ?>
+                </div>
+
+                <label class="flex items-start gap-2 mt-3 text-sm">
+                    <input type="checkbox" name="media_originals_only" value="1" class="w-4 h-4 mt-0.5 text-blue-600 rounded border-slate-300">
+                    <span><strong class="font-medium">Originals only</strong>
+                        <span class="block text-xs text-slate-500">Skip thumbnails and resized copies (<code>photo-300x200.jpg</code>, <code>photo@2x.jpg</code>),
+                        download the original instead of WordPress's <code>-scaled</code> copy, and link resized images in posts to the full image
+                        instead of downloading each size.</span></span>
+                </label>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                    <label class="block sm:col-span-2">
+                        <span class="block text-sm font-medium text-slate-700 mb-1">Exclude file names <span class="font-normal text-slate-400">(optional)</span></span>
+                        <input type="text" name="media_exclude" placeholder="*-150x150.*, *.webp, logo-old*"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono">
+                        <span class="block text-xs text-slate-500 mt-1">Comma-separated wildcards, matched against the file name (<code>*</code> any text, <code>?</code> one character).</span>
+                    </label>
+                    <label class="block">
+                        <span class="block text-sm font-medium text-slate-700 mb-1">Max file size (MB)</span>
+                        <input type="number" name="media_max_mb" value="25" min="1" max="512"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    </label>
+                </div>
+
+                <details class="mt-3">
+                    <summary class="text-xs text-slate-600 cursor-pointer">Advanced</summary>
+                    <label class="flex items-start gap-2 mt-2 text-sm">
+                        <input type="checkbox" name="media_allow_svg" value="1" class="w-4 h-4 mt-0.5 text-blue-600 rounded border-slate-300">
+                        <span>Allow SVG files <span class="block text-xs text-slate-500">SVG can contain scripts. Only for a source you trust.</span></span>
+                    </label>
+                    <label class="flex items-start gap-2 mt-2 text-sm">
+                        <input type="checkbox" name="media_allow_private" value="1" class="w-4 h-4 mt-0.5 text-blue-600 rounded border-slate-300">
+                        <span>Allow downloads from private network addresses
+                            <span class="block text-xs text-slate-500">Only if the old site is on localhost or your LAN. Off, downloads from 127.0.0.1, 10.x, 192.168.x and similar are refused.</span></span>
+                    </label>
+                </details>
+            </fieldset>
         </div>
 
         <!-- Auth options -->
@@ -136,7 +187,7 @@ $jsUrl  = $app->asset('js/wizard.js');
                     <label class="block text-sm font-medium text-slate-700 mb-1">Default password for imported users</label>
                     <input type="text" name="default_password" placeholder="Leave blank to auto-generate"
                            class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                    <p class="text-xs text-slate-500 mt-1">Users will need to reset on first login.</p>
+                    <p class="text-xs text-slate-500 mt-1">Users will need to reset on first login. If left blank, the generated password is shown once when the migration starts and written to the log.</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1">Default role</label>
@@ -155,7 +206,7 @@ $jsUrl  = $app->asset('js/wizard.js');
                 <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
                     <?= icon('play', 'w-4 h-4 mr-1') ?> Start migration
                 </button>
-                <span id="wpmig-setup-msg" class="text-sm text-slate-500"></span>
+                <span id="wpmig-setup-msg" class="text-sm text-slate-500" role="status"></span>
             </div>
 
             <!-- Upload progress (chunked WXR upload only; hidden otherwise) -->
@@ -194,11 +245,15 @@ $jsUrl  = $app->asset('js/wizard.js');
             </div>
         </div>
 
+        <div id="wpmig-notice" class="hidden mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900"></div>
+
         <div id="wpmig-counts" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm"></div>
 
         <div class="mt-5">
-            <details>
-                <summary class="text-sm text-slate-600 cursor-pointer">View log</summary>
+            <details open>
+                <summary class="text-sm text-slate-600 cursor-pointer">Log
+                    <a href="<?= $e($base) ?>/admin/wp-migrator/log" class="ml-2 text-xs text-blue-700 hover:underline">Download</a>
+                </summary>
                 <pre id="wpmig-log" class="mt-2 max-h-72 overflow-auto bg-slate-900 text-slate-100 text-xs p-3 rounded-lg font-mono"></pre>
             </details>
         </div>
@@ -216,13 +271,56 @@ $jsUrl  = $app->asset('js/wizard.js');
                 <h3 class="font-semibold text-slate-900">Migration complete</h3>
                 <p class="text-sm text-slate-500 mt-1">All selected entities have been imported.</p>
                 <div id="wpmig-summary" class="mt-3 text-sm"></div>
+                <details class="mt-3">
+                    <summary class="text-sm text-slate-600 cursor-pointer">Log
+                        <a href="<?= $e($base) ?>/admin/wp-migrator/log" class="ml-2 text-xs text-blue-700 hover:underline">Download</a>
+                    </summary>
+                    <pre id="wpmig-done-log" class="mt-2 max-h-72 overflow-auto bg-slate-900 text-slate-100 text-xs p-3 rounded-lg font-mono whitespace-pre-wrap"></pre>
+                </details>
                 <div class="mt-4 flex gap-2">
-                    <a href="<?= $base ?>/admin/posts" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">View posts</a>
-                    <a href="<?= $base ?>/admin/wp-migrator" class="px-3 py-2 text-sm border border-slate-300 hover:bg-slate-50 rounded-lg font-medium">Migrate another site</a>
+                    <a href="<?= $e($base) ?>/admin/posts" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">View posts</a>
+                    <a href="<?= $e($base) ?>/admin/wp-migrator" class="px-3 py-2 text-sm border border-slate-300 hover:bg-slate-50 rounded-lg font-medium">Migrate another site</a>
                 </div>
             </div>
         </div>
     </div>
+
+    <?php if (!$running && $lastJob): ?>
+    <!-- ============================================================== -->
+    <!-- Last migration (status, counts, log)                            -->
+    <!-- ============================================================== -->
+    <?php
+        $st = (string) $lastJob['status'];
+        $tone = ['completed' => 'text-green-700 bg-green-50', 'failed' => 'text-red-700 bg-red-50',
+                 'cancelled' => 'text-amber-800 bg-amber-50'][$st] ?? 'text-slate-700 bg-slate-100';
+    ?>
+    <div id="wpmig-last" class="bg-white border border-slate-200 rounded-xl p-6 max-w-4xl mt-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <h3 class="font-semibold text-slate-900">Last migration
+                <span class="ml-2 px-2 py-0.5 rounded text-xs font-medium <?= $e($tone) ?>"><?= $e($st) ?></span>
+            </h3>
+            <span class="text-xs text-slate-500">
+                #<?= (int) $lastJob['id'] ?> · <?= $e($lastJob['source']) ?>
+                · started <?= $e($lastJob['started_at'] ?? '') ?>
+                <?php if (!empty($lastJob['finished_at'])): ?> · ended <?= $e($lastJob['finished_at']) ?><?php endif; ?>
+            </span>
+        </div>
+        <?php if (!empty($lastJob['counts'])): ?>
+        <ul class="mt-3 flex flex-wrap gap-2 text-xs">
+            <?php foreach ((array) $lastJob['counts'] as $k => $v): ?>
+                <li class="px-2 py-1 bg-slate-50 rounded"><span class="text-slate-500"><?= $e(str_replace('_', ' ', (string) $k)) ?></span>
+                    <strong class="text-slate-900"><?= (int) $v ?></strong></li>
+            <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+        <details class="mt-3" <?= $st !== 'completed' ? 'open' : '' ?>>
+            <summary class="text-sm text-slate-600 cursor-pointer">Log
+                <a href="<?= $e($base) ?>/admin/wp-migrator/log?job=<?= (int) $lastJob['id'] ?>" class="ml-2 text-xs text-blue-700 hover:underline">Download full log</a>
+            </summary>
+            <pre class="mt-2 max-h-72 overflow-auto bg-slate-900 text-slate-100 text-xs p-3 rounded-lg font-mono whitespace-pre-wrap"><?= $lastLog !== '' ? $e($lastLog) : 'No log lines were recorded.' ?></pre>
+        </details>
+    </div>
+    <?php endif; ?>
 
     <!-- ============================================================== -->
     <!-- Repair image links in posts already on the site                 -->

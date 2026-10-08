@@ -68,7 +68,7 @@ class TaxonomyImporter extends Importer
                 if ($existing) {
                     $this->idMap->put('term', (int)$row['old_id'], (int)$existing['id']);
                 } else {
-                    $this->log("term '{$normalizedSlug}' failed: " . $e->getMessage());
+                    $this->warn("term '{$normalizedSlug}' failed: " . $e->getMessage());
                 }
             }
         }
@@ -97,7 +97,9 @@ class TaxonomyImporter extends Importer
                 $taxSlug = $row['taxonomy'] === 'tag' ? 'tag' : 'category';
                 /** @var TaxonomyService $tax */
                 $tax = $this->app->make(TaxonomyService::class);
-                $parent = $tax->findTermBySlug($taxSlug, $row['parent_slug']);
+                // Same two forms as on import: terms were created with the normalized slug.
+                $parent = $tax->findTermBySlug($taxSlug, Helpers::slug((string) $row['parent_slug']))
+                    ?: $tax->findTermBySlug($taxSlug, (string) $row['parent_slug']);
                 if ($parent) $parentNewId = (int)$parent['id'];
             }
 

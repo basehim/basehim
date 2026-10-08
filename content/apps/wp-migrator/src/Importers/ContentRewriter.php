@@ -27,7 +27,7 @@ class ContentRewriter extends Importer
     public function runBatch(int $offset, int $limit): int
     {
         $rows = $this->db->select(
-            'SELECT old_id, new_id FROM app_wpmig_idmap
+            'SELECT old_id, new_id FROM {app_wpmig_idmap}
              WHERE entity_type = :t ORDER BY id LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset,
             ['t' => 'post']
         );
@@ -39,7 +39,7 @@ class ContentRewriter extends Importer
 
         foreach ($rows as $r) {
             $newId = (int) $r['new_id'];
-            $post = $this->db->selectOne('SELECT id, content FROM posts WHERE id = :id', ['id' => $newId]);
+            $post = $this->db->selectOne('SELECT id, content FROM {posts} WHERE id = :id AND deleted_at IS NULL', ['id' => $newId]);
             $done++;
             if (!$post || (string) $post['content'] === '') continue;
 
@@ -58,17 +58,30 @@ class ContentRewriter extends Importer
             if (microtime(true) - $started > 20) break;
         }
 
-        if ($offset + $done >= $this->total()) {
-            $s = $fixer->stats;
-            $n = static fn(int $c, string $one, string $many) => $c . ' ' . ($c === 1 ? $one : $many);
-            $this->log('rewrote ' . $n($s['urls'], 'image URL', 'image URLs') . ', ' . $n($s['galleries'], 'gallery', 'galleries') . ', '
-                . $n($s['captions'], 'caption', 'captions') . ', ' . $n($s['links'], 'link', 'links')
-                . ($this->mapper->fetched ? "; fetched {$this->mapper->fetched} resized copies" : ''));
+        // Stats are per request (a new fixer each batch). Up to 1.3.1 the
+        // closing summary reported only the last batch's numbers; they are
+        // now added to the job's counts and summarised from there.
+        $s = $fixer->stats;
+        foreach (['urls', 'galleries', 'captions', 'links', 'unmapped'] as $k) {
+            if (!empty($s[$k])) $this->state->bumpCount($this->jobId, 'rewrite_' . $k, (int) $s[$k]);
+        }
+        if ($this->mapper && $this->mapper->fetched) {
+            $this->state->bumpCount($this->jobId, 'rewrite_fetched', $this->mapper->fetched);
         }
         if ($fixer->stats['unmapped'] && $fixer->unmappedSamples) {
-            $this->log('left ' . $fixer->stats['unmapped'] . ' upload URLs unchanged (no imported file), e.g. ' . $fixer->unmappedSamples[0]);
-            $fixer->stats['unmapped'] = 0;
-            $fixer->unmappedSamples = [];
+            $this->log('left ' . $fixer->stats['unmapped'] . ' upload URLs unchanged (no imported file), e.g. '
+                . implode(', ', array_slice($fixer->unmappedSamples, 0, 3)));
+        }
+
+        if ($offset + $done >= $this->total()) {
+            $c = $this->state->find($this->jobId)['counts'] ?? [];
+            $n = static fn(int $c, string $one, string $many) => $c . ' ' . ($c === 1 ? $one : $many);
+            $this->log('rewrote ' . $n((int) ($c['rewrite_urls'] ?? 0), 'image URL', 'image URLs') . ', '
+                . $n((int) ($c['rewrite_galleries'] ?? 0), 'gallery', 'galleries') . ', '
+                . $n((int) ($c['rewrite_captions'] ?? 0), 'caption', 'captions') . ', '
+                . $n((int) ($c['rewrite_links'] ?? 0), 'link', 'links')
+                . (!empty($c['rewrite_fetched']) ? "; fetched {$c['rewrite_fetched']} resized copies" : '')
+                . (!empty($c['rewrite_unmapped']) ? "; {$c['rewrite_unmapped']} upload URLs left unchanged" : ''));
         }
         return $done;
     }
@@ -80,10 +93,17 @@ class ContentRewriter extends Importer
         $hosts = UrlMapper::hostsFrom($siteUrl);
         // Attachments are often recorded on another host (http vs https, an
         // old domain, a CDN): every host seen on an imported file counts.
-        foreach ($this->db->select('SELECT old_id FROM app_wpmig_idmap WHERE entity_type = :t', ['t' => 'media_host']) as $r) {
+        foreach ($this->db->select('SELECT old_id FROM {app_wpmig_idmap} WHERE entity_type = :t', ['t' => 'media_host']) as $r) {
             $hosts[] = strtolower((string) $r['old_id']);
         }
-        $this->mapper = new UrlMapper($this->db, $this->idMap, array_values(array_unique($hosts)), $siteUrl, true, false);
+        // "Originals only": content that points at a resized copy links to the
+        // full image instead of fetching the copy from the old site.
+        $filter = \Basehim\WpMigrator\MediaFilter::fromOptions((array) $this->opt('media', []));
+        $this->mapper = new UrlMapper(
+            $this->db, $this->idMap, array_values(array_unique($hosts)), $siteUrl,
+            !$filter->originalsOnly, false, null,
+            new \Basehim\WpMigrator\Downloader($filter->allowPrivate, 20, 8)
+        );
         return $this->fixer = new ContentFixer($this->db, $this->idMap, $this->mapper);
     }
 }

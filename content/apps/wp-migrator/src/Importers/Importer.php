@@ -45,9 +45,15 @@ abstract class Importer
     public function batchSize(): int { return $this->batchSize; }
 
     /** Helpful for importers that want to log progress without an exception. */
-    protected function log(string $msg): void
+    protected function log(string $msg, string $level = 'info'): void
     {
-        $this->state->appendLog($this->jobId, "[{$this->entityType()}] {$msg}");
+        $this->state->appendLog($this->jobId, "[{$this->entityType()}] {$msg}", $level);
+    }
+
+    /** Warnings show up in the core log as well as the job log. */
+    protected function warn(string $msg): void
+    {
+        $this->log($msg, 'warning');
     }
 
     /** Pull an option value with a default. */

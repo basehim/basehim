@@ -37,6 +37,9 @@ var ICO = function (n, c) {
     const stepBar   = document.getElementById('wpmig-step-bar');
     const counts    = document.getElementById('wpmig-counts');
     const logEl     = document.getElementById('wpmig-log');
+    const doneLogEl = document.getElementById('wpmig-done-log');
+    const noticeEl  = document.getElementById('wpmig-notice');
+    const resetBtn  = document.getElementById('wpmig-reset');
     const summary   = document.getElementById('wpmig-summary');
     const cancelBtn = document.getElementById('wpmig-cancel');
 
@@ -191,6 +194,32 @@ var ICO = function (n, c) {
     const firstTab = document.querySelector('.wpmig-tab');
     if (firstTab) firstTab.classList.add('bg-blue-50', 'text-blue-700', 'border-blue-200');
 
+    // ---- Media filter is only relevant when Media is ticked ----
+    const mediaToggle = setupForm ? setupForm.querySelector('input[name="opt_media"]') : null;
+    const mediaOpts = document.getElementById('wpmig-media-opts');
+    function syncMediaOpts() {
+        if (!mediaToggle || !mediaOpts) return;
+        mediaOpts.disabled = !mediaToggle.checked;
+        mediaOpts.classList.toggle('opacity-50', !mediaToggle.checked);
+    }
+    if (mediaToggle) { mediaToggle.addEventListener('change', syncMediaOpts); syncMediaOpts(); }
+
+    // ---- Reset (was a plain form POST that showed raw JSON) ----
+    if (resetBtn) {
+        resetBtn.addEventListener('click', async () => {
+            if (!confirm('Clear all migration history and start over? This wipes the ID map, job logs and redirects. Imported posts, users and media stay.')) return;
+            resetBtn.disabled = true;
+            try {
+                const fd = new FormData(); fd.append('_csrf', csrf);
+                await postJson(base + '/admin/wp-migrator/reset', fd);
+                window.location.reload();
+            } catch (err) {
+                alert(err.message);
+                resetBtn.disabled = false;
+            }
+        });
+    }
+
     // ---- Start migration ----
     if (setupForm) {
         setupForm.addEventListener('submit', async (e) => {
@@ -203,6 +232,13 @@ var ICO = function (n, c) {
 
             if (file && file.size > MAX_IMPORT_BYTES) {
                 setupMsg.textContent = `File is too large — max import size is 500 MB (this file is ${Math.round(file.size / 1048576)} MB).`;
+                setupMsg.classList.add('text-red-700');
+                return;
+            }
+
+            if (mediaToggle && mediaToggle.checked &&
+                !setupForm.querySelector('input[name="media_types[]"]:checked')) {
+                setupMsg.textContent = 'Media is selected but no media type is — tick at least one type, or untick Media.';
                 setupMsg.classList.add('text-red-700');
                 return;
             }
@@ -238,8 +274,14 @@ var ICO = function (n, c) {
                 }
                 // Hide form, show progress, kick off loop.
                 setupForm.classList.add('hidden');
+                ['wpmig-last', 'wpmig-repair'].forEach((id) => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+                if (resetBtn) resetBtn.classList.add('hidden');
                 progress.classList.remove('hidden');
                 setupMsg.textContent = '';
+                if (json.notice && noticeEl) {
+                    noticeEl.textContent = json.notice;
+                    noticeEl.classList.remove('hidden');
+                }
                 loop();
             } catch (err) {
                 uploadWrap.classList.add('hidden');
@@ -312,8 +354,14 @@ var ICO = function (n, c) {
                 showError(resp.error || 'Unknown error');
                 break;
             }
+            if (resp.busy) {
+                // Another tab (or a slow previous request) is running a batch.
+                for (let i = 0; i < 15 && !cancelLoop; i++) await sleep(100);
+                continue;
+            }
+            if (typeof resp.log === 'string') setServerLog(resp.log);
             if (resp.finished) {
-                showFinished(resp.counts || {});
+                showFinished(resp.counts || {}, resp.log);
                 break;
             }
             updateUi(resp);
@@ -335,6 +383,7 @@ var ICO = function (n, c) {
             stepBar.style.width = '0%';
             stepProg.textContent = '';
             lastTotal = 0;
+            renderCounts(resp.counts || {});
             return;
         }
         const total = resp.total || 0;
@@ -348,13 +397,14 @@ var ICO = function (n, c) {
 
     function renderCounts(c) {
         counts.innerHTML = '';
-        const order = ['users','taxonomies','media','posts','pages','featured_media','comments','menus','redirects','rewrite_content'];
+        const order = ['users','taxonomies','media','media_skipped','media_failed','posts','pages','featured_media','comments','menus','redirects','rewrite_content'];
         for (const key of order) {
             if (c[key] === undefined) continue;
             const cell = document.createElement('div');
             cell.className = 'bg-slate-50 rounded-lg px-3 py-2';
-            cell.innerHTML = `<div class="text-xs text-slate-500">${label(key)}</div>
-                              <div class="font-semibold text-slate-900">${c[key]}</div>`;
+            const l = document.createElement('div'); l.className = 'text-xs text-slate-500'; l.textContent = label(key);
+            const v = document.createElement('div'); v.className = 'font-semibold text-slate-900'; v.textContent = String(c[key]);
+            cell.append(l, v);
             counts.appendChild(cell);
         }
     }
@@ -362,27 +412,59 @@ var ICO = function (n, c) {
         return ({
             users:'Users', taxonomies:'Cats/Tags', media:'Media', posts:'Posts', pages:'Pages',
             featured_media:'Featured', comments:'Comments', menus:'Menu items',
-            redirects:'Redirects', rewrite_content:'Rewrites'
-        }[k]) || k;
+            redirects:'Redirects', rewrite_content:'Rewritten posts',
+            media_skipped:'Media skipped (filter)', media_failed:'Media failed', posts_skipped:'Posts skipped (trash/drafts)',
+            rewrite_urls:'Image links rewritten', rewrite_galleries:'Galleries', rewrite_captions:'Captions',
+            rewrite_links:'Internal links', rewrite_unmapped:'Upload URLs left unchanged', rewrite_fetched:'Resized copies fetched'
+        }[k]) || k.replace(/_/g, ' ');
     }
 
-    function showFinished(c) {
+    function showFinished(c, log) {
         progress.classList.add('hidden');
         done.classList.remove('hidden');
-        const items = Object.entries(c).map(([k,v]) => `<li><strong>${v}</strong> ${label(k)}</li>`).join('');
-        summary.innerHTML = `<ul class="list-disc list-inside text-slate-700">${items}</ul>`;
+        const ul = document.createElement('ul');
+        ul.className = 'list-disc list-inside text-slate-700';
+        Object.entries(c).forEach(([k, v]) => {
+            const li = document.createElement('li');
+            const b = document.createElement('strong'); b.textContent = String(v);
+            li.append(b, ' ' + label(k));
+            ul.appendChild(li);
+        });
+        summary.replaceChildren(ul);
+        if (doneLogEl) doneLogEl.textContent = (typeof log === 'string' && log) ? log : (logEl ? logEl.textContent : '');
+        if (noticeEl && !noticeEl.classList.contains('hidden')) {
+            const n = noticeEl.cloneNode(true); n.id = ''; summary.prepend(n);
+        }
     }
 
-    function logAppend(line) {
+    // The log box shows the server's job log (every batch returns its tail)
+    // followed by anything that went wrong in the browser. Up to 1.3.1 only
+    // the browser-side lines were ever shown.
+    let serverLog = '';
+    const clientLines = [];
+    function paintLog() {
         if (!logEl) return;
-        logEl.textContent += line + '\n';
-        logEl.scrollTop = logEl.scrollHeight;
+        const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 20;
+        logEl.textContent = serverLog + (clientLines.length ? clientLines.join('\n') + '\n' : '');
+        if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    }
+    function setServerLog(text) { serverLog = text; paintLog(); }
+    function logAppend(line) {
+        clientLines.push('[browser] ' + line);
+        if (clientLines.length > 50) clientLines.shift();
+        paintLog();
     }
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-    // If we landed on the page while a job is already running, resume the loop.
+    // If we landed on the page while a job is already running, show what has
+    // been logged so far and resume the loop.
     if (isRunning) {
+        fetch(base + '/admin/wp-migrator/status', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            .then((r) => r.json()).then((d) => {
+                if (d && typeof d.log === 'string') setServerLog(d.log);
+                if (d && d.job && d.job.counts) renderCounts(d.job.counts);
+            }).catch(() => {});
         loop();
     }
 })();

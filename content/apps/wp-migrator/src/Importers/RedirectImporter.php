@@ -28,7 +28,7 @@ class RedirectImporter extends Importer
         // We iterate the idmap itself — every imported post should get a
         // redirect record (if we can resolve its old URL).
         $rows = $this->db->select(
-            'SELECT old_id, new_id FROM app_wpmig_idmap
+            'SELECT old_id, new_id FROM {app_wpmig_idmap}
              WHERE entity_type = :t ORDER BY id LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset,
             ['t' => 'post']
         );
@@ -47,7 +47,7 @@ class RedirectImporter extends Importer
             $wp = $byOldId[$oldId] ?? null;
             if (!$wp) continue;
 
-            $newPost = $this->db->selectOne('SELECT * FROM posts WHERE id = :id', ['id' => $newId]);
+            $newPost = $this->db->selectOne('SELECT * FROM {posts} WHERE id = :id', ['id' => $newId]);
             if (!$newPost) continue;
 
             $fromPath = $this->extractPath((string)($wp['link'] ?? ''), $siteUrl);
@@ -68,7 +68,7 @@ class RedirectImporter extends Importer
 
             try {
                 $existing = $this->db->selectOne(
-                    'SELECT id FROM app_wpmig_redirects WHERE from_path = :p',
+                    'SELECT id FROM {app_wpmig_redirects} WHERE from_path = :p',
                     ['p' => $fromPath]
                 );
                 if ($existing) {

@@ -42,9 +42,16 @@ class Wizard
     private State $state;
     private IdMap $idMap;
 
+    /** Roles an imported user may be given. Never an administrator. */
+    private const ROLES = ['author', 'editor', 'contributor', 'subscriber'];
+
     public function __construct(private App $app)
     {
-        $this->state = new State($app->dbPublic());
+        // Every job-log line is mirrored to the per-app log file
+        // (Admin > Apps > Logs); warnings and errors also reach the core log.
+        $this->state = new State($app->dbPublic(), static function (string $msg, string $level) use ($app): void {
+            $app->appLog($msg, [], $level);
+        });
         $this->idMap = new IdMap($app->dbPublic());
     }
 
@@ -66,8 +73,9 @@ class Wizard
             }, $this->app, $this->app);
             return $closure($template, $title, $data);
         })('wizard', 'WordPress Migrator', [
-            'job'      => $current,
-            'lastJob'  => $last,
+            'job'      => State::redact($current),
+            'lastJob'  => State::redact($last),
+            'lastLog'  => $last ? $this->state->logTail((int) $last['id'], 20000) : '',
             'csrf'     => $session->csrfToken(),
             'maxUpload' => $this->maxUploadBytes(),
         ]);
@@ -157,15 +165,18 @@ class Wizard
             }
         } else {
             $config = [
-                'host'     => (string)$request->input('mysql_host', '127.0.0.1'),
+                'host'     => trim((string)$request->input('mysql_host', '127.0.0.1')),
                 'port'     => (int)$request->input('mysql_port', 3306),
-                'database' => (string)$request->input('mysql_database', ''),
+                'database' => trim((string)$request->input('mysql_database', '')),
                 'username' => (string)$request->input('mysql_username', ''),
                 'password' => (string)$request->input('mysql_password', ''),
-                'prefix'   => (string)$request->input('mysql_prefix', 'wp_'),
+                'prefix'   => trim((string)$request->input('mysql_prefix', 'wp_')),
             ];
-            if (!$config['database']) {
-                return $this->jsonError('Database name is required.', 422);
+            // These end up inside the PDO DSN and inside SQL as identifiers,
+            // where no placeholder can protect them (1.3.1 used them as typed).
+            $bad = MysqlSource::validateConfig($config);
+            if ($bad !== null) {
+                return $this->jsonError($bad, 422);
             }
         }
 
@@ -188,10 +199,40 @@ class Wizard
         }
         $optDefault = $anyOptSubmitted ? false : true;
 
+        $role = (string)$request->input('default_role', 'author');
+        if (!in_array($role, self::ROLES, true)) {
+            return $this->jsonError('Unknown default role.', 422);
+        }
+
+        // One password for the whole job, fixed now. Generated here (not per
+        // batch, as up to 1.3.1) when the field was left blank.
+        $password = (string)$request->input('default_password', '');
+        $generated = false;
+        if ($password === '') {
+            $password = 'ChangeMe-' . bin2hex(random_bytes(6));
+            $generated = true;
+        }
+
+        // Media filter. Absent from older/API callers: import everything.
+        $types = $request->input('media_types', null);
+        $mediaOpts = [
+            'types'          => is_array($types) ? array_values(array_intersect(MediaFilter::TYPES, array_map('strval', $types)))
+                                                 : MediaFilter::TYPES,
+            'originals_only' => $request->boolean('media_originals_only', false),
+            'exclude'        => implode("\n", MediaFilter::parsePatterns((string)$request->input('media_exclude', ''))),
+            'allow_svg'      => $request->boolean('media_allow_svg', false),
+            'max_mb'         => max(1, min(512, (int)$request->input('media_max_mb', 25) ?: 25)),
+            'allow_private'  => $request->boolean('media_allow_private', false),
+        ];
+        if (is_array($types) && !$mediaOpts['types'] && $request->boolean('opt_media', false)) {
+            return $this->jsonError('Media is selected but no media type is — tick at least one type, or untick Media.', 422);
+        }
+
         $options = [
-            'default_password'  => (string)$request->input('default_password', '') ?: null,
-            'default_role'      => (string)$request->input('default_role', 'author'),
-            'default_author_id' => 1,
+            'default_password'  => $password,
+            'default_role'      => $role,
+            'default_author_id' => $this->defaultAuthorId(),
+            'media'             => $mediaOpts,
             'enabled' => [
                 'users'           => $request->boolean('opt_users', $optDefault),
                 'taxonomies'      => $request->boolean('opt_taxonomies', $optDefault),
@@ -221,9 +262,29 @@ class Wizard
 
         $jobId = $this->state->create($sourceType, $config, $options);
         $this->state->update($jobId, ['status' => 'running', 'totals' => $totals]);
-        $this->state->appendLog($jobId, "Job started — source={$sourceType}, totals=" . json_encode($totals));
+        $this->state->appendLog($jobId, "Job started — source={$sourceType}, site=" . $source->siteUrl()
+            . ', totals=' . json_encode($totals));
+        $steps = array_keys(array_filter($options['enabled']));
+        $this->state->appendLog($jobId, 'Steps: ' . ($steps ? implode(', ', $steps) : '(none)'));
+        if ($options['enabled']['media']) {
+            $this->state->appendLog($jobId, 'Media filter: types=' . implode('/', $mediaOpts['types'])
+                . ($mediaOpts['originals_only'] ? ', originals only' : '')
+                . ($mediaOpts['exclude'] !== '' ? ', exclude=' . str_replace("\n", ' ', $mediaOpts['exclude']) : '')
+                . ', max ' . $mediaOpts['max_mb'] . ' MB'
+                . ($mediaOpts['allow_svg'] ? ', SVG allowed' : '')
+                . ($mediaOpts['allow_private'] ? ', private addresses allowed' : ''));
+        }
+        // Shown once here and in the job log (which only admins can read);
+        // the stored copy is removed when the job ends.
+        $notice = null;
+        if ($generated && $options['enabled']['users']) {
+            $notice = "No default password was given. Imported users get: {$password} — note it now; it is removed from the job when the migration ends.";
+            // Database job log only — never the log files, which outlive the job.
+            $this->state->appendLog($jobId, 'Generated default password for imported users: ' . $password, 'warning', false);
+            $this->app->appLog("job #{$jobId}: a default password was generated for imported users (shown in the job log)", [], 'warning');
+        }
 
-        return $this->json(['ok' => true, 'job_id' => $jobId]);
+        return $this->json(['ok' => true, 'job_id' => $jobId, 'notice' => $notice]);
     }
 
     /**
@@ -327,7 +388,9 @@ class Wizard
         // Defensive bounds check — the declared total_size was already
         // capped at MAX_IMPORT_BYTES in uploadInit(), so a chunk landing
         // outside [0, total_size + one chunk] means a stale/bogus request.
-        if ($offset < 0 || $offset > self::MAX_IMPORT_BYTES || $offset + $len > (int)$meta['total_size'] + $chunkSize) {
+        $totalSize = (int)$meta['total_size'];
+        $expected = min($chunkSize, $totalSize - $offset);
+        if ($chunkSize <= 0 || $offset < 0 || $offset >= $totalSize || $len !== $expected) {
             return $this->jsonError('Upload chunk out of range.', 422);
         }
 
@@ -357,14 +420,32 @@ class Wizard
             return $this->jsonError('Security check failed.', 403);
         }
 
+        // One batch at a time. With the page open in two tabs, 1.3.1 ran
+        // batches side by side: the same records twice, cursors racing.
+        $lock = $this->acquireRunLock();
+        if ($lock === false) {
+            return $this->json(['ok' => true, 'busy' => true]);
+        }
+
+        try {
+            return $this->runLocked();
+        } finally {
+            if (is_resource($lock)) { flock($lock, LOCK_UN); fclose($lock); }
+        }
+    }
+
+    private function runLocked(): Response
+    {
+        @set_time_limit(120);
         $job = $this->state->currentJob();
         if (!$job) return $this->jsonError('No active job.', 404);
 
         try {
             $source = $this->makeSource($job['source'], $job['config']);
         } catch (\Throwable $e) {
-            $this->state->update($job['id'], ['status' => 'failed']);
-            $this->state->appendLog($job['id'], 'FAILED to open source: ' . $e->getMessage());
+            $this->state->update($job['id'], ['status' => 'failed', 'finished_at' => date('Y-m-d H:i:s')]);
+            $this->state->appendLog($job['id'], 'FAILED to open source: ' . $e->getMessage(), 'error');
+            $this->state->scrubSecrets($job['id']);
             return $this->jsonError($e->getMessage(), 500);
         }
 
@@ -374,6 +455,7 @@ class Wizard
         // Allow the user to skip a step by toggling it off in options.
         $enabled = $job['options']['enabled'] ?? [];
         if (isset($enabled[$step]) && !$enabled[$step]) {
+            $this->state->appendLog($job['id'], "Step '{$step}' skipped (not selected).");
             return $this->advanceStep($job, $step);
         }
 
@@ -382,21 +464,38 @@ class Wizard
             return $this->advanceStep($job, $step);
         }
 
-        $total = $importer->total();
-        $this->state->setTotal($job['id'], $step, $total);
+        try {
+            $total = $importer->total();
+            $this->state->setTotal($job['id'], $step, $total);
 
-        if ($total === 0) {
-            return $this->advanceStep($job, $step);
+            if ($total === 0) {
+                $this->state->appendLog($job['id'], "Step '{$step}': nothing to do.");
+                return $this->advanceStep($job, $step);
+            }
+            if ($cursor === 0) {
+                $this->state->appendLog($job['id'], "Step '{$step}' started: {$total} records.");
+            }
+
+            $t0 = microtime(true);
+            $processed = $importer->runBatch($cursor, $importer->batchSize());
+        } catch (\Throwable $e) {
+            // Logged where the operator will look; the browser retries, and
+            // stops after three failures in a row.
+            $this->state->appendLog($job['id'], "Step '{$step}' batch at {$cursor} failed: " . $e->getMessage()
+                . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')', 'error');
+            return $this->jsonError("Step '{$step}' failed: " . $e->getMessage(), 500);
         }
 
-        $processed = $importer->runBatch($cursor, $importer->batchSize());
         // Advance by what was actually done. Batches may stop early to stay
-        // inside PHP's time limit; advancing by the batch size (as up to 1.2.0)
-        // would have skipped the records they did not reach.
+        // inside PHP's time limit.
         $newCursor = $cursor + $processed;
+        if ($step !== 'media' && $processed > 0) {
+            // (Media logs its own per-batch summary.)
+            $this->state->appendLog($job['id'], sprintf("[%s] %d–%d of %d (%.1fs)",
+                $step, $cursor + 1, min($newCursor, $total), $total, microtime(true) - $t0));
+        }
 
         if ($processed === 0 || $newCursor >= $total) {
-            // Step is done. Move on.
             return $this->advanceStep($job, $step);
         }
 
@@ -409,7 +508,19 @@ class Wizard
             'total'     => $total,
             'done'      => false,
             'counts'    => $this->state->find($job['id'])['counts'] ?? [],
+            'log'       => $this->state->logTail($job['id']),
         ]);
+    }
+
+    /** @return resource|false|null  a held lock, false when another batch holds it, null when locking is unavailable */
+    private function acquireRunLock()
+    {
+        $dir = $this->cacheDir();
+        if ($dir === null) return null;
+        $fh = @fopen($dir . '/wpmig_run.lock', 'c');
+        if ($fh === false) return null;
+        if (!flock($fh, LOCK_EX | LOCK_NB)) { fclose($fh); return false; }
+        return $fh;
     }
 
     /**
@@ -442,14 +553,14 @@ class Wizard
         if ($oldSite !== '' && !preg_match('#^https?://#i', $oldSite)) $oldSite = 'https://' . $oldSite;
 
         $hosts = UrlMapper::hostsFrom($oldSite, (string) ($_SERVER['HTTP_HOST'] ?? ''));
-        foreach ($db->select("SELECT old_id FROM app_wpmig_idmap WHERE entity_type = 'media_host'") as $r) $hosts[] = (string) $r['old_id'];
+        foreach ($db->select("SELECT old_id FROM {app_wpmig_idmap} WHERE entity_type = 'media_host'") as $r) $hosts[] = (string) $r['old_id'];
 
         $mapper = new UrlMapper($db, $this->idMap, array_values(array_unique($hosts)), $oldSite, $apply && $oldSite !== '', true);
         $fixer = new ContentFixer($db, $this->idMap, $mapper, false);
 
-        $total = (int) ($db->selectOne("SELECT COUNT(*) c FROM posts WHERE type IN ('post','page') AND deleted_at IS NULL")['c'] ?? 0);
+        $total = (int) ($db->selectOne("SELECT COUNT(*) c FROM {posts} WHERE type IN ('post','page') AND deleted_at IS NULL")['c'] ?? 0);
         $rows = $db->select(
-            "SELECT id, title, content FROM posts
+            "SELECT id, title, content FROM {posts}
               WHERE type IN ('post','page') AND deleted_at IS NULL AND id > :a
               ORDER BY id LIMIT 25",
             ['a' => $after]
@@ -475,7 +586,7 @@ class Wizard
 
         // Finished when this batch reached the end of the table.
         $done = !$stoppedEarly && count($rows) < 25;
-        $scanned = (int) ($db->selectOne("SELECT COUNT(*) c FROM posts WHERE type IN ('post','page') AND deleted_at IS NULL AND id <= :c", ['c' => $cursor])['c'] ?? 0);
+        $scanned = (int) ($db->selectOne("SELECT COUNT(*) c FROM {posts} WHERE type IN ('post','page') AND deleted_at IS NULL AND id <= :c", ['c' => $cursor])['c'] ?? 0);
 
         return $this->json([
             'ok'        => true,
@@ -506,12 +617,15 @@ class Wizard
                 'cursor' => 0,
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
-            $this->state->appendLog($job['id'], 'All steps completed.');
+            $this->state->appendLog($job['id'], 'All steps completed. Counts: '
+                . json_encode($this->state->find($job['id'])['counts'] ?? [], JSON_UNESCAPED_SLASHES));
+            $this->state->scrubSecrets($job['id']);
             $this->cleanupTempFiles($job);
             return $this->json([
                 'ok'       => true,
                 'finished' => true,
                 'counts'   => $this->state->find($job['id'])['counts'] ?? [],
+                'log'      => $this->state->logTail($job['id']),
             ]);
         }
         $this->state->advanceToStep($job['id'], $next);
@@ -522,6 +636,7 @@ class Wizard
             'cursor' => 0,
             'advanced' => true,
             'counts' => $this->state->find($job['id'])['counts'] ?? [],
+            'log'    => $this->state->logTail($job['id']),
         ]);
     }
 
@@ -529,7 +644,21 @@ class Wizard
     {
         $job = $this->state->currentJob() ?? $this->state->lastJob();
         if (!$job) return $this->json(['job' => null]);
-        return $this->json(['job' => $job]);
+        // Never the stored MySQL or user password (1.3.1 returned both).
+        return $this->json(['job' => State::redact($job), 'log' => $this->state->logTail($job['id'])]);
+    }
+
+    /** GET /admin/wp-migrator/log — the whole log of the latest (or ?job=) job, as a text file. */
+    public function downloadLog(Request $request): Response
+    {
+        $id = (int) $request->input('job', 0);
+        $job = $id > 0 ? $this->state->find($id) : ($this->state->currentJob() ?? $this->state->lastJob());
+        $text = $job ? $this->state->fullLog((int) $job['id']) : '';
+        $response = new Response($text !== '' ? $text : "No log.\n");
+        $response->header('Content-Type', 'text/plain; charset=utf-8');
+        $response->header('X-Content-Type-Options', 'nosniff');
+        $response->header('Content-Disposition', 'attachment; filename="wp-migrator-job-' . (int) ($job['id'] ?? 0) . '.log"');
+        return $response;
     }
 
     public function cancel(Request $request): Response
@@ -544,6 +673,8 @@ class Wizard
                 'status' => 'cancelled',
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
+            $this->state->appendLog($job['id'], "Cancelled by the user during step '{$job['step']}' at record {$job['cursor']}.", 'warning');
+            $this->state->scrubSecrets($job['id']);
             $this->cleanupTempFiles($job);
         }
         return $this->json(['ok' => true]);
@@ -555,11 +686,30 @@ class Wizard
         if (!$session->verifyCsrf((string)$request->input('_csrf'))) {
             return $this->jsonError('Security check failed.', 403);
         }
-        // Wipe all migration state.
-        $this->app->dbPublic()->execute('DELETE FROM app_wpmig_idmap');
-        $this->app->dbPublic()->execute('DELETE FROM app_wpmig_jobs');
-        $this->app->dbPublic()->execute('DELETE FROM app_wpmig_redirects');
+        if ($job = $this->state->currentJob()) {
+            return $this->jsonError("A migration (#{$job['id']}) is running. Cancel it first.", 409);
+        }
+        if ($last = $this->state->lastJob()) $this->cleanupTempFiles($last);
+        $db = $this->app->dbPublic();
+        $db->execute('DELETE FROM {app_wpmig_idmap}');
+        $db->execute('DELETE FROM {app_wpmig_jobs}');
+        $db->execute('DELETE FROM {app_wpmig_redirects}');
+        $this->app->appLog('migration data reset (ID map, jobs, redirects)', [], 'warning');
         return $this->json(['ok' => true]);
+    }
+
+    /** The first administrator: owner of imported media and of posts whose author is unknown. */
+    private function defaultAuthorId(): int
+    {
+        try {
+            $row = $this->app->dbPublic()->selectOne(
+                "SELECT id FROM {users}
+                  WHERE role IN ('super_admin', 'admin', 'administrator') AND status = 'active' AND deleted_at IS NULL
+                  ORDER BY id LIMIT 1"
+            );
+            if ($row) return (int) $row['id'];
+        } catch (\Throwable) {}
+        return 1;
     }
 
     // ------------------------------------------------------------------

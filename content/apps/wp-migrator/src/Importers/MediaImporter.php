@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Basehim\WpMigrator\Importers;
 
 use App\Core\Helpers;
+use Basehim\WpMigrator\Downloader;
+use Basehim\WpMigrator\MediaFilter;
 use Basehim\WpMigrator\UrlMapper;
 
 /**
@@ -11,17 +13,35 @@ use Basehim\WpMigrator\UrlMapper;
  *
  * Downloads media files from the WordPress site and saves them into the
  * Basehim storage/uploads tree, then writes media records that Basehim
- * can reference. The original WP attachment URL is recorded in
- * app_wpmig_idmap under 'media_url' so the content-rewriter step can
+ * can reference. Every address an attachment can appear at in content is
+ * recorded in app_wpmig_idmap (entity 'media_path') so the rewrite step can
  * later replace inline references.
  *
- * Failures are logged and the record is skipped — a single bad image
+ * 1.4.0:
+ *   - Media filter (MediaFilter): import only chosen types (images, video,
+ *     audio, documents, archives, other), skip resized copies, prefer the
+ *     original upload over WordPress's "-scaled" copy, exclude by file-name
+ *     pattern, and a configurable size cap.
+ *   - Downloads go through Downloader: http/https only, no private
+ *     addresses unless allowed, streamed to disk with the cap enforced
+ *     while downloading (1.3.1 read file:// URLs and local paths, and held
+ *     whole files in memory).
+ *   - The stored extension comes from an allow-list and the stored MIME type
+ *     from the file's content, not from the remote server's header. An
+ *     "image" that is really an HTML error page is rejected.
+ *   - Files keep their WordPress year/month folder.
+ *   - One summary line per batch in the log.
+ *
+ * Failures are logged and the record is skipped — a single bad file
  * should never abort the migration.
  */
 class MediaImporter extends Importer
 {
     /** Each download can take seconds; a small batch stays inside PHP's time limit. */
     protected int $batchSize = 10;
+
+    private ?MediaFilter $filter = null;
+    private ?Downloader $downloader = null;
 
     public function entityType(): string { return 'media'; }
     public function total(): int { return $this->source->countAttachments(); }
@@ -33,21 +53,39 @@ class MediaImporter extends Importer
 
         $started = microtime(true);
         $done = 0;
+        $tally = ['imported' => 0, 'existing' => 0, 'skipped' => 0, 'failed' => 0];
         foreach ($rows as $row) {
             $done++;
             try {
-                $this->importOne($row);
+                $tally[$this->importOne($row)]++;
             } catch (\Throwable $e) {
-                $this->log("attachment {$row['ID']} failed: " . $e->getMessage());
+                $tally['failed']++;
+                $this->warn("attachment {$row['ID']} failed: " . $e->getMessage());
             }
             // Stop early rather than hit the PHP time limit; the next batch
             // starts where this one stopped.
             if (microtime(true) - $started > 20) break;
         }
+
+        if ($tally['skipped']) $this->state->bumpCount($this->jobId, 'media_skipped', $tally['skipped']);
+        if ($tally['failed'])  $this->state->bumpCount($this->jobId, 'media_failed', $tally['failed']);
+        $this->log(sprintf('records %d–%d: %d imported, %d already imported, %d skipped by filter, %d failed',
+            $offset + 1, $offset + $done, $tally['imported'], $tally['existing'], $tally['skipped'], $tally['failed']));
         return $done;
     }
 
-    private function importOne(array $row): void
+    private function filter(): MediaFilter
+    {
+        return $this->filter ??= MediaFilter::fromOptions((array) $this->opt('media', []));
+    }
+
+    private function downloader(): Downloader
+    {
+        return $this->downloader ??= new Downloader($this->filter()->allowPrivate);
+    }
+
+    /** @return 'imported'|'existing'|'skipped'|'failed' */
+    private function importOne(array $row): string
     {
         $oldId = (int)$row['ID'];
         $meta  = $this->metaOf($row);
@@ -57,79 +95,123 @@ class MediaImporter extends Importer
             $url = rtrim($this->source->siteUrl(), '/') . '/wp-content/uploads/' . $attached;
         }
         if ($url === '') $url = trim((string) ($row['guid'] ?? ''));
-        if ($url === '') return;
+        if ($url === '') {
+            $this->warn("attachment {$oldId} has no file URL");
+            return 'failed';
+        }
 
         // Idempotency check. The paths are recorded again even so: a re-run
         // after upgrading from 1.2.0 fills in what that version left out.
         if ($existing = $this->idMap->get('media', $oldId)) {
             $this->recordPaths($existing, $url, $attached, $meta, $row);
-            return;
+            return 'existing';
         }
 
-        // Download the file. Cap size at 25 MB.
-        [$data, $mime] = $this->fetch($url, 25 * 1024 * 1024);
-        if ($data === null) {
-            $this->log("could not fetch {$url}");
-            return;
+        // The filter: type, resized copies, name patterns.
+        $fileName = basename((string) (parse_url($url, PHP_URL_PATH) ?: $attached));
+        $reason = $this->filter()->rejects($fileName, (string) ($row['post_mime_type'] ?? ''));
+        if ($reason !== null) {
+            $this->log("skipped {$fileName}: {$reason}");
+            return 'skipped';
         }
 
-        // Build storage path: /YYYY/MM/{uuid}.{ext}
-        $year = date('Y');
-        $month = date('m');
-        $relDir = "$year/$month";
-        $uploadRoot = $this->uploadRoot();
-        $absDir = $uploadRoot . '/' . $relDir;
-        if (!is_dir($absDir) && !@mkdir($absDir, 0775, true) && !is_dir($absDir)) {
-            $this->log("could not create directory {$absDir}");
-            return;
+        // "-scaled" is a copy WordPress made of a big upload; the original
+        // name is in the metadata. Prefer it when asked to.
+        $info = $this->unserializeMeta((string) ($meta['_wp_attachment_metadata'] ?? $row['attachment_metadata'] ?? ''));
+        $downloadUrl = $url;
+        if ($this->filter()->originalsOnly && !empty($info['original_image']) && is_string($info['original_image'])) {
+            $orig = basename($info['original_image']);
+            $downloadUrl = preg_replace('#[^/]+$#', rawurlencode($orig), $url) ?: $url;
         }
 
-        $ext = $this->extFromUrlOrMime($url, $mime) ?: 'bin';
-        $uuid = Helpers::uuid();
-        $safeName = $uuid . '.' . $ext;
-        $absPath = $absDir . '/' . $safeName;
-        $relPath = $relDir . '/' . $safeName;
-
-        if (file_put_contents($absPath, $data) === false) {
-            $this->log("could not write {$absPath}");
-            return;
+        $cacheDir = $this->cacheDir();
+        $dl = $this->downloader()->toTempFile($downloadUrl, $cacheDir, $this->filter()->maxBytes);
+        if ($dl === null && $downloadUrl !== $url) {
+            $this->log("original {$downloadUrl} unavailable ({$this->downloader()->lastError}); using {$url}");
+            $downloadUrl = $url;
+            $dl = $this->downloader()->toTempFile($url, $cacheDir, $this->filter()->maxBytes);
         }
-        @chmod($absPath, 0644);
-
-        // Image dimensions, if possible.
-        $width = null; $height = null;
-        if (str_starts_with($mime, 'image/') && $mime !== 'image/svg+xml') {
-            $info = @getimagesize($absPath);
-            if ($info) { $width = $info[0]; $height = $info[1]; }
+        if ($dl === null) {
+            $this->warn("could not fetch {$downloadUrl}: {$this->downloader()->lastError}");
+            return 'failed';
         }
 
-        $authorId = (int) ($this->opt('default_author_id', 1));
-        $title = pathinfo(parse_url($url, PHP_URL_PATH) ?: '', PATHINFO_FILENAME) ?: 'imported';
-        $size = strlen($data);
+        try {
+            // What the file really is, not what the server said it was.
+            $mime = $this->sniffMime($dl['path']) ?? $dl['mime'];
+            $ext = $this->filter()->safeExtension($downloadUrl, $mime);
+            if ($ext === null) {
+                $this->warn("refused {$fileName}: file type not allowed ({$mime})");
+                return 'skipped';
+            }
+            // A host that answers a missing image with a 200 HTML page.
+            if ($this->filter()->category($ext, $mime) === 'image'
+                && (str_starts_with($mime, 'text/') || str_contains($mime, 'html') || str_contains($mime, 'json'))) {
+                $this->warn("refused {$fileName}: expected an image, got {$mime} (an error page?)");
+                return 'failed';
+            }
+            // Re-check the type filter against what was actually downloaded.
+            $reason = $this->filter()->rejects($fileName, $mime);
+            if ($reason !== null) {
+                $this->log("skipped {$fileName}: {$reason}");
+                return 'skipped';
+            }
 
-        $newId = (int) $this->db->insert('media', [
-            'uuid'          => $uuid,
-            'author_id'     => $authorId,
-            'title'         => $title,
-            // WordPress keeps alt text in its own field; the title is not alt text.
-            'alt_text'      => ($meta['_wp_attachment_image_alt'] ?? '') !== '' ? (string) $meta['_wp_attachment_image_alt'] : null,
-            'caption'       => $row['post_excerpt'] ?? null,
-            'description'   => $row['post_content'] ?? null,
-            'mime_type'     => $mime,
-            'file_name'     => $safeName,
-            'original_name' => basename(parse_url($url, PHP_URL_PATH) ?: $safeName),
-            'file_size'     => $size,
-            'width'         => $width,
-            'height'        => $height,
-            'storage_disk'  => 'local',
-            'storage_path'  => $relPath,
-            'url'           => '/uploads/' . $relPath,
-        ]);
+            // storage/uploads/YYYY/MM/{uuid}.{ext}; WordPress's own folder when known.
+            $relDir = preg_match('#^(\d{4})/(\d{2})/#', $attached, $ym) ? "{$ym[1]}/{$ym[2]}" : date('Y') . '/' . date('m');
+            $absDir = $this->uploadRoot() . '/' . $relDir;
+            if (!is_dir($absDir) && !@mkdir($absDir, 0775, true) && !is_dir($absDir)) {
+                $this->warn("could not create directory {$absDir}");
+                return 'failed';
+            }
 
-        $this->idMap->put('media', $oldId, $newId);
-        $this->recordPaths($newId, $url, $attached, $meta, $row);
+            $uuid = Helpers::uuid();
+            $safeName = $uuid . '.' . $ext;
+            $absPath = $absDir . '/' . $safeName;
+            $relPath = $relDir . '/' . $safeName;
 
-        $this->state->bumpCount($this->jobId, 'media');
+            if (!@rename($dl['path'], $absPath) && !(@copy($dl['path'], $absPath))) {
+                $this->warn("could not write {$absPath}");
+                return 'failed';
+            }
+            @chmod($absPath, 0644);
+
+            $width = null; $height = null;
+            if (str_starts_with($mime, 'image/') && $mime !== 'image/svg+xml') {
+                $img = @getimagesize($absPath);
+                if ($img) { $width = $img[0]; $height = $img[1]; }
+            }
+
+            $authorId = (int) ($this->opt('default_author_id', 1));
+            $title = trim((string) ($row['post_title'] ?? ''))
+                ?: (pathinfo($fileName, PATHINFO_FILENAME) ?: 'imported');
+
+            $newId = (int) $this->db->insert('media', [
+                'uuid'          => $uuid,
+                'author_id'     => $authorId,
+                'title'         => mb_substr($title, 0, 255),
+                // WordPress keeps alt text in its own field; the title is not alt text.
+                'alt_text'      => ($meta['_wp_attachment_image_alt'] ?? '') !== '' ? (string) $meta['_wp_attachment_image_alt'] : null,
+                'caption'       => $row['post_excerpt'] ?? null,
+                'description'   => $row['post_content'] ?? null,
+                'mime_type'     => $mime,
+                'file_name'     => $safeName,
+                'original_name' => mb_substr(basename((string) (parse_url($downloadUrl, PHP_URL_PATH) ?: $safeName)), 0, 255),
+                'file_size'     => $dl['size'],
+                'width'         => $width,
+                'height'        => $height,
+                'storage_disk'  => 'local',
+                'storage_path'  => $relPath,
+                'url'           => '/uploads/' . $relPath,
+            ]);
+
+            $this->idMap->put('media', $oldId, $newId);
+            $this->recordPaths($newId, $url, $attached, $meta, $row);
+            $this->state->bumpCount($this->jobId, 'media');
+            return 'imported';
+        } finally {
+            if (is_file($dl['path'])) @unlink($dl['path']);
+        }
     }
 
     /**
@@ -137,10 +219,6 @@ class MediaImporter extends Importer
      * the uploaded file, the original (for -scaled images) and every resized
      * copy WordPress listed in _wp_attachment_metadata. Keys are hashed
      * uploads-relative paths — see UrlMapper::key().
-     *
-     * Up to 1.2.0 the full URL itself was the key, in a VARCHAR(64) column:
-     * on a non-strict server it was cut at 64 characters, the rewrite step
-     * then replaced that prefix inside longer URLs and left the rest behind.
      */
     private function recordPaths(int $newId, string $url, string $attached, array $meta, array $row): void
     {
@@ -150,9 +228,9 @@ class MediaImporter extends Importer
 
         $info = $this->unserializeMeta((string) ($meta['_wp_attachment_metadata'] ?? $row['attachment_metadata'] ?? ''));
         $dir = $rel !== '' && str_contains($rel, '/') ? dirname($rel) . '/' : '';
-        if (!empty($info['original_image'])) $paths[] = $dir . $info['original_image'];
+        if (!empty($info['original_image']) && is_string($info['original_image'])) $paths[] = $dir . basename($info['original_image']);
         foreach ((array) ($info['sizes'] ?? []) as $size) {
-            if (is_array($size) && !empty($size['file'])) $paths[] = $dir . $size['file'];
+            if (is_array($size) && !empty($size['file']) && is_string($size['file'])) $paths[] = $dir . basename($size['file']);
         }
         foreach (array_unique($paths) as $p) {
             $this->idMap->put('media_path', UrlMapper::key((string) $p), $newId);
@@ -195,67 +273,25 @@ class MediaImporter extends Importer
         return is_array($v) ? $v : [];
     }
 
-    /**
-     * Fetch a URL into memory. Returns [bytes, mime] or [null, ''] on failure.
-     */
-    private function fetch(string $url, int $maxBytes): array
+    private function sniffMime(string $path): ?string
     {
-        if (function_exists('curl_init')) {
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 5,
-                CURLOPT_TIMEOUT        => 30,
-                CURLOPT_CONNECTTIMEOUT => 10,
-                CURLOPT_USERAGENT      => 'Basehim-WpMigrator/1.0',
-                CURLOPT_BUFFERSIZE     => 8192,
-            ]);
-            $body = curl_exec($ch);
-            if ($body === false) {
-                curl_close($ch);
-                return [null, ''];
-            }
-            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $mime = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-            curl_close($ch);
-            if ($status >= 400 || $body === '' || strlen($body) > $maxBytes) return [null, ''];
-            $mime = $mime ? strtok($mime, ';') : 'application/octet-stream';
-            return [$body, $mime];
-        }
-
-        // Fallback: file_get_contents (requires allow_url_fopen).
-        $ctx = stream_context_create(['http' => ['timeout' => 30, 'follow_location' => 1]]);
-        $body = @file_get_contents($url, false, $ctx);
-        if ($body === false || strlen($body) > $maxBytes) return [null, ''];
-
-        // Try to detect mime.
-        $mime = 'application/octet-stream';
-        if (function_exists('finfo_buffer')) {
-            $f = finfo_open(FILEINFO_MIME_TYPE);
-            if ($f) {
-                $mime = finfo_buffer($f, $body) ?: $mime;
-                finfo_close($f);
-            }
-        }
-        return [$body, $mime];
-    }
-
-    private function extFromUrlOrMime(string $url, string $mime): string
-    {
-        $ext = strtolower(pathinfo(parse_url($url, PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
-        if ($ext) return preg_replace('/[^a-z0-9]/', '', $ext) ?: 'bin';
-
-        return match ($mime) {
-            'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
-            'image/webp' => 'webp', 'image/svg+xml' => 'svg',
-            'application/pdf' => 'pdf',
-            default => 'bin',
-        };
+        if (!function_exists('finfo_open')) return null;
+        $f = finfo_open(FILEINFO_MIME_TYPE);
+        if (!$f) return null;
+        $m = finfo_file($f, $path);
+        finfo_close($f);
+        return is_string($m) && $m !== '' ? strtolower($m) : null;
     }
 
     private function uploadRoot(): string
     {
-        return defined('BASEHIM_ROOT') ? BASEHIM_ROOT . '/storage/uploads' : 'storage/uploads';
+        return UrlMapper::uploadRoot();
+    }
+
+    private function cacheDir(): string
+    {
+        $dir = (defined('BASEHIM_ROOT') ? BASEHIM_ROOT : dirname(__DIR__, 5)) . '/storage/cache';
+        if (!is_dir($dir)) @mkdir($dir, 0775, true);
+        return is_dir($dir) && is_writable($dir) ? $dir : sys_get_temp_dir();
     }
 }

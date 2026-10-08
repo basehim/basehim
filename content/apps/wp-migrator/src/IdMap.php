@@ -35,7 +35,7 @@ class IdMap
         } catch (\Throwable) {
             // Likely UNIQUE constraint hit on re-run — update instead.
             $this->db->execute(
-                'UPDATE app_wpmig_idmap SET new_id = :n WHERE entity_type = :t AND old_id = :o',
+                'UPDATE {app_wpmig_idmap} SET new_id = :n WHERE entity_type = :t AND old_id = :o',
                 ['n' => $newId, 't' => $type, 'o' => $oldId]
             );
         }
@@ -50,7 +50,7 @@ class IdMap
             return $this->cache[$type][$oldId];
         }
         $row = $this->db->selectOne(
-            'SELECT new_id FROM app_wpmig_idmap WHERE entity_type = :t AND old_id = :o',
+            'SELECT new_id FROM {app_wpmig_idmap} WHERE entity_type = :t AND old_id = :o',
             ['t' => $type, 'o' => $oldId]
         );
         $val = $row ? (int)$row['new_id'] : null;
@@ -64,7 +64,7 @@ class IdMap
     public function loadAll(string $type): void
     {
         $rows = $this->db->select(
-            'SELECT old_id, new_id FROM app_wpmig_idmap WHERE entity_type = :t',
+            'SELECT old_id, new_id FROM {app_wpmig_idmap} WHERE entity_type = :t',
             ['t' => $type]
         );
         foreach ($rows as $r) {
@@ -75,7 +75,7 @@ class IdMap
     /** Wipe all mappings (used by the "reset" admin action). */
     public function clear(): void
     {
-        $this->db->execute('DELETE FROM app_wpmig_idmap');
+        $this->db->execute('DELETE FROM {app_wpmig_idmap}');
         $this->cache = [];
     }
 
@@ -83,7 +83,7 @@ class IdMap
     public function count(string $type): int
     {
         $row = $this->db->selectOne(
-            'SELECT COUNT(*) AS c FROM app_wpmig_idmap WHERE entity_type = :t',
+            'SELECT COUNT(*) AS c FROM {app_wpmig_idmap} WHERE entity_type = :t',
             ['t' => $type]
         );
         return (int)($row['c'] ?? 0);

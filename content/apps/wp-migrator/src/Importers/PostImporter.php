@@ -33,7 +33,7 @@ class PostImporter extends Importer
             try {
                 $this->importOne($row);
             } catch (\Throwable $e) {
-                $this->log("post '{$row['post_title']}' failed: " . $e->getMessage());
+                $this->warn("post '{$row['post_title']}' failed: " . $e->getMessage());
             }
         }
 
@@ -57,12 +57,12 @@ class PostImporter extends Importer
     {
         try {
             $this->db->execute(
-                "UPDATE terms
+                "UPDATE {terms} tm
                  SET count = (
-                     SELECT COUNT(*) FROM post_term WHERE term_id = terms.id
+                     SELECT COUNT(*) FROM {post_term} pt WHERE pt.term_id = tm.id
                  )
                  WHERE taxonomy_id IN (
-                     SELECT id FROM taxonomies WHERE slug IN ('category','tag')
+                     SELECT id FROM {taxonomies} WHERE slug IN ('category','tag')
                  )"
             );
             $this->log("recounted term post counts from post_term");
@@ -74,20 +74,27 @@ class PostImporter extends Importer
     private function importOne(array $row): void
     {
         $oldId = (int)$row['ID'];
+
+        // The MySQL source never reads these; a WXR export contains them.
+        // 1.3.1 imported trashed posts and auto-drafts from WXR files only.
+        if (in_array((string) ($row['post_status'] ?? ''), ['auto-draft', 'trash', 'inherit'], true)) {
+            $this->state->bumpCount($this->jobId, 'posts_skipped');
+            return;
+        }
         $type  = $row['post_type'] === 'page' ? 'page' : 'post';
         $slug  = trim((string)($row['post_name'] ?? '')) ?: Helpers::slug((string)$row['post_title']);
 
-        // Map author: try ID first (MySQL source has numeric), then login (WXR).
-        $authorOld = $row['post_author'] ?? '';
-        $authorNewId = null;
-        if (is_numeric($authorOld)) {
+        // Map author. Both sources give the login (WXR dc:creator; the MySQL
+        // source replaces the numeric ID with user_login), so the login is
+        // tried first — a numeric login such as "2024" was taken for a user
+        // ID by 1.3.1 and attributed the post to the wrong person.
+        $authorOld = (string) ($row['post_author'] ?? '');
+        $authorNewId = $authorOld !== '' ? $this->idMap->get('user_login', $authorOld) : null;
+        if (!$authorNewId && ctype_digit($authorOld)) {
             $authorNewId = $this->idMap->get('user', (int)$authorOld);
         }
-        if (!$authorNewId && is_string($authorOld) && $authorOld !== '') {
-            $authorNewId = $this->idMap->get('user_login', $authorOld);
-        }
         // Fall back to user 1 (first admin) if author missing.
-        if (!$authorNewId) $authorNewId = 1;
+        if (!$authorNewId) $authorNewId = (int) $this->opt('default_author_id', 1) ?: 1;
 
         $status = $this->mapStatus((string)$row['post_status']);
         $publishedAt = $this->mapDate((string)($row['post_date'] ?? ''));
@@ -102,7 +109,7 @@ class PostImporter extends Importer
         $existingId = $this->idMap->get('post', $oldId);
         if (!$existingId) {
             $existingRow = $this->db->selectOne(
-                'SELECT id FROM posts WHERE type = :t AND slug = :s LIMIT 1',
+                'SELECT id FROM {posts} WHERE type = :t AND slug = :s LIMIT 1',
                 ['t' => $type, 's' => $slug]
             );
             if ($existingRow) {
@@ -185,7 +192,7 @@ class PostImporter extends Importer
         $i = 2;
         while (true) {
             $row = $this->db->selectOne(
-                'SELECT id FROM posts WHERE type = :t AND slug = :s LIMIT 1',
+                'SELECT id FROM {posts} WHERE type = :t AND slug = :s LIMIT 1',
                 ['t' => $type, 's' => $candidate]
             );
             if (!$row || (int)$row['id'] === $excludeId) return $candidate;
@@ -213,8 +220,8 @@ class PostImporter extends Importer
 
         $rows = $this->db->select(
             "SELECT t.id, t.slug, t.name, tx.slug AS tax_slug
-             FROM terms t
-             JOIN taxonomies tx ON tx.id = t.taxonomy_id
+             FROM {terms} t
+             JOIN {taxonomies} tx ON tx.id = t.taxonomy_id
              WHERE tx.slug IN ('category','tag')"
         );
 
@@ -300,7 +307,7 @@ class PostImporter extends Importer
         // as strings on some configurations, which would make in_array(...,
         // true) miss every time and cause spurious duplicate-key inserts.
         $existing = $this->db->select(
-            'SELECT term_id FROM post_term WHERE post_id = :p',
+            'SELECT term_id FROM {post_term} WHERE post_id = :p',
             ['p' => $postId]
         );
         $existingIds = array_map('intval', array_column($existing, 'term_id'));
@@ -313,7 +320,7 @@ class PostImporter extends Importer
         if ($toRemove) {
             $placeholders = implode(',', array_fill(0, count($toRemove), '?'));
             $this->db->execute(
-                "DELETE FROM post_term WHERE post_id = ? AND term_id IN ({$placeholders})",
+                "DELETE FROM {post_term} WHERE post_id = ? AND term_id IN ({$placeholders})",
                 array_merge([$postId], $toRemove)
             );
         }
@@ -338,7 +345,7 @@ class PostImporter extends Importer
                 'robots' => null];
 
         // Clear existing post_meta for this post (idempotent re-run).
-        $this->db->execute('DELETE FROM post_meta WHERE post_id = :p', ['p' => $postId]);
+        $this->db->execute('DELETE FROM {post_meta} WHERE post_id = :p', ['p' => $postId]);
 
         foreach ($postmeta as $m) {
             $k = (string)$m['meta_key'];
@@ -388,7 +395,7 @@ class PostImporter extends Importer
 
     private function upsertSeo(int $postId, array $seo): void
     {
-        $existing = $this->db->selectOne('SELECT id FROM seo_meta WHERE post_id = :p', ['p' => $postId]);
+        $existing = $this->db->selectOne('SELECT id FROM {seo_meta} WHERE post_id = :p', ['p' => $postId]);
         $payload = [
             'meta_title'       => $this->trim($seo['meta_title']      ?? null, 160),
             'meta_description' => $this->trim($seo['meta_description']?? null, 320),

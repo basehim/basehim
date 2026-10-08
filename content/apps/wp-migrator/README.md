@@ -40,9 +40,21 @@ Open **WP Migrator** from the sidebar. The wizard has three steps:
 
 Every entity type is on by default. Uncheck anything you want to skip. If you're re-running, leave them all on — the importer is idempotent (looks up by ID map, no duplicates).
 
+### Media filter
+
+Under **Media** you can choose which attachments are downloaded:
+
+- **Types** — images, video, audio, documents, archives, other files.
+- **Originals only** — skips thumbnails and resized copies (`photo-300x200.jpg`, `photo@2x.jpg`), downloads the original upload instead of WordPress's `-scaled` copy, and links resized images inside posts to the full image instead of downloading each size. A file whose real name ends in `-WIDTHxHEIGHT` (e.g. `banner-1920x1080.jpg`) is treated as a copy too — add it back by unticking this option or renaming it.
+- **Exclude file names** — comma-separated wildcards, e.g. `*-150x150.*, *.webp`.
+- **Max file size** — per file, 1–512 MB (default 25).
+- **Advanced** — allow SVG (can contain scripts; trusted sources only) and allow downloads from private network addresses (only when the old site is on localhost or your LAN).
+
+Files are stored under WordPress's own `YYYY/MM` folder, with an extension from an allow-list and the MIME type detected from the file itself. Skipped and failed files are listed in the log.
+
 ### 3. Set user options
 
-- **Default password** — Used for all imported users. Leave blank to auto-generate (will be printed to the log). Users should change this on first login.
+- **Default password** — Used for all imported users. Leave blank to auto-generate: the generated password is shown once when the migration starts and written to the job log, then removed from the job when the migration ends. Users should change this on first login.
 - **Default role** — Role assigned to imported users.
 
 Click **Start migration**. The wizard runs in small batches (~25 records at a time), updating the progress bar after each batch. You can leave the page open or close it — re-opening the app page resumes the loop where it left off.
@@ -61,12 +73,16 @@ Migration steps run in this order (each must complete before the next starts):
 8. `redirects` → for every imported post, computes old/new URLs and inserts a 301
 9. `rewrite_content` → walks each post's HTML and replaces old `<img src>` and absolute internal links with new Basehim URLs
 
+## Logs
+
+The progress panel shows the job log live; after the run the **Last migration** panel shows its status, counts and log, with a **Download** link for the whole log. Every line is also written to **Admin → Apps → Logs** (wp-migrator), and warnings/errors to the core log.
+
 ## After migration
 
 - **Login** — users can log in with their original username/email and the default password you set
 - **Old URLs** — visit any old WordPress URL on your new site, and the app issues a 301 to the new path
 - **Re-running** — safe to run again with the same settings; existing entities are updated, not duplicated
-- **Reset** — the **Reset migration data** button (top right) wipes the ID map, job history, and redirects so you can start completely fresh
+- **Reset** — the **Reset migration data** button (top right) wipes the ID map, job history, and redirects so you can start completely fresh (not while a migration is running)
 
 ## Troubleshooting
 
@@ -75,6 +91,8 @@ Migration steps run in this order (each must complete before the next starts):
 **"Unknown or expired upload session"** — the chunked upload took longer than 12 hours, or `storage/cache` was cleared mid-upload. Re-select the file and try again.
 
 **File larger than 500 MB** — this is a hard cap on WXR imports. For sites with very large exports, use the Direct MySQL source instead — no upload needed, and it’s faster anyway.
+
+**Media downloads fail with "private or reserved address"** — the old site resolves to a local/LAN address. Tick *Allow downloads from private network addresses* under Media → Advanced.
 
 **Media downloads fail** — your server can't reach the old site. Check that `curl` is enabled and that the old site is online. Failed media URLs are logged but don't abort the migration; the inline `<img>` will keep its old URL.
 
@@ -95,7 +113,8 @@ Uninstalling the app drops the three app tables. Imported posts, users, and medi
 ## Requirements
 
 - PHP 8.1+
-- Extensions: `pdo_mysql`, `simplexml`, `curl`, `mbstring`
+- Extensions: `pdo_mysql`, `simplexml`, `xmlreader`, `curl`, `mbstring`, `fileinfo`
+- The `db.raw` app permission (declared in `app.json`; approve it under Admin → Apps)
 - Writable `storage/uploads` and `storage/cache` directories
 
 ## Image links
