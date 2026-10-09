@@ -30,6 +30,7 @@ class TaxonomyController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
+        if (!$this->userCan('manage_taxonomies')) return $this->forbidden('manage_taxonomies');
 
         /** @var TaxonomyService $tax */
         $taxSvc = $this->app->make(TaxonomyService::class);
@@ -47,6 +48,7 @@ class TaxonomyController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
+        if (!$this->userCan('manage_taxonomies')) return $this->forbidden('manage_taxonomies');
 
         /** @var TaxonomyService $tax */
         $taxSvc = $this->app->make(TaxonomyService::class);
@@ -66,6 +68,7 @@ class TaxonomyController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
+        if (!$this->userCan('manage_taxonomies')) return $this->forbidden('manage_taxonomies');
 
         /** @var TaxonomyService $tax */
         $taxSvc = $this->app->make(TaxonomyService::class);

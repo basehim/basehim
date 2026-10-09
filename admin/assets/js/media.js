@@ -54,6 +54,12 @@
             fd.append('_csrf', CSRF);
             if (opts.title)    fd.append('title', opts.title);
             if (opts.alt_text) fd.append('alt_text', opts.alt_text);
+            // A page can say what its uploads are about (the post editor sends
+            // the post title). The server uses it only to name files whose own
+            // name is meaningless, like 1000477992.jpg or image.png.
+            var hint = opts.name_hint != null ? opts.name_hint
+                : (window.BasehimMedia && typeof window.BasehimMedia.nameHint === 'function' ? window.BasehimMedia.nameHint() : '');
+            if (hint) fd.append('name_hint', String(hint).slice(0, 200));
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', url('/admin/media/upload?ajax=1'));

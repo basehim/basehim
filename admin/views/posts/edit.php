@@ -442,6 +442,15 @@ $v = urlencode(BASEHIM_VERSION);
     var btnSelect = document.getElementById('featured-select');
     var btnChange = document.getElementById('featured-change');
     var btnRemove = document.getElementById('featured-remove');
+    // Uploads made from this screen (image blocks, the featured image, files
+    // dropped or pasted on the canvas) are named after the post when the file's
+    // own name is meaningless: a phone photo becomes best-hiking-trails.jpg.
+    if (window.BasehimMedia) {
+        BasehimMedia.nameHint = function () {
+            var t = document.querySelector('textarea[name="title"]');
+            return t ? t.value.trim() : '';
+        };
+    }
     if (!idInput) return;
     if (!window.BasehimMedia) {
         console.error('[Basehim] window.BasehimMedia is undefined — /admin/assets/js/media.js failed to load.');

@@ -14,8 +14,8 @@ class SearchController extends ApiController
         $query = trim((string)$request->query('q', ''));
         if ($query === '') return Response::json(['data' => [], 'meta' => ['total' => 0]]);
 
-        $page = max(1, (int)$request->query('page', 1));
-        $per = min(100, max(1, (int)$request->query('per_page', 10)));
+        $page = $this->pageNumber($request);
+        $per = $this->perPage($request, 10);
 
         /** @var PostService $posts */
         $posts = $this->app->make(PostService::class);

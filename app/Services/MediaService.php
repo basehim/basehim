@@ -172,7 +172,21 @@ class MediaService
 
         // The uuid stays the row's identity; the file name is now readable.
         $uuid = Helpers::uuid();
-        $safeName = $this->reserveFileName($absDir, $relDir, $originalName, $ext, $mime);
+        // A name that says nothing ("1000477992.jpg", "image.png", "IMG_2034")
+        // is replaced by the caller's hint when there is one: the post editor
+        // sends the post's title, so a photo dropped into "Best Hiking
+        // Trails" is stored as best-hiking-trails.jpg (1.2.44). Meaningful
+        // names are never changed, and no hint means no change.
+        $nameFor = $originalName;
+        $hint = trim((string) ($meta['name_hint'] ?? ''));
+        if ($hint !== '' && $this->isMeaninglessName($originalName, $mime)) {
+            $hintStem = $this->fileStem($hint . '.x', '');
+            if ($hintStem !== '' && $hintStem !== 'file' && !$this->isMeaninglessName($hint . '.x', $mime)) {
+                $nameFor = $hint . '.' . $ext;
+                if (!isset($meta['title']) || trim((string) $meta['title']) === '') $meta['title'] = $hint;
+            }
+        }
+        $safeName = $this->reserveFileName($absDir, $relDir, $nameFor, $ext, $mime);
         $absPath = $absDir . '/' . $safeName;
         $relPath = ($relDir !== '' ? $relDir . '/' : '') . $safeName;
 
@@ -235,6 +249,36 @@ class MediaService
     }
 
     // ── File names ────────────────────────────────────────────────────────
+
+    /**
+     * Is this file name one a camera, phone, clipboard or tool made up?
+     *
+     *   1000477992.jpg, IMG_2034.JPG, PXL_20260101_123456.jpg, DSC0012.jpg,
+     *   image.png, image (3).png, Screenshot 2026-10-09 at 13.02.11.png,
+     *   WhatsApp Image 2026-10-09 at 1.02.03 PM.jpeg, untitled.png, blob,
+     *   0b6ab875-1cdd-435a-b2a2-fbb147e85532.png  ->  true
+     *
+     *   my-awesome-photo.jpg, arduino-uno-pinout.png  ->  false
+     */
+    public function isMeaninglessName(string $originalName, string $mime = ''): bool
+    {
+        $stem = $this->fileStem($originalName, $mime);
+        if ($stem === '' || $stem === 'image' || $stem === 'file') return true;
+        // Only digits, dashes: camera counters, timestamps.
+        if (preg_match('/^[0-9-]+$/', $stem)) return true;
+        // UUIDs and long hex hashes.
+        if (preg_match('/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/', $stem)) return true;
+        if (preg_match('/^[0-9a-f-]{16,}$/', $stem) && preg_match('/[0-9]/', $stem)) return true;
+        // Device / app prefixes, optionally followed by numbers, dates and times.
+        $prefixes = 'img|image|images|photo|pic|picture|pxl|dsc|dscn|dscf|dcim|mvimg|vid|pano|burst|'
+            . 'screenshot|screen-shot|screen-recording|capture|snap|snapshot|scan|'
+            . 'whatsapp-image|whatsapp-img|signal|telegram|fb-img|received|'
+            . 'untitled|download|downloaded|blob|pasted|pasted-image|clipboard|file|unnamed|'
+            . 'new-image|new-file|copy|export|output|final|temp|tmp|test';
+        $tail = '(-(\\d+|at|am|pm|copy|edited|scaled|[0-9a-f]{6,}))*';
+        return (bool) preg_match('/^(' . $prefixes . ')' . $tail . '$/', $stem)
+            || (bool) preg_match('/^(img|pxl|dsc|dscn|dscf|vid|mvimg)\\d+(-\\d+)*$/', $stem);
+    }
 
     /**
      * Turn an uploaded file's name into a URL-friendly stem.

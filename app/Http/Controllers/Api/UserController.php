@@ -18,8 +18,8 @@ class UserController extends ApiController
 
         /** @var UserService $users */
         $users = $this->app->make(UserService::class);
-        $page = max(1, (int)$request->query('page', 1));
-        $per = min(100, max(1, (int)$request->query('per_page', 25)));
+        $page = $this->pageNumber($request);
+        $per = $this->perPage($request, 25);
         $filters = [];
         if ($request->query('q')) $filters['search'] = $request->query('q');
         if ($request->query('role')) $filters['role'] = $request->query('role');

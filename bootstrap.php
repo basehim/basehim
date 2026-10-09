@@ -249,7 +249,10 @@ if (!function_exists('bh_asset_tag')) {
  */
 if (!function_exists('bh_head')) {
     function bh_head(): string {
-        $out = '';
+        // Names the platform for tools and directories that look for it. No
+        // version number: that would tell an attacker exactly which fixes a
+        // site is missing.
+        $out = '<meta name="generator" content="Basehim CMS">' . "\n";
 
         try {
             $out .= \App\Core\Application::getInstance()

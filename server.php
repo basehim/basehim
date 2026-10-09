@@ -27,7 +27,11 @@ $path = rawurldecode((string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_
 if (preg_match('#^/(app|config|database|routes)(/|$)#', $path)
     || preg_match('#^/storage(/(?!uploads/)|$)#', $path)
     || $path === '/bootstrap.php'
-    || preg_match('#/\.#', $path)) {
+    // Dotfiles stay private, but /.well-known/ is public by standard: OAuth
+    // and MCP discovery live there (RFC 8615). Blocking it, as before 1.2.43,
+    // made AI connectors fail against a local site. The allowed form has no
+    // further dots, so /.well-known/../.env and the like are still refused.
+    || (preg_match('#/\.#', $path) && !preg_match('#^/\.well-known/[A-Za-z0-9_\-/]+$#', $path))) {
     http_response_code(403);
     echo 'Forbidden';
     return true;

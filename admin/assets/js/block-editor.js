@@ -1006,8 +1006,17 @@ function closePopover() {
   }
 }
 function popover(anchor, content, opts) {
-  closePopover();
   opts = opts || {};
+  // Pressing the button that opened this popover closes it. The outside-press
+  // handler above deliberately ignores presses on the anchor, so before 1.2.44
+  // the click that followed closed the menu and reopened it straight away:
+  // the ⋮ button could open its menu but never close it (most noticeable on
+  // phones, where tapping elsewhere is awkward).
+  if (!opts.noToggle && openPopover && openPopover.anchor && openPopover.anchor === anchor) {
+    closePopover();
+    return null;
+  }
+  closePopover();
   var el = h('div', { class: 'bhe-popover' + (opts.className ? ' ' + opts.className : ''), role: opts.role || 'dialog', 'aria-label': opts.label || null });
   el.appendChild(content);
   document.body.appendChild(el);
@@ -1055,6 +1064,7 @@ function openMenu(anchor, items, opts) {
     else if (e.key === 'ArrowUp') { e.preventDefault(); (buttons[i - 1] || buttons[buttons.length - 1]).focus(); }
   });
   var pop = popover(anchor, menu, { label: opts.label, role: 'presentation', alignRight: opts.alignRight });
+  if (!pop) return null;   // a second press on the same button closed it
   if (opts.focusFirst !== false && buttons[0] && !opts.keepFocus) {
     var act = menu.querySelector('.is-active') || buttons[0];
     if (document.activeElement && document.activeElement.isContentEditable) {/* keep caret for format menus */}

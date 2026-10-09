@@ -142,6 +142,9 @@ class MediaController extends Controller
                 'title' => $request->input('title'),
                 'alt_text' => $request->input('alt_text'),
                 'caption' => $request->input('caption'),
+                // The post editor sends the post title; used only when the
+                // file's own name is meaningless (see MediaService::upload).
+                'name_hint' => is_scalar($request->input('name_hint')) ? mb_substr((string) $request->input('name_hint'), 0, 200) : '',
             ]);
             if ($isAjax) {
                 // upload() returns the inserted row; decorate URL with base prefix

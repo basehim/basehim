@@ -12,6 +12,8 @@ namespace App\Core;
 final class Env
 {
     private static array $data = [];
+    /** Keys whose value was quoted in .env: kept as strings, never cast. */
+    private static array $quoted = [];
     private static bool $loaded = false;
 
     public static function load(string $path): void
@@ -34,12 +36,16 @@ final class Env
             $key = trim($key);
             $value = trim($value);
 
+            // A later unquoted line for the same key wins, cast as usual.
+            unset(self::$quoted[$key]);
+
             // Strip surrounding quotes
             if (strlen($value) >= 2) {
                 $first = $value[0];
                 $last = substr($value, -1);
                 if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
                     $value = substr($value, 1, -1);
+                    self::$quoted[$key] = true;
                 }
             }
 
@@ -56,6 +62,10 @@ final class Env
     {
         if (array_key_exists($key, self::$data)) {
             $v = self::$data[$key];
+            // A quoted value is literal text. DB_PASSWORD="null" is the
+            // password "null"; it used to become PHP null (and "true" became
+            // true), so the database connection failed. Fixed in 1.2.43.
+            if (isset(self::$quoted[$key])) return $v;
             // Cast common literals
             return match (strtolower((string)$v)) {
                 'true', '(true)'   => true,

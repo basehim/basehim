@@ -466,11 +466,9 @@ class ThemeService
             CURLOPT_TIMEOUT        => $timeout,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_USERAGENT      => 'Basehim-Marketplace/' . (defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1'),
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => 0,
             CURLOPT_HEADER         => true,
-        ]);
-        $raw = curl_exec($ch);
+        ] + \App\Core\Tls::curlOptions());
+        $raw = \App\Core\Tls::exec($ch);
         $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);

@@ -14,11 +14,12 @@ class MediaController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
+        if (!$this->userCan('upload_media')) return $this->forbidden('upload_media');
 
         /** @var MediaService $media */
         $media = $this->app->make(MediaService::class);
-        $page = max(1, (int)$request->query('page', 1));
-        $per = min(100, max(1, (int)$request->query('per_page', 24)));
+        $page = $this->pageNumber($request);
+        $per = $this->perPage($request, 24);
         $filters = [];
         if ($request->query('q')) $filters['search'] = $request->query('q');
         return Response::json($media->paginate($filters, $page, $per));
@@ -28,6 +29,7 @@ class MediaController extends ApiController
     {
         $user = $this->authUser();
         if (!$user) return Response::json(['error' => 'Unauthenticated'], 401);
+        if (!$this->userCan('upload_media')) return $this->forbidden('upload_media');
         if (empty($_FILES['file'])) return Response::json(['error' => 'No file'], 422);
 
         /** @var MediaService $media */
@@ -63,7 +65,12 @@ class MediaController extends ApiController
 
         /** @var MediaService $media */
         $media = $this->app->make(MediaService::class);
-        if (!$media->find((int)$id)) return Response::json(['error' => 'Not found'], 404);
+        $item = $media->find((int)$id);
+        if (!$item) return Response::json(['error' => 'Not found'], 404);
+        // Your own uploads need upload_media; anyone else's need delete_media.
+        $own = (int) ($item['author_id'] ?? 0) === (int) $user['id'];
+        $cap = $own ? 'upload_media' : 'delete_media';
+        if (!$this->userCan($cap)) return $this->forbidden($cap);
         $media->delete((int)$id);
         return Response::json(['message' => 'Deleted']);
     }
@@ -84,6 +91,9 @@ class MediaController extends ApiController
         $media = $this->app->make(MediaService::class);
         $item = $media->find((int) $id);
         if (!$item) return Response::json(['error' => 'Not found'], 404);
+        $own = (int) ($item['author_id'] ?? 0) === (int) $user['id'];
+        $cap = $own ? 'upload_media' : 'delete_media';
+        if (!$this->userCan($cap)) return $this->forbidden($cap);
 
         $data = [];
         foreach (['title', 'alt_text', 'caption', 'description'] as $field) {

@@ -15,8 +15,11 @@ class SearchController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = trim((string)$request->query('q', ''));
-        $page = max(1, (int)$request->query('page', 1));
+        // ?q[]=x arrives as an array; treat it as no query rather than warn.
+        $q = $request->query('q', '');
+        $query = is_scalar($q) ? trim((string) $q) : '';
+        $p = $request->query('page', 1);
+        $page = is_scalar($p) ? max(1, (int) $p) : 1;
 
         /** @var SettingService $settings */
         $settings = $this->app->make(SettingService::class);

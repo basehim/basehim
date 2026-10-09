@@ -831,8 +831,6 @@ class UpdateService
             CURLOPT_TIMEOUT        => $timeout,
             CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
             CURLOPT_USERAGENT      => 'Basehim-Updater/' . BASEHIM_VERSION,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => 0,
         ];
         if ($method === 'POST') {
             $opts[CURLOPT_POST] = true;
@@ -842,8 +840,8 @@ class UpdateService
             // curl's default downgrades to GET, which breaks registration.
             $opts[CURLOPT_POSTREDIR] = 7;
         }
-        curl_setopt_array($ch, $opts);
-        $body = curl_exec($ch);
+        curl_setopt_array($ch, $opts + \App\Core\Tls::curlOptions());
+        $body = \App\Core\Tls::exec($ch);
         $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);

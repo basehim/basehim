@@ -110,8 +110,8 @@ class CommentController extends ApiController
         }
         if ($request->query('post_id')) $filters['post_id'] = (int) $request->query('post_id');
 
-        $page = max(1, (int) $request->query('page', 1));
-        $perPage = min(100, max(1, (int) $request->query('per_page', 20)));
+        $page = $this->pageNumber($request);
+        $perPage = $this->perPage($request, 20);
 
         return Response::json($comments->paginate($filters, $page, $perPage));
     }

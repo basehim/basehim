@@ -20,7 +20,7 @@ declare(strict_types=1);
 // App\Core\BASEHIM_ROOT" — PHP resolves an unknown bare constant against the
 // current namespace before giving up.
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.2.42');
+define('BASEHIM_VERSION', '1.2.44');
 define('BASEHIM_INSTALLING', true);
 
 
@@ -40,7 +40,15 @@ require __DIR__ . '/app/Core/Autoloader.php';
 $envFile = __DIR__ . '/.env';
 if (is_file($envFile)) {
     \App\Core\Env::load($envFile);
-    if (\App\Core\Env::get('INSTALLED') === 'true') {
+    // Env::get() casts an unquoted `true` to boolean true, so the old
+    // `=== 'true'` comparison never matched and the installer stayed open on
+    // every installed site: anyone could re-run setup and point the site at
+    // a database of their own. Fixed in 1.2.43. The raw-file check also
+    // covers a hand-edited .env whose INSTALLED line isn't parsed as expected.
+    $installedFlag = \App\Core\Env::get('INSTALLED');
+    $rawEnv = (string) @file_get_contents($envFile);
+    if ($installedFlag === true || in_array(strtolower(trim((string) $installedFlag)), ['true', '1', 'yes', 'on'], true)
+        || preg_match('/^\s*INSTALLED\s*=\s*["\']?(true|1|yes|on)/mi', $rawEnv)) {
         header('Location: ' . (BASEHIM_BASE ?: '/'));
         exit;
     }
@@ -164,6 +172,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // after 001, so a retried install tripped over the leftovers from its own
                 // first attempt. Names go through pxSql() so DB_PREFIX is honoured.
                 $basehimTables = [
+                    // migrations and auth_remember_tokens were missing until 1.2.43:
+                    // a retried install kept the first attempt's migration
+                    // records and then added a second set.
+                    'migrations', 'auth_remember_tokens',
+                    'mcp_oauth_tokens', 'mcp_oauth_codes', 'mcp_oauth_clients',
                     'activity_log', 'user_activity_log', 'notifications', 'refresh_tokens',
                     'api_keys', 'password_resets', 'auth_login_attempts', 'scheduled_tasks',
                     'apps', 'menu_items', 'menus', 'seo_meta', 'settings', 'comments',
@@ -355,7 +368,10 @@ ADMIN_EMAIL={$email}
 
 INSTALLED=true
 ENV;
-                file_put_contents(__DIR__ . '/.env', $envContent);
+                // End with a newline. Without one, anything later appended to
+                // .env (a host panel, a deploy script, `echo X=1 >> .env`) was
+                // glued onto INSTALLED=true, and the site went back to setup.
+                file_put_contents(__DIR__ . '/.env', rtrim($envContent, "\n") . "\n");
 
                 // Seed the baseline settings. The migrations don't create these
                 // rows, so a plain UPDATE would match nothing — upsert instead so
