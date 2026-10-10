@@ -29,7 +29,7 @@
             <div class="dn-result">
                 <div class="dn-meta">
                     <i class="fa-regular fa-calendar"></i>
-                    <time><?= date('M j, Y', strtotime($p['published_at'] ?? $p['created_at'])) ?></time>
+                    <?= bh_time_tag($p['published_at'] ?? $p['created_at'], 'M j, Y') ?>
                     <?php if (!empty($p['author_name'])): ?>
                         <span class="dot">·</span><span><?= htmlspecialchars($p['author_name']) ?></span>
                     <?php endif; ?>

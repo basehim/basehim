@@ -130,6 +130,9 @@ $flash = $flash ?? null;
     <!-- Heroicons for JS-built markup (window.BasehimIcon). Loaded in <head> so
          every later script — core, app, and theme — can rely on it. -->
     <script src="<?= $base ?>/admin/assets/js/icons.js?v=<?= urlencode(BASEHIM_VERSION) ?>"></script>
+    <?php /* Site timezone for scripts that show times (BasehimTime, 1.2.45). */ ?>
+    <script>window.BASEHIM_TIME = <?= json_encode(\App\Core\Time::info(), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?>;</script>
+    <script src="<?= $base ?>/admin/assets/js/time.js?v=<?= urlencode(BASEHIM_VERSION) ?>"></script>
 <?php
 // App-registered admin stylesheets (via $this->addAdminStyle()).
 try {

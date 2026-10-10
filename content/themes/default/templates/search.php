@@ -38,7 +38,7 @@
                     <?= htmlspecialchars($p['title']) ?>
                 </a>
             </h2>
-            <div class="text-xs text-slate-500 mb-2"><?= date('M j, Y', strtotime($p['published_at'] ?? $p['created_at'])) ?></div>
+            <div class="text-xs text-slate-500 mb-2"><?= bh_date($p['published_at'] ?? $p['created_at'], 'M j, Y') ?></div>
             <?php if (!empty($p['excerpt'])): ?>
                 <p class="text-sm text-slate-600"><?= htmlspecialchars(mb_substr($p['excerpt'], 0, 200)) ?></p>
             <?php endif; ?>

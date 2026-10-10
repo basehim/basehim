@@ -93,36 +93,26 @@ final class Helpers
         return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
+    /** Now in UTC, the way every time is stored. */
     public static function now(): string
     {
-        return date('Y-m-d H:i:s');
+        return gmdate('Y-m-d H:i:s');
     }
 
+    /** A stored (UTC) time shown in the site timezone. See App\Core\Time. */
     public static function formatDate(?string $datetime, string $format = 'M j, Y'): string
     {
         if (!$datetime) return '';
-        try {
-            return (new \DateTime($datetime))->format($format);
-        } catch (\Throwable) {
-            return $datetime;
-        }
+        $out = Time::format($datetime, $format);
+        return $out !== '' ? $out : $datetime;
     }
 
+    /** "5 minutes ago", measured correctly whatever the site timezone. */
     public static function timeAgo(?string $datetime): string
     {
         if (!$datetime) return '';
-        try {
-            $then = new \DateTime($datetime);
-            $now = new \DateTime();
-            $diff = $now->getTimestamp() - $then->getTimestamp();
-            if ($diff < 60) return "just now";
-            if ($diff < 3600) return floor($diff / 60) . 'm ago';
-            if ($diff < 86400) return floor($diff / 3600) . 'h ago';
-            if ($diff < 604800) return floor($diff / 86400) . 'd ago';
-            return $then->format('M j, Y');
-        } catch (\Throwable) {
-            return $datetime;
-        }
+        $out = Time::ago($datetime);
+        return $out !== '' ? $out : $datetime;
     }
 
     public static function bytesFormat(int $bytes): string

@@ -166,7 +166,31 @@ class SettingController extends Controller
         return $this->redirect('/admin/settings/email');
     }
 
-    public function saveGeneral(Request $request): Response    { return $this->saveTab($request, 'general'); }
+    public function saveGeneral(Request $request): Response
+    {
+        // The timezone used to be a free-text field that nothing read. It is a
+        // list now; anything not in it is refused rather than stored.
+        $tz = $request->input('timezone');
+        if ($tz !== null && !\App\Core\Time::isValidTimezone((string) $tz)) {
+            $this->flash('error', 'Choose a timezone from the list.');
+            return $this->redirect('/admin/settings/general');
+        }
+        foreach (['date_format', 'time_format'] as $k) {
+            $v = $request->input($k);
+            if ($v !== null && (!is_string($v) || $v === '' || strlen($v) > 40 || preg_match('/[<>"\'\\\\]/', $v))) {
+                $this->flash('error', 'That date or time format is not allowed.');
+                return $this->redirect('/admin/settings/general');
+            }
+        }
+        $wk = $request->input('week_starts_on');
+        if ($wk !== null && !in_array((string) $wk, ['0', '1', '2', '3', '4', '5', '6'], true)) {
+            $this->flash('error', 'Pick a day for the start of the week.');
+            return $this->redirect('/admin/settings/general');
+        }
+        $res = $this->saveTab($request, 'general');
+        \App\Core\Time::reset();
+        return $res;
+    }
     public function saveReading(Request $request): Response    { return $this->saveTab($request, 'reading'); }
     public function saveWriting(Request $request): Response    { return $this->saveTab($request, 'writing'); }
     public function saveDiscussion(Request $request): Response { return $this->saveTab($request, 'discussion'); }

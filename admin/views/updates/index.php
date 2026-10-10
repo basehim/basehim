@@ -133,7 +133,7 @@ $allCount = count($updates) + count($appUpdates);
 <div id="bh-uptodate" class="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 mb-5 <?= $allCount === 0 ? '' : 'hidden' ?>">
     <?= icon('check-circle', 'w-10 h-10 text-emerald-400 mb-3') ?>
     <p class="font-medium text-slate-700 mb-1">You're up to date</p>
-    <p class="text-sm">You're running the latest version of Basehim and every installed app<span class="bh-lastcheck-wrap<?= $lastCheck === '' ? ' hidden' : '' ?>"> — last checked <span class="bh-lastcheck"><?= htmlspecialchars($lastCheck) ?></span></span>.</p>
+    <p class="text-sm">You're running the latest version of Basehim and every installed app<span class="bh-lastcheck-wrap<?= $lastCheck === '' ? ' hidden' : '' ?>"> — last checked <span class="bh-lastcheck"><?= htmlspecialchars($lastCheck !== '' ? bh_datetime($lastCheck, 'M j, Y g:i a') : '') ?></span></span>.</p>
 </div>
 <?php endif; ?>
 
@@ -143,7 +143,7 @@ $allCount = count($updates) + count($appUpdates);
         <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
         <div class="min-w-0 flex-1">
             <div class="text-sm font-medium text-slate-800">Update service connected <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold align-middle">AUTO</span></div>
-            <div class="text-xs text-slate-500 truncate">This site checks for new Basehim releases automatically<?= $config['site_name'] !== '' ? ' · registered as "' . htmlspecialchars($config['site_name']) . '"' : '' ?><span class="bh-lastcheck-wrap<?= $lastCheck === '' ? ' hidden' : '' ?>"> · last check <span class="bh-lastcheck"><?= htmlspecialchars($lastCheck) ?></span></span></div>
+            <div class="text-xs text-slate-500 truncate">This site checks for new Basehim releases automatically<?= $config['site_name'] !== '' ? ' · registered as "' . htmlspecialchars($config['site_name']) . '"' : '' ?><span class="bh-lastcheck-wrap<?= $lastCheck === '' ? ' hidden' : '' ?>"> · last check <span class="bh-lastcheck"><?= htmlspecialchars($lastCheck !== '' ? bh_datetime($lastCheck, 'M j, Y g:i a') : '') ?></span></span></div>
         </div>
     </div>
     <?php else: ?>
@@ -244,7 +244,7 @@ $allCount = count($updates) + count($appUpdates);
         // the timestamp only moved on a full page reload.
         if (d.last_check) {
             document.querySelectorAll('.bh-lastcheck').forEach(function (el) {
-                el.textContent = d.last_check;
+                el.textContent = window.BasehimTime ? BasehimTime.format(d.last_check) : d.last_check;
             });
             document.querySelectorAll('.bh-lastcheck-wrap').forEach(function (el) {
                 el.classList.remove('hidden');
@@ -283,7 +283,7 @@ $allCount = count($updates) + count($appUpdates);
                 ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold uppercase">Patch</span>'
                 : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold uppercase">Release</span>';
             var meta = [];
-            if (u.published_at) meta.push('Released ' + esc(String(u.published_at).slice(0, 10)));
+            if (u.published_at) meta.push('Released ' + esc(window.BasehimTime ? BasehimTime.date(u.published_at) : String(u.published_at).slice(0, 10)));
             if (u.size) meta.push(Math.round(u.size / 1024) + ' KB');
             if (u.sha256) meta.push('SHA-256 verified');
             return '<div class="bg-white rounded-xl border border-slate-200 p-4" data-v="' + esc(u.version) + '">'
@@ -386,7 +386,7 @@ $allCount = count($updates) + count($appUpdates);
         desc.textContent = u.description || '';
         desc.classList.toggle('hidden', !u.description);
         var facts = [];
-        if (u.published_at) facts.push(['Released', esc(String(u.published_at).slice(0, 10))]);
+        if (u.published_at) facts.push(['Released', esc(window.BasehimTime ? BasehimTime.date(u.published_at) : String(u.published_at).slice(0, 10))]);
         if (u.size) facts.push(['Download', u.size >= 1048576 ? (u.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(u.size / 1024)) + ' KB']);
         facts.push(['Checksum', u.sha256 ? 'SHA-256, verified before installing' : 'Not provided']);
         if (u.developer && u.developer.url) facts.push(['Developer', party({ name: u.developer.url.replace(/^https?:\/\//, ''), url: u.developer.url })]);

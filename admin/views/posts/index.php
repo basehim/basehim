@@ -145,7 +145,7 @@ $csrf = $session->csrfToken();
                             ($st === 'scheduled' ? 'bh-badge--blue' : 'bh-badge--amber'));
                     ?>"><?= ucfirst($post['status']) ?></span>
                 </td>
-                <td class="px-5 py-3 text-slate-500 text-xs hidden md:table-cell"><?= date('M j, Y', strtotime($post['created_at'])) ?></td>
+                <td class="px-5 py-3 text-slate-500 text-xs hidden md:table-cell"><?= bh_date($post['created_at'], 'M j, Y') ?></td>
                 <td class="px-5 py-3 text-right">
                     <div class="inline-flex items-center gap-1">
                         <?php if (!empty($trashed)): ?>

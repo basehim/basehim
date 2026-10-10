@@ -107,7 +107,7 @@ function fmtBytes($b) {
                             <?= htmlspecialchars($post['title']) ?>
                         </a>
                         <div class="text-xs text-slate-500 mt-0.5">
-                            by <?= htmlspecialchars($post['author_name'] ?? 'Unknown') ?> · <?= date('M j, Y', strtotime($post['created_at'])) ?>
+                            by <?= htmlspecialchars($post['author_name'] ?? 'Unknown') ?> · <?= bh_date($post['created_at'], 'M j, Y') ?>
                         </div>
                     </div>
                     <span class="text-xs px-2 py-1 rounded-full font-medium <?php

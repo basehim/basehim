@@ -330,7 +330,7 @@ final class AiAccessService
         foreach ($items as $p) {
             $out .= '## ' . self::md((string) $p['title']) . "\n\n";
             $out .= 'URL: ' . $this->postUrl($p) . "\n";
-            if (!empty($p['published_at']) && $p['type'] === 'post') $out .= 'Published: ' . date('Y-m-d', strtotime((string) $p['published_at'])) . "\n";
+            if (!empty($p['published_at']) && $p['type'] === 'post') $out .= 'Published: ' . bh_date((string) $p['published_at'], 'Y-m-d') . "\n";
             $out .= "\n" . $this->plainText($p, 20000) . "\n\n";
         }
         return rtrim($out) . "\n";
@@ -674,7 +674,12 @@ final class AiAccessService
             $h .= '<link rel="ai-catalog" type="application/json" href="' . $e($base . '/.well-known/ai-catalog.json') . '">' . "\n";
         }
         if ($this->on('llms_enabled')) $h .= '<link rel="alternate" type="text/markdown" title="llms.txt" href="' . $e($base . '/llms.txt') . '">' . "\n";
-        if ($this->on('jsonld_website') && $this->isFrontPage()) {
+        // The WebSite structured data moved to the SEO service (1.2.45), which
+        // prints one @graph per page; Settings → SEO → JSON-LD controls it. It
+        // is only printed here when the SEO service is switched off entirely.
+        $seoOn = true;
+        try { $seoOn = Application::getInstance()->make(\App\Services\SeoHeadService::class)->enabled(); } catch (\Throwable) {}
+        if (!$seoOn && $this->on('jsonld_website') && $this->isFrontPage()) {
             $o = $this->origin();
             $data = [
                 '@context' => 'https://schema.org',

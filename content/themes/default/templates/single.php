@@ -35,7 +35,7 @@
             </div>
             <?php endif; ?>
             <span class="text-slate-300">·</span>
-            <time><?= icon('calendar', 'w-4 h-4 mr-1 text-slate-400') ?><?= date('F j, Y', strtotime($post['published_at'] ?? $post['created_at'])) ?></time>
+            <time datetime="<?= bh_iso8601($post['published_at'] ?? $post['created_at']) ?>"><?= icon('calendar', 'w-4 h-4 mr-1 text-slate-400') ?><?= bh_date($post['published_at'] ?? $post['created_at']) ?></time>
             <?php if (!empty($post['view_count'])): ?>
             <span class="text-slate-300">·</span>
             <span><?= icon('eye', 'w-4 h-4 mr-1 text-slate-400') ?><?= number_format($post['view_count']) ?> views</span>
@@ -122,7 +122,7 @@
                                     <?php else: ?>
                                         <span class="font-semibold text-slate-900 text-sm"><?= htmlspecialchars($c['author_name']) ?></span>
                                     <?php endif; ?>
-                                    <span class="text-xs text-slate-500"><?= date('M j, Y g:i a', strtotime($c['created_at'])) ?></span>
+                                    <span class="text-xs text-slate-500"><?= bh_datetime($c['created_at'], 'M j, Y g:i a') ?></span>
                                 </div>
                                 <p class="text-sm text-slate-700 whitespace-pre-wrap"><?= htmlspecialchars($c['content']) ?></p>
                             </div>

@@ -73,7 +73,7 @@
                     </span>
                 </td>
                 <td class="px-5 py-3 text-slate-500 text-xs hidden md:table-cell">
-                    <?= $u['last_login_at'] ? date('M j, Y', strtotime($u['last_login_at'])) : 'Never' ?>
+                    <?= $u['last_login_at'] ? bh_date($u['last_login_at'], 'M j, Y') : 'Never' ?>
                 </td>
                 <td class="px-5 py-3 text-right">
                     <div class="inline-flex items-center gap-1">

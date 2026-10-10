@@ -67,9 +67,9 @@
                         <td class="px-4 py-3">
                             <div class="font-medium text-slate-900"><?= htmlspecialchars($key['name']) ?></div>
                             <div class="text-xs text-slate-400 mt-0.5">
-                                Created <?= date('M j, Y', strtotime($key['created_at'])) ?>
+                                Created <?= bh_date($key['created_at'], 'M j, Y') ?>
                                 <?php if ($key['expires_at']): ?>
-                                  · Expires <?= date('M j, Y', strtotime($key['expires_at'])) ?>
+                                  · Expires <?= bh_date($key['expires_at'], 'M j, Y') ?>
                                 <?php else: ?>
                                   · Never expires
                                 <?php endif; ?>
@@ -99,7 +99,7 @@
                         </td>
                         <td class="px-4 py-3 text-xs text-slate-500">
                             <?php if ($key['last_used_at']): ?>
-                                <?= date('M j, Y', strtotime($key['last_used_at'])) ?><br>
+                                <?= bh_date($key['last_used_at'], 'M j, Y') ?><br>
                                 <span class="text-slate-400"><?= htmlspecialchars($key['last_used_ip'] ?? '') ?></span>
                             <?php else: ?>
                                 <span class="text-slate-300">Never</span>

@@ -94,9 +94,9 @@
             <div class="text-sm space-y-2 text-slate-600">
                 <div class="flex justify-between"><span>Role</span><span class="font-medium text-slate-900"><?= ucwords(str_replace('_', ' ', $currentUser['role'])) ?></span></div>
                 <div class="flex justify-between"><span>Status</span><span class="text-green-700 font-medium"><?= ucfirst($currentUser['status']) ?></span></div>
-                <div class="flex justify-between"><span>Member since</span><span class="text-slate-500"><?= date('M Y', strtotime($currentUser['created_at'])) ?></span></div>
+                <div class="flex justify-between"><span>Member since</span><span class="text-slate-500"><?= bh_date($currentUser['created_at'], 'M Y') ?></span></div>
                 <?php if (!empty($currentUser['last_login_at'])): ?>
-                <div class="flex justify-between"><span>Last login</span><span class="text-slate-500"><?= date('M j, Y g:i a', strtotime($currentUser['last_login_at'])) ?></span></div>
+                <div class="flex justify-between"><span>Last login</span><span class="text-slate-500"><?= bh_datetime($currentUser['last_login_at'], 'M j, Y g:i a') ?></span></div>
                 <?php endif; ?>
             </div>
         </div>
@@ -153,7 +153,7 @@ $tfaOn = !empty($tfa['enabled']) || !empty($tfa['required']);
             <p class="text-sm text-slate-600">This site requires two-step verification for your account, so you are asked for a code whenever you sign in on a new device.</p>
         <?php elseif ($tfaOn): ?>
             <p class="text-sm text-slate-600">
-                On<?= !empty($tfa['since']) ? ' since ' . htmlspecialchars(date('M j, Y', strtotime((string) $tfa['since']))) : '' ?>: we email you a code when you sign in on a new device.
+                On<?= !empty($tfa['since']) ? ' since ' . htmlspecialchars(bh_date((string) $tfa['since'], 'M j, Y')) : '' ?>: we email you a code when you sign in on a new device.
                 <?php if (!empty($tfa['required'])): ?>Required for your account by the site's settings.<?php endif; ?>
                 <?php if (!empty($tfa['emergency'])): ?><span class="text-amber-700">Codes are suspended site-wide at the moment (storage/disable-2fa).</span><?php endif; ?>
             </p>

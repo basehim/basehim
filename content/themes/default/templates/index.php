@@ -36,7 +36,7 @@
                 <div class="p-5">
                     <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
                         <?= icon('calendar', 'w-4 h-4') ?>
-                        <time><?= date('M j, Y', strtotime($p['published_at'] ?? $p['created_at'])) ?></time>
+                        <?= bh_time_tag($p['published_at'] ?? $p['created_at'], 'M j, Y') ?>
                         <?php if (!empty($p['author_name'])): ?>
                             <span class="text-slate-300">·</span>
                             <?php if (!empty($p['author_avatar_url'])): ?>

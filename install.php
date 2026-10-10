@@ -20,7 +20,7 @@ declare(strict_types=1);
 // App\Core\BASEHIM_ROOT" — PHP resolves an unknown bare constant against the
 // current namespace before giving up.
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.2.44');
+define('BASEHIM_VERSION', '1.2.45');
 define('BASEHIM_INSTALLING', true);
 
 
@@ -121,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dsn = "mysql:host={$cfg['DB_HOST']};port={$cfg['DB_PORT']};dbname={$cfg['DB_DATABASE']};charset=utf8mb4";
             $pdo = new PDO($dsn, $cfg['DB_USERNAME'], $cfg['DB_PASSWORD'], [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+00:00'",
             ]);
             if (!preg_match('/^[A-Za-z0-9_]{0,32}$/', $cfg['DB_PREFIX'])) {
                 // Same rule as App\Core\Database: the prefix goes into identifiers.
@@ -161,6 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dsn = "mysql:host={$cfg['DB_HOST']};port={$cfg['DB_PORT']};dbname={$cfg['DB_DATABASE']};charset=utf8mb4";
                 $pdo = new PDO($dsn, $cfg['DB_USERNAME'], $cfg['DB_PASSWORD'], [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+00:00'",
                 ]);
 
                 // Clean any partial install: drop Basehim tables in reverse-dependency order.
@@ -215,7 +217,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $record = $pdo->prepare(pxSql('INSERT INTO {migrations} (migration, applied_at) VALUES (?, ?)', $cfg));
                 $applied = [];
 
+                // Data repairs for existing sites: a fresh install has nothing to
+                // repair, and running them would damage its correct rows. They
+                // are recorded as applied without running.
+                $recordOnly = ['013_utc_timestamps'];
+
                 foreach ($files as $file) {
+                    if (in_array(preg_replace('/\\.sql$/', '', basename($file)), $recordOnly, true)) {
+                        $key = preg_replace('/\\.sql$/', '', basename($file));
+                        $record->execute([$key, gmdate('Y-m-d H:i:s')]);
+                        $applied[] = $key;
+                        continue;
+                    }
                     $sql = (string) file_get_contents($file);
 
                     // Strip SQL line-comments first. Without this, chunks that begin
@@ -242,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // the file name made the first update after an install run
                     // every migration a second time.
                     $key = preg_replace('/\\.sql$/', '', basename($file));
-                    $record->execute([$key, date('Y-m-d H:i:s')]);
+                    $record->execute([$key, gmdate('Y-m-d H:i:s')]);
                     $applied[] = $key;
                 }
 
@@ -274,6 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dsn = "mysql:host={$cfg['DB_HOST']};port={$cfg['DB_PORT']};dbname={$cfg['DB_DATABASE']};charset=utf8mb4";
                 $pdo = new PDO($dsn, $cfg['DB_USERNAME'], $cfg['DB_PASSWORD'], [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+00:00'",
                 ]);
 
                 $uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',

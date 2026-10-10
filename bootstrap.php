@@ -88,8 +88,12 @@ if (!function_exists('brand_logo')) {
 // Load environment variables from .env
 \App\Core\Env::load(BASEHIM_ROOT . '/.env');
 
-// Set timezone from config
-date_default_timezone_set(\App\Core\Env::get('APP_TIMEZONE', 'UTC'));
+// PHP always runs in UTC, so date(), time() and strtotime() agree with what
+// is stored. The site's own timezone (Settings → General) is applied when a
+// time is shown: App\Core\Time and the bh_date()/bh_time() helpers.
+// APP_TIMEZONE in .env, which used to set this, is now only the fallback for
+// the site timezone until one is saved in the settings.
+date_default_timezone_set('UTC');
 
 // Session config (file-based, cPanel-friendly)
 $sessionPath = BASEHIM_ROOT . '/storage/sessions';
@@ -238,6 +242,57 @@ if (!function_exists('bh_asset_tag')) {
     }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dates and times (1.2.45)
+
+   Everything is stored in UTC. These show a stored time in the site's
+   timezone and formats (Settings → General), so changing the timezone changes
+   every date on the site at once. Themes and apps should use them rather than
+   date(…, strtotime(…)), which shows UTC.
+
+     <?= bh_date($post['published_at']) ?>              October 10, 2026
+     <?= bh_date($post['published_at'], 'M j') ?>       Oct 10
+     <?= bh_time($post['published_at']) ?>              1:32 pm
+     <?= bh_datetime($comment['created_at']) ?>         October 10, 2026 1:32 pm
+     <?= bh_time_ago($comment['created_at']) ?>         5 minutes ago
+     <?= bh_time_tag($post['published_at']) ?>          <time datetime="2026-10-10T13:32:00+05:00">…</time>
+     bh_iso8601($post['published_at'])                   2026-10-10T13:32:00+05:00
+     bh_to_utc('2026-10-10 13:32')                       2026-10-10 08:32:00  (store what a person typed)
+     bh_now()                                            UTC "Y-m-d H:i:s", for storing
+     bh_timezone()                                       Asia/Karachi
+   ═══════════════════════════════════════════════════════════════════════════ */
+if (!function_exists('bh_timezone')) {
+    function bh_timezone(): string { return \App\Core\Time::timezone(); }
+}
+if (!function_exists('bh_date')) {
+    function bh_date(mixed $value, ?string $format = null): string { return \App\Core\Time::date($value, $format); }
+}
+if (!function_exists('bh_time')) {
+    function bh_time(mixed $value, ?string $format = null): string { return \App\Core\Time::time($value, $format); }
+}
+if (!function_exists('bh_datetime')) {
+    function bh_datetime(mixed $value, ?string $format = null): string { return \App\Core\Time::format($value, $format); }
+}
+if (!function_exists('bh_time_ago')) {
+    function bh_time_ago(mixed $value, int $maxDays = 7): string { return \App\Core\Time::ago($value, $maxDays); }
+}
+if (!function_exists('bh_time_tag')) {
+    function bh_time_tag(mixed $value, ?string $format = null, bool $relative = false): string { return \App\Core\Time::tag($value, $format, $relative); }
+}
+if (!function_exists('bh_iso8601')) {
+    function bh_iso8601(mixed $value): string { return \App\Core\Time::iso($value); }
+}
+if (!function_exists('bh_to_utc')) {
+    function bh_to_utc(mixed $localValue): string { return \App\Core\Time::toUtc($localValue); }
+}
+if (!function_exists('bh_now')) {
+    function bh_now(): string { return \App\Core\Time::now(); }
+}
+if (!function_exists('bh_local_time')) {
+    /** The value as a DateTimeImmutable in the site timezone (null if empty). */
+    function bh_local_time(mixed $value): ?\DateTimeImmutable { return \App\Core\Time::local($value); }
+}
+
 /**
  * Everything that belongs in <head>.
  *
@@ -249,10 +304,10 @@ if (!function_exists('bh_asset_tag')) {
  */
 if (!function_exists('bh_head')) {
     function bh_head(): string {
-        // Names the platform for tools and directories that look for it. No
-        // version number: that would tell an attacker exactly which fixes a
-        // site is missing.
-        $out = '<meta name="generator" content="Basehim CMS">' . "\n";
+        // SEO and social tags (title, description, canonical, robots, Open
+        // Graph, Twitter, JSON-LD, generator) are not printed here: core's SEO
+        // service adds them to every page, whatever the theme calls (1.2.45).
+        $out = '';
 
         try {
             $out .= \App\Core\Application::getInstance()
@@ -272,7 +327,45 @@ if (!function_exists('bh_head')) {
         // AI agents: origin-trial token, discovery links, WebSite structured data.
         try { $out .= bh_ai()->headMarkup(); } catch (\Throwable) {}
 
-        return $out . bh_hook_output('bh.head');
+        $out .= bh_hook_output('bh.head');
+        // Remembered so the SEO service never strips apps' own tags from it.
+        bh_head_outputs($out);
+        return $out;
+    }
+}
+
+/** What bh_head() returned on this request (internal: lets SEO leave it intact). */
+if (!function_exists('bh_head_outputs')) {
+    function bh_head_outputs(?string $add = null): array {
+        static $list = [];
+        if ($add !== null && $add !== '') $list[] = $add;
+        return $list;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SEO (1.2.45)
+
+   Core prints the page's SEO and social tags itself (App\Services\SeoHeadService).
+   A theme or app can change them while the page renders:
+
+     <?php bh_seo()->set('title', 'Pricing – Acme'); ?>
+     <?php bh_seo()->set('image', '/uploads/2026/10/cover.png'); ?>
+     <?php bh_seo()->addJsonLd(['@type' => 'SoftwareApplication', 'name' => 'Acme']); ?>
+     <?php bh_seo()->disable('twitter'); ?>       no twitter:* tags on this page
+     <?php bh_seo()->handOff('jsonld'); ?>        this template prints its own JSON-LD
+
+   …or for every page with the seo.* filters (THEME-DEVELOPMENT.md).
+   ═══════════════════════════════════════════════════════════════════════════ */
+if (!function_exists('bh_seo')) {
+    function bh_seo(): \App\Services\SeoHeadService {
+        return \App\Core\Application::getInstance()->make(\App\Services\SeoHeadService::class);
+    }
+}
+if (!function_exists('bh_seo_value')) {
+    /** A value of this page's SEO head (title, description, canonical, image…), once known. */
+    function bh_seo_value(string $key): mixed {
+        try { return bh_seo()->get($key); } catch (\Throwable) { return null; }
     }
 }
 

@@ -67,9 +67,26 @@ trait RendersTheme
          * with a plain page that says which template failed. The site stays up,
          * the admin stays reachable, and the message names the file to fix.
          */
-        // The share image for this page (1.2.44), handed to the theme as
-        // $seo['og_image'] and enforced in the finished HTML below.
-        $data['seo'] = $this->withSocialImage((array) $data['seo'], $data);
+        /*
+         * SEO and social tags are core's job (1.2.45): SeoHeadService works
+         * them out and puts them into the finished page, so no theme has to.
+         * $seo is still handed to the theme, filled in, for templates that
+         * show a value (or were written before 1.2.45).
+         */
+        $seoCtx = $this->seoContext($template, $data);
+        $seoSvc = null;
+        try {
+            $seoSvc = $this->app->make(\App\Services\SeoHeadService::class);
+            if ($seoSvc->enabled($seoCtx)) {
+                $v = $seoSvc->build($seoCtx)['values'];
+                $data['seo'] = array_merge((array) $data['seo'], [
+                    'title' => $v['title'], 'description' => $v['description'],
+                    'canonical' => $v['canonical'], 'robots' => $v['robots'],
+                    'og_title' => $v['og_title'], 'og_description' => $v['og_description'],
+                    'og_image' => $v['image']['url'] ?? null,
+                ]);
+            }
+        } catch (\Throwable) { $seoSvc = null; }
 
         try {
             $html = $themes->render($template, $data);
@@ -77,7 +94,9 @@ trait RendersTheme
             return $this->themeFailure($template, $e, $data);
         }
 
-        $html = $this->applySocialMeta($html, (array) $data['seo']);
+        if ($seoSvc) {
+            try { $html = $seoSvc->apply($html, $seoCtx); } catch (\Throwable) {}
+        }
 
         // A preview is only ever shown to a signed-in user who may edit the
         // post, so unpublished work never reaches the public. The badge is
@@ -122,123 +141,35 @@ trait RendersTheme
 
     /** Floating "you are previewing" badge, appended before </body>. */
     /**
-     * Pick the image a link to this page should show when shared.
-     *
-     * In order: the social image chosen in the post's SEO settings
-     * (seo_meta.og_image_id, saved since early versions but never read), then
-     * the featured image. Pages with neither keep whatever the theme prints.
-     * Adds og_image (absolute URL), og_image_width/height/alt/type to $seo.
+     * What the SEO service needs to know about the page being rendered.
      */
-    protected function withSocialImage(array $seo, array $data): array
+    protected function seoContext(string $template, array $data): array
     {
-        if (!empty($seo['og_image'])) {
-            $seo['og_image'] = $this->absoluteUrl((string) $seo['og_image']);
-            return $seo;
-        }
-        $post = $data['post'] ?? null;
-        if (!is_array($post) || empty($post['id'])) return $seo;
-
-        $img = null;
-        try {
-            $meta = $this->app->make(\App\Services\SeoService::class)->forPost((int) $post['id']);
-            $ogId = (int) ($meta['og_image_id'] ?? 0);
-            if ($ogId > 0) {
-                $m = $this->app->make(\App\Services\MediaService::class)->find($ogId);
-                if ($m && !empty($m['url']) && str_starts_with((string) ($m['mime_type'] ?? ''), 'image/')) {
-                    $img = [
-                        'url' => \App\Repositories\PostRepository::mediaUrl((string) $m['url']),
-                        'width' => $m['width'] ?? null, 'height' => $m['height'] ?? null,
-                        'alt' => $m['alt_text'] ?? null, 'type' => $m['mime_type'] ?? null,
-                    ];
-                }
-            }
-        } catch (\Throwable) {}
-
-        if ($img === null && !empty($post['featured_url'])) {
-            $img = [
-                'url' => (string) $post['featured_url'],
-                'width' => $post['featured_width'] ?? null, 'height' => $post['featured_height'] ?? null,
-                'alt' => $post['featured_alt'] ?? null, 'type' => null,
-            ];
-        }
-        if ($img === null) return $seo;
-
-        $seo['og_image'] = $this->absoluteUrl($img['url']);
-        if ((int) $img['width'] > 0)  $seo['og_image_width']  = (int) $img['width'];
-        if ((int) $img['height'] > 0) $seo['og_image_height'] = (int) $img['height'];
-        $alt = trim((string) ($img['alt'] ?? ''));
-        $seo['og_image_alt'] = $alt !== '' ? $alt : (string) ($post['title'] ?? '');
-        if (!empty($img['type'])) $seo['og_image_type'] = (string) $img['type'];
-        return $seo;
-    }
-
-    /** Make a site-relative URL absolute; crawlers don't resolve relative ones. */
-    protected function absoluteUrl(string $url): string
-    {
-        if ($url === '' || preg_match('#^https?://#i', $url)) return $url;
-        if (str_starts_with($url, '//')) {
-            return ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https:' : 'http:') . $url;
-        }
-        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
-        $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-        if ($host === '') {
-            $app = (string) (\App\Core\Env::get('APP_URL', '') ?? '');
-            return rtrim(preg_replace('#^(https?://[^/]+).*$#i', '$1', $app) ?? '', '/') . '/' . ltrim($url, '/');
-        }
-        return ($https ? 'https' : 'http') . '://' . $host . '/' . ltrim($url, '/');
-    }
-
-    /**
-     * Make the finished page's share tags right, whatever the theme printed.
-     *
-     * Themes write their own Open Graph tags and disagree: one always sends its
-     * logo, one sends the featured image as a relative URL (dropped by every
-     * crawler), the bundled ones send no image at all. When the page has a
-     * share image, every og:image / twitter:image tag in <head> is replaced
-     * with the right set. Missing twitter:card, twitter:title,
-     * twitter:description and og:url are added. Done here, like the preview
-     * badge, so every theme gets it, including ones written before this.
-     */
-    protected function applySocialMeta(string $html, array $seo): string
-    {
-        $end = stripos($html, '</head>');
-        if ($end === false) return $html;
-        $head = substr($html, 0, $end);
-        $rest = substr($html, $end);
-        $e = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-        $has = static fn(string $key): bool =>
-            (bool) preg_match('/<meta\b[^>]*\b(?:property|name)\s*=\s*["\']' . preg_quote($key, '/') . '["\']/i', $head);
-
-        $tags = [];
-        $image = (string) ($seo['og_image'] ?? '');
-        if ($image !== '') {
-            $head = preg_replace(
-                '/[ \t]*<meta\b[^>]*\b(?:property|name)\s*=\s*["\'](?:og:image(?::[a-z_]+)?|twitter:image(?::[a-z_]+)?|twitter:image:src)["\'][^>]*>[ \t]*\r?\n?/i',
-                '',
-                $head
-            ) ?? $head;
-            $tags[] = '<meta property="og:image" content="' . $e($image) . '">';
-            if (str_starts_with($image, 'https://')) $tags[] = '<meta property="og:image:secure_url" content="' . $e($image) . '">';
-            if (!empty($seo['og_image_type']))   $tags[] = '<meta property="og:image:type" content="' . $e($seo['og_image_type']) . '">';
-            if (!empty($seo['og_image_width']))  $tags[] = '<meta property="og:image:width" content="' . (int) $seo['og_image_width'] . '">';
-            if (!empty($seo['og_image_height'])) $tags[] = '<meta property="og:image:height" content="' . (int) $seo['og_image_height'] . '">';
-            if (!empty($seo['og_image_alt']))    $tags[] = '<meta property="og:image:alt" content="' . $e($seo['og_image_alt']) . '">';
-            $tags[] = '<meta name="twitter:image" content="' . $e($image) . '">';
-            if (!empty($seo['og_image_alt']))    $tags[] = '<meta name="twitter:image:alt" content="' . $e($seo['og_image_alt']) . '">';
-        }
-        if (!$has('twitter:card')) {
-            $big = $image !== '' || $has('og:image');
-            $tags[] = '<meta name="twitter:card" content="' . ($big ? 'summary_large_image' : 'summary') . '">';
-        }
-        $title = (string) ($seo['og_title'] ?? $seo['title'] ?? '');
-        if ($title !== '' && !$has('twitter:title')) $tags[] = '<meta name="twitter:title" content="' . $e($title) . '">';
-        $desc = (string) ($seo['og_description'] ?? $seo['description'] ?? '');
-        if ($desc !== '' && !$has('twitter:description')) $tags[] = '<meta name="twitter:description" content="' . $e($desc) . '">';
-        if (!empty($seo['canonical']) && !$has('og:url')) $tags[] = '<meta property="og:url" content="' . $e($seo['canonical']) . '">';
-
-        if (!$tags) return $head . $rest;
-        return $head . "    <!-- Social sharing (Basehim) -->\n    " . implode("\n    ", $tags) . "\n" . $rest;
+        $post = is_array($data['post'] ?? null) ? $data['post'] : null;
+        $isHome = !empty($data['is_home']);
+        $type = match (true) {
+            $template === '404' => '404',
+            $isHome => 'home',
+            $template === 'search' => 'search',
+            $template === 'archive' => (($data['archive_type'] ?? '') === 'author' ? 'author' : 'archive'),
+            $post !== null && ($post['type'] ?? '') === 'page' => 'page',
+            $post !== null => 'post',
+            default => 'other',
+        };
+        $page = (int) ($data['meta']['page'] ?? 0);
+        if ($page < 1) $page = max(1, (int) (is_scalar($_GET['page'] ?? null) ? $_GET['page'] : 1));
+        return [
+            'type' => $type,
+            'template' => $template,
+            'post' => $post,
+            'terms' => $data['terms'] ?? null,
+            'term' => $data['term'] ?? null,
+            'author' => $data['author'] ?? null,
+            'query' => $data['query'] ?? null,
+            'seo' => is_array($data['seo'] ?? null) ? $data['seo'] : [],
+            'page' => $page,
+            'is_preview' => !empty($data['is_preview']),
+        ];
     }
 
     private function injectPreviewBadge(string $html, string $status): string
@@ -357,6 +288,9 @@ trait RendersTheme
          */
         try {
             $html = $themes->render('404', $data);
+            try {
+                $html = $this->app->make(\App\Services\SeoHeadService::class)->apply($html, $this->seoContext('404', $data));
+            } catch (\Throwable) {}
         } catch (\Throwable $e) {
             try {
                 $this->app->make(\App\Core\Logger::class)->error(

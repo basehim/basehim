@@ -431,7 +431,7 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
     }
     function rowHtml(r) {
         var b = badge(r.event || '');
-        var when = (r.created_at || '').replace('T', ' ');
+        var when = window.BasehimTime ? BasehimTime.format(r.created_at) : (r.created_at || '').replace('T', ' ');
         return '<div class="flex items-start gap-3 px-4 py-3">'
             + '<span class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap mt-0.5 ' + b[1] + '">' + esc(b[0]) + '</span>'
             + '<div class="min-w-0 flex-1"><div class="text-sm text-slate-700">' + esc(r.detail || '—') + '</div>'

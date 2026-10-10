@@ -4,20 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($seo['title'] ?? $site_title) ?></title>
-    <?php if (!empty($seo['description'])): ?>
-    <meta name="description" content="<?= htmlspecialchars($seo['description']) ?>">
-    <?php endif; ?>
-    <?php if (!empty($seo['canonical'])): ?>
-    <link rel="canonical" href="<?= htmlspecialchars($seo['canonical']) ?>">
-    <?php endif; ?>
-    <?php if (!empty($seo['robots'])): ?>
-    <meta name="robots" content="<?= htmlspecialchars($seo['robots']) ?>">
-    <?php endif; ?>
-    <!-- Open Graph -->
-    <meta property="og:title" content="<?= htmlspecialchars($seo['og_title'] ?? $seo['title'] ?? $site_title) ?>">
-    <meta property="og:description" content="<?= htmlspecialchars($seo['og_description'] ?? $seo['description'] ?? '') ?>">
-    <meta property="og:type" content="<?= !empty($post) ? 'article' : 'website' ?>">
-    <meta property="og:site_name" content="<?= htmlspecialchars($site_title) ?>">
+    <?php /* Description, canonical, robots, Open Graph, X and JSON-LD are added
+             by core's SEO service (Settings → SEO); a theme prints none of them. */ ?>
     <meta name="theme-color" content="#0a0e17">
 
     <link rel="alternate" type="application/rss+xml" title="<?= htmlspecialchars($site_title) ?>" href="<?= $base ?>/feed">

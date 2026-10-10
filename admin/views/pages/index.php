@@ -78,7 +78,7 @@ $csrf = $session->csrfToken();
                             ($st === 'scheduled' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'));
                     ?>"><?= ucfirst($post['status']) ?></span>
                 </td>
-                <td class="px-5 py-3 text-slate-500 text-xs hidden md:table-cell"><?= date('M j, Y', strtotime($post['created_at'])) ?></td>
+                <td class="px-5 py-3 text-slate-500 text-xs hidden md:table-cell"><?= bh_date($post['created_at'], 'M j, Y') ?></td>
                 <td class="px-5 py-3 text-right">
                     <div class="inline-flex items-center gap-1">
                         <a href="<?= $base ?>/admin/<?= $type ?>s/<?= $post['id'] ?>/edit" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded">

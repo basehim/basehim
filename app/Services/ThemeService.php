@@ -43,6 +43,34 @@ class ThemeService
         }
     }
 
+    /**
+     * Run the active theme's boot.php, if it has one (1.2.45).
+     *
+     * Runs once per request after apps boot and before any page renders, so
+     * a theme can register filters, most usefully the seo.* ones:
+     *
+     *   // content/themes/my-theme/boot.php
+     *   $hooks->addFilter('seo.jsonld', function (array $nodes, array $ctx) {
+     *       if ($ctx['type'] === 'home') $nodes[] = ['@type' => 'SoftwareApplication', 'name' => 'Acme'];
+     *       return $nodes;
+     *   });
+     *
+     * $app and $hooks are in scope. A failure is logged, never fatal.
+     */
+    public function bootTheme(\App\Core\Application $app): void
+    {
+        $dir = $this->activePath();
+        $file = $dir . '/boot.php';
+        if (!is_file($file)) return;
+        $real = realpath($file);
+        $root = realpath($this->themePath);
+        if (!$real || !$root || !str_starts_with($real, $root . DIRECTORY_SEPARATOR)) return;
+        $hooks = $app->make(\App\Core\HookRegistry::class);
+        (static function (string $__file, \App\Core\Application $app, \App\Core\HookRegistry $hooks): void {
+            require $__file;
+        })($real, $app, $hooks);
+    }
+
     public function activeSlug(): string
     {
         return (string)($this->settings->get('appearance', 'active_theme') ?: 'default');

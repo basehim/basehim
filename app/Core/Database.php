@@ -136,7 +136,12 @@ final class Database
                     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                     PDO::ATTR_EMULATE_PREPARES   => false,
-                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$charset} COLLATE {$this->config['collation']} ",
+                    // Every connection works in UTC (1.2.45). NOW(), CURRENT_TIMESTAMP and
+                    // TIMESTAMP columns used the server's own zone before, while PHP
+                    // wrote UTC, so one table could hold both and comparisons like
+                    // expires_at > NOW() were off by the server's offset. Times are
+                    // shown in the site timezone by App\Core\Time.
+                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$charset} COLLATE {$this->config['collation']}, time_zone = '+00:00'",
                 ]
             );
         } catch (PDOException $e) {

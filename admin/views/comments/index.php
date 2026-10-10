@@ -69,7 +69,7 @@
                 </div>
                 <p class="text-sm text-slate-700 mt-1"><?= nl2br(htmlspecialchars($c['content'])) ?></p>
                 <div class="text-xs text-slate-400 mt-2 flex items-center gap-3 flex-wrap">
-                    <span><?= icon('clock', 'w-4 h-4 mr-1') ?><?= date('M j, Y g:i a', strtotime($c['created_at'])) ?></span>
+                    <span><?= icon('clock', 'w-4 h-4 mr-1') ?><?= bh_datetime($c['created_at'], 'M j, Y g:i a') ?></span>
                     <?php if (!empty($c['post_title'])): ?>
                     <span>on <a href="<?= $base ?>/admin/posts/<?= $c['post_id'] ?>/edit" class="text-blue-600 hover:underline"><?= htmlspecialchars($c['post_title']) ?></a></span>
                     <?php endif; ?>

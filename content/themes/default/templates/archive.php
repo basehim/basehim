@@ -54,7 +54,7 @@
         <article class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:shadow-brand-100/40 hover:border-brand-200 transition">
             <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
                 <?= icon('calendar', 'w-4 h-4') ?>
-                <time><?= date('M j, Y', strtotime($p['published_at'] ?? $p['created_at'])) ?></time>
+                <?= bh_time_tag($p['published_at'] ?? $p['created_at'], 'M j, Y') ?>
                 <?php if (!empty($p['author_name'])): ?>
                     <span class="text-slate-300">·</span>
                     <?php $pAuthorUrl = function_exists('bh_author_url') ? bh_author_url($p) : ''; ?>

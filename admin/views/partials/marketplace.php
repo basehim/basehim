@@ -237,8 +237,7 @@ $isApps = $tab === 'apps';
     function installs(n) { n = +n || 0; return count(n) + (n === 1 ? ' install' : ' installs'); }
     function day(s) {
         if (!s) return '';
-        var d = new Date(String(s).replace(' ', 'T'));
-        return isNaN(d) ? esc(String(s).slice(0, 10)) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        return window.BasehimTime ? esc(BasehimTime.date(s)) : esc(String(s).slice(0, 10));
     }
     function get(url) { return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }); }
     function cmpVer(a, b) {

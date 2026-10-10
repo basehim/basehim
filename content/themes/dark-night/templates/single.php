@@ -23,7 +23,7 @@
                 <?php endif; ?>
             </span>
             <?php endif; ?>
-            <time><i class="fa-regular fa-calendar" style="margin-right:.35rem;"></i><?= date('F j, Y', strtotime($post['published_at'] ?? $post['created_at'])) ?></time>
+            <time datetime="<?= bh_iso8601($post['published_at'] ?? $post['created_at']) ?>"><i class="fa-regular fa-calendar" style="margin-right:.35rem;"></i><?= bh_date($post['published_at'] ?? $post['created_at']) ?></time>
             <?php if (!empty($post['view_count'])): ?>
             <span><i class="fa-regular fa-eye" style="margin-right:.35rem;"></i><?= number_format($post['view_count']) ?> views</span>
             <?php endif; ?>
@@ -76,7 +76,7 @@
                     <div class="dn-comment-bubble">
                         <div class="dn-comment-head">
                             <b><?= htmlspecialchars($c['author_name']) ?></b>
-                            <time><?= date('M j, Y g:i a', strtotime($c['created_at'])) ?></time>
+                            <?= bh_time_tag($c['created_at'], 'M j, Y g:i a') ?>
                         </div>
                         <p><?= htmlspecialchars($c['content']) ?></p>
                     </div>

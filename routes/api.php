@@ -28,6 +28,11 @@ $router->group(['prefix' => '/api/v1', 'middleware' => ['App\\Http\\Middleware\\
     $router->get('/settings/public', ['App\\Http\\Controllers\\Api\\SettingController', 'publicSettings']);
     $router->get('/search', ['App\\Http\\Controllers\\Api\\SearchController', 'index']);
 
+    // ---- Site time (1.2.45) ----
+    $router->get('/time', ['App\\Http\\Controllers\\Api\\TimeController', 'show']);
+    $router->get('/time/convert', ['App\\Http\\Controllers\\Api\\TimeController', 'convert']);
+    $router->get('/timezones', ['App\\Http\\Controllers\\Api\\TimeController', 'timezones']);
+
     // ---- Comments (public can read & submit) ----
     $router->get('/posts/{slug}/comments', ['App\\Http\\Controllers\\Api\\CommentController', 'index']);
     $router->post('/posts/{slug}/comments', ['App\\Http\\Controllers\\Api\\CommentController', 'store']);

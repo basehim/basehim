@@ -26,7 +26,8 @@
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   function fmtSize(b){ b=+b||0; var u=['B','KB','MB','GB']; var i=0; while(b>=1024&&i<3){b/=1024;i++;} return (Math.round(b*10)/10)+' '+u[i]; }
-  function fmtDate(s){ if(!s) return '—'; var d=new Date(String(s).replace(' ','T')); return isNaN(d)?s:d.toLocaleString(); }
+  // Site timezone (BasehimTime); the old toLocaleString() used the browser's and read UTC as local.
+  function fmtDate(s){ if(!s) return '—'; return window.BasehimTime ? BasehimTime.format(s) : s; }
   function absUrl(u){ if(!u) return ''; if(/^https?:\/\//.test(u)) return u; return window.location.origin + u; }
 
   // ---- generated sizes ----

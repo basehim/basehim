@@ -329,6 +329,13 @@ final class Application
         } catch (\Throwable $e) {
             try { $this->make(Logger::class)->error('Theme widget-area boot failure: ' . $e->getMessage()); } catch (\Throwable) {}
         }
+
+        // …and its boot.php, where a theme registers filters (seo.*, …).
+        try {
+            $this->make(\App\Services\ThemeService::class)->bootTheme($this);
+        } catch (\Throwable $e) {
+            try { $this->make(Logger::class)->error('Theme boot.php failure: ' . $e->getMessage()); } catch (\Throwable) {}
+        }
     }
 
     /**
