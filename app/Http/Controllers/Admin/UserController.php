@@ -525,7 +525,8 @@ class UserController extends Controller
         /** @var \App\Core\Database $db */
         $db = $this->app->make(\App\Core\Database::class);
         $count = $db->selectOne('SELECT COUNT(*) AS c FROM {posts} WHERE author_id = :a AND deleted_at IS NULL', ['a' => (int)$id]);
-        $db->execute('UPDATE {posts} SET author_id = :to WHERE author_id = :from', ['to' => $toId, 'from' => (int)$id]);
+        // A new owner is not an edit: keep each post's modified date (1.2.49).
+        $db->execute('UPDATE {posts} SET author_id = :to, updated_at = updated_at WHERE author_id = :from', ['to' => $toId, 'from' => (int)$id]);
 
         $moved = (int) ($count['c'] ?? 0);
         $actor = (string) ($this->user()['display_name'] ?? 'admin');

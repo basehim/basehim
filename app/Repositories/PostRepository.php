@@ -413,7 +413,11 @@ class PostRepository
 
     public function incrementViewCount(int $id): void
     {
-        $this->db->execute('UPDATE {posts} SET view_count = view_count + 1 WHERE id = :id', ['id' => $id]);
+        // `updated_at = updated_at`: the column is ON UPDATE CURRENT_TIMESTAMP,
+        // so without it every page view stamped the post as modified "now",
+        // which leaked into article:modified_time, dateModified and the
+        // sitemap's lastmod (1.2.49).
+        $this->db->execute('UPDATE {posts} SET view_count = view_count + 1, updated_at = updated_at WHERE id = :id', ['id' => $id]);
     }
 
     public function counts(): array
