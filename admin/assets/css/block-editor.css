@@ -457,6 +457,8 @@ body.bhe-top-toolbar.bhe-typing .bhe-toolbar { opacity: 1; pointer-events: auto;
 .bhe-modebar { max-width: var(--bhe-content); margin: 0 auto 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--bhe-ink-2); }
 .bhe-convert-note { max-width: var(--bhe-content); margin: 0 auto 16px; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-left: 4px solid var(--bhe-accent); background: #f0f6ff; font-size: 13px; line-height: 1.5; }
 .bhe-convert-note button { margin-left: auto; border: 0; background: none; cursor: pointer; font-size: 18px; line-height: 1; opacity: .6; }
+.bhe-convert-note .bhe-convert-note__action { margin-left: auto; flex: none; font-size: 13px; line-height: 1.5; opacity: 1; color: var(--bhe-accent); font-weight: 600; white-space: nowrap; text-decoration: underline; text-underline-offset: 2px; }
+.bhe-convert-note .bhe-convert-note__action + button { margin-left: 4px; }
 
 .bhe-editor {
   font-family: var(--bhe-content-font); font-size: 18px; line-height: 1.7; color: var(--bhe-ink);

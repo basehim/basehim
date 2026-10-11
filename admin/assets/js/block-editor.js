@@ -555,6 +555,9 @@ var api = {
   serialize: serialize,
   refresh: function () { renderAll(); },
   htmlToBlocks: function (html) { return htmlToBlocks(html); },
+  // Start undo history from the current content (after a conversion on open,
+  // so Undo does not go back to an empty document). 1.2.48.
+  resetHistory: function () { historyInit(); try { window.BasehimEditorDirty = false; } catch (e) {} },
   undo: function () { undo(); }, redo: function () { redo(); },
   icon: icon,
   config: CONFIG, version: VERSION
@@ -3769,6 +3772,11 @@ if (WIDGETS.length) {
 var BH_KEEP_AS_HTML = /^(FORM|SCRIPT|STYLE|NOSCRIPT|OBJECT|EMBED|SVG|CANVAS|DL|SELECT|TEXTAREA|INPUT|BUTTON|MAP|TEMPLATE|MATH)$/;
 var BH_BLOCK_TAGS = /^(P|H[1-6]|UL|OL|BLOCKQUOTE|PRE|HR|FIGURE|TABLE|DIV|SECTION|ARTICLE|MAIN|HEADER|FOOTER|ASIDE|NAV|CENTER|ADDRESS|FIELDSET|IFRAME|VIDEO|AUDIO|FORM|DETAILS|DL|SCRIPT|STYLE|NOSCRIPT|OBJECT|EMBED|SVG|CANVAS|TEMPLATE|MATH|HGROUP)$/;
 
+// GitHub-style task list items keep their state as a visible mark: a list
+// block holds text, and a disabled checkbox would be dropped.
+function bhTaskMarks(html) {
+  return String(html || '').replace(/<input\b[^>]*type\s*=\s*["']?checkbox[^>]*>\s*/gi, function (m) { return /\bchecked\b/i.test(m) ? '\u2611 ' : '\u2610 '; });
+}
 function bhIsImageUrl(u) { return /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?.*)?$/i.test(String(u || '')); }
 function bhAlignOf(el) {
   if (!el || !el.getAttribute) return '';
@@ -3908,8 +3916,51 @@ function convertChildren(container) {
 
   function listItems(el) {
     return Array.prototype.filter.call(el.children, function (c) { return c.nodeName === 'LI'; }).map(function (li) {
-      return bhInline(li.innerHTML.replace(/<\/p>\s*<p[^>]*>/gi, '<br>').replace(/<\/?p[^>]*>/gi, ''));
+      return bhInline(bhTaskMarks(li.innerHTML).replace(/<\/p>\s*<p[^>]*>/gi, '<br>').replace(/<\/?p[^>]*>/gi, ''));
     });
+  }
+
+  /*
+   * A list whose items hold more than text — a code sample under step 6, an
+   * image, a table — has no single-block equivalent: the list block holds
+   * text items only. Until 1.2.48 the whole list became Custom HTML. Now the
+   * list is split around those parts: steps 1–6, the code block, then the
+   * list again from 7, so every part is a normal block and the numbering
+   * reads the same as before.
+   */
+  function splitList(el) {
+    var ordered = el.nodeName === 'OL';
+    var n = ordered ? (parseInt(el.getAttribute('start'), 10) || 1) : 1;
+    var chunk = [], chunkStart = n;
+    function pushChunk() {
+      if (!chunk.length) return;
+      var ld = { style: ordered ? 'ol' : 'ul', items: chunk };
+      if (ordered && chunkStart > 1) ld.start = chunkStart;
+      push('list', ld);
+      chunk = [];
+    }
+    Array.prototype.forEach.call(el.children, function (li) {
+      if (li.nodeName !== 'LI') return;
+      var textBox = document.createElement('div'), rest = document.createElement('div'), inRest = false;
+      Array.prototype.slice.call(li.childNodes).forEach(function (c) {
+        var isBlock = c.nodeType === 1 && /^(PRE|TABLE|BLOCKQUOTE|FIGURE|IFRAME|VIDEO|AUDIO|IMG|DIV|P|H[1-6]|HR|DETAILS)$/.test(c.nodeName);
+        // The item's first paragraph is its text ("loose" Markdown lists).
+        if (!inRest && isBlock && c.nodeName === 'P' && textBox.textContent.trim() === '') { textBox.appendChild(c.cloneNode(true)); return; }
+        if (isBlock) inRest = true;
+        (inRest ? rest : textBox).appendChild(c.cloneNode(true));
+      });
+      var text = bhInline(bhTaskMarks(textBox.innerHTML).replace(/<\/?p[^>]*>/gi, ''));
+      if (!chunk.length) chunkStart = n;
+      if (text !== '') chunk.push(text);
+      n++;
+      var extra = convertChildren(rest);
+      if (extra.length) {
+        pushChunk();
+        chunkStart = n;
+        extra.forEach(function (b) { out.push(b); });
+      }
+    });
+    pushChunk();
   }
 
   function tableBlock(el) {
@@ -3958,8 +4009,10 @@ function convertChildren(container) {
     }
     if (tag === 'UL' || tag === 'OL') {
       var lis = listItems(el);
-      // A nested list, or an image inside an item, would be flattened away.
-      if (!lis.length || el.querySelector('li ul,li ol,img,table,iframe,pre')) { keepHtml(el); return; }
+      // A nested list would lose its nesting in a flat list block: kept as
+      // Custom HTML. Code, images or tables inside items split the list.
+      if (!lis.length || el.querySelector('li ul,li ol')) { keepHtml(el); return; }
+      if (el.querySelector('img,table,iframe,pre,blockquote,figure,video,audio,details')) { splitList(el); return; }
       var ld = { style: tag === 'OL' ? 'ol' : 'ul', items: lis };
       if (tag === 'OL' && parseInt(el.getAttribute('start'), 10) > 1) ld.start = parseInt(el.getAttribute('start'), 10);
       if (tag === 'OL' && el.hasAttribute('reversed')) ld.reversed = true;

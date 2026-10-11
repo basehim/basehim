@@ -166,6 +166,33 @@ Override with `capability_type` only if you've created matching capabilities.
 
 `post` and `page` are owned by core and cannot be re-registered.
 
+## Content formats
+
+A post's `content_format` says how its `content` is stored:
+
+| Format | Stored as | On the site |
+|---|---|---|
+| `blocks` | the block editor's JSON | rendered block by block |
+| `html` (default) | HTML | printed as it is |
+| `markdown` | Markdown | converted to HTML |
+
+Write whichever suits the source: `$this->api()->posts()->create([... 'content_format' => 'markdown'])`,
+or the same field through REST and MCP.
+
+**Core trusts the content over the label.** Block JSON saved as `html` is
+still rendered as blocks, and since 1.2.48 Markdown saved as `html` (the
+default, so a common slip for AI tools and scripts) is rendered as Markdown
+(`Markdown::looksLikeMarkdown()`). The check is strict: any block-level HTML
+tag or WordPress block comment means HTML, and plain prose with a stray
+asterisk is never taken for Markdown.
+
+**Markdown opens in the visual editor.** When someone edits a Markdown post,
+it is converted to blocks on the spot (headings, lists, code, tables,
+images, quotes; a nested list stays one Custom HTML block). Nothing changes in
+the database until they save; **Keep Markdown** puts the original back
+untouched. So it is safe to keep generating drafts in Markdown: authors get
+normal blocks to edit.
+
 ## Hooks
 
 `$this->addAction($name, $callback, $priority = 10)` for side effects,

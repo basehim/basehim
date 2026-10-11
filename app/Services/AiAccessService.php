@@ -215,7 +215,7 @@ final class AiAccessService
         try {
             if ($fmt === 'blocks' || (ltrim($raw) !== '' && ltrim($raw)[0] === '{')) {
                 $raw = BlockRenderer::render($raw, $this->hooks() ?? new HookRegistry());
-            } elseif ($fmt === 'markdown') {
+            } elseif ($fmt === 'markdown' || Markdown::looksLikeMarkdown($raw)) {
                 $raw = Markdown::toHtml($raw);
             }
         } catch (\Throwable) {}

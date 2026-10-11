@@ -1,0 +1,83 @@
+/*
+ * Shared admin UI components that live outside the main layout's inline
+ * styles, so both admin layouts (and the media picker) get them.
+ * See docs/ADMIN-UI.md.
+ */
+
+/* ── Loader: the dark pill with a spinner and a short message ─────────────
+   One design wherever the admin waits on the server: next to a button
+   (Save draft), over an image (the media library's full-size preview), in a
+   panel. JavaScript: bhLoader(anchor, 'Saving…', { place }) — see app.php.   */
+.bh-loader {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    background: rgba(15, 23, 42, .72); color: #fff;
+    font: 500 12px/1.2 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    white-space: nowrap; vertical-align: middle; pointer-events: none;
+    transition: opacity .18s ease, background-color .18s ease;
+}
+.bh-loader__spin {
+    width: 14px; height: 14px; flex: 0 0 auto; box-sizing: border-box;
+    border-radius: 50%; border: 2px solid rgba(255, 255, 255, .35); border-top-color: #fff;
+    animation: bh-loader-spin .7s linear infinite;
+}
+.bh-loader.is-done { background: rgba(4, 120, 87, .9); }
+.bh-loader.is-error { background: rgba(185, 28, 28, .9); pointer-events: auto; }
+.bh-loader.is-done .bh-loader__spin,
+.bh-loader.is-error .bh-loader__spin { animation: none; border: 0; width: auto; height: auto; }
+.bh-loader.is-done .bh-loader__spin::before { content: "\2713"; font-size: 12px; line-height: 1; }
+.bh-loader.is-error .bh-loader__spin::before { content: "!"; font-weight: 700; font-size: 12px; line-height: 1; }
+.bh-loader.is-leaving { opacity: 0; }
+/* Placed over something (an image): centred on it. */
+.bh-loader--over { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+/* Next to a button: a little breathing room. */
+.bh-loader--before { margin-right: 8px; }
+.bh-loader--after { margin-left: 8px; }
+@keyframes bh-loader-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bh-loader__spin { animation-duration: 2s; } }
+
+/* ── Tag box (post editor) ───────────────────────────────────────────────── */
+.bh-tags { display: grid; gap: 10px; }
+.bh-tags__chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
+.bh-tags__chips:empty { display: none; }
+.bh-tag {
+    display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+    padding: 3px 4px 3px 9px; border-radius: 999px;
+    background: #eef2ff; color: #3730a3; font-size: 12.5px; line-height: 1.4;
+}
+.bh-tag__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-tag.is-new { background: #fefce8; color: #854d0e; box-shadow: inset 0 0 0 1px #fde68a; }
+.bh-tag.is-new .bh-tag__name::after { content: " (new)"; opacity: .7; }
+.bh-tag.is-busy { opacity: .55; }
+.bh-tag__x {
+    display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none;
+    border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer;
+    font-size: 14px; line-height: 1; padding: 0;
+}
+.bh-tag__x:hover, .bh-tag__x:focus-visible { background: rgba(55, 48, 163, .14); outline: none; }
+.bh-tags__field { position: relative; }
+.bh-tags__suggest {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
+    margin: 0; padding: 4px; list-style: none; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, .35);
+    max-height: 240px; overflow-y: auto;
+}
+.bh-tags__suggest[hidden] { display: none; }
+.bh-tags__opt {
+    display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 6px;
+    font-size: 13px; color: #0f172a; cursor: pointer;
+}
+.bh-tags__opt[aria-selected="true"], .bh-tags__opt:hover { background: #eff6ff; }
+.bh-tags__opt small { color: #64748b; }
+.bh-tags__opt mark { background: none; color: inherit; font-weight: 600; }
+.bh-tags__hint { font-size: 12px; color: #64748b; }
+.bh-tags__group { display: grid; gap: 6px; }
+.bh-tags__group-title { font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: #64748b; }
+.bh-tags__cloud { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.bh-tags__pick {
+    border: 0; background: none; padding: 1px 2px; cursor: pointer;
+    color: #2563eb; font-size: 12.5px; text-decoration: none;
+}
+.bh-tags__pick:hover, .bh-tags__pick:focus-visible { text-decoration: underline; outline: none; }
+.bh-tags__pick[disabled] { color: #94a3b8; cursor: default; text-decoration: none; }
+.bh-tags__pick small { color: #94a3b8; }

@@ -33,6 +33,10 @@ $statusVal  = $isEdit ? (string) $post['status'] : 'draft';
 $commentVal = $isEdit ? (string) $post['comment_status'] : 'open';
 $formatVal  = $isEdit ? (string) ($post['content_format'] ?? 'blocks') : 'blocks';
 if (!in_array($formatVal, ['blocks', 'html', 'markdown'], true)) $formatVal = 'html';
+// Markdown saved under the default 'html' format (API, MCP, AI tools) is
+// treated as the Markdown it is (1.2.48), so it converts to blocks properly.
+$mdSniffed  = $formatVal === 'html' && \App\Services\Markdown::looksLikeMarkdown($contentVal);
+if ($mdSniffed) $formatVal = 'markdown';
 $isBlocks   = $formatVal === 'blocks';
 $isLive     = $statusVal === 'published';
 
@@ -66,6 +70,17 @@ $nbeConfig  = (array) $nbeHooks->applyFilters('editor.config', [
     'widgetRenderUrl' => $base . '/admin/widgets/render',
     'flash'           => $flash ?? null,
 ], $isEdit ? $post : null);
+// A Markdown post opens in the visual editor, converted to blocks (1.2.48).
+// The conversion is done here, by the same converter the site uses, so the
+// editor needs no round trip. Nothing is stored until the author saves.
+if ($formatVal === 'markdown' && trim($contentVal) !== '') {
+    try {
+        $nbeConfig['markdown'] = [
+            'html'    => \App\Services\Markdown::toHtml($contentVal, \App\Services\Markdown::FOR_BLOCKS),
+            'sniffed' => $mdSniffed,
+        ];
+    } catch (\Throwable) {}
+}
 $v = urlencode(BASEHIM_VERSION);
 ?>
 <?php foreach ($nbeStyles as $nbeCss): ?>
@@ -375,17 +390,23 @@ $v = urlencode(BASEHIM_VERSION);
 
     // HTML → blocks: paragraphs, headings, images, lists, tables… What blocks
     // cannot hold without loss (a form, a script) stays a Custom HTML block.
-    function convertInto(html) {
+    function convertInto(html, opts) {
+        opts = opts || {};
         var blocks = [];
         try { blocks = BasehimEditor.htmlToBlocks ? BasehimEditor.htmlToBlocks(html) : []; } catch (e) { blocks = []; }
         if (!blocks.length) blocks = [{ type: 'html', data: { html: html } }];
         BasehimEditor.setBlocks(blocks);
+        if (opts.fresh && BasehimEditor.resetHistory) BasehimEditor.resetHistory();
         var kept = blocks.filter(function (b) { return b.type === 'html'; }).length;
-        note('Converted into ' + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') + '.'
-            + (kept ? ' ' + kept + ' part' + (kept === 1 ? '' : 's') + ' that blocks can\'t represent (forms, scripts…) ' + (kept === 1 ? 'was' : 'were') + ' kept as Custom HTML.' : '')
-            + ' Not what you expected? Leave without saving to keep the original.');
+        var n = blocks.length + ' block' + (blocks.length === 1 ? '' : 's');
+        var msg = opts.onOpen
+            ? 'This ' + (cfg.typeLabel || 'post').toLowerCase() + ' is written in Markdown, so it has been opened as ' + n + '. Saving stores it as blocks.'
+            : 'Converted into ' + n + '.';
+        if (kept) msg += ' ' + kept + ' part' + (kept === 1 ? '' : 's') + ' with no matching block (a nested list, a form, a script…) ' + (kept === 1 ? 'is' : 'are') + ' kept as Custom HTML.';
+        if (!opts.onOpen) msg += ' Not what you expected? Leave without saving to keep the original.';
+        note(msg, opts.action);
     }
-    function note(msg) {
+    function note(msg, action) {
         var n = document.getElementById('nbe-convert-note');
         if (!n) {
             n = document.createElement('div'); n.id = 'nbe-convert-note'; n.setAttribute('role', 'status');
@@ -394,10 +415,66 @@ $v = urlencode(BASEHIM_VERSION);
         }
         n.innerHTML = '<span></span><button type="button" aria-label="Dismiss">&times;</button>';
         n.firstChild.textContent = msg;
+        if (action) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.className = 'bhe-convert-note__action'; b.textContent = action.label;
+            b.onclick = function () { action.run(); };
+            n.insertBefore(b, n.lastChild);
+        }
         n.lastChild.onclick = function () { n.remove(); };
     }
 
+    // The same test as Markdown::looksLikeMarkdown() in PHP: HTML source that
+    // is really Markdown converts as Markdown.
+    function isMarkdownDoc(t) {
+        t = String(t || '').replace(/\r\n?/g, '\n');
+        if (!t.trim() || t.trim().charAt(0) === '{') return false;
+        var fences = (t.match(/^(?:```|~~~)/gm) || []).length;
+        var out = t.replace(/^(?:```|~~~)[\s\S]*?^(?:```|~~~)[ \t]*$/gm, '').replace(/`[^`\n]+`/g, '');
+        if (/<(p|div|h[1-6]|ul|ol|li|table|tr|td|figure|img|br|section|article|blockquote|pre|iframe|span|strong|em|a)\b[^>]*>|<!-- \/?wp:/i.test(out)) return false;
+        var kinds = 0, headings = (out.match(/^#{1,6}\s+\S/gm) || []).length;
+        if (headings) kinds++;
+        if ((out.match(/^\s{0,3}(?:[-*+]|\d{1,3}[.)])\s+\S/gm) || []).length >= 2) kinds++;
+        if (fences >= 2) kinds++;
+        if (/\*\*[^*\n]+\*\*|__[^_\n]+__/.test(out)) kinds++;
+        if (/!?\[[^\]\n]+\]\([^)\s]+[^)]*\)/.test(out)) kinds++;
+        if (/^\s*\|.*\|\s*\n\s*\|?\s*:?-{3,}/m.test(out)) kinds++;
+        if (/^>\s?\S/m.test(out)) kinds++;
+        return kinds >= 2 || fences >= 2 || headings >= 2;
+    }
+
+    // -- A Markdown post opens in the visual editor (1.2.48) -----------------
+    // cfg.markdown.html is the post converted on the server. The original
+    // Markdown is kept here; "Keep Markdown" puts it back, untouched, and is
+    // remembered for this post in this browser.
+    var suppress = false;
+    function openMarkdownAsBlocks() {
+        var md = cfg.markdown;
+        if (!md || typeof md.html !== 'string' || current !== 'markdown' || !window.BasehimEditor || !BasehimEditor.setBlocks) return;
+        var keepKey = 'bhe-keep-markdown-' + (cfg.postId || 'new');
+        try { if (localStorage.getItem(keepKey) === '1') return; } catch (e) {}
+        var original = raw.value;
+        sel.value = 'blocks'; current = 'blocks';
+        suppress = true; sel.dispatchEvent(new Event('change', { bubbles: true })); suppress = false;
+        show(true);
+        convertInto(md.html, { fresh: true, onOpen: true, action: { label: 'Keep Markdown', run: function () {
+            try { localStorage.setItem(keepKey, '1'); } catch (e) {}
+            sel.value = 'markdown'; current = 'markdown';
+            suppress = true; sel.dispatchEvent(new Event('change', { bubbles: true })); suppress = false;
+            show(false);
+            raw.value = original;
+            try { window.BasehimEditorDirty = false; } catch (e) {}
+            document.dispatchEvent(new CustomEvent('bh:editor-baseline'));
+            note('Kept as Markdown. To edit it visually later, choose Visual editor in the ⋮ menu.');
+        } } });
+        try { window.BasehimEditorDirty = false; } catch (e) {}
+        document.dispatchEvent(new CustomEvent('bh:editor-baseline'));
+    }
+    if (document.querySelector('.bhe-list--root') && window.BasehimEditor && BasehimEditor.setBlocks) openMarkdownAsBlocks();
+    else document.addEventListener('bh-editor:ready', function () { setTimeout(openMarkdownAsBlocks, 0); });
+
     sel.addEventListener('change', function () {
+        if (suppress) return;
         var from = current, to = sel.value;
         current = to;
         var isBlocks = to === 'blocks';
@@ -411,10 +488,10 @@ $v = urlencode(BASEHIM_VERSION);
                     if (doc && Array.isArray(doc.blocks)) { BasehimEditor.setBlocks(doc.blocks); return; }
                 } catch (e) { /* not JSON */ }
                 if (val.trim() === '') { BasehimEditor.setBlocks([{ type: 'paragraph', data: {} }]); return; }
-                if (from === 'markdown' && window.Basehim && Basehim.ajax) {
+                if ((from === 'markdown' || isMarkdownDoc(val)) && window.Basehim && Basehim.ajax) {
                     // posts.render through the AJAX gateway (1.2.47).
-                    Basehim.ajax.request('posts.render', { from: 'markdown', content: val })
-                        .then(function (d) { convertInto(d && typeof d.html === 'string' ? d.html : val); })
+                    Basehim.ajax.request('posts.render', { from: 'markdown', content: val, for: 'blocks' })
+                        .then(function (d) { convertInto(d && typeof d.html === 'string' ? d.html : val, { from: 'markdown' }); })
                         .catch(function () { convertInto(val); });
                     return;
                 }
@@ -560,6 +637,12 @@ $v = urlencode(BASEHIM_VERSION);
     });
     // Save draft (AJAX) keeps the page: what was just saved is the new baseline.
     document.addEventListener('bh:post-saved', function () {
+        baseline = snapshot();
+        window.BasehimEditorDirty = false;
+    });
+    // The editor converted the post on open (Markdown → blocks) or put the
+    // original back: that is the starting point, not an edit.
+    document.addEventListener('bh:editor-baseline', function () {
         baseline = snapshot();
         window.BasehimEditorDirty = false;
     });

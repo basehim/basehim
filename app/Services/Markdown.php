@@ -26,17 +26,83 @@ final class Markdown
     /** @var string[] */
     private array $codeStore = [];
 
-    public static function toHtml(string $md): string
+    /**
+     * Options for converting into editor blocks (1.2.48). Off for the public
+     * site, so published Markdown posts render exactly as before.
+     *
+     *  - breaks: 'smart' keeps a single line break where the writer clearly
+     *    meant one (a line ending a sentence or a "Q:" / "A:" label), and
+     *    joins hard-wrapped prose as CommonMark does.
+     *  - bold_headings: a paragraph that is nothing but **bold text** (a
+     *    common way to write headings) becomes a heading, one level below the
+     *    document's own # headings.
+     */
+    public const FOR_BLOCKS = ['breaks' => 'smart', 'bold_headings' => true];
+
+    private array $opts = [];
+    private int $boldHeadingLevel = 2;
+
+    public function __construct(array $opts = [])
     {
-        return (new self())->render($md);
+        $this->opts = $opts;
+    }
+
+    public static function toHtml(string $md, array $opts = []): string
+    {
+        return (new self($opts))->render($md);
     }
 
     public function render(string $md): string
     {
         $md = str_replace(["\r\n", "\r"], "\n", $md);
         $md = $this->stashFencedCode($md);
+        if (!empty($this->opts['bold_headings']) && preg_match_all('/^(#{1,6})\s/m', $md, $hm)) {
+            // One level below the document's section headings. A single "#"
+            // line is the article's title, not a section level.
+            $levels = array_map('strlen', $hm[1]);
+            if (count(array_keys($levels, 1)) === 1 && count(array_unique($levels)) > 1) {
+                $levels = array_values(array_filter($levels, fn($l) => $l > 1));
+            }
+            $this->boldHeadingLevel = min(4, min($levels) + 1);
+        }
         $html = $this->blocks($md);
         return $this->restoreCode($html);
+    }
+
+    /**
+     * Whether $content is Markdown, whatever its content_format says.
+     *
+     * Posts written by AI tools, the REST API or MCP often arrive as Markdown
+     * stored under the default 'html' format; shown as HTML they are one run
+     * of text full of ** and *. Like BlockRenderer::looksLikeBlocks(), this
+     * trusts the content. It is strict on purpose:
+     *  - any block-level HTML tag or WordPress block comment means HTML;
+     *  - otherwise it needs two different kinds of Markdown structure
+     *    (headings, lists, code fences, bold, links, tables, quotes), or one
+     *    code fence, or two # headings.
+     * Plain prose with an odd asterisk is not Markdown.
+     */
+    public static function looksLikeMarkdown(string $content): bool
+    {
+        $c = str_replace(["\r\n", "\r"], "\n", $content);
+        if (trim($c) === '' || str_starts_with(ltrim($c), '{')) return false;
+        $fences = preg_match_all('/^(?:```|~~~)/m', $c);
+        // Look for HTML outside code samples only.
+        $outside = (string) preg_replace('/^(?:```|~~~).*?^(?:```|~~~)[ \t]*$/ms', '', $c);
+        $outside = (string) preg_replace('/`[^`\n]+`/', '', $outside);
+        if (preg_match('/<(p|div|h[1-6]|ul|ol|li|table|tr|td|figure|img|br|section|article|blockquote|pre|iframe|span|strong|em|a)\b[^>]*>|<!-- \/?wp:/i', $outside)) {
+            return false;
+        }
+        $kinds = 0;
+        $headings = preg_match_all('/^#{1,6}\s+\S/m', $outside);
+        if ($headings) $kinds++;
+        if (preg_match_all('/^\s{0,3}(?:[-*+]|\d{1,3}[.)])\s+\S/m', $outside) >= 2) $kinds++;
+        if ($fences >= 2) $kinds++;
+        if (preg_match('/\*\*[^*\n]+\*\*|__[^_\n]+__/', $outside)) $kinds++;
+        if (preg_match('/!?\[[^\]\n]+\]\([^)\s]+[^)]*\)/', $outside)) $kinds++;
+        if (preg_match('/^\s*\|.*\|\s*\n\s*\|?\s*:?-{3,}/m', $outside)) $kinds++;
+        if (preg_match('/^>\s?\S/m', $outside)) $kinds++;
+        return $kinds >= 2 || $fences >= 2 || $headings >= 2;
     }
 
     // ==================================================================
@@ -80,9 +146,32 @@ final class Markdown
 
         $flush = function () use (&$para, &$out): void {
             if (!$para) return;
-            $text = trim(implode("\n", $para));
-            if ($text !== '') $out[] = '<p>' . $this->inline($text) . '</p>';
+            $lines = $para;
             $para = [];
+            $text = trim(implode("\n", $lines));
+            if ($text === '') return;
+            // **Heading** on a line of its own (FOR_BLOCKS).
+            if (!empty($this->opts['bold_headings']) && count($lines) === 1
+                && preg_match('/^(?:\*\*(?<b>[^*\n]{1,80}?)\*\*|__(?<b>[^_\n]{1,80}?)__)\s*:?$/J', $text, $bm)
+                && !preg_match('/[.!?,;]$/', trim($bm['b']))) {
+                $lvl = $this->boldHeadingLevel;
+                $out[] = "<h{$lvl}>" . $this->inline(trim($bm['b'])) . "</h{$lvl}>";
+                return;
+            }
+            if (($this->opts['breaks'] ?? '') === 'smart' && count($lines) > 1) {
+                $text = trim($lines[0]);
+                for ($k = 1; $k < count($lines); $k++) {
+                    $prev = rtrim($lines[$k - 1]);
+                    $next = trim($lines[$k]);
+                    // A sentence that ends at the line end, or a "Label:" line,
+                    // was a deliberate break; anything else is hard-wrapped prose.
+                    $keep = preg_match('/[.!?:;)"\'\x{201D}]$/u', $prev)
+                        || preg_match('/^[\p{Lu}][\p{L}\d ]{0,24}:\s/u', $next)
+                        || str_ends_with($prev, '  ');
+                    $text .= ($keep ? "<br>\n" : "\n") . $next;
+                }
+            }
+            $out[] = '<p>' . $this->inline($text) . '</p>';
         };
 
         for ($i = 0; $i < count($lines); $i++) {
@@ -201,7 +290,9 @@ final class Markdown
         }
         if ($cur !== null) $items[] = $cur;
 
-        $html = "<{$tag}>";
+        // "3. Third step" starts the list at 3, as CommonMark does.
+        $start = $ordered && preg_match('/^(\d{1,9})/', $first, $sm) ? (int) $sm[1] : 1;
+        $html = $start > 1 ? "<ol start=\"{$start}\">" : "<{$tag}>";
         foreach ($items as $it) {
             $text = $it['text'];
             // GitHub-style task list

@@ -63,7 +63,11 @@ final class Application
                 if ($format === 'blocks' || \App\Services\BlockRenderer::looksLikeBlocks($content)) {
                     return \App\Services\BlockRenderer::render($content, $hooks);
                 }
-                if ($format === 'markdown') {
+                // Markdown stored under the default 'html' format (common for
+                // posts written through the API, MCP or AI tools) printed its
+                // ** and * on the public site. Same self-correction (1.2.48).
+                if ($format === 'markdown'
+                    || (($format === 'html' || $format === '') && \App\Services\Markdown::looksLikeMarkdown($content))) {
                     return \App\Services\Markdown::toHtml($content);
                 }
                 return $content;

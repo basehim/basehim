@@ -96,7 +96,7 @@ $ajax->register('posts.render', [
     'capability'  => 'edit_posts',
     'area'        => '/admin/posts',
     'max_body'    => 1048576,
-    'input'       => ['content' => 'string', 'from' => 'string|in:blocks,markdown'],
+    'input'       => ['content' => 'string', 'from' => 'string|in:blocks,markdown', 'for' => 'string|in:blocks'],
     'description' => 'Render block JSON or Markdown to HTML (switching the editor to source view and back).',
 ]);
 

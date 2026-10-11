@@ -608,7 +608,7 @@ POST action also needs the CSRF token; every one is rate-limited.
 |---|---|---|---|
 | `core.csrf` | GET | anyone | The session's current CSRF token |
 | `posts.save_draft` | POST | the type's editors (own; others' with `edit_others_*`) | Save the editor's post as a draft or pending review; creates it on the first save. Idempotent. Never changes a published post (409 `ALREADY_PUBLISHED`) |
-| `posts.render` | POST | `edit_posts` | Block JSON or Markdown → HTML |
+| `posts.render` | POST | `edit_posts` | Block JSON or Markdown → HTML. With `for: 'blocks'`, Markdown is converted for the visual editor (bold-only lines become headings, deliberate line breaks are kept) |
 | `posts.templates` | GET | `edit_posts` | Block templates for the inserter |
 | `posts.tag_add`, `posts.tag_remove` | POST | whoever may edit the post | Add or remove a tag at once; a new name is kept pending until the post is published |
 | `terms.tag_suggest`, `terms.tag_overview` | GET | `edit_posts` | Tag typeahead; most used and recently used tags |
