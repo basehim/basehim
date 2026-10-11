@@ -27,6 +27,22 @@ class AppService
     /** Cached app instances, keyed by slug. */
     private array $instances = [];
 
+    /**
+     * Slugs whose boot() ran in this request — i.e. apps that are active.
+     * An app instance loaded only to fire a lifecycle method (onActivate,
+     * onUninstall …) is not in here, so registrations that are meant only for
+     * running apps (AJAX actions) can tell the difference.
+     *
+     * @var array<string,true>
+     */
+    private array $booted = [];
+
+    /** True when the app's boot() ran in this request. */
+    public function isBooted(string $slug): bool
+    {
+        return isset($this->booted[$slug]);
+    }
+
     /** Resolved directory per slug, filled by scan(). slug => absolute path. */
     private array $dirCache = [];
 
@@ -784,6 +800,7 @@ class AppService
         if (isset($this->instances[$slug])) {
             $instance = $this->instances[$slug];
             if ($callBoot && method_exists($instance, 'boot')) {
+                $this->booted[$slug] = true;
                 $this->callBoot($instance, $app);
             }
             return $instance;
@@ -824,6 +841,9 @@ class AppService
         $this->instances[$slug] = $instance;
 
         if ($callBoot && method_exists($instance, 'boot')) {
+            // Marked before boot() runs, because boot() is where an app
+            // registers what needs this flag.
+            $this->booted[$slug] = true;
             $this->callBoot($instance, $app);
         }
 

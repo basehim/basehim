@@ -186,7 +186,9 @@ final class Router
              * never fire for the ordinary case of an old permalink. Only a 404
              * is offered around; any other status means the route handled it.
              */
-            if ($response->getStatus() === 404) {
+            // The AJAX gateway's 404 is a JSON answer ("no such action"), not a
+            // missing page: a redirect or custom-404 app must not replace it.
+            if ($response->getStatus() === 404 && $path !== Request::AJAX_PATH) {
                 $handled = $this->offerMiss($request, $path);
                 if ($handled instanceof Response) {
                     $this->emit($handled);

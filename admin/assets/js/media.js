@@ -281,47 +281,31 @@
 
         function saveMeta() {
             if (!selected) return;
-            var id = selected.id;
-            var body = new URLSearchParams();
-            body.set('alt_text', altIn.value);
-            body.set('caption', capIn.value);
-            // The same token the uploader uses, from body[data-csrf]. There is no
-            // csrf-token meta tag in the admin layout, so looking for one would
-            // send an empty token and be refused with a 419.
-            body.set('_csrf', CSRF);
+            var item = selected;
 
             saveMsg.textContent = 'Saving…';
             saveMsg.className = 'nm-savestate';
 
-            fetch(url('/admin/media/' + encodeURIComponent(id) + '/update'), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                body: body.toString()
-            }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-              .then(function (res) {
-                if (!res.ok || res.j.error) {
-                    saveMsg.textContent = res.j.error || 'Could not save.';
-                    saveMsg.className = 'nm-savestate is-error';
-                    return;
-                }
+            // Through the AJAX gateway (media.update): the token, errors and
+            // the "your own files only" rule are handled there.
+            window.Basehim.ajax.request('media.update', {
+                id: parseInt(item.id, 10),
+                alt_text: altIn.value,
+                caption: capIn.value
+            }).then(function (data) {
                 // Keep the in-memory copy current, so re-selecting the card shows
                 // what was typed rather than what was first loaded.
-                if (res.j.data) {
-                    selected.alt_text = res.j.data.alt_text;
-                    selected.caption  = res.j.data.caption;
+                if (data && data.item) {
+                    item.alt_text = data.item.alt_text;
+                    item.caption  = data.item.caption;
                 }
                 saveMsg.textContent = 'Saved';
                 saveMsg.className = 'nm-savestate is-ok';
                 setTimeout(function () {
                     if (saveMsg.textContent === 'Saved') saveMsg.textContent = '';
                 }, 2000);
-            }).catch(function () {
-                saveMsg.textContent = 'Could not save.';
+            }).catch(function (err) {
+                saveMsg.textContent = (err && err.message) || 'Could not save.';
                 saveMsg.className = 'nm-savestate is-error';
             });
         }
@@ -333,11 +317,10 @@
 
         function loadMedia(query) {
             status.textContent = 'Loading…';
-            var q = query ? '&q=' + encodeURIComponent(query) : '';
-            fetch(url('/admin/media/json?per_page=60' + q), {
-                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-                credentials: 'same-origin'
-            }).then(function (r) { return r.json(); }).then(function (data) {
+            var params = { per_page: 60 };
+            if (query) params.q = query;
+            // media.list through the AJAX gateway (1.2.47).
+            window.Basehim.ajax.get('media.list', params).then(function (data) {
                 grid.innerHTML = '';
                 var items = data.data || [];
                 if (items.length === 0) {

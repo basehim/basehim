@@ -11,4 +11,5 @@
  */
 $__v = urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1');
 ?>
+<link rel="stylesheet" href="<?= $base ?>/admin/assets/css/ui.css?v=<?= $__v ?>">
 <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/media-picker.css?v=<?= $__v ?>">

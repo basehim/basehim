@@ -259,6 +259,7 @@ class PostController extends Controller
         if (array_filter($seoFields)) {
             $seo->savePostMeta($id, $seoFields);
         }
+        $this->settleNewTags($request, $id, (string) ($data['status'] ?? 'draft'));
 
         $this->flash('success', ucfirst($this->type) . ' created.');
         return $this->redirect($this->basePath() . "/{$id}/edit");
@@ -299,6 +300,10 @@ class PostController extends Controller
         // SEO meta
         $seoFields = $this->extractSeoData($request);
         $seo->savePostMeta((int)$id, $seoFields);
+        if ($request->input('_post_settings') !== null) {
+            $saved = $posts->find((int) $id);
+            $this->settleNewTags($request, (int) $id, (string) ($saved['status'] ?? $existing['status']));
+        }
 
         \App\Services\ActivityLogService::record($this->userId(), $this->type . '.updated', $this->type, (int)$id,
             'Updated "' . mb_substr((string) ($data['title'] ?? $existing['title'] ?? ''), 0, 80) . '"');
@@ -434,20 +439,44 @@ class PostController extends Controller
             'status' => (string)$request->input('status', 'draft'),
             'comment_status' => (string)$request->input('comment_status', 'open'),
             'featured_media_id' => $request->input('featured_media_id') ?: null,
-            'term_ids' => array_filter(array_map('intval', (array)$termIds)),
+            // Only terms that exist: one deleted in another tab used to fail the
+            // whole save on the foreign key (a 500).
+            'term_ids' => $this->app->make(\App\Services\PostEditorService::class)->existingTermIds((array) $termIds),
         ];
     }
 
+    /**
+     * Tags typed in the editor that do not exist yet (new_tags[]): attached
+     * if they now exist, created when the post is published, otherwise kept
+     * with the post until it is (PostEditorService::settleNewTags()).
+     */
+    private function settleNewTags(Request $request, int $id, string $status): void
+    {
+        /** @var \App\Services\PostEditorService $editor */
+        $editor = $this->app->make(\App\Services\PostEditorService::class);
+        if (!$editor->hasTags($this->type)) return;
+        $names = $request->input('new_tags', []);
+        if (is_string($names)) $names = [$names];
+        $names = array_values(array_filter((array) $names, 'is_string'));
+        $r = $editor->settleNewTags($id, $names, $status, $this->user(), $this->type);
+        if ($r['pending'] !== [] && in_array($status, \App\Services\PostEditorService::PUBLISHING, true)) {
+            $this->flash('info', count($r['pending']) . ' new tag(s) will be created when someone who can publish saves this post.');
+        }
+    }
+
+    /** Only the SEO fields the form sent: the rest keep their stored values. */
     private function extractSeoData(Request $request): array
     {
-        return [
-            'meta_title' => $request->input('seo_meta_title'),
-            'meta_description' => $request->input('seo_meta_description'),
-            'og_title' => $request->input('seo_og_title'),
-            'og_description' => $request->input('seo_og_description'),
-            'canonical_url' => $request->input('seo_canonical'),
-            'robots' => $request->input('seo_robots', 'index,follow'),
-            'focus_keyword' => $request->input('seo_focus'),
+        $map = [
+            'meta_title' => 'seo_meta_title', 'meta_description' => 'seo_meta_description',
+            'og_title' => 'seo_og_title', 'og_description' => 'seo_og_description',
+            'canonical_url' => 'seo_canonical', 'robots' => 'seo_robots', 'focus_keyword' => 'seo_focus',
         ];
+        $out = [];
+        foreach ($map as $key => $field) {
+            $v = $request->input($field);
+            if ($v !== null && !is_array($v)) $out[$key] = (string) $v;
+        }
+        return $out;
     }
 }

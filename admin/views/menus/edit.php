@@ -282,18 +282,6 @@
         if (kind === 'ok') setTimeout(function () { b.classList.add('hidden'); }, 2500);
     }
     function markDirty(on) { dirty = on; dirtyEl.classList.toggle('hidden', !on); }
-    function post(path, body) {
-        return fetch(BASE + path, {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify(Object.assign({ _csrf: CSRF }, body || {}))
-        }).then(function (r) {
-            return r.text().then(function (t) {
-                try { return JSON.parse(t); }
-                catch (e) { throw new Error('Unexpected server response (HTTP ' + r.status + ').'); }
-            });
-        });
-    }
 
     /* ---------------- render ---------------- */
     var BADGE = { page:'Page', post:'Post', taxonomy:'Term', custom:'Link', archive:'Archive' };
@@ -412,8 +400,8 @@
                 var vals = {};
                 editor.querySelectorAll('[data-f]').forEach(function (f) { vals[f.getAttribute('data-f')] = f.value; });
                 if (!vals.title || !vals.url) { flash('err', 'A menu item needs both a label and a URL.'); return; }
-                post('/admin/menus/' + MENU_ID + '/items/' + id, vals).then(function (d) {
-                    if (!d.ok) { flash('err', d.error || d.detail || 'Could not save that item.'); return; }
+                // menus.item_update through the AJAX gateway (1.2.47).
+                Basehim.ajax.request('menus.item_update', { menu_id: +MENU_ID, item_id: +id, title: vals.title, url: vals.url, target: vals.target || '_self', classes: vals.classes || '' }).then(function (d) {
                     var node = find(id);
                     if (node) {
                         node.title = vals.title; node.url = vals.url;
@@ -426,8 +414,7 @@
 
             row.querySelector('[data-remove]').addEventListener('click', async function () {
                 if (!(await bhConfirm('Remove this item from the menu?\n\nIts sub-items will be removed too.', { confirmLabel: 'Remove' }))) return;
-                post('/admin/menus/' + MENU_ID + '/items/' + id + '/delete', {}).then(function (d) {
-                    if (!d.ok) { flash('err', d.error || d.detail || 'Could not remove that item.'); return; }
+                Basehim.ajax.request('menus.item_remove', { menu_id: +MENU_ID, item_id: +id }).then(function (d) {
                     items = d.items || [];
                     render();
                     flash('ok', 'Item removed.');
@@ -678,8 +665,13 @@
     /* ---------------- add from pickers ---------------- */
     function addItems(payload) {
         if (!payload.length) return;
-        post('/admin/menus/' + MENU_ID + '/items/bulk', { items: payload }).then(function (d) {
-            if (!d.ok) { flash('err', d.error || d.detail || 'Could not add those items.'); return; }
+        Basehim.ajax.request('menus.items_add', { menu_id: +MENU_ID, items: payload.map(function (it) {
+            var types = ['post', 'page', 'taxonomy', 'custom', 'archive'];
+            var o = { title: String(it.title || '').slice(0, 200), url: String(it.url || '').slice(0, 500),
+                      type: types.indexOf(it.type) >= 0 ? it.type : 'custom', target: it.target === '_blank' ? '_blank' : '_self' };
+            if (it.object_id) o.object_id = +it.object_id;
+            return o;
+        }) }).then(function (d) {
             items = d.items || [];
             render();
             flash('ok', d.added + (d.added === 1 ? ' item added.' : ' items added.'));
@@ -753,8 +745,9 @@
     saveBtn.addEventListener('click', function () {
         saveBtn.disabled = true;
         document.getElementById('mb-save-txt').textContent = 'Saving…';
-        post('/admin/menus/' + MENU_ID + '/items/reorder', { tree: flatten() }).then(function (d) {
-            if (!d.ok) { flash('err', d.error || d.detail || 'Could not save the menu.'); return; }
+        Basehim.ajax.request('menus.reorder', { menu_id: +MENU_ID, tree: flatten().map(function (n) {
+            return { id: +n.id, parent_id: n.parent_id ? +n.parent_id : null };
+        }) }).then(function (d) {
             markDirty(false);
             flash('ok', 'Menu saved.');
         }).catch(function (e) {

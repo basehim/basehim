@@ -282,15 +282,14 @@ $dot = ['pass' => 'bg-emerald-400', 'warn' => 'bg-amber-400', 'fail' => 'bg-red-
         actions.style.display = '';
         delName.value = name;
         content.textContent = 'Loading…';
-        fetch(BASE + '/admin/system/log?name=' + encodeURIComponent(name) + '&lines=400', { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
+        // system.log through the AJAX gateway (1.2.47).
+        Basehim.ajax.get('system.log', { name: name, lines: 400 })
             .then(function (d) {
-                if (d.error) { content.textContent = d.error; return; }
                 var lines = d.lines || [];
                 content.textContent = lines.length ? lines.join('\n') : '(empty)';
                 content.scrollTop = content.scrollHeight;
             })
-            .catch(function () { content.textContent = 'Failed to load log.'; });
+            .catch(function (err) { content.textContent = (err && err.message) || 'Failed to load log.'; });
     }
     document.querySelectorAll('.log-file').forEach(function (b) {
         b.addEventListener('click', function () {

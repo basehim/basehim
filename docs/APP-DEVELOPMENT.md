@@ -1,7 +1,8 @@
 # Building a Basehim App
 
-Companion docs: **APP-API.md** (the `$this->api()` surface) and
-**APP-PERMISSIONS.md** (declaring and enforcing permissions).
+Companion docs: **APP-API.md** (the `$this->api()` surface),
+**APP-PERMISSIONS.md** (declaring and enforcing permissions) and
+**APP-AJAX.md** (AJAX actions called from the browser).
 
 ## Layout
 
@@ -197,6 +198,7 @@ Override with `capability_type` only if you've created matching capabilities.
 
 **Hooks** `addAction` `addFilter` `doAction` `applyFilters`
 **Routes** `get` `post` `route` `routeGroup` `adminGet` `adminPost`
+**AJAX** `ajax` `useAjaxClient` — actions browsers call through `POST /ajax` (APP-AJAX.md)
 **Admin** `addAdminMenu` `addAdminStyle` `addAdminScript` `adminView`
 **Editor** `addEditorScript` `addEditorStyle` `addEditorConfig` `registerBlockRenderer`
 **Widgets** `registerWidget`
@@ -221,6 +223,31 @@ settings, tables and active state; `onUpgrade()` runs as usual. A version that
 declares new permissions keeps running and is flagged for the site owner to
 review.
 
+## The post editor's Save draft (1.2.47)
+
+**Save draft** (and Ctrl+S on a draft) saves over AJAX through the
+`posts.save_draft` action and keeps the page open. It sends the editor's own
+fields only. If your sidebar panel puts a **named** field inside the post
+form, the editor sees a field it does not know and posts the whole form
+instead, as before, so your field is never lost. You can let the AJAX path
+run by saving your panel's data yourself:
+
+```js
+BasehimEditor.on('saved', function (post) {        // after every AJAX save
+    Basehim.ajax.request('my-app.save-panel', { post_id: post.id, value: myField.value });
+});
+document.addEventListener('bh:post-saved', function (e) { /* e.detail is the same object */ });
+```
+
+`post` holds `id`, `created` (true on the first save of a new post),
+`status`, `slug`, `edit_url`, `view_url`, `tags` and `pending_tags`. Fields
+without a `name` attribute are never sent anywhere, which is usually what a
+panel wants.
+
+Tags typed in the editor that do not exist yet are kept with the post and
+created when it is published (`PostEditorService::settleNewTags()`), by
+whoever publishes it.
+
 ## Gotchas
 
 - **`boot()` runs on every request.** Register cheaply; do real work in a route,
@@ -233,3 +260,7 @@ review.
   APP-API.md.
 - **Assets are served from a route,** not directly by Apache, so they respect
   the install's base path. Always build URLs with `$this->asset()`.
+- **For browser calls that return JSON, register an AJAX action** with
+  `$this->ajax()` rather than an `adminPost()` route. The action gets the
+  session, CSRF, capability, rate-limit and input checks without you writing
+  them; a hand-written route has to remember every one (APP-AJAX.md).

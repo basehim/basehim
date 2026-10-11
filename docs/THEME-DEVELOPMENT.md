@@ -536,6 +536,22 @@ before anything renders. `$app` and `$hooks` are in scope. Use it to register
 filters (the `seo.*` ones above, `comment_form.args`, `author_box.html` …), not
 to output anything. A failure in it is logged and the site carries on.
 
+## AJAX on the public site
+
+Interactive features (a newsletter form, a "load more" button) call actions
+through the AJAX gateway with `Basehim.ajax.request()`. The actions themselves
+are registered by an app (see APP-AJAX.md); a theme only calls them. The
+client is not loaded on the front end unless something asks for it:
+
+```php
+<?php bh_ajax_client(); ?>   <!-- before bh_head() -->
+```
+
+It prints the endpoint's URL, never a CSRF token: the client fetches one just
+before its first POST, so pages stay cacheable and visitors who never use the
+feature get no session. Show what comes back with `textContent`, not
+`innerHTML`.
+
 ## Comments
 
 Core provides the comment form. One call, wherever the template has the post:
@@ -679,6 +695,7 @@ it don't reveal a login name. `$author` never contains an email address.
 | | |
 |---|---|
 | `bh_head()`, `bh_footer()` | everything core and apps need on the page |
+| `bh_ajax_client()` | load `Basehim.ajax` on the public site (call before `bh_head()`) |
 | `bh_seo()` | this page's SEO head: `set()`, `get()`, `addJsonLd()`, `disable()`, `handOff()` |
 | `bh_seo_value($key)` | a value of this page's SEO head |
 | `bh_date()`, `bh_time()`, `bh_datetime()` | a stored time in the site timezone and formats |

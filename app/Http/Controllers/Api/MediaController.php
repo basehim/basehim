@@ -91,9 +91,14 @@ class MediaController extends ApiController
         $media = $this->app->make(MediaService::class);
         $item = $media->find((int) $id);
         if (!$item) return Response::json(['error' => 'Not found'], 404);
+        // Same rule as the admin and media.update (MediaService::userCanEdit):
+        // someone else's file needs delete_media, or edit_others_posts.
         $own = (int) ($item['author_id'] ?? 0) === (int) $user['id'];
-        $cap = $own ? 'upload_media' : 'delete_media';
-        if (!$this->userCan($cap)) return $this->forbidden($cap);
+        if ($own) {
+            if (!$this->userCan('upload_media')) return $this->forbidden('upload_media');
+        } elseif (!$this->userCan('delete_media') && !($this->userCan('upload_media') && $this->userCan('edit_others_posts'))) {
+            return $this->forbidden('delete_media');
+        }
 
         $data = [];
         foreach (['title', 'alt_text', 'caption', 'description'] as $field) {

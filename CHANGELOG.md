@@ -7,12 +7,48 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+See CHANGELOG-1.2.47.md (block editor: AJAX Save draft, tag box; three admin areas
+that had no permission rule) and CHANGELOG-1.2.46.md for the 1.2.46 release, including nine fixes made
+to the AJAX gateway before release (HTTP Basic, OPTIONS/HEAD, schema checks).
+
 ### Added
+- **AJAX gateway** (`POST /ajax`, docs/APP-AJAX.md): one endpoint for browser
+  AJAX with registered, namespaced actions. Every request passes the same
+  checks — session, CSRF token, same-origin, capability, rate limit, input
+  schema — before its handler runs. Apps register with `$this->ajax()` from
+  `boot()`; core actions live in `routes/ajax.php`. Standard JSON envelope with
+  a request ID; unexpected errors are logged, never shown.
+- `Basehim.ajax.request()` JavaScript client, loaded on every admin page;
+  `bh_ajax_client()` loads it on the public site.
+- Database-backed rate limiter (`App\Services\RateLimiter`, migration
+  `014_rate_limits.sql`) using one atomic statement per check.
+- `TRUSTED_PROXIES`: only these proxies' `X-Forwarded-For` is believed, via the
+  new `Request::clientIp()`.
+- An automated test suite (`php tests/run.php`, tests/README.md) with
+  end-to-end tests through the real front controller, and a CI job running it
+  on MariaDB.
 - `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`, and this changelog.
 - GitHub issue and pull request templates, plus a CI workflow that syntax-checks
   every PHP file on 8.1–8.4, applies all migrations against MySQL 8, and fails
   the build if an `.env` or hardcoded credential is ever committed.
 - `.gitignore` and `.gitattributes`.
+
+### Security
+- **Media ownership (IDOR).** The admin media screens checked only that a user
+  could open the media library, so an author could rename, re-caption or delete
+  an administrator's files. Deleting someone else's file now needs
+  `delete_media` (`MediaService::userCanModify()`); editing its title, alt
+  text, caption or description needs `delete_media` or `edit_others_posts`
+  (`MediaService::userCanEdit()`), so editors can still fix alt text. The same
+  rules apply in the admin, the AJAX gateway and the REST API. `/admin/media/{id}/update` also refuses
+  non-text values and no longer returns raw exception messages.
+- **CSRF token rotation.** The token is replaced at sign-in and sign-out. It
+  used to carry over from the signed-out visitor into the signed-in session.
+
+### Changed
+- The media picker and the media library save metadata through the
+  `media.update` AJAX action. `/admin/media/{id}/update` remains for older
+  callers.
 
 ### Removed — legacy naming (breaking)
 

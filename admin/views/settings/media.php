@@ -182,9 +182,8 @@
                 var finish = function (msg) { running = false; start.disabled = false; stop.hidden = true; status.textContent = msg; };
                 var step = function () {
                     if (stopped) return finish('Stopped after ' + (tot.processed + tot.skipped + tot.failed) + ' images. Start again to continue where it left off.');
-                    var body = new FormData(); body.append('_csrf', csrf); body.append('after', after); body.append('scope', scope);
-                    fetch(url, { method: 'POST', body: body, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-                        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); })
+                    // media.regenerate_batch through the AJAX gateway (1.2.47).
+                    Basehim.ajax.request('media.regenerate_batch', { after: +after || 0, scope: scope === 'all' ? 'all' : 'missing' }, { timeout: 90000 })
                         .then(function (j) {
                             ['processed', 'skipped', 'failed', 'variants'].forEach(function (k) { tot[k] += j[k] || 0; });
                             after = j.next;

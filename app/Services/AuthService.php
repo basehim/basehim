@@ -73,6 +73,10 @@ class AuthService
     public function loginSession(array $user): void
     {
         $this->session->regenerate();
+        // A new identity gets a new CSRF token. session_regenerate_id() keeps
+        // the session's data, so without this the token minted for the
+        // signed-out visitor carried straight over into the signed-in session.
+        $this->session->rotateCsrf();
         $this->session->set('user_id', (int)$user['id']);
         $this->session->set('user_role', $user['role']);
         $this->session->set('logged_in_at', time());
@@ -86,6 +90,7 @@ class AuthService
         $this->session->forget('logged_in_at');
         $this->session->forget('auth_fp');
         $this->session->forget('two_factor_pending');
+        $this->session->rotateCsrf();
         $this->session->regenerate();
     }
 

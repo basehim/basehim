@@ -49,21 +49,32 @@ final class AdminAreaPolicy
         '/admin/posts'      => 'edit_posts',
         '/admin/templates'  => 'edit_posts',
         '/admin/pages'      => 'edit_pages',
+        // Until 1.2.47 these three had no rule, so any signed-in user (an
+        // author, a contributor) could change the theme settings and custom
+        // CSS, rename or delete categories and tags, and delete menu items.
+        // tests/Unit/AdminAreaPolicyTest.php now fails for any unmapped route.
+        '/admin/customize'  => 'manage_themes',
+        '/admin/terms'      => 'manage_taxonomies',
+        '/admin/menu-items' => 'manage_menus',
     ];
 
-    public function handle(Request $request, Closure $next): mixed
+    /**
+     * Paths every signed-in user may open: their own profile and session,
+     * the dashboard. Listed so the route audit can tell "open on purpose"
+     * from "forgotten".
+     */
+    public const OPEN = ['/admin', '/admin/dashboard', '/admin/profile', '/admin/logout'];
+
+    /**
+     * The capability an admin path requires, or null when none: the core map
+     * (after the admin.area_policy filter), longest prefix first, then the
+     * menu URLs apps registered. The AJAX gateway asks the same question for
+     * actions that stand in for an admin route ('area' => '/admin/media'), so
+     * a site that changes a rule with the filter changes it for both.
+     */
+    public static function requiredFor(string $path): ?string
     {
         $app = Application::getInstance();
-        $user = $app->has('auth.user') ? $app->make('auth.user') : null;
-        if (!$user) {
-            return $next($request); // Authenticate handles unauthenticated users.
-        }
-
-        $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
-        if (defined('BASEHIM_BASE') && BASEHIM_BASE !== '' && str_starts_with($path, (string) BASEHIM_BASE)) {
-            $path = substr($path, strlen((string) BASEHIM_BASE)) ?: '/';
-        }
-
         $map = self::MAP;
         try {
             $hooks = $app->make(\App\Core\HookRegistry::class);
@@ -75,9 +86,9 @@ final class AdminAreaPolicy
         $required = null;
         $bestLen = 0;
         foreach ($map as $prefix => $cap) {
-            if (str_starts_with($path, $prefix) && strlen($prefix) > $bestLen) {
+            if (str_starts_with($path, (string) $prefix) && strlen((string) $prefix) > $bestLen) {
                 $required = $cap;
-                $bestLen = strlen($prefix);
+                $bestLen = strlen((string) $prefix);
             }
         }
 
@@ -92,6 +103,24 @@ final class AdminAreaPolicy
                 }
             }
         } catch (\Throwable) {}
+
+        return is_string($required) && $required !== '' ? $required : null;
+    }
+
+    public function handle(Request $request, Closure $next): mixed
+    {
+        $app = Application::getInstance();
+        $user = $app->has('auth.user') ? $app->make('auth.user') : null;
+        if (!$user) {
+            return $next($request); // Authenticate handles unauthenticated users.
+        }
+
+        $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+        if (defined('BASEHIM_BASE') && BASEHIM_BASE !== '' && str_starts_with($path, (string) BASEHIM_BASE)) {
+            $path = substr($path, strlen((string) BASEHIM_BASE)) ?: '/';
+        }
+
+        $required = self::requiredFor($path);
 
         if ($required === null || CheckCapability::userCan($user, $required)) {
             return $next($request);

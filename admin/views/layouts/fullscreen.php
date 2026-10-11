@@ -18,6 +18,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="<?= $base ?>/admin/assets/img/favicon-32.png">
     <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/tailwind.min.css">
     <?php $this->include('partials.admin-styles', ['base' => $base]); ?>
+    <?php $this->include('partials.ajax-client', ['base' => $base]); ?>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         html, body { height: 100%; }

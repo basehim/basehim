@@ -133,6 +133,7 @@ $flash = $flash ?? null;
     <?php /* Site timezone for scripts that show times (BasehimTime, 1.2.45). */ ?>
     <script>window.BASEHIM_TIME = <?= json_encode(\App\Core\Time::info(), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?>;</script>
     <script src="<?= $base ?>/admin/assets/js/time.js?v=<?= urlencode(BASEHIM_VERSION) ?>"></script>
+    <?php $this->include('partials.ajax-client', ['base' => $base]); ?>
 <?php
 // App-registered admin stylesheets (via $this->addAdminStyle()).
 try {
@@ -1308,9 +1309,62 @@ try {
         }
     };
 
+    // ── loader: the shared "working…" pill (admin/assets/css/ui.css) ──
+    //   var l = bhLoader(button, 'Saving draft…');        // next to the button
+    //   l.done('Draft saved');  l.fail('Could not save');  l.set('Still saving…');  l.remove();
+    // place: 'before' (default) or 'after' the anchor, 'inside' it, or 'over'
+    // it (centred; the anchor must be position:relative). done() fades out on
+    // its own after `timeout` ms (2000); fail() stays until removed or replaced.
+    // One loader per anchor: a new call replaces the previous one.
+    window.bhLoader = function (anchor, label, opts) {
+        opts = opts || {};
+        var place = opts.place || 'before';
+        var el = document.createElement('span');
+        el.className = 'bh-loader bh-loader--' + place;
+        el.setAttribute('role', 'status');
+        el.setAttribute('aria-live', 'polite');
+        el.innerHTML = '<span class="bh-loader__spin" aria-hidden="true"></span><span class="bh-loader__text"></span>';
+        var text = el.lastChild;
+        text.textContent = label || 'Working…';
+        if (anchor) {
+            if (anchor._bhLoader) anchor._bhLoader.remove();
+            if (place === 'after') anchor.insertAdjacentElement('afterend', el);
+            else if (place === 'inside' || place === 'over') anchor.appendChild(el);
+            else anchor.insertAdjacentElement('beforebegin', el);
+        }
+        var timer = null, gone = false;
+        var api = {
+            el: el,
+            set: function (msg) { if (!gone) text.textContent = msg; return api; },
+            done: function (msg, o) {
+                if (gone) return api;
+                el.classList.remove('is-error'); el.classList.add('is-done');
+                if (msg) text.textContent = msg;
+                clearTimeout(timer);
+                timer = setTimeout(api.remove, (o && o.timeout) || 2000);
+                return api;
+            },
+            fail: function (msg) {
+                if (gone) return api;
+                el.classList.remove('is-done'); el.classList.add('is-error');
+                if (msg) text.textContent = msg;
+                clearTimeout(timer);
+                return api;
+            },
+            remove: function () {
+                if (gone) return; gone = true; clearTimeout(timer);
+                el.classList.add('is-leaving');
+                setTimeout(function () { el.remove(); }, 180);
+                if (anchor && anchor._bhLoader === api) anchor._bhLoader = null;
+            }
+        };
+        if (anchor) anchor._bhLoader = api;
+        return api;
+    };
+
     // One namespace for apps that prefer it.
     window.Basehim = window.Basehim || {};
-    window.Basehim.ui = { confirm: window.bhConfirm, toast: window.bhToast, busy: window.bhBusy };
+    window.Basehim.ui = { confirm: window.bhConfirm, toast: window.bhToast, busy: window.bhBusy, loader: window.bhLoader };
     window.bhAlert = function (message, opts) { return ask(message, Object.assign({}, opts, { alert: true })); };
     window.Basehim.ui.alert = window.bhAlert;
     // alert() has nothing to answer, so it can always use the admin's dialog.
@@ -1405,8 +1459,7 @@ try {
  */
 (function () {
     var badge = document.querySelector('[data-bh-badge="comments"]');
-    if (!badge || !window.fetch) return;
-    var url = <?= json_encode(($base ?? '') . '/admin/comments/pending.json') ?>;
+    if (!badge || !window.Basehim || !window.Basehim.ajax) return;
     var busy = false;
     function paint(n) {
         n = parseInt(n, 10) || 0;
@@ -1417,8 +1470,8 @@ try {
     function refresh() {
         if (busy || document.visibilityState === 'hidden') return;
         busy = true;
-        fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' } })
-            .then(function (r) { return r.ok ? r.json() : null; })
+        // comments.pending_count through the AJAX gateway (1.2.47).
+        window.Basehim.ajax.get('comments.pending_count')
             .then(function (d) { if (d && typeof d.pending !== 'undefined') paint(d.pending); })
             .catch(function () { /* signed out, offline: leave the badge as it is */ })
             .finally(function () { busy = false; });

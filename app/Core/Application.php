@@ -258,6 +258,16 @@ final class Application
             );
         });
 
+        // AJAX gateway: the action registry (filled by routes/ajax.php and by
+        // apps' boot()) and the counters behind its rate limits.
+        $this->singleton(\App\Core\Ajax\AjaxRegistry::class, fn($app) =>
+            new \App\Core\Ajax\AjaxRegistry($app->make(Config::class)));
+        $this->singleton(\App\Services\RateLimiter::class, fn($app) =>
+            new \App\Services\RateLimiter($app->make(Database::class), $app->make(Logger::class)));
+        // Post editor rules shared by the form and the AJAX actions (1.2.47).
+        $this->singleton(\App\Services\PostEditorService::class, fn($app) =>
+            new \App\Services\PostEditorService($app->make(Database::class)));
+
         // Repositories
         $this->singleton(\App\Repositories\PostRepository::class, fn($app) =>
             new \App\Repositories\PostRepository($app->make(Database::class)));
@@ -292,6 +302,7 @@ final class Application
         $this->alias('permissions', \App\Services\PermissionBroker::class);
         $this->alias('post_types', \App\Services\PostTypeRegistry::class);
         $this->alias('themes', \App\Services\ThemeService::class);
+        $this->alias('ajax', \App\Core\Ajax\AjaxRegistry::class);
 
         // Boot apps (after services are ready)
         $this->bootApps();

@@ -1915,9 +1915,8 @@ function drawPatterns(body, q) {
   }
   if (templatesCache) { render(templatesCache); return; }
   body.appendChild(h('p', { class: 'bhe-muted', text: 'Loading patterns…' }));
-  var url = CONFIG.templatesUrl || ((CONFIG.base || '') + '/admin/posts/editor/templates');
-  fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-    .then(function (r) { return r.json(); })
+  // posts.templates through the AJAX gateway (1.2.47).
+  window.Basehim.ajax.get('posts.templates')
     .then(function (d) { templatesCache = (d && d.templates) || []; render(templatesCache); })
     .catch(function () { body.textContent = ''; body.appendChild(h('p', { class: 'bhe-muted', text: 'Could not load patterns.' })); });
 }
@@ -3709,17 +3708,14 @@ WIDGETS.forEach(function (w) { widgetById[w.key] = w; });
 function previewWidget(host, b) {
   var key = b.data.widget || '';
   if (!key) { host.innerHTML = '<div class="bhe-muted">Pick a widget.</div>'; return; }
-  if (!CONFIG.widgetRenderUrl) { host.innerHTML = '<div class="bhe-muted">Preview unavailable.</div>'; return; }
   host.innerHTML = '<div class="bhe-muted">' + icon('arrow-path', 'bhe-icon bhe-spin') + ' Loading preview…</div>';
-  var fd = new FormData();
-  fd.append('_csrf', CONFIG.csrf || '');
-  fd.append('widget', key);
-  fd.append('surface', 'editor');
-  fd.append('settings', JSON.stringify(b.data.settings || {}));
-  fetch(CONFIG.widgetRenderUrl, { method: 'POST', body: fd, credentials: 'same-origin', headers: { Accept: 'application/json' } })
-    .then(function (r) { return r.json(); })
-    .then(function (d) { host.innerHTML = d.ok ? (d.html || '<div class="bhe-muted">(empty)</div>') : '<div class="bhe-muted">' + esc(d.error || 'Preview failed') + '</div>'; })
-    .catch(function () { host.innerHTML = '<div class="bhe-muted">Preview unavailable</div>'; });
+  // widgets.render through the AJAX gateway (1.2.47). Before, the old
+  // /admin/widgets/render needed manage_apps, so authors and editors only
+  // ever saw "Preview failed".
+  var settings = b.data.settings && typeof b.data.settings === 'object' && !Array.isArray(b.data.settings) ? b.data.settings : {};
+  window.Basehim.ajax.request('widgets.render', { widget: key, surface: 'editor', settings: JSON.stringify(settings) })
+    .then(function (d) { host.innerHTML = d.html || '<div class="bhe-muted">(empty)</div>'; })
+    .catch(function (err) { host.innerHTML = '<div class="bhe-muted">' + esc(err.message || 'Preview unavailable') + '</div>'; });
 }
 
 if (WIDGETS.length) {
@@ -4582,9 +4578,102 @@ function submitForm() {
   else { var ev = new Event('submit', { cancelable: true }); if (form.dispatchEvent(ev)) form.submit(); }
 }
 function statusField() { return form ? form.querySelector('[name="status"]') : null; }
-// Ctrl+S saves with the current status: a draft stays a draft, a published
-// post is updated.
-function saveDraft() { submitForm(); }
+// Ctrl+S saves with the current status: a draft stays a draft (through the
+// AJAX gateway, without leaving the page), a published post is updated.
+function saveDraft() {
+  var btn = $id('bhe-save-draft');
+  if (btn && !btn.disabled) saveDraftAjax(btn); else submitForm();
+}
+
+// -- Save draft over AJAX (posts.save_draft, 1.2.47)
+// Every field the action understands. A field anything else added to the
+// form (an app's own sidebar panel) means the form is posted as before,
+// so nothing an app collects is ever dropped by a draft save.
+var DRAFT_FIELDS = {
+  _csrf: 1, _post_settings: 1, title: 1, slug: 1, content: 1, content_format: 1, excerpt: 1,
+  status: 1, comment_status: 1, featured_media_id: 1, 'term_ids[]': 1, 'new_tags[]': 1,
+  seo_meta_title: 1, seo_meta_description: 1, seo_focus: 1, seo_robots: 1, seo_canonical: 1
+};
+var SEO_FIELDS = { seo_meta_title: 'meta_title', seo_meta_description: 'meta_description', seo_focus: 'focus_keyword', seo_robots: 'robots', seo_canonical: 'canonical_url' };
+var draftSaving = false;
+
+function draftPayload() {
+  var p = { type: CONFIG.postType || 'post' }, seo = {}, terms = [], tags = [], foreign = false;
+  if (CONFIG.postId) p.id = CONFIG.postId;
+  Array.prototype.forEach.call(form.elements, function (el) {
+    var k = el.name;
+    if (!k || el.disabled || /^(button|submit|reset|file)$/.test(el.type)) return;
+    if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+    if (!DRAFT_FIELDS[k]) { foreign = true; return; }
+    var v = el.value;
+    if (k === 'term_ids[]') { var n = parseInt(v, 10); if (n > 0 && terms.indexOf(n) < 0) terms.push(n); return; }
+    if (k === 'new_tags[]') { if (v.trim()) tags.push(v.trim()); return; }
+    if (SEO_FIELDS[k]) { seo[SEO_FIELDS[k]] = v; return; }
+    if (k === 'featured_media_id') { var f = parseInt(v, 10); p.featured_media_id = f > 0 ? f : null; return; }
+    if (k === 'status') { p.status = v === 'pending' ? 'pending' : 'draft'; return; }
+    if (k === '_csrf' || k === '_post_settings') return;
+    p[k] = v;
+  });
+  if (foreign) return null;
+  // The term panels are there: send the list even when empty, so unticking
+  // the last category or removing the last tag is saved too.
+  if (form.querySelector('[data-bhe-panel="categories"], [data-bhe-panel="tags"]')) { p.term_ids = terms; p.new_tags = tags; }
+  if (Object.keys(seo).length) p.seo = seo;
+  return p;
+}
+
+function saveDraftAjax(btn) {
+  if (draftSaving) return;
+  if (!window.Basehim || !window.Basehim.ajax) { submitForm(); return; }
+  if (isBlocksMode()) { emit('save', getBlocks()); syncField(); }
+  var t = form.querySelector('[name="title"]');
+  if (t && t.value.trim() === '') t.value = 'Untitled';
+  var payload = draftPayload();
+  if (!payload) { submitForm(); return; }
+
+  draftSaving = true;
+  btn.disabled = true; btn.setAttribute('aria-busy', 'true');
+  var loader = window.bhLoader ? window.bhLoader(btn, 'Saving draft…') : null;
+  var st = $id('bhe-save-state'); if (st) st.textContent = '';
+
+  window.Basehim.ajax.request('posts.save_draft', payload, { idempotencyKey: true, timeout: 60000 })
+    .then(function (d) {
+      applySavedDraft(d);
+      if (loader) loader.done('Draft saved');
+      if (st) st.textContent = 'Saved ' + (d.saved_at_text || '');
+      emit('saved', d);
+      document.dispatchEvent(new CustomEvent('bh:post-saved', { detail: d }));
+    })
+    .catch(function (err) {
+      // Too big for one AJAX request (over 1 MB): the form has no such limit.
+      if (err && err.code === 'PAYLOAD_TOO_LARGE') { if (loader) loader.remove(); submitForm(); return; }
+      var msg = (err && err.message) || 'Could not save the draft.';
+      if (loader) loader.fail('Not saved'); else if (st) st.textContent = 'Not saved';
+      toast(msg, 'error');
+    })
+    .then(function () { draftSaving = false; btn.disabled = false; btn.removeAttribute('aria-busy'); });
+}
+
+function applySavedDraft(d) {
+  if (!d || !d.id) return;
+  CONFIG.postId = d.id;
+  if (d.created) {
+    // The page now edits this post: later saves (and Publish) go to it.
+    if (d.action_url) form.setAttribute('action', d.action_url);
+    try { if (d.edit_url) window.history.replaceState(window.history.state, '', d.edit_url); } catch (e) {}
+  }
+  var slug = form.querySelector('[name="slug"]'); if (slug && d.slug) slug.value = d.slug;
+  // A new post gets the Preview link a reload would have shown.
+  var pub = $id('bhe-publish');
+  if (d.view_url && pub && !document.querySelector('[data-bhe-preview-link], .bhe-header__right a[target="_blank"]')) {
+    var a = h('a', { class: 'bhe-btn bhe-btn--tertiary bhe-hide-mobile', href: d.view_url, target: '_blank', rel: 'noopener',
+                     title: 'Preview — only signed-in editors can see it', 'data-bhe-preview-link': '' });
+    a.innerHTML = 'Preview ' + icon('arrow-top-right-on-square', 'bhe-icon');
+    pub.parentNode.insertBefore(a, pub);
+  }
+  var s = statusField(); if (s && d.status) s.value = d.status;
+  try { window.BasehimEditorDirty = false; } catch (e) {}
+}
 function wireForm() {
   if (!form) return;
   form.addEventListener('submit', function () {
@@ -4604,9 +4693,13 @@ function wireForm() {
     }
   });
   var draft = $id('bhe-save-draft');
-  if (draft) draft.addEventListener('click', function () {
+  if (draft) draft.addEventListener('click', function (e) {
     var s = statusField();
     if (s && draft.getAttribute('data-status')) s.value = draft.getAttribute('data-status');
+    // Saved over AJAX: the page stays put (saveDraftAjax falls back to the
+    // form when it cannot).
+    e.preventDefault();
+    saveDraftAjax(draft);
   });
   if (formatField) formatField.addEventListener('change', function () { setTimeout(updateModeUi, 0); });
 }

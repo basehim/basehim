@@ -148,6 +148,7 @@ class MenuController extends Controller
             $title = trim((string) ($it['title'] ?? ''));
             $url   = trim((string) ($it['url'] ?? ''));
             if ($title === '' || $url === '') continue;
+            if (!self::safeMenuUrl($url)) continue;
             $type = (string) ($it['type'] ?? 'custom');
             if (!in_array($type, ['post', 'page', 'taxonomy', 'custom', 'archive'], true)) $type = 'custom';
             $svc->addItem((int) $id, [
@@ -189,6 +190,10 @@ class MenuController extends Controller
         if (!$svc->find((int) $id)) return \App\Core\Response::json(['ok' => false, 'error' => 'Menu not found.'], 404);
 
         $raw = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        // The item must be in this menu, and its link must not be a script
+        // (javascript:, data:), which would run on the public site (1.2.47).
+        if (!$this->itemInMenu((int) $id, (int) $itemId)) return \App\Core\Response::json(['ok' => false, 'error' => 'Menu item not found.'], 404);
+        if (!self::safeMenuUrl(trim((string) ($raw['url'] ?? '')))) return \App\Core\Response::json(['ok' => false, 'error' => 'A menu link must be a web address, a path, mailto: or tel:.'], 422);
         $ok = $svc->updateItem((int) $itemId, [
             'title'   => mb_substr(trim((string) ($raw['title'] ?? '')), 0, 200),
             'url'     => mb_substr(trim((string) ($raw['url'] ?? '')), 0, 500),
@@ -206,6 +211,7 @@ class MenuController extends Controller
         }
         /** @var MenuService $svc */
         $svc = $this->app->make(MenuService::class);
+        if (!$this->itemInMenu((int) $id, (int) $itemId)) return \App\Core\Response::json(['ok' => false, 'error' => 'Menu item not found.'], 404);
         $ok = $svc->deleteItem((int) $itemId);
         return \App\Core\Response::json(['ok' => $ok, 'items' => $svc->items((int) $id)]);
     }
@@ -234,5 +240,20 @@ class MenuController extends Controller
         $menus->deleteItem((int)$id);
         $this->flash('success', 'Item removed.');
         return $this->back();
+    }
+
+    private function itemInMenu(int $menuId, int $itemId): bool
+    {
+        return (bool) $this->app->make(\App\Core\Database::class)->selectOne(
+            'SELECT id FROM {menu_items} WHERE id = :i AND menu_id = :m', ['i' => $itemId, 'm' => $menuId]);
+    }
+
+    /** Relative, #fragment, http(s), mailto: or tel: — never javascript: or data:. */
+    private static function safeMenuUrl(string $url): bool
+    {
+        // Browsers drop tabs, newlines and other controls inside a URL, so
+        // "java\tscript:" is javascript: — look at the URL without them.
+        $probe = preg_replace('/[\x00-\x20\x7F]+/', '', $url) ?? '';
+        return (bool) preg_match('#^(/|\#|\?|https?://|mailto:|tel:)#i', $probe) || !preg_match('#^[a-z][a-z0-9+.\-]*:#i', $probe);
     }
 }

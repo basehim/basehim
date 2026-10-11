@@ -266,6 +266,59 @@ abstract class App
     }
 
     // ------------------------------------------------------------------
+    // AJAX actions — called from the browser through POST /ajax.
+    // ------------------------------------------------------------------
+
+    /**
+     * Register an AJAX action under this app's namespace. See docs/APP-AJAX.md.
+     *
+     *     $this->ajax('save-settings', [
+     *         'handler'    => [$this, 'saveSettings'],
+     *         'capability' => 'manage_options',
+     *         'input'      => ['title' => 'required|string|max:120'],
+     *     ]);
+     *     // → the browser calls Basehim.ajax.request('my-app.save-settings', {title: '…'})
+     *
+     * Call it from boot(). It works only while the app is booted as active,
+     * so a deactivated app's actions stop existing on the next request. A bad
+     * definition is refused, written to this app's log, and returns false;
+     * the rest of boot() carries on.
+     *
+     * @return string|false the full action name, or false if refused
+     */
+    protected function ajax(string $action, array $definition): string|false
+    {
+        $name = '';
+        try {
+            if (!$this->app->make(\App\Services\AppService::class)->isBooted($this->slug)) {
+                throw new \InvalidArgumentException('AJAX actions can only be registered from boot() of an active app.');
+            }
+            $ns = \App\Core\Ajax\AjaxRegistry::namespaceForApp($this->slug);
+            if ($ns === null) {
+                throw new \InvalidArgumentException(
+                    "This app's slug '{$this->slug}' is reserved by core or cannot be an AJAX namespace."
+                );
+            }
+            $name = $ns . '.' . $action;
+            $this->app->make(\App\Core\Ajax\AjaxRegistry::class)->register($name, $definition, $this->slug);
+            return $name;
+        } catch (\InvalidArgumentException $e) {
+            $this->log('AJAX action not registered: ' . $e->getMessage(), ['action' => $name ?: $action], 'warning');
+            return false;
+        }
+    }
+
+    /**
+     * Load the AJAX client (Basehim.ajax) on public pages, for front-end
+     * features that call this app's actions. Safe to call from boot(). The
+     * admin always has the client already.
+     */
+    protected function useAjaxClient(): void
+    {
+        \App\Core\Ajax\AjaxClient::enable();
+    }
+
+    // ------------------------------------------------------------------
     // Admin menu — add a sidebar item to /admin.
     // ------------------------------------------------------------------
 

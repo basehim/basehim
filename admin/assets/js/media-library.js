@@ -74,15 +74,11 @@
   // ---- fetch + render ----
   function query(reset){
     if (reset){ state.page = 1; }
-    var params = new URLSearchParams();
-    params.set('type', state.type);
-    params.set('sort', state.sort);
-    params.set('per_page', state.perPage);
-    params.set('page', state.page);
-    if (state.q) params.set('q', state.q);
+    var params = { type: state.type, sort: state.sort, per_page: state.perPage, page: state.page };
+    if (state.q) params.q = state.q;
 
-    return fetch(BASE + '/admin/media/json?' + params.toString(), { credentials:'same-origin' })
-      .then(function(r){ return r.json(); })
+    // Through the AJAX gateway (media.list), 1.2.47.
+    return window.Basehim.ajax.get('media.list', params)
       .then(function(d){
         if (reset) state.items = [];
         state.items = state.items.concat(d.data || []);
@@ -188,7 +184,7 @@
     if (k==='image'||k==='svg'){
       // Show a generated copy at once, blurred, while the original loads.
       preview = '<img id="nml-pane-img" src="'+esc(quick || m.url)+'" alt="'+esc(m.alt_text||'')+'">'
-              + '<span class="nml-pane__loader" aria-live="polite"><span class="nml-spin"></span>Loading original…</span>';
+              + '<span class="nml-pane__loader bh-loader bh-loader--over" role="status" aria-live="polite"><span class="bh-loader__spin"></span><span class="bh-loader__text">Loading original…</span></span>';
     }
     else if (k==='video') preview = '<video src="'+esc(m.url)+'" controls></video>';
     else if (k==='audio') preview = '<div class="nml-pane__audio">'+BasehimIcon('musical-note','w-4 h-4')+'</div><audio src="'+esc(m.url)+'" controls></audio>';
@@ -263,7 +259,7 @@
     }
     var full = new Image();
     full.onload = function(){ if (token !== paneToken) return; img.src = m.url; done(); };
-    full.onerror = function(){ if (token !== paneToken) return; done(); var l = box.querySelector('.nml-pane__loader'); if (l){ l.textContent = 'Original could not be loaded'; box.classList.add('is-error'); } };
+    full.onerror = function(){ if (token !== paneToken) return; done(); var l = box.querySelector('.nml-pane__loader'); if (l){ l.classList.add('is-error'); var tx = l.querySelector('.bh-loader__text'); if (tx) tx.textContent = 'Original could not be loaded'; box.classList.add('is-error'); } };
     full.src = m.url;
   }
 
@@ -273,18 +269,21 @@
       var fields = {};
       paneBody.querySelectorAll('[data-f]').forEach(function(inp){ fields[inp.getAttribute('data-f')] = inp.value; });
       save.disabled = true; save.textContent = 'Saving…';
-      var body = new URLSearchParams(); body.set('_csrf', CSRF);
-      Object.keys(fields).forEach(function(k){ body.set(k, fields[k]); });
-      fetch(BASE+'/admin/media/'+m.id+'/update', {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':CSRF},body:body.toString()})
-        .then(function(r){return r.json();}).then(function(d){
+      // Through the AJAX gateway (media.update). Only the four descriptive
+      // fields are accepted there; anything else in the form would be refused.
+      var payload = { id: parseInt(m.id, 10) };
+      ['title', 'alt_text', 'caption', 'description'].forEach(function(k){ if (k in fields) payload[k] = fields[k]; });
+      window.Basehim.ajax.request('media.update', payload).then(function(d){
           save.disabled = false; save.textContent = 'Save changes';
-          if (d.success){
-            // Update local cache so the grid label reflects a new title.
-            for (var i=0;i<state.items.length;i++){ if(String(state.items[i].id)===String(m.id)){ state.items[i]=d.data; break; } }
-            renderGrid(); highlightSelected();
-            var sv = document.getElementById('nml-saved'); if(sv){ sv.classList.remove('hidden'); setTimeout(function(){sv.classList.add('hidden');},1500); }
-          } else { alert(d.error||'Could not save.'); }
-        }).catch(function(){ save.disabled=false; save.textContent='Save changes'; });
+          // Update local cache so the grid label reflects a new title.
+          for (var i=0;i<state.items.length;i++){ if(String(state.items[i].id)===String(m.id)){ state.items[i]=d.item; break; } }
+          renderGrid(); highlightSelected();
+          var sv = document.getElementById('nml-saved'); if(sv){ sv.classList.remove('hidden'); setTimeout(function(){sv.classList.add('hidden');},1500); }
+        }).catch(function(err){
+          save.disabled = false; save.textContent = 'Save changes';
+          var msg = (err && err.message) || 'Could not save.';
+          if (typeof window.bhToast === 'function') window.bhToast(msg, 'error'); else alert(msg);
+        });
     });
 
     var copy = document.getElementById('nml-copy');
@@ -298,16 +297,23 @@
 
     var del = document.getElementById('nml-del');
     if (del) del.addEventListener('click', function(){
-      if (!confirm('Delete this file? This cannot be undone.')) return;
-      var body = new URLSearchParams(); body.set('_csrf', CSRF);
-      fetch(BASE+'/admin/media/'+m.id+'/delete', {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':CSRF},body:body.toString()})
-        .then(function(r){ return r.ok ? r.json().catch(function(){return {success:true};}) : {error:'Delete failed'}; })
-        .then(function(d){
-          if (d && d.error){ alert(d.error); return; }
+      var ask = window.bhConfirm ? window.bhConfirm('Delete this file? This cannot be undone.', { danger: true, confirmLabel: 'Delete' })
+                                 : Promise.resolve(window.confirm('Delete this file? This cannot be undone.'));
+      ask.then(function(ok){
+        if (!ok) return;
+        var l = window.bhLoader ? window.bhLoader(del, 'Deleting…') : null;
+        del.disabled = true;
+        // media.delete (AJAX gateway): someone else's file is refused with the reason.
+        window.Basehim.ajax.request('media.delete', { ids: [parseInt(m.id, 10)] }).then(function(){
+          if (l) l.remove();
           closePane();
           state.items = state.items.filter(function(x){ return String(x.id)!==String(m.id); });
           renderGrid(); query(true);   // refresh counts
+        }).catch(function(err){
+          del.disabled = false;
+          if (l) l.fail(err.message || 'Could not delete.'); else alert(err.message || 'Could not delete.');
         });
+      });
     });
   }
 
@@ -408,18 +414,22 @@
   document.getElementById('nml-bulk-delete').addEventListener('click', function(){
     var ids = chosenIds();
     if (!ids.length) return;
-    if (!confirm('Delete ' + ids.length + ' selected file' + (ids.length===1?'':'s') + '? This cannot be undone.')) return;
+    var question = 'Delete ' + ids.length + ' selected file' + (ids.length===1?'':'s') + '? This cannot be undone.';
+    (window.bhConfirm ? window.bhConfirm(question, { danger: true, confirmLabel: 'Delete' }) : Promise.resolve(window.confirm(question))).then(function(ok){
+    if (!ok) return;
     var btn = document.getElementById('nml-bulk-delete');
     btn.disabled = true; btn.innerHTML = ''+BasehimIcon('arrow-path','w-4 h-4 animate-spin')+' Deleting…';
-    var body = new URLSearchParams(); body.set('_csrf', CSRF);
-    ids.forEach(function(id){ body.append('ids[]', id); });
-    fetch(BASE+'/admin/media/bulk-delete', {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':CSRF},body:body.toString()})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        btn.disabled = false; btn.innerHTML = ''+BasehimIcon('trash','w-4 h-4')+' Delete';
-        if (d && d.success){ chosen = {}; setSelectMode(false); query(true); }
-        else { alert((d && d.error) || 'Bulk delete failed.'); }
-      }).catch(function(){ btn.disabled=false; btn.innerHTML=''+BasehimIcon('trash','w-4 h-4')+' Delete'; alert('Bulk delete failed.'); });
+    var reset = function(){ btn.disabled = false; btn.innerHTML = ''+BasehimIcon('trash','w-4 h-4')+' Delete'; };
+    var toast = function(msg, type){ if (typeof window.bhToast === 'function') window.bhToast(msg, type); else alert(msg); };
+    // media.delete (AJAX gateway). Files the user may not delete (someone
+    // else's, without delete_media) are skipped and counted, not hidden.
+    window.Basehim.ajax.request('media.delete', { ids: ids.map(function(id){ return parseInt(id, 10); }) }).then(function(d){
+      reset();
+      chosen = {}; setSelectMode(false); query(true);
+      if (d.denied > 0) toast(d.denied + ' file' + (d.denied===1?' was':'s were') + ' not deleted: you can only delete your own files.', 'warning');
+      else if (d.failed > 0) toast(d.failed + ' file' + (d.failed===1?'':'s') + ' could not be deleted.', 'error');
+    }).catch(function(err){ reset(); toast(err.message || 'Bulk delete failed.', 'error'); });
+    });
   });
 
   pillsEl.addEventListener('click', function(ev){

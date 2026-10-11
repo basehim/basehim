@@ -221,6 +221,18 @@ if (!function_exists('bh_enqueue_script')) {
     }
 }
 
+if (!function_exists('bh_ajax_client')) {
+    /**
+     * Load the AJAX client (Basehim.ajax.request) on the public site — call it
+     * from a theme before bh_head(). Apps use $this->useAjaxClient() in boot().
+     * Prints the endpoint's URL, never a CSRF token (App\Core\Ajax\AjaxClient
+     * explains why). See docs/APP-AJAX.md.
+     */
+    function bh_ajax_client(): void {
+        \App\Core\Ajax\AjaxClient::enable();
+    }
+}
+
 /** Build one tag, escaping every attribute. An app supplies these, so none is trusted. */
 if (!function_exists('bh_asset_tag')) {
     function bh_asset_tag(string $kind, array $a): string {

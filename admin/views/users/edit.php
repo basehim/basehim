@@ -440,10 +440,9 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
     }
     function loadActivity(reset) {
         if (reset) { actPage = 1; listEl.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm"><?= icon('arrow-path', 'w-4 h-4 animate-spin mr-2') ?>Loading…</div>'; }
-        fetch(BASE + '/admin/users/' + UID + '/activity.json?filter=' + actFilter + '&page=' + actPage, { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
+        // users.activity through the AJAX gateway (1.2.47).
+        Basehim.ajax.get('users.activity', { user_id: +UID, filter: actFilter, page: actPage })
             .then(function (d) {
-                if (!d.ok) { listEl.innerHTML = '<div class="p-8 text-center text-red-500 text-sm">Could not load activity.</div>'; return; }
                 actLast = (d.meta && d.meta.last_page) || 1;
                 var html = (d.data || []).map(rowHtml).join('');
                 if (reset) {

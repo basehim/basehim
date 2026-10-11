@@ -82,15 +82,9 @@
      * frame reloads with them applied, and nothing is stored.
      */
     function saveDraft() {
-        return fetch(BASE + '/admin/customize/draft', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            credentials: 'same-origin',
-            body: new URLSearchParams({ _csrf: CSRF, values: JSON.stringify(pending) }).toString()
-        }).catch(function () { /* the reload will simply show saved values */ });
+        // customizer.draft through the AJAX gateway (1.2.47).
+        return window.Basehim.ajax.request('customizer.draft', { values: JSON.stringify(pending) })
+            .catch(function () { /* the reload will simply show saved values */ });
     }
 
     // ── reading a field ──────────────────────────────────────────────────────
@@ -216,24 +210,9 @@
         saveBtn.textContent = 'Saving…';
         setStatus('');
 
-        fetch(BASE + '/admin/customize/save', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
-            },
-            credentials: 'same-origin',
-            body: new URLSearchParams({ _csrf: CSRF, values: JSON.stringify(pending) }).toString()
-        })
-        .then(function (r) { return r.json(); })
+        // customizer.save through the AJAX gateway (1.2.47).
+        window.Basehim.ajax.request('customizer.save', { values: JSON.stringify(pending) })
         .then(function (d) {
-            if (!d.ok) {
-                setStatus(d.error || 'Could not save.', 'error');
-                saveBtn.disabled = false;
-                saveBtn.textContent = 'Save';
-                return;
-            }
             pending = {};
             saveBtn.textContent = 'Saved';
             // Skipped values are named rather than dropped quietly: a setting
@@ -244,8 +223,8 @@
                 if (!Object.keys(pending).length) { saveBtn.textContent = 'Saved'; saveBtn.disabled = true; }
             }, 1200);
         })
-        .catch(function () {
-            setStatus('The request failed. Nothing was saved.', 'error');
+        .catch(function (err) {
+            setStatus((err && err.message) || 'The request failed. Nothing was saved.', 'error');
             saveBtn.disabled = false;
             saveBtn.textContent = 'Save';
         });

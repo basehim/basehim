@@ -17,15 +17,22 @@ class SeoService
     public function savePostMeta(int $postId, array $data): void
     {
         $existing = $this->forPost($postId);
+        /*
+         * Fields that were not sent keep what they had. Before 1.2.47 every
+         * save wrote all eight, so saving in the editor (which has no Open
+         * Graph fields) erased an og:title, og:description or social image
+         * set any other way.
+         */
+        $keep = fn(string $k, mixed $default = null) => array_key_exists($k, $data) ? $data[$k] : ($existing[$k] ?? $default);
         $payload = [
-            'meta_title' => $data['meta_title'] ?? null,
-            'meta_description' => $data['meta_description'] ?? null,
-            'og_title' => $data['og_title'] ?? null,
-            'og_description' => $data['og_description'] ?? null,
-            'og_image_id' => !empty($data['og_image_id']) ? (int)$data['og_image_id'] : null,
-            'canonical_url' => $data['canonical_url'] ?? null,
-            'robots' => $data['robots'] ?? 'index,follow',
-            'focus_keyword' => $data['focus_keyword'] ?? null,
+            'meta_title' => $keep('meta_title'),
+            'meta_description' => $keep('meta_description'),
+            'og_title' => $keep('og_title'),
+            'og_description' => $keep('og_description'),
+            'og_image_id' => !empty($keep('og_image_id')) ? (int) $keep('og_image_id') : null,
+            'canonical_url' => $keep('canonical_url'),
+            'robots' => $keep('robots') ?: 'index,follow',
+            'focus_keyword' => $keep('focus_keyword'),
         ];
 
         if (!empty($data['schema_markup'])) {

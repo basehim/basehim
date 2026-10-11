@@ -77,18 +77,29 @@ class MediaController extends Controller
         if (!is_array($ids) || empty($ids)) {
             return Response::json(['error' => 'No items selected.'], 422);
         }
-        $deleted = 0; $failed = 0;
+        $deleted = 0; $failed = 0; $denied = 0;
+        $user = $this->user();
         foreach ($ids as $id) {
             $id = (int) $id;
             if ($id <= 0) continue;
             try {
+                $row = $media->find($id);
+                // Someone else's file needs delete_media (MediaService::userCanModify).
+                if ($row && !MediaService::userCanModify($user, $row)) { $denied++; $failed++; continue; }
                 if ($media->delete($id)) $deleted++; else $failed++;
             } catch (\Throwable) { $failed++; }
         }
-        return Response::json(['success' => true, 'deleted' => $deleted, 'failed' => $failed]);
+        return Response::json(['success' => true, 'deleted' => $deleted, 'failed' => $failed, 'denied' => $denied]);
     }
 
-    /** PATCH-like: update a media item's editable metadata from the detail pane. */
+    /**
+     * POST /admin/media/{id}/update — kept for older callers.
+     *
+     * Superseded by the "media.update" AJAX action, which the admin's own
+     * scripts now use. Hardened in place: it applies the same ownership rule
+     * (MediaService::userCanEdit), takes string values only, and no longer
+     * returns a raw exception message.
+     */
     public function updateMeta(Request $request, string $id): Response
     {
         if (!$this->verifyCsrf($request)) {
@@ -98,19 +109,25 @@ class MediaController extends Controller
         $media = $this->app->make(MediaService::class);
         $row = $media->find((int)$id);
         if (!$row) return Response::json(['error' => 'Not found.'], 404);
+        if (!MediaService::userCanEdit($this->user(), $row)) {
+            return Response::json(['error' => 'You can only edit your own files.'], 403);
+        }
 
         $fields = [];
-        foreach (['title', 'alt_text', 'caption', 'description'] as $f) {
+        foreach (array_keys(MediaService::META_FIELDS) as $f) {
             $v = $request->input($f, null);
-            if ($v !== null) $fields[$f] = is_string($v) ? substr($v, 0, ($f === 'title' || $f === 'alt_text') ? 255 : 65535) : $v;
+            if ($v === null) continue;
+            if (!is_string($v)) return Response::json(['error' => "The {$f} field must be text."], 422);
+            $fields[$f] = $v;
         }
         if (empty($fields)) return Response::json(['error' => 'Nothing to update.'], 422);
 
         try {
-            $media->update((int)$id, $fields);
+            $media->updateMeta((int)$id, $fields);
             return Response::json(['success' => true, 'data' => $media->find((int)$id)]);
         } catch (\Throwable $e) {
-            return Response::json(['error' => $e->getMessage()], 422);
+            try { $this->app->make(\App\Core\Logger::class)->error('Media metadata update failed: ' . $e->getMessage(), ['id' => (int) $id]); } catch (\Throwable) {}
+            return Response::json(['error' => 'Could not save the changes.'], 500);
         }
     }
 
@@ -173,6 +190,12 @@ class MediaController extends Controller
         }
         /** @var MediaService $media */
         $media = $this->app->make(MediaService::class);
+        $row = $media->find((int)$id);
+        if ($row && !MediaService::userCanModify($this->user(), $row)) {
+            if ($isAjax) return Response::json(['error' => 'You can only delete your own files.'], 403);
+            $this->flash('error', 'You can only delete your own files.');
+            return $this->redirect('/admin/media');
+        }
         $media->delete((int)$id);
         if ($isAjax) return Response::json(['success' => true]);
         $this->flash('success', 'File deleted.');

@@ -125,9 +125,10 @@
         if (!grid || lib.busy) return;
         if (reset) { lib.page = 1; grid.innerHTML = ''; }
         lib.busy = true;
-        fetch(BASE + '/admin/media/json?type=image&per_page=40&sort=newest&page=' + lib.page + '&q=' + encodeURIComponent(lib.q),
-              { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-            .then(function (r) { return r.json(); })
+        var params = { type: 'image', per_page: 40, sort: 'newest', page: lib.page };
+        if (lib.q) params.q = lib.q;
+        // media.list through the AJAX gateway (1.2.47).
+        window.Basehim.ajax.get('media.list', params)
             .then(function (d) {
                 lib.loaded = true;
                 var items = (d.data || d.items || []).filter(function (m) { return /^image\/(jpeg|png|gif|webp)$/.test(m.mime_type || ''); });

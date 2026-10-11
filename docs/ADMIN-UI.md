@@ -71,13 +71,57 @@ field is linked automatically, but explicit is better).
 | `await bhAlert(message)` | a message to acknowledge. `alert()` uses it too. |
 | `bhToast(message, type, { timeout })` | a short notice, bottom right. `type`: `success` (default), `error`, `warning`, `info`. Returns a function that dismisses it. |
 | `bhBusy(button, busy, label)` | button loading state (above). |
+| `bhLoader(anchor, label, { place })` | the shared loader pill (below) → `{ set, done, fail, remove }`. |
 
-All are also on `window.Basehim.ui` (`confirm`, `alert`, `toast`, `busy`).
+All are also on `window.Basehim.ui` (`confirm`, `alert`, `toast`, `busy`, `loader`).
+
+## Loader
+
+One loader for every wait on the server: a dark pill with a spinner and a few
+words. The media library shows it over an image while the original loads;
+the post editor shows it next to **Save draft**. Use it rather than a
+spinner of your own, so waiting looks the same everywhere.
+
+```js
+var l = bhLoader(button, 'Saving draft…');      // placed before the button
+doTheWork()
+  .then(function () { l.done('Draft saved'); }) // turns green, fades after 2s
+  .catch(function (err) { l.fail('Not saved'); bhToast(err.message, 'error'); });
+```
+
+`place`: `'before'` (default) or `'after'` the anchor, `'inside'` it, or
+`'over'` it, centred (give the anchor `position: relative`). `set(text)`
+changes the words while it runs; `remove()` takes it away at once. A second
+loader on the same anchor replaces the first. In markup:
+
+```html
+<span class="bh-loader" role="status"><span class="bh-loader__spin"></span><span class="bh-loader__text">Loading…</span></span>
+```
+
+`is-done` and `is-error` give the finished states; `bh-loader--over` centres it.
+The styles are in `admin/assets/css/ui.css`, loaded on every admin page.
 
 A form or link with `onsubmit` / `onclick="return confirm('…')"` is switched
 to `bhConfirm` automatically — but new code should call `bhConfirm` itself.
 `confirm()` can't be replaced that way (it has to answer at once), so don't
 use it in admin code.
+
+## AJAX requests (JavaScript)
+
+Call the server through the AJAX gateway rather than hand-writing `fetch()`.
+The client is loaded on every admin page and handles the CSRF token, JSON,
+errors and timeouts:
+
+```js
+bhBusy(button, true, 'Saving…');
+Basehim.ajax.request('media.update', { id: 42, alt_text: input.value })
+  .then(function (data) { bhToast('Saved'); })
+  .catch(function (err) { bhToast(err.message, 'error'); })   // err.code, err.fields, err.requestId
+  .then(function () { bhBusy(button, false); });
+```
+
+`err.message` is written for people and safe to show. Actions are registered
+in PHP; see APP-AJAX.md.
 
 ## Also automatic
 

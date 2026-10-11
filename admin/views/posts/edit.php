@@ -233,19 +233,44 @@ $v = urlencode(BASEHIM_VERSION);
                         </div>
                     </section>
 
+                    <?php
+                    // Tags (1.2.47): chips with typeahead; existing tags are
+                    // added and removed straight away over AJAX on a saved post,
+                    // new names wait as "pending" and become tags on publish.
+                    $tagEditor = $app->make(\App\Services\PostEditorService::class);
+                    $selectedTags = array_values(array_filter($tags, fn($t) => in_array((int) $t['id'], $selectedTermIds, true)));
+                    $pendingTags = $isEdit ? $tagEditor->pendingTags((int) $post['id']) : [];
+                    $tagsSaved = $isEdit ? ' data-bh-autosaved' : '';
+                    $canCreateTags = $tagEditor->canCreateTags($currentUser ?? null, $type);
+                    ?>
                     <section class="bhe-panel is-open" data-bhe-panel="tags">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Tags</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body">
-                            <div class="bhe-checklist">
-                                <?php foreach ($tags as $tag): ?>
-                                    <label class="bhe-check">
-                                        <input type="checkbox" name="term_ids[]" value="<?= (int) $tag['id'] ?>" <?= in_array((int) $tag['id'], $selectedTermIds, true) ? 'checked' : '' ?>>
-                                        <span><?= htmlspecialchars($tag['name']) ?></span>
-                                    </label>
-                                <?php endforeach; ?>
-                                <?php if (empty($tags)): ?>
-                                    <p class="bhe-muted">No tags yet. <a href="<?= $base ?>/admin/taxonomies/tag" style="color:var(--bhe-accent)">Create one</a>.</p>
-                                <?php endif; ?>
+                            <div class="bh-tags" data-bh-tags
+                                 data-post-id="<?= $isEdit ? (int) $post['id'] : '' ?>"
+                                 data-can-create="<?= $canCreateTags ? '1' : '0' ?>">
+                                <div class="bh-tags__chips" data-bh-tags-chips><?php
+                                    foreach ($selectedTags as $tg): ?><span class="bh-tag" data-id="<?= (int) $tg['id'] ?>"><span class="bh-tag__name"><?= htmlspecialchars($tg['name']) ?></span><button type="button" class="bh-tag__x" aria-label="Remove tag <?= htmlspecialchars($tg['name']) ?>">&times;</button><input type="hidden" name="term_ids[]" value="<?= (int) $tg['id'] ?>"<?= $tagsSaved ?>></span><?php endforeach;
+                                    foreach ($pendingTags as $pn): ?><span class="bh-tag is-new" data-name="<?= htmlspecialchars($pn) ?>" title="Created when the post is published"><span class="bh-tag__name"><?= htmlspecialchars($pn) ?></span><button type="button" class="bh-tag__x" aria-label="Remove tag <?= htmlspecialchars($pn) ?>">&times;</button><input type="hidden" name="new_tags[]" value="<?= htmlspecialchars($pn) ?>"<?= $tagsSaved ?>></span><?php endforeach;
+                                ?></div>
+                                <div class="bh-tags__field">
+                                    <label class="bhe-label" for="bh-tags-input">Add a tag</label>
+                                    <input type="text" id="bh-tags-input" class="bhe-input" autocomplete="off" spellcheck="false" maxlength="100"
+                                           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="bh-tags-suggest"
+                                           placeholder="Type to search tags" data-bh-tags-input>
+                                    <ul class="bh-tags__suggest" id="bh-tags-suggest" role="listbox" hidden data-bh-tags-suggest></ul>
+                                </div>
+                                <p class="bh-tags__hint">Separate with commas or press Enter.<?= $canCreateTags
+                                    ? ' New tags are created when the post is published.'
+                                    : ' New tags are created when an editor publishes the post.' ?></p>
+                                <div class="bh-tags__group" data-bh-tags-group="most_used" hidden>
+                                    <span class="bh-tags__group-title">Most used</span>
+                                    <div class="bh-tags__cloud"></div>
+                                </div>
+                                <div class="bh-tags__group" data-bh-tags-group="recent" hidden>
+                                    <span class="bh-tags__group-title">Recently used</span>
+                                    <div class="bh-tags__cloud"></div>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -320,6 +345,7 @@ $v = urlencode(BASEHIM_VERSION);
 
 <script>window.BasehimEditorConfig = <?= json_encode($nbeConfig, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="<?= $base ?>/admin/assets/js/block-editor.js?v=<?= $v ?>"></script>
+<?php if ($type === 'post'): ?><script src="<?= $base ?>/admin/assets/js/post-tags.js?v=<?= $v ?>"></script><?php endif; ?>
 <?php foreach ($nbeScripts as $nbeJs): ?>
 <script src="<?= htmlspecialchars((string) $nbeJs) ?>"></script>
 <?php endforeach; ?>
@@ -385,12 +411,10 @@ $v = urlencode(BASEHIM_VERSION);
                     if (doc && Array.isArray(doc.blocks)) { BasehimEditor.setBlocks(doc.blocks); return; }
                 } catch (e) { /* not JSON */ }
                 if (val.trim() === '') { BasehimEditor.setBlocks([{ type: 'paragraph', data: {} }]); return; }
-                if (from === 'markdown' && cfg.renderUrl) {
-                    var mb = new FormData();
-                    mb.append('_csrf', cfg.csrf || ''); mb.append('from', 'markdown'); mb.append('content', val);
-                    fetch(cfg.renderUrl, { method: 'POST', body: mb, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-                        .then(function (r) { return r.json(); })
-                        .then(function (d) { convertInto(d && d.ok && typeof d.html === 'string' ? d.html : val); })
+                if (from === 'markdown' && window.Basehim && Basehim.ajax) {
+                    // posts.render through the AJAX gateway (1.2.47).
+                    Basehim.ajax.request('posts.render', { from: 'markdown', content: val })
+                        .then(function (d) { convertInto(d && typeof d.html === 'string' ? d.html : val); })
                         .catch(function () { convertInto(val); });
                     return;
                 }
@@ -401,17 +425,15 @@ $v = urlencode(BASEHIM_VERSION);
 
         // Leaving the visual editor: the source box gets the post as HTML,
         // rendered by the same code that renders it for visitors.
-        if (from !== 'blocks' || !window.BasehimEditor || !BasehimEditor.serialize || !cfg.renderUrl) return;
-        var body = new FormData();
-        body.append('_csrf', cfg.csrf || '');
-        body.append('content', BasehimEditor.serialize());
+        if (from !== 'blocks' || !window.BasehimEditor || !BasehimEditor.serialize || !window.Basehim || !Basehim.ajax) return;
+        var content = BasehimEditor.serialize();
         raw.readOnly = true;
         raw.value = '';
         raw.placeholder = 'Converting…';
-        fetch(cfg.renderUrl, { method: 'POST', body: body, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-            .then(function (r) { return r.json(); })
+        // posts.render through the AJAX gateway (1.2.47).
+        Basehim.ajax.request('posts.render', { from: 'blocks', content: content })
             .then(function (d) {
-                if (!d || !d.ok || typeof d.html !== 'string') throw new Error((d && d.error) || 'render failed');
+                if (!d || typeof d.html !== 'string') throw new Error('render failed');
                 // Strip the one-time block stylesheet link the renderer adds.
                 raw.value = d.html.replace(/^<link[^>]+data-basehim-blocks[^>]*>\s*/i, '');
             })
@@ -504,9 +526,23 @@ $v = urlencode(BASEHIM_VERSION);
     if (!form) return;
     var baseline = null;
     var saving = false;
+    // Fields marked data-bh-autosaved (a saved post's tags, which are stored
+    // as soon as they change) never count as unsaved work.
     function snapshot() {
-        try { return new URLSearchParams(new FormData(form)).toString(); }
-        catch (e) { return null; }
+        try {
+            var out = new URLSearchParams();
+            Array.prototype.forEach.call(form.elements, function (el) {
+                if (!el.name || el.disabled || el.hasAttribute('data-bh-autosaved')) return;
+                if (/^(button|submit|reset|file)$/.test(el.type)) return;
+                if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+                if (el.tagName === 'SELECT' && el.multiple) {
+                    Array.prototype.forEach.call(el.selectedOptions, function (o) { out.append(el.name, o.value); });
+                    return;
+                }
+                out.append(el.name, el.value);
+            });
+            return out.toString();
+        } catch (e) { return null; }
     }
     function isDirty() {
         if (window.BasehimEditorDirty) return true;
@@ -520,6 +556,11 @@ $v = urlencode(BASEHIM_VERSION);
     }, 600);
     form.addEventListener('submit', function () {
         saving = true;
+        window.BasehimEditorDirty = false;
+    });
+    // Save draft (AJAX) keeps the page: what was just saved is the new baseline.
+    document.addEventListener('bh:post-saved', function () {
+        baseline = snapshot();
         window.BasehimEditorDirty = false;
     });
     window.addEventListener('beforeunload', function (e) {

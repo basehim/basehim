@@ -12,6 +12,13 @@ namespace App\Core;
  */
 final class Request
 {
+    /**
+     * The AJAX gateway's path, relative to the install base. capture() does
+     * not decode this path's body: the gateway reads it itself, after checking
+     * its size, so an oversized request is refused before any JSON is parsed.
+     */
+    public const AJAX_PATH = '/ajax';
+
     public function __construct(
         public readonly string $method,
         public readonly string $uri,
@@ -30,7 +37,7 @@ final class Request
 
         $body = [];
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && !self::isAjaxGatewayPath($uri)) {
             if (str_contains($contentType, 'application/json')) {
                 $raw = file_get_contents('php://input') ?: '';
                 $decoded = json_decode($raw, true);
@@ -54,6 +61,15 @@ final class Request
             server:  $_SERVER,
             headers: self::collectHeaders(),
         );
+    }
+
+    private static function isAjaxGatewayPath(string $uri): bool
+    {
+        $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+        if ($base !== '' && str_starts_with($uri, $base)) {
+            $uri = substr($uri, strlen($base)) ?: '/';
+        }
+        return rtrim($uri, '/') === self::AJAX_PATH;
     }
 
     private static function collectHeaders(): array
@@ -145,6 +161,67 @@ final class Request
             }
         }
         return '0.0.0.0';
+    }
+
+    /**
+     * The client's address, believing X-Forwarded-For only from a trusted proxy.
+     *
+     * ip() above takes the first entry of X-Forwarded-For or CF-Connecting-IP
+     * from anyone, so a client can name any address it likes — fine for
+     * display, useless for a rate limit. Here the connecting address is the
+     * client unless it is one of $trustedProxies; then X-Forwarded-For is
+     * read from the right (the end our proxy appended), skipping further
+     * trusted hops, and the first address that is not a trusted proxy is the
+     * client. Anything malformed falls back to the connecting address.
+     *
+     * @param string|string[] $trustedProxies IPs or CIDR ranges, list or comma-separated
+     */
+    public function clientIp(string|array $trustedProxies = []): string
+    {
+        $remote = trim((string) ($this->server['REMOTE_ADDR'] ?? ''));
+        if (filter_var($remote, FILTER_VALIDATE_IP) === false) return '0.0.0.0';
+
+        $trusted = is_array($trustedProxies) ? $trustedProxies : explode(',', $trustedProxies);
+        $trusted = array_values(array_filter(array_map('trim', $trusted), fn($t) => $t !== ''));
+        if ($trusted === [] || !self::ipInAny($remote, $trusted)) return $remote;
+
+        $xff = (string) ($this->server['HTTP_X_FORWARDED_FOR'] ?? '');
+        if ($xff === '') return $remote;
+        $hops = array_reverse(array_map('trim', explode(',', $xff)));
+        foreach ($hops as $hop) {
+            if (filter_var($hop, FILTER_VALIDATE_IP) === false) return $remote;
+            if (!self::ipInAny($hop, $trusted)) return $hop;
+        }
+        return $remote;
+    }
+
+    /** @param string[] $ranges IPs or CIDR ranges */
+    public static function ipInAny(string $ip, array $ranges): bool
+    {
+        foreach ($ranges as $range) {
+            if (self::ipMatches($ip, $range)) return true;
+        }
+        return false;
+    }
+
+    /** True when $ip equals $range, or falls inside it when $range is CIDR (IPv4 or IPv6). */
+    public static function ipMatches(string $ip, string $range): bool
+    {
+        $range = trim($range);
+        [$net, $bits] = array_pad(explode('/', $range, 2), 2, null);
+        $ipBin = @inet_pton($ip);
+        $netBin = @inet_pton((string) $net);
+        if ($ipBin === false || $netBin === false || strlen($ipBin) !== strlen($netBin)) return false;
+        $max = strlen($ipBin) * 8;
+        if ($bits === null) return $ipBin === $netBin;
+        if (!ctype_digit($bits) || (int) $bits > $max) return false;
+        $bits = (int) $bits;
+        $bytes = intdiv($bits, 8);
+        if (substr($ipBin, 0, $bytes) !== substr($netBin, 0, $bytes)) return false;
+        $rem = $bits % 8;
+        if ($rem === 0) return true;
+        $mask = (0xFF << (8 - $rem)) & 0xFF;
+        return (ord($ipBin[$bytes]) & $mask) === (ord($netBin[$bytes]) & $mask);
     }
 
     public function userAgent(): string

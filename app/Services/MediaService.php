@@ -19,6 +19,79 @@ class MediaService
 
     public function find(int $id): ?array { return $this->repo->find($id); }
     public function update(int $id, array $data): int { return $this->repo->update($id, $data); }
+
+    /**
+     * Descriptive fields a person may edit, with how much each column holds:
+     * VARCHAR(255) counts characters, TEXT counts bytes. Everything else on
+     * a media row (path, mime type, size, dimensions) describes the file on
+     * disk and is never taken from a request.
+     */
+    public const META_FIELDS = [
+        'title'       => ['chars' => 255],
+        'alt_text'    => ['chars' => 255],
+        'caption'     => ['bytes' => 65535],
+        'description' => ['bytes' => 65535],
+    ];
+
+    /**
+     * Whether $user may change or delete $item: their own uploads need
+     * upload_media, anyone else's need delete_media.
+     *
+     * This is the rule the REST API (Api\MediaController) has applied since
+     * 1.35; it lives here so the admin screens and the AJAX gateway apply the
+     * very same one. Before this, the admin media screens checked only that
+     * the user could reach /admin/media (upload_media), so an author could
+     * rename or delete an administrator's files.
+     */
+    public static function userCanModify(?array $user, array $item): bool
+    {
+        if ($user === null || empty($user['id'])) return false;
+        $own = (int) ($item['author_id'] ?? 0) === (int) $user['id'];
+        return \App\Http\Middleware\CheckCapability::userCan($user, $own ? 'upload_media' : 'delete_media');
+    }
+
+    /**
+     * Whether $user may edit $item's descriptive fields (title, alt text,
+     * caption, description): their own with upload_media; anyone else's with
+     * delete_media, or with edit_others_posts.
+     *
+     * Looser than userCanModify() on purpose. An editor fixes alt text and
+     * captions on the images in other people's posts every day, and could
+     * before 1.2.46; editing a description destroys nothing, so it does not
+     * need the right to delete files. Deleting someone else's file still does.
+     */
+    public static function userCanEdit(?array $user, array $item): bool
+    {
+        if ($user === null || empty($user['id'])) return false;
+        $can = fn(string $cap) => \App\Http\Middleware\CheckCapability::userCan($user, $cap);
+        if ((int) ($item['author_id'] ?? 0) === (int) $user['id']) return $can('upload_media');
+        return $can('delete_media') || ($can('upload_media') && $can('edit_others_posts'));
+    }
+
+    /**
+     * Update an item's descriptive fields.
+     *
+     * Takes only META_FIELDS, only string values, and cuts each to what its
+     * column holds without splitting a multi-byte character (substr() could
+     * leave half a character, which strict MySQL then refuses).
+     *
+     * @return array the fields actually written; empty when nothing usable was given
+     */
+    public function updateMeta(int $id, array $fields): array
+    {
+        $clean = [];
+        foreach (self::META_FIELDS as $field => $limit) {
+            if (!array_key_exists($field, $fields) || !is_string($fields[$field])) continue;
+            $v = $fields[$field];
+            $clean[$field] = isset($limit['chars'])
+                ? mb_substr($v, 0, $limit['chars'], 'UTF-8')
+                : mb_strcut($v, 0, $limit['bytes'], 'UTF-8');
+        }
+        if ($clean !== []) {
+            $this->repo->update($id, $clean);
+        }
+        return $clean;
+    }
     public function typeCounts(?string $search = null): array { return $this->repo->typeCounts($search); }
 
     public function paginate(array $filters = [], int $page = 1, int $perPage = 24): array
