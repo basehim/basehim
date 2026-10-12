@@ -1,0 +1,9 @@
+{
+  "name": "AJAX Fixture",
+  "slug": "ajax-fixture",
+  "version": "1.0.0",
+  "description": "Test fixture for the AJAX gateway. Installed and removed by tests/run.php; never ship it.",
+  "namespace": "BasehimTests\\AjaxFixture",
+  "src": "src",
+  "entry": "App"
+}

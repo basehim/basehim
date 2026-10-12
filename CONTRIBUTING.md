@@ -54,6 +54,27 @@ find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
 
 CI runs this same lint against every supported PHP version.
 
+## Tests
+
+The suite lives in `tests/` and needs nothing beyond PHP — no Composer, no
+PHPUnit. See [`tests/README.md`](tests/README.md).
+
+```bash
+php tests/run.php                       # unit tests only
+BASEHIM_TEST_DB_HOST=127.0.0.1 \
+BASEHIM_TEST_DB_USER=root BASEHIM_TEST_DB_PASS=secret \
+php tests/run.php                       # unit + integration (needs MySQL/MariaDB)
+php tests/run.php --filter=csrf         # only tests whose name contains "csrf"
+```
+
+Integration tests create a database named `basehim_test` (it must end in
+`_test`), **drop and recreate it**, run the real migrations, and drive the real
+`index.php` over HTTP with PHP's built-in server. They never touch your own
+database. Node.js 18+ is used for the JavaScript client tests when present;
+without it those tests are skipped.
+
+CI runs the whole suite against MySQL 8.0 on every push and pull request.
+
 ## Database changes
 
 Migrations live in `database/migrations/` and are plain `.sql` files applied in
@@ -78,8 +99,9 @@ docs in [`docs/`](docs/):
 
 1. Branch from `main`: `git checkout -b fix/short-description`.
 2. Keep the change focused. One concern per PR.
-3. Test against a real install — there is no automated test suite yet, so say in
-   the PR description what you exercised manually.
+3. Run `php tests/run.php` (with a test database) and add a test for the bug or
+   behaviour you changed. Say in the PR description what else you exercised by
+   hand.
 4. Update the docs and `CHANGELOG.md` if behaviour changed.
 5. Write a commit message that explains the reasoning, not just the diff.
 

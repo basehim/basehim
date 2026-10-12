@@ -33,6 +33,9 @@ storage/logs/apps/*
 storage/updates/*
 !storage/updates/.gitkeep
 
+# Lock files the media library creates while naming uploads.
+storage/locks/
+
 storage/uploads/*
 !storage/uploads/.gitkeep
 

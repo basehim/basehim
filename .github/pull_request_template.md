@@ -8,8 +8,8 @@
 
 ## How it was tested
 
-<!-- There is no automated suite yet, so describe what you exercised manually:
-     PHP version, database, and the specific flows you clicked through. -->
+<!-- Which tests you added or ran (php tests/run.php), and what you exercised
+     by hand: PHP version, database, and the flows you clicked through. -->
 
 - PHP version:
 - Database:
@@ -18,6 +18,7 @@
 ## Checklist
 
 - [ ] `find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l` passes
+- [ ] `php tests/run.php` passes with a test database (and a test covers the change)
 - [ ] No new Composer, npm, or daemon dependency
 - [ ] Works on PHP 8.1 (no 8.2+ syntax in core)
 - [ ] Any new table or column honours `DB_PREFIX`

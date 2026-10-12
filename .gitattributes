@@ -41,3 +41,4 @@ docs/**            linguist-documentation
 /.gitignore     export-ignore
 /docs           export-ignore
 /CONTRIBUTING.md export-ignore
+/tests          export-ignore
