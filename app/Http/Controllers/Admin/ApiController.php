@@ -26,7 +26,7 @@ class ApiController extends Controller
     public function overview(Request $request): Response
     {
         return $this->render('overview', [
-            'title'   => 'API — Overview',
+            'title'   => 'API Overview',
             'subtab'  => 'overview',
         ]);
     }
@@ -35,7 +35,7 @@ class ApiController extends Controller
     public function mcp(Request $request): Response
     {
         return $this->render('mcp', [
-            'title'   => 'API — MCP Server',
+            'title'   => 'MCP Server',
             'subtab'  => 'mcp',
         ]);
     }
@@ -58,7 +58,7 @@ class ApiController extends Controller
         }
 
         return $this->render('keys', [
-            'title'   => 'API — Keys',
+            'title'   => 'API Keys',
             'subtab'  => 'keys',
             'keys'    => $keys,
             'newKey'  => $newKey,
@@ -152,10 +152,84 @@ class ApiController extends Controller
 
     public function reference(Request $request): Response
     {
-        return $this->render('reference', [
-            'title'  => 'API — Reference',
+        return $this->render('reference', array_merge([
+            'title'  => 'API Reference',
             'subtab' => 'reference',
-        ]);
+        ], $this->referenceData()));
+    }
+
+    /**
+     * What the reference lists beyond core's fixed REST table, read from the
+     * running site so it cannot fall behind (1.2.50): the routes apps add
+     * outside /admin, every AJAX gateway action, and every MCP tool.
+     */
+    private function referenceData(): array
+    {
+        $siteUrl = '';
+        try { $siteUrl = (string) $this->app->make(\App\Services\McpOAuthService::class)->issuer(); } catch (\Throwable) {}
+
+        $names = [];
+        try {
+            foreach ($this->app->make(\App\Services\AppService::class)->installed() as $row) {
+                $names[(string) $row['slug']] = (string) ($row['name'] ?? $row['slug']);
+            }
+        } catch (\Throwable) {}
+        $appName = static fn(string $slug): string => $names[$slug] ?? ucfirst($slug);
+
+        // Routes apps registered outside the admin (REST endpoints, trackers, feeds).
+        $appRoutes = [];
+        try {
+            $seen = [];
+            foreach ($this->app->make(\App\Core\Router::class)->routes() as $r) {
+                $owner = $r['owner'];
+                $path = $r['pattern'];
+                if ($owner === null || $path === '/admin' || str_starts_with($path, '/admin/')) continue;
+                if (str_starts_with($path, '/content/apps/')) continue;          // static assets
+                foreach ($r['methods'] as $m) {
+                    if ($m === 'HEAD' || $m === 'OPTIONS') continue;
+                    $k = $m . ' ' . $path;
+                    if (isset($seen[$k])) continue;
+                    $seen[$k] = true;
+                    $appRoutes[$appName($owner)][] = [$m, $path, $r['protected'], $r['fallback']];
+                }
+            }
+            ksort($appRoutes);
+        } catch (\Throwable) {}
+
+        // AJAX gateway actions, core first, then each app.
+        $ajax = [];
+        try {
+            foreach ($this->app->make(\App\Core\Ajax\AjaxRegistry::class)->all() as $a) {
+                $group = $a->isCore() ? 'Core' : $appName($a->owner);
+                $ajax[$group][] = [
+                    'name'   => $a->name,
+                    'method' => implode(', ', $a->methods),
+                    'auth'   => $a->isPublic() ? 'public' : ($a->capabilities ? implode(', ', $a->capabilities) : 'signed in'),
+                    'area'   => $a->area,
+                    'input'  => $a->input->describe(),
+                    'desc'   => $a->description,
+                ];
+            }
+            uksort($ajax, static fn($x, $y) => $x === 'Core' ? -1 : ($y === 'Core' ? 1 : strcmp($x, $y)));
+            foreach ($ajax as &$list) usort($list, static fn($x, $y) => strcmp($x['name'], $y['name']));
+            unset($list);
+        } catch (\Throwable) {}
+
+        // MCP tools, as the server lists them to a key holding every scope.
+        $tools = [];
+        try {
+            $scopes = array_keys(ApiKeyService::availableScopes());
+            foreach ((new \App\Http\Controllers\Api\McpController())->allTools($scopes) as $t) {
+                $tools[] = [
+                    'name'  => (string) $t['name'],
+                    'scope' => $t['_scope'] ?? null,
+                    'app'   => !empty($t['_app']),
+                    'desc'  => (string) ($t['description'] ?? ''),
+                ];
+            }
+        } catch (\Throwable) {}
+
+        return ['siteUrl' => $siteUrl, 'appRoutes' => $appRoutes, 'ajaxActions' => $ajax, 'mcpTools' => $tools];
     }
 
     // -------------------------------------------------------------------------

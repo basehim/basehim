@@ -4686,13 +4686,14 @@ function saveDraftAjax(btn) {
 
   draftSaving = true;
   btn.disabled = true; btn.setAttribute('aria-busy', 'true');
-  var loader = window.bhLoader ? window.bhLoader(btn, 'Saving draft…') : null;
+  // The spinner goes inside the button (bhLoader on a button, 1.2.50).
+  var loader = window.bhLoader ? window.bhLoader(btn, 'Saving…') : null;
   var st = $id('bhe-save-state'); if (st) st.textContent = '';
 
   window.Basehim.ajax.request('posts.save_draft', payload, { idempotencyKey: true, timeout: 60000 })
     .then(function (d) {
       applySavedDraft(d);
-      if (loader) loader.done('Draft saved');
+      if (loader) loader.done('Saved');
       if (st) st.textContent = 'Saved ' + (d.saved_at_text || '');
       emit('saved', d);
       document.dispatchEvent(new CustomEvent('bh:post-saved', { detail: d }));

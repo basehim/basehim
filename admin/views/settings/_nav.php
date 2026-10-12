@@ -23,3 +23,5 @@ $this->include('partials.tabs', [
         'authorization' => ['label' => 'Authentication', 'icon' => 'shield-check'],
     ],
 ]);
+?>
+<script src="<?= htmlspecialchars((string) ($base ?? ''), ENT_QUOTES) ?>/admin/assets/js/settings-save.js?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>" defer></script>

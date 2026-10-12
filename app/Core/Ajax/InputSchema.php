@@ -80,6 +80,21 @@ final class InputSchema
     }
 
     /**
+     * The top-level fields, for documentation (the API reference screen):
+     * ['id' => 'int, required', 'title' => 'string', …].
+     *
+     * @return array<string,string>
+     */
+    public function describe(): array
+    {
+        $out = [];
+        foreach ($this->fields as $name => $spec) {
+            $out[(string) $name] = (string) ($spec['type'] ?? 'mixed') . (!empty($spec['required']) ? ', required' : '');
+        }
+        return $out;
+    }
+
+    /**
      * Check $input and return only the declared, validated values.
      *
      * @param bool $fromQuery values came from a query string, where everything

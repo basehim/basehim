@@ -120,11 +120,7 @@ $flash = $flash ?? null;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($title ?? 'Admin') ?> &mdash; Basehim</title>
-    <?php // Admin favicon. A site's own favicon setting governs the public site;
-          // the admin is Basehim's, so it uses the mark. ?>
-    <link rel="icon" type="image/png" sizes="32x32" href="<?= $base ?>/admin/assets/img/favicon-32.png">
-    <link rel="apple-touch-icon" href="<?= $base ?>/admin/assets/img/apple-touch-icon.png">
+    <?php $this->include('partials.admin-head', ['base' => $base, 'title' => $title ?? null]); ?>
     <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/tailwind.min.css?v=<?= urlencode(BASEHIM_VERSION) ?>">
     <?php $this->include('partials.admin-styles', ['base' => $base]); ?>
     <!-- Heroicons for JS-built markup (window.BasehimIcon). Loaded in <head> so
@@ -649,7 +645,7 @@ try {
                 $__siteAddr = $__host . rtrim((string) ($base ?? ''), '/');
                 ?>
                 <a href="<?= htmlspecialchars(($base ?? '') . '/') ?>" target="_blank" rel="noopener"
-                   class="block font-semibold text-slate-900 text-sm leading-tight truncate hover:text-blue-600"
+                   class="block font-semibold text-slate-900 text-sm leading-tight truncate hover:text-blue-600" data-bh-site-name
                    title="View <?= htmlspecialchars($__siteName) ?> — opens in a new tab"><?= htmlspecialchars($__siteName) ?></a>
                 <?php if ($__siteAddr !== ''): ?>
                 <div class="text-[11px] text-slate-400 leading-tight mt-0.5 truncate" title="<?= htmlspecialchars($__siteAddr) ?>"><?= htmlspecialchars($__siteAddr) ?></div>
@@ -912,7 +908,7 @@ try {
         <!-- Content -->
         <main class="p-4 sm:p-6">
             <?php if ($flash): ?>
-                <div class="mb-4 px-4 py-3 rounded-lg border <?php
+                <div data-bh-flash class="mb-4 px-4 py-3 rounded-lg border <?php
                     echo $flash['type'] === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
                         ($flash['type'] === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
                         'bg-blue-50 border-blue-200 text-blue-800');
@@ -1309,16 +1305,69 @@ try {
         }
     };
 
-    // ── loader: the shared "working…" pill (admin/assets/css/ui.css) ──
-    //   var l = bhLoader(button, 'Saving draft…');        // next to the button
-    //   l.done('Draft saved');  l.fail('Could not save');  l.set('Still saving…');  l.remove();
-    // place: 'before' (default) or 'after' the anchor, 'inside' it, or 'over'
-    // it (centred; the anchor must be position:relative). done() fades out on
-    // its own after `timeout` ms (2000); fail() stays until removed or replaced.
+    // ── loader: the shared "working…" state (admin/assets/css/ui.css) ──
+    //   var l = bhLoader(button, 'Saving draft…');        // inside the button
+    //   l.done('Draft saved');  l.fail('Not saved');  l.set('Still saving…');  l.remove();
+    // On a button (1.2.50) the spinner and words go inside it: the button is
+    // disabled while it works, shows ✓ / ! when done() / fail(), and gets its
+    // own label back after `timeout` ms (2000; 3000 after a failure). Keep
+    // button texts short — the full message belongs in a toast or banner.
+    // Anything else gets the pill: place 'before' (default) or 'after' the
+    // anchor, 'inside' it, or 'over' it (centred; the anchor must be
+    // position:relative); done() fades out after `timeout`, fail() stays.
+    // { place: 'before' } etc. on a button asks for the pill instead.
     // One loader per anchor: a new call replaces the previous one.
+    function buttonLoader(btn, label) {
+        var original = btn.innerHTML;
+        var prevMin = btn.style.minWidth;
+        var w = btn.getBoundingClientRect().width;
+        if (w) btn.style.minWidth = Math.ceil(w) + 'px';      // never narrower than it was
+        btn.classList.remove('is-done', 'is-error');
+        btn.classList.add('bh-btn-busy');
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.innerHTML = '<span class="bh-btn-busy__icon" aria-hidden="true"></span><span class="bh-btn-busy__text" role="status" aria-live="polite"></span>';
+        var icon = btn.firstChild, text = btn.lastChild;
+        text.textContent = label || 'Working…';
+        var timer = null, gone = false;
+        function finish(cls, msg, ms) {
+            if (gone) return api;
+            btn.classList.remove('is-done', 'is-error');
+            btn.classList.add(cls);
+            icon.textContent = cls === 'is-done' ? '\u2713' : '!';
+            if (msg) text.textContent = msg;
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            clearTimeout(timer);
+            timer = setTimeout(api.remove, ms);
+            return api;
+        }
+        var api = {
+            el: btn,
+            set: function (msg) { if (!gone) text.textContent = msg; return api; },
+            done: function (msg, o) { return finish('is-done', msg, (o && o.timeout) || 2000); },
+            fail: function (msg, o) { return finish('is-error', msg, (o && o.timeout) || 3000); },
+            remove: function () {
+                if (gone) return; gone = true; clearTimeout(timer);
+                btn.innerHTML = original;
+                btn.classList.remove('bh-btn-busy', 'is-done', 'is-error');
+                btn.style.minWidth = prevMin;
+                btn.disabled = false;
+                btn.removeAttribute('aria-busy');
+                if (btn._bhLoader === api) btn._bhLoader = null;
+            }
+        };
+        btn._bhLoader = api;
+        return api;
+    }
+
     window.bhLoader = function (anchor, label, opts) {
         opts = opts || {};
-        var place = opts.place || 'before';
+        if (anchor && anchor._bhLoader) anchor._bhLoader.remove();
+        var isButton = anchor && (anchor.tagName === 'BUTTON'
+            || (anchor.tagName === 'INPUT' && /^(submit|button)$/i.test(anchor.type)));
+        if (isButton && anchor.tagName === 'BUTTON' && (!opts.place || opts.place === 'button')) return buttonLoader(anchor, label);
+        var place = opts.place && opts.place !== 'button' ? opts.place : 'before';
         var el = document.createElement('span');
         el.className = 'bh-loader bh-loader--' + place;
         el.setAttribute('role', 'status');
@@ -1327,7 +1376,6 @@ try {
         var text = el.lastChild;
         text.textContent = label || 'Working…';
         if (anchor) {
-            if (anchor._bhLoader) anchor._bhLoader.remove();
             if (place === 'after') anchor.insertAdjacentElement('afterend', el);
             else if (place === 'inside' || place === 'over') anchor.appendChild(el);
             else anchor.insertAdjacentElement('beforebegin', el);

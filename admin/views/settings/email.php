@@ -15,6 +15,7 @@
             <form method="POST" action="<?= $base ?>/admin/settings/email" class="space-y-5">
                 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
 
+                <div data-settings-live="mail-warning">
                 <?php if (!empty($mail['foreignFrom'])): ?>
                 <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     Emails are sent from <strong><?= htmlspecialchars($mail['from']) ?></strong>, which isn't on this site's domain.
@@ -26,6 +27,7 @@
                     This site's address (<?= htmlspecialchars($mail['domain'] ?? '') ?>) isn't a public domain, so there is no automatic sender address. Set APP_URL in .env to the site's real address, or type a From Email.
                 </div>
                 <?php endif; ?>
+                </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -78,7 +80,7 @@
                             <input type="text" name="smtp_username" value="<?= htmlspecialchars($values['smtp_username'] ?? '') ?>" autocomplete="off"
                                 class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
                         </div>
-                        <div>
+                        <div data-settings-live="smtp-password">
                             <label class="block text-sm font-medium text-slate-700 mb-1.5">SMTP Password</label>
                             <input type="password" name="smtp_password" value="" autocomplete="new-password" placeholder="<?= !empty($mail['hasPassword']) ? 'Saved — leave empty to keep it' : '' ?>"
                                 class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">

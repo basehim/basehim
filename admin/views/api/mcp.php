@@ -1,8 +1,12 @@
 <?php $this->extend('layouts.app'); ?>
 <?php $this->section('content'); ?>
 <?php
-$scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$baseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . $base;
+// The address the MCP server announces (honours X-Forwarded-Proto behind a proxy).
+try {
+    $baseUrl = rtrim((string) \App\Core\Application::getInstance()->make(\App\Services\McpOAuthService::class)->issuer(), '/');
+} catch (\Throwable) {
+    $baseUrl = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . $base;
+}
 $mcpUrl  = $baseUrl . '/mcp';
 $prm     = $baseUrl . '/.well-known/oauth-protected-resource';
 ?>
@@ -149,7 +153,7 @@ $prm     = $baseUrl . '/.well-known/oauth-protected-resource';
             <li><strong>3.</strong> It registers itself (RFC 7591) — which is why there is no Client ID to copy.</li>
             <li><strong>4.</strong> You sign in and approve; the client gets a token scoped to what you allowed.</li>
         </ol>
-        <div class="grid gap-3 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div class="min-w-0">
                 <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Resource metadata</p>
                 <pre class="bg-slate-900 text-sky-200 rounded-lg p-3 text-[11px] overflow-x-auto"><?= htmlspecialchars($prm) ?></pre>

@@ -36,6 +36,25 @@
 @keyframes bh-loader-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .bh-loader__spin { animation-duration: 2s; } }
 
+/* ── Loader inside a button (1.2.50): bhLoader(button, 'Saving…') ──────────
+   The button keeps its own colours; its label becomes a spinner and a word
+   or two, then ✓ (done) or ! (failed) before the label comes back.          */
+.bh-btn-busy { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.bh-btn-busy[aria-busy="true"] { cursor: progress; }
+button.bh-btn-busy:disabled { opacity: 1; cursor: progress; }   /* beats .bhe-btn:disabled and similar */
+.bh-btn-busy__icon {
+    width: 1em; height: 1em; flex: 0 0 auto; box-sizing: border-box;
+    border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent;
+    opacity: .9; animation: bh-loader-spin .7s linear infinite;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1em; line-height: 1; font-weight: 700;
+}
+.bh-btn-busy.is-done .bh-btn-busy__icon,
+.bh-btn-busy.is-error .bh-btn-busy__icon { animation: none; border: 0; width: auto; height: auto; }
+.bh-btn-busy.is-error { background-color: #dc2626 !important; border-color: #dc2626 !important; color: #fff !important; }
+.bh-btn-busy__text { white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .bh-btn-busy__icon { animation-duration: 2s; } }
+
 /* ── Tag box (post editor) ───────────────────────────────────────────────── */
 .bh-tags { display: grid; gap: 10px; }
 .bh-tags__chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
@@ -81,3 +100,29 @@
 .bh-tags__pick:hover, .bh-tags__pick:focus-visible { text-decoration: underline; outline: none; }
 .bh-tags__pick[disabled] { color: #94a3b8; cursor: default; text-decoration: none; }
 .bh-tags__pick small { color: #94a3b8; }
+
+/* ── Code boxes: a scrollbar you can see (1.2.50) ─────────────────────────
+   Long lines in a <pre> scroll sideways. With overlay scrollbars (macOS,
+   phones) nothing showed that there was more, so the text looked cut off.
+   Chrome/Safari draw this one always; Firefox gets its thin variant.        */
+.bh-code::-webkit-scrollbar,
+pre.overflow-x-auto::-webkit-scrollbar,
+pre.overflow-auto::-webkit-scrollbar { width: 10px; height: 10px; }
+.bh-code::-webkit-scrollbar-track,
+pre.overflow-x-auto::-webkit-scrollbar-track,
+pre.overflow-auto::-webkit-scrollbar-track { background: transparent; }
+.bh-code::-webkit-scrollbar-thumb,
+pre.overflow-x-auto::-webkit-scrollbar-thumb,
+pre.overflow-auto::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, .55); border-radius: 10px;
+    border: 3px solid transparent; background-clip: padding-box;
+}
+.bh-code::-webkit-scrollbar-thumb:hover,
+pre.overflow-x-auto::-webkit-scrollbar-thumb:hover,
+pre.overflow-auto::-webkit-scrollbar-thumb:hover { background-color: rgba(148, 163, 184, .85); }
+.bh-code::-webkit-scrollbar-corner,
+pre.overflow-x-auto::-webkit-scrollbar-corner,
+pre.overflow-auto::-webkit-scrollbar-corner { background: transparent; }
+@supports not selector(::-webkit-scrollbar) {
+    .bh-code, pre.overflow-x-auto, pre.overflow-auto { scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, .6) transparent; }
+}

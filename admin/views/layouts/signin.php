@@ -26,7 +26,8 @@ $flashType = isset($flash['type']) && isset($noticeIcon[$flash['type']]) ? $flas
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="no-referrer">
     <meta name="theme-color" content="<?= htmlspecialchars($site['accent']) ?>">
-    <title><?= htmlspecialchars($title ?? 'Sign in') ?> ‹ <?= htmlspecialchars($site['name']) ?></title>
+    <?php // Same shape as the rest of the admin (1.2.50): "{Page} - {Site name} - Basehim". ?>
+    <title><?= htmlspecialchars(implode(' - ', array_values(array_unique(array_filter([(string) ($title ?? 'Sign in'), (string) $site['name'], 'Basehim']))))) ?></title>
     <?php if ($site['icon'] !== ''): ?>
     <link rel="icon" href="<?= htmlspecialchars($site['icon']) ?>">
     <?php else: ?>

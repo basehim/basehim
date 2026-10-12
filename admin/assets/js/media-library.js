@@ -311,7 +311,9 @@
           renderGrid(); query(true);   // refresh counts
         }).catch(function(err){
           del.disabled = false;
-          if (l) l.fail(err.message || 'Could not delete.'); else alert(err.message || 'Could not delete.');
+          var msg = (err && err.message) || 'Could not delete.';
+          if (l) l.fail('Not deleted');
+          if (window.bhToast) window.bhToast(msg, 'error'); else alert(msg);
         });
       });
     });

@@ -14,8 +14,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($title ?? 'Basehim') ?> &mdash; Basehim</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="<?= $base ?>/admin/assets/img/favicon-32.png">
+    <?php $this->include('partials.admin-head', ['base' => $base, 'title' => $title ?? null]); ?>
     <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/tailwind.min.css">
     <?php $this->include('partials.admin-styles', ['base' => $base]); ?>
     <?php $this->include('partials.ajax-client', ['base' => $base]); ?>

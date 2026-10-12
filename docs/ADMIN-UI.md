@@ -71,35 +71,47 @@ field is linked automatically, but explicit is better).
 | `await bhAlert(message)` | a message to acknowledge. `alert()` uses it too. |
 | `bhToast(message, type, { timeout })` | a short notice, bottom right. `type`: `success` (default), `error`, `warning`, `info`. Returns a function that dismisses it. |
 | `bhBusy(button, busy, label)` | button loading state (above). |
-| `bhLoader(anchor, label, { place })` | the shared loader pill (below) → `{ set, done, fail, remove }`. |
+| `bhLoader(anchor, label, { place })` | the shared loader — inside a button, or a pill elsewhere (below) → `{ set, done, fail, remove }`. |
 
 All are also on `window.Basehim.ui` (`confirm`, `alert`, `toast`, `busy`, `loader`).
 
 ## Loader
 
-One loader for every wait on the server: a dark pill with a spinner and a few
-words. The media library shows it over an image while the original loads;
-the post editor shows it next to **Save draft**. Use it rather than a
-spinner of your own, so waiting looks the same everywhere.
+One loader for every wait on the server. On a **button** (Save changes on the
+Settings screens, Save draft in the post editor, Delete in the media library)
+the spinner and a word or two go *inside* the button: it is disabled while the
+request runs, shows ✓ or ! when it finishes, and then gets its own label back.
+Anywhere else it is a dark pill with a spinner — the media library shows one
+over an image while the original loads. Use it rather than a spinner of your
+own, so waiting looks the same everywhere.
 
 ```js
-var l = bhLoader(button, 'Saving draft…');      // placed before the button
+var l = bhLoader(button, 'Saving…');           // spinner inside the button
 doTheWork()
-  .then(function () { l.done('Draft saved'); }) // turns green, fades after 2s
-  .catch(function (err) { l.fail('Not saved'); bhToast(err.message, 'error'); });
+  .then(function () { l.done('Saved'); })        // ✓ Saved, label back after 2s
+  .catch(function (err) { l.fail('Not saved'); bhToast(err.message, 'error'); });  // red, back after 3s
 ```
 
-`place`: `'before'` (default) or `'after'` the anchor, `'inside'` it, or
-`'over'` it, centred (give the anchor `position: relative`). `set(text)`
-changes the words while it runs; `remove()` takes it away at once. A second
-loader on the same anchor replaces the first. In markup:
+Keep the words short — they replace the button's label for a moment; the full
+message belongs in a toast or the page's banner. `done(text, { timeout })` and
+`fail(text, { timeout })` take the delay before the label comes back. While it
+runs the button carries `bh-btn-busy` and `aria-busy="true"`.
+
+For the pill, pass a place: `'before'` or `'after'` the anchor, `'inside'` it,
+or `'over'` it, centred (give the anchor `position: relative`). A pill's
+`done()` turns green and fades after 2s; `fail()` stays until removed.
+`set(text)` changes the words while either kind runs; `remove()` ends it at
+once. A second loader on the same anchor replaces the first. The pill in
+markup:
 
 ```html
 <span class="bh-loader" role="status"><span class="bh-loader__spin"></span><span class="bh-loader__text">Loading…</span></span>
 ```
 
 `is-done` and `is-error` give the finished states; `bh-loader--over` centres it.
-The styles are in `admin/assets/css/ui.css`, loaded on every admin page.
+The styles are in `admin/assets/css/ui.css`, loaded on every admin page, which
+also gives every `<pre class="overflow-x-auto">` (and `.bh-code`) a scrollbar
+you can see.
 
 A form or link with `onsubmit` / `onclick="return confirm('…')"` is switched
 to `bhConfirm` automatically — but new code should call `bhConfirm` itself.

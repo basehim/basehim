@@ -2,19 +2,32 @@
 <?php $this->section('content'); ?>
 
 <?php
-$baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-    . '://' . ($_SERVER['HTTP_HOST'] ?? 'your-domain.com');
+/**
+ * API Reference. Core's REST table is written out below; the routes apps add,
+ * the AJAX gateway actions and the MCP tools come from the running site
+ * (ApiController::referenceData()), so they list exactly what this site has.
+ *
+ * @var string $siteUrl     scheme://host[/folder], as the MCP server announces it
+ * @var array  $appRoutes   [app name => [[method, path, protected, fallback], …]]
+ * @var array  $ajaxActions [group => [['name','method','auth','area','input','desc'], …]]
+ * @var array  $mcpTools    [['name','scope','app','desc'], …]
+ */
+$baseUrl = rtrim((string) ($siteUrl ?? ''), '/');
+if ($baseUrl === '') {
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+    $baseUrl = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'your-domain.com') . ($base ?? '');
+}
 $apiBase = $baseUrl . '/api/v1';
 
 /**
  * Not every documented endpoint lives under /api/v1. The MCP server, the OAuth
- * endpoints, the discovery documents and the admin routes are deliberately at
- * the site root — blindly prefixing $apiBase printed URLs that 404 (e.g.
- * /api/v1/mcp instead of /mcp).
+ * endpoints, the discovery documents, the AJAX gateway and the admin routes
+ * are at the site root — blindly prefixing $apiBase printed URLs that 404
+ * (e.g. /api/v1/mcp instead of /mcp).
  */
 $isRootPath = static fn (string $p): bool =>
-    (bool) preg_match('#^/(admin|mcp|oauth|\.well-known|feed|sitemap)\b#', $p);
-$endpointUrl = static fn (string $p): string => ($isRootPath($p) ? $baseUrl : $apiBase) . $p;
+    (bool) preg_match('#^/(admin|mcp|oauth|ajax|ai/|\.well-known|feed|sitemap\.xml|robots\.txt|llms(-full)?\.txt)(\b|/|$)#', $p);
+$endpointUrl = static fn (string $p, bool $full = false): string => ($full || $isRootPath($p) ? $baseUrl : $apiBase) . $p;
 
 $endpoints = [
     'Authentication' => [
@@ -29,7 +42,7 @@ $endpoints = [
         ['DELETE', '/me/avatar',     'Remove your profile photo (the file stays in the media library)', true],
     ],
     'Posts' => [
-        ['GET',    '/posts',          'List published posts (paginated). Supports ?page, ?per_page, ?search, ?category, ?tag', false],
+        ['GET',    '/posts',          'List published posts (paginated). Supports ?page, ?per_page (max 100), ?q (search), ?author_id', false],
         ['GET',    '/posts/{slug}',   'Get a single post by slug',                                 false],
         ['POST',   '/posts',          'Create a new post',                                         true],
         ['PUT',    '/posts/{id}',     'Replace a post',                                            true],
@@ -83,8 +96,27 @@ $endpoints = [
         ['GET',    '/posts/{slug}',              'Public post — blocks content is returned server-rendered as HTML via the post.content filter', false],
     ],
     'MCP Server (AI assistants)' => [
-        ['POST',   '/mcp',                         'Model Context Protocol endpoint (JSON-RPC 2.0). Connect an AI assistant (e.g. Claude) with an API key via Authorization: Bearer basehim_.... Supports initialize, tools/list, tools/call, resources/list, resources/read. Tools are gated by the key\'s scopes (full path — not under /api/v1)', false],
+        ['POST',   '/mcp',                         'Model Context Protocol endpoint (JSON-RPC 2.0). Connect an AI assistant (e.g. Claude) with an API key via Authorization: Bearer basehim_..., or through OAuth. Supports initialize, tools/list, tools/call, resources/list, resources/read. Tools are gated by the key\'s scopes — see the tool list below (full path — not under /api/v1)', false],
         ['GET',    '/mcp',                         'Discovery ping — returns the server name and transport hint (full path)', false],
+        ['GET',    '/.well-known/oauth-protected-resource', 'RFC 9728 protected-resource metadata: where an MCP client finds the authorization server. Also at /.well-known/oauth-protected-resource/mcp (full path)', false],
+        ['GET',    '/.well-known/oauth-authorization-server', 'RFC 8414 authorization-server metadata: endpoints, PKCE S256, supported scopes. Also at /.well-known/openid-configuration (full path)', false],
+        ['POST',   '/oauth/register',              'RFC 7591 dynamic client registration — clients register themselves, so there is no client id or secret to configure (full path)', false],
+        ['GET',    '/oauth/authorize',             'Consent screen: sign in as an administrator and choose the scopes to grant (full path)', false],
+        ['POST',   '/oauth/authorize',             'Approve or deny; redirects back to the client with an authorization code (full path)', false],
+        ['POST',   '/oauth/token',                 'Exchange the code (with the PKCE verifier) for access and refresh tokens, or refresh them (full path)', false],
+    ],
+    'AI Agents & Discovery' => [
+        ['GET',    '/robots.txt',                  'Crawler rules from Settings → AI Agents (AI training, AI search and user-triggered agents can be allowed or blocked) plus the sitemap (full path)', false],
+        ['GET',    '/llms.txt',                    'Site summary for language models: intro, pages, categories and recent posts (Settings → AI Agents) (full path)', false],
+        ['GET',    '/llms-full.txt',               'Full text of recent posts for language models (full path)', false],
+        ['GET',    '/.well-known/ard.json',        'Agent discovery catalog (ARD): what the site offers agents. Also at /.well-known/ai-catalog.json (full path)', false],
+        ['GET',    '/ai/recent-articles.json',     'Recent articles for the in-page WebMCP tool. ?limit, ?topic (full path)', false],
+        ['GET',    '/sitemap.xml',                 'XML sitemap of published content (full path)', false],
+        ['GET',    '/feed',                        'RSS feed of recent posts (full path)', false],
+    ],
+    'AJAX Gateway' => [
+        ['POST',   '/ajax',                        'One endpoint for every admin and app AJAX action. Body: {"action": "name", "data": {...}}; header X-CSRF-Token. Answers {success, data} or {success:false, error:{code, message, fields}}. Every action is listed under "AJAX actions" below (full path)', true],
+        ['GET',    '/ajax?action=name',            'Actions registered for GET (reads) take their input as query parameters (full path)', true],
     ],
     'Widgets' => [
         ['GET',    '/admin/widgets',             'Widgets overview page — lists every widget registered by active apps & the theme, with their surfaces (editor/frontend/dashboard). Requires manage_apps (full path — not under /api/v1)', true],
@@ -110,23 +142,25 @@ $endpoints = [
         ['POST',   '/admin/posts/bulk',  'Bulk action on posts. Body: {bulk_action: publish|draft|delete|restore|delete_forever, ids[]}. Per-item ownership + publish caps enforced. CSRF (full path)', true],
         ['GET',    '/admin/posts?view=trash', 'Trash view: soft-deleted posts with restore/purge actions. Same for /admin/templates?view=trash', true],
         ['POST',   '/admin/posts/{id}/restore', 'Restore a trashed post. Same pattern for templates. CSRF (full path)', true],
-        ['POST',   '/admin/posts/{id}/force-delete', 'Permanently delete one trashed post. CSRF (full path)', true],        ['POST',   '/admin/themes/install', 'Upload + install a theme zip (theme.json + templates/ required; overwrite=1 to update in place). manage_themes, CSRF (full path)', true],
+        ['POST',   '/admin/posts/{id}/force-delete', 'Permanently delete one trashed post. CSRF (full path)', true],
+        ['POST',   '/admin/posts/empty-trash', 'Permanently delete ALL trashed posts of this type (requires delete capability). Same for /admin/templates/empty-trash. CSRF (full path)', true],
+    ],
+    'Themes & Updates' => [
+        ['POST',   '/admin/themes/install', 'Upload + install a theme zip (theme.json + templates/ required; overwrite=1 to update in place). manage_themes, CSRF (full path)', true],
         ['POST',   '/admin/themes/{slug}/delete', 'Delete an inactive theme (default + active protected). CSRF (full path)', true],
-
         ['GET',    '/admin/updates', 'Updates page: update-service status, available releases, install. manage_settings (full path)', true],
         ['POST',   '/admin/updates/check', 'Check the Basehim update service for newer releases; refreshes the sidebar badge count. CSRF (full path)', true],
         ['POST',   '/admin/updates/apply', 'Download, SHA-256-verify, and install a release; runs migrations. Body: {version}. CSRF (full path)', true],
-        ['POST',   '/admin/posts/empty-trash', 'Permanently delete ALL trashed posts of this type (requires delete capability). Same for /admin/templates/empty-trash. CSRF (full path)', true],
     ],
     'Pages' => [
-        ['GET',    '/pages',          'List published pages',                                      false],
+        ['GET',    '/pages',          'List published pages (paginated). Supports ?page, ?per_page, ?q, ?author_id', false],
         ['GET',    '/pages/{slug}',   'Get a single page by slug',                                 false],
         ['POST',   '/pages',          'Create a new page',                                         true],
         ['PUT',    '/pages/{id}',     'Replace a page',                                            true],
         ['DELETE', '/pages/{id}',     'Delete a page',                                             true],
     ],
     'Media' => [
-        ['GET',    '/media',          'List uploaded media files',                                  true],
+        ['GET',    '/media',          'List uploaded media files (paginated). Supports ?page, ?per_page, ?q',  true],
         ['POST',   '/media',          'Upload a new media file (multipart/form-data). Honours the Media settings for allowed types & max size, and generates the configured thumbnail sizes for images', true],
         ['PATCH',  '/media/{id}',     'Update {media} metadata. Body: any of {title, alt_text, caption, description}. Path, MIME type and dimensions are intentionally not writable — they describe the file on disk', true],
         ['DELETE', '/media/{id}',     'Delete a media file (and its generated thumbnail variants)',  true],
@@ -182,6 +216,12 @@ $endpoints = [
         ['GET',    '/settings/public','Get publicly-available site settings (no auth)',             false],
         ['GET',    '/settings',       'Get all settings (admin)',                                   true],
         ['PUT',    '/settings',       'Update {settings} (admin)',                                    true],
+        ['POST',   '/admin/settings/{tab}', 'Save a Settings screen: general, reading, writing, discussion, permalinks, media, seo, ai, email, authorization. Form fields as the screen posts them. CSRF; the screens themselves save through the settings.save AJAX action (full path)', true],
+    ],
+    'Site Time' => [
+        ['GET',    '/time',           'The site clock: timezone, UTC offset, date and time formats, week start, and now in UTC and local time', false],
+        ['GET',    '/time/convert',   'Convert a time. ?value=…&to=local|utc[&format=…] — to=local turns a stored UTC time into the site timezone (ISO 8601 + formatted); to=utc turns a time typed in the site timezone into the UTC string to store', false],
+        ['GET',    '/timezones',      'Every timezone the site accepts: id, region, city and current offset', false],
     ],
     'Apps' => [
         ['GET',    '/apps',           'List installed apps: slug, name, version, status, icon, declared permissions, whether files are present. ?status=active|inactive. Requires manage_apps', true],
@@ -199,6 +239,17 @@ $endpoints = [
         ['GET',    '/search',         'Full-text search across posts and pages. ?q=term',          false],
     ],
 ];
+
+// Endpoints apps add outside the admin, credited to the app whose boot()
+// registered them. Paths are printed as registered (they are not under /api/v1
+// unless the app put them there). "App" means the app checks access itself.
+foreach (($appRoutes ?? []) as $__app => $__routes) {
+    $__rows = [];
+    foreach ($__routes as [$__m, $__p, $__prot, $__fb]) {
+        $__rows[] = [$__m, $__p, 'Registered by the ' . $__app . ' app' . ($__fb ? ' — answers only addresses nothing else matched' : '') . '.', $__prot ? true : null, true];
+    }
+    $endpoints['App: ' . $__app] = $__rows;
+}
 
 $methodColors = [
     'GET'    => 'text-blue-700 bg-blue-50 border-blue-200',
@@ -226,28 +277,33 @@ $methodColors = [
         <!-- Legend -->
         <div class="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
             <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span> Public — no auth required</span>
-            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Protected — API key or JWT required</span>
+            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Protected — API key, JWT or admin session required</span>
+            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-300 inline-block"></span> App — the app that registered it checks access</span>
         </div>
 
         <!-- Endpoint groups -->
         <?php foreach ($endpoints as $group => $rows): ?>
         <div class="bg-white border border-slate-200 rounded-xl overflow-hidden endpoint-group"
-             data-group="<?= strtolower($group) ?>">
+             data-group="<?= htmlspecialchars(strtolower($group)) ?>">
             <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between">
                 <h3 class="text-sm font-semibold text-slate-800"><?= htmlspecialchars($group) ?></h3>
                 <span class="text-xs text-slate-400"><?= count($rows) ?> endpoint<?= count($rows) !== 1 ? 's' : '' ?></span>
             </div>
             <div class="divide-y divide-slate-100">
-                <?php foreach ($rows as [$method, $path, $desc, $auth]): ?>
+                <?php foreach ($rows as $row): [$method, $path, $desc, $auth] = $row; $full = !empty($row[4]); ?>
                 <div class="endpoint-row flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition"
-                     data-text="<?= strtolower($method . ' ' . $path . ' ' . $desc) ?>">
+                     data-text="<?= htmlspecialchars(strtolower($method . ' ' . $path . ' ' . $desc)) ?>">
                     <span class="<?= $methodColors[$method] ?? '' ?> border text-[11px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5 w-14 text-center">
                         <?= $method ?>
                     </span>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <code class="text-xs font-mono text-slate-800 break-all"><?= htmlspecialchars($endpointUrl($path)) ?></code>
-                            <?php if ($auth): ?>
+                            <code class="text-xs font-mono text-slate-800 break-all"><?= htmlspecialchars($endpointUrl($path, $full)) ?></code>
+                            <?php if ($auth === null): ?>
+                                <span class="inline-flex items-center gap-1 text-[10px] text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-full font-medium">
+                                    <?= icon('puzzle-piece', 'w-4 h-4 text-[8px]') ?> App
+                                </span>
+                            <?php elseif ($auth): ?>
                                 <span class="inline-flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium">
                                     <?= icon('lock-closed', 'w-4 h-4 text-[8px]') ?> Auth
                                 </span>
@@ -259,7 +315,7 @@ $methodColors = [
                         </div>
                         <p class="text-xs text-slate-500 mt-0.5"><?= htmlspecialchars($desc) ?></p>
                     </div>
-                    <button onclick="copyEndpoint('<?= htmlspecialchars($method . ' ' . $endpointUrl($path), ENT_QUOTES) ?>')"
+                    <button onclick="copyEndpoint('<?= htmlspecialchars($method . ' ' . $endpointUrl($path, $full), ENT_QUOTES) ?>')"
                             title="Copy"
                             class="text-slate-300 hover:text-slate-600 transition mt-0.5 shrink-0">
                         <?= icon('document-duplicate', 'w-3.5 h-3.5') ?>
@@ -270,21 +326,76 @@ $methodColors = [
         </div>
         <?php endforeach; ?>
 
+        <!-- AJAX gateway actions (from the registry: core and every active app) -->
+        <?php if (!empty($ajaxActions)): $__ajaxTotal = array_sum(array_map('count', $ajaxActions)); ?>
+        <div id="ajax-actions" class="space-y-3">
+            <div class="min-w-0">
+                <h3 class="text-base font-semibold text-slate-900">AJAX actions</h3>
+                <p class="text-xs text-slate-500 mt-0.5 break-words">
+                    <?= $__ajaxTotal ?> actions answer at <code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono break-all"><?= htmlspecialchars($baseUrl) ?>/ajax</code>.
+                    Admin pages and apps call them with <code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono">Basehim.ajax.request('name', data)</code>, which adds the CSRF token.
+                    Each runs as the signed-in user and needs the capability shown; an action tied to an admin screen is never more open than that screen.
+                </p>
+            </div>
+            <?php foreach ($ajaxActions as $__group => $__rows): ?>
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden endpoint-group" data-group="<?= htmlspecialchars(strtolower('ajax ' . $__group)) ?>">
+                <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-semibold text-slate-800">AJAX — <?= htmlspecialchars($__group === 'Core' ? 'Core' : $__group . ' app') ?></h3>
+                    <span class="text-xs text-slate-400"><?= count($__rows) ?> action<?= count($__rows) !== 1 ? 's' : '' ?></span>
+                </div>
+                <div class="divide-y divide-slate-100">
+                    <?php foreach ($__rows as $a):
+                        $__fields = [];
+                        foreach ($a['input'] as $__f => $__t) $__fields[] = $__f . ': ' . $__t;
+                    ?>
+                    <div class="endpoint-row flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition"
+                         data-text="<?= htmlspecialchars(strtolower($a['method'] . ' ' . $a['name'] . ' ' . $a['desc'] . ' ' . $a['auth'] . ' ' . implode(' ', array_keys($a['input'])))) ?>">
+                        <span class="<?= $methodColors[explode(',', $a['method'])[0]] ?? '' ?> border text-[11px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5 w-14 text-center"><?= htmlspecialchars(explode(',', $a['method'])[0]) ?></span>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <code class="text-xs font-mono text-slate-800 break-all"><?= htmlspecialchars($a['name']) ?></code>
+                                <?php if ($a['auth'] === 'public'): ?>
+                                    <span class="inline-flex items-center gap-1 text-[10px] text-green-600 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full font-medium"><?= icon('globe-alt', 'w-3 h-3') ?> Public</span>
+                                <?php else: ?>
+                                    <span class="inline-flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium"><?= icon('lock-closed', 'w-3 h-3') ?> <?= htmlspecialchars($a['auth']) ?></span>
+                                <?php endif; ?>
+                                <?php if (str_contains($a['method'], ',')): ?><span class="text-[10px] text-slate-400"><?= htmlspecialchars($a['method']) ?></span><?php endif; ?>
+                            </div>
+                            <?php if ($a['desc'] !== ''): ?><p class="text-xs text-slate-500 mt-0.5"><?= htmlspecialchars($a['desc']) ?></p><?php endif; ?>
+                            <?php if ($__fields || $a['area']): ?>
+                            <p class="text-[11px] text-slate-400 mt-1 break-words">
+                                <?php if ($__fields): ?>Input: <span class="font-mono text-slate-500"><?= htmlspecialchars(implode(' · ', $__fields)) ?></span><?php endif; ?>
+                                <?php if ($a['area']): ?><?= $__fields ? ' — ' : '' ?>Screen: <span class="font-mono text-slate-500"><?= htmlspecialchars($a['area']) ?></span><?php endif; ?>
+                            </p>
+                            <?php endif; ?>
+                        </div>
+                        <button type="button" onclick="copyEndpoint(<?= htmlspecialchars(json_encode("Basehim.ajax.request('" . $a['name'] . "', {})"), ENT_QUOTES) ?>)"
+                                title="Copy a call" class="text-slate-300 hover:text-slate-600 transition mt-0.5 shrink-0">
+                            <?= icon('document-duplicate', 'w-3.5 h-3.5') ?>
+                        </button>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
         <!-- Response format -->
         <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
             <h3 class="text-sm font-semibold text-slate-800">Response Format</h3>
             <p class="text-xs text-slate-500">All responses are JSON. Successful responses return the resource or a paginated collection. Errors follow RFC 7807 Problem Details.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
+                <div class="min-w-0">
                     <p class="text-xs font-semibold text-slate-600 mb-1.5">Success (200)</p>
-                    <pre class="bg-slate-900 text-green-300 rounded-lg p-3 text-xs overflow-x-auto">{
+                    <pre class="bh-code bg-slate-900 text-green-300 rounded-lg p-3 text-xs overflow-x-auto">{
   "data": { ... },
   "meta": { "total": 42, "page": 1 }
 }</pre>
                 </div>
-                <div>
+                <div class="min-w-0">
                     <p class="text-xs font-semibold text-slate-600 mb-1.5">Error (4xx / 5xx)</p>
-                    <pre class="bg-slate-900 text-red-300 rounded-lg p-3 text-xs overflow-x-auto">{
+                    <pre class="bh-code bg-slate-900 text-red-300 rounded-lg p-3 text-xs overflow-x-auto">{
   "type": "https://basehim.io/errors/...",
   "title": "Unauthorized",
   "status": 401,
@@ -299,9 +410,9 @@ $methodColors = [
             <h3 class="text-sm font-semibold text-slate-800"><?= icon('square-3-stack-3d', 'w-4 h-4 text-blue-500 mr-2') ?>Block Editor — App APIs</h3>
             <p class="text-xs text-slate-500">The post editor is fully extensible. Apps register custom blocks, toolbar buttons, and sidebar panels in JS, and server-side renderers in PHP. Full guide: <code class="bg-slate-100 px-1.5 py-0.5 rounded">BLOCK-EDITOR.md</code> in the project root.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
+                <div class="min-w-0">
                     <p class="text-xs font-semibold text-slate-600 mb-1.5">JavaScript (window.BasehimEditor)</p>
-                    <pre class="bg-slate-900 text-blue-200 rounded-lg p-3 text-xs overflow-x-auto">BasehimEditor.registerBlock(type, {
+                    <pre class="bh-code bg-slate-900 text-blue-200 rounded-lg p-3 text-xs overflow-x-auto">BasehimEditor.registerBlock(type, {
   title, icon, category, defaults,
   description, keywords, styles,
   edit(el, block, api, ctx),  // ctx.rich() / ctx.inner()
@@ -326,9 +437,9 @@ BasehimEditor.getBlocks() / setBlocks()
 // group divider spacer table widget
 // Containers save children in "innerBlocks".</pre>
                 </div>
-                <div>
+                <div class="min-w-0">
                     <p class="text-xs font-semibold text-slate-600 mb-1.5">PHP hooks (from an app's boot())</p>
-                    <pre class="bg-slate-900 text-amber-200 rounded-lg p-3 text-xs overflow-x-auto">$this-&gt;addEditorScript($url);
+                    <pre class="bh-code bg-slate-900 text-amber-200 rounded-lg p-3 text-xs overflow-x-auto">$this-&gt;addEditorScript($url);
 $this-&gt;addEditorStyle($url);
 $this-&gt;addEditorConfig([...]);
 $this-&gt;registerBlockRenderer('type',
@@ -356,32 +467,51 @@ $this-&gt;registerWidget('stats', [
         </div>
 
         <!-- MCP server -->
-        <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+        <?php
+        $mcpUrl = $baseUrl . '/mcp';
+        $mcpTools = $mcpTools ?? [];
+        $toolCount = count($mcpTools);
+        ?>
+        <div id="mcp" class="bg-white border border-slate-200 rounded-xl p-5 space-y-3 min-w-0">
             <h3 class="text-sm font-semibold text-slate-800"><?= icon('cpu-chip', 'w-4 h-4 text-violet-500 mr-2') ?>MCP Server — connect an AI assistant</h3>
             <p class="text-xs text-slate-500">Basehim exposes a <strong>Model Context Protocol</strong> endpoint so AI assistants (like Claude) can search, read, and author content on this site. It speaks JSON-RPC 2.0 over a single HTTP endpoint and authenticates with your existing API keys — no extra server to run.</p>
-            <div class="grid md:grid-cols-2 gap-3">
-                <div>
-                    <p class="text-xs font-semibold text-slate-600 mb-1.5">Endpoint</p>
-                    <pre class="bg-slate-900 text-emerald-200 rounded-lg p-3 text-xs overflow-x-auto"><?= htmlspecialchars($base) ?>/mcp
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div class="min-w-0 space-y-3">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-600 mb-1.5">Endpoint</p>
+                        <pre class="bh-code bg-slate-900 text-emerald-200 rounded-lg p-3 text-xs overflow-x-auto"><?= htmlspecialchars($mcpUrl) . "\n" ?>
 
 Authorization: Bearer basehim_your_key
 Content-Type: application/json</pre>
+                    </div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-600 mb-1.5">Try it</p>
+                        <pre class="bh-code bg-slate-900 text-slate-200 rounded-lg p-3 text-xs overflow-x-auto">curl -X POST <?= htmlspecialchars($mcpUrl) ?> \
+  -H "Authorization: Bearer basehim_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</pre>
+                    </div>
                 </div>
-                <div>
-                    <p class="text-xs font-semibold text-slate-600 mb-1.5">Tools (gated by key scopes)</p>
-                    <pre class="bg-slate-900 text-sky-200 rounded-lg p-3 text-xs overflow-x-auto">get_site_info                       (always)
-search_content, list_posts,
-list_pages, get_post, get_page      posts:read
-create_post, create_page,
-update_post, update_page,
-trash_post, set_post_terms          posts:write
-list_taxonomies                     taxonomies:read
-create_term                         taxonomies:write
-list_media, get_media               media:read
-list_comments                       comments:read
-moderate_comment                    comments:write
-get_settings                        settings:read
-list_users                          users:read</pre>
+                <div class="min-w-0">
+                    <p class="text-xs font-semibold text-slate-600 mb-1.5">Tools<?= $toolCount ? ' (' . $toolCount . ')' : '' ?> — each needs the scope beside it on the key</p>
+                    <div class="bh-code bh-tools bg-slate-900 rounded-lg overflow-auto" tabindex="0" aria-label="MCP tools">
+                        <table class="w-full text-xs">
+                            <tbody>
+                            <?php foreach ($mcpTools as $t): ?>
+                                <tr>
+                                    <td class="pl-3 pr-3 py-2">
+                                        <div class="font-mono text-sky-200 whitespace-nowrap"><?= htmlspecialchars($t['name']) ?><?php if ($t['app']): ?> <span class="ml-1 text-[10px] text-violet-300 font-sans">app</span><?php endif; ?></div>
+                                        <?php if ($t['desc'] !== ''): ?><div class="text-slate-400 mt-0.5 leading-snug bh-tools__desc"><?= htmlspecialchars($t['desc']) ?></div><?php endif; ?>
+                                    </td>
+                                    <td class="pr-3 py-2 font-mono whitespace-nowrap text-right <?= $t['scope'] === null ? 'text-slate-400' : 'text-emerald-200' ?>"><?= htmlspecialchars($t['scope'] ?? '(always)') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if (!$mcpTools): ?>
+                                <tr><td class="p-3 text-slate-400">The tool list could not be read.</td></tr>
+                            <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <div class="rounded-lg bg-violet-50 border border-violet-200 p-3 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -403,9 +533,9 @@ list_users                          users:read</pre>
             <h3 class="text-sm font-semibold text-slate-800"><?= icon('envelope', 'w-4 h-4 text-blue-500 mr-2') ?>Email Service &amp; Role-Based Access — App APIs</h3>
             <p class="text-xs text-slate-500">Core mail is configured under Settings → Email (PHP mail() or SMTP). Roles map to capabilities in <code class="bg-slate-100 px-1.5 py-0.5 rounded">config/capabilities.php</code>; the <code class="bg-slate-100 px-1.5 py-0.5 rounded">AdminAreaPolicy</code> middleware enforces them per admin area, and controllers add per-record rules (own posts only, publish gating).</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
+                <div class="min-w-0">
                     <p class="text-xs font-semibold text-slate-600 mb-1.5">Sending mail from an app</p>
-                    <pre class="bg-slate-900 text-emerald-200 rounded-lg p-3 text-xs overflow-x-auto">$mailer = $this-&gt;app-&gt;make(
+                    <pre class="bh-code bg-slate-900 text-emerald-200 rounded-lg p-3 text-xs overflow-x-auto">$mailer = $this-&gt;app-&gt;make(
     \App\Services\Mailer::class);
 $mailer-&gt;sendTemplate($to, $subject,
     $heading, $bodyHtml);
@@ -415,9 +545,9 @@ $mailer-&gt;sendTemplate($to, $subject,
 //    the mail array or return false)
 //  mail.sent / mail.failed (actions)</pre>
                 </div>
-                <div>
+                <div class="min-w-0">
                     <p class="text-xs font-semibold text-slate-600 mb-1.5">Roles &amp; capabilities</p>
-                    <pre class="bg-slate-900 text-sky-200 rounded-lg p-3 text-xs overflow-x-auto">use App\Http\Middleware\CheckCapability;
+                    <pre class="bh-code bg-slate-900 text-sky-200 rounded-lg p-3 text-xs overflow-x-auto">use App\Http\Middleware\CheckCapability;
 CheckCapability::userCan($user,
     'edit_others_posts');
 
@@ -435,6 +565,14 @@ CheckCapability::userCan($user,
     </div><!-- /content -->
 <?php $this->endSection(); ?>
 <?php $this->section('scripts'); ?>
+<style>
+/* MCP tool list: a fixed-height box that scrolls both ways (1.2.50). */
+.bh-tools { max-height: 22rem; }
+.bh-tools table { border-collapse: collapse; }
+.bh-tools tr + tr td { border-top: 1px solid rgba(148, 163, 184, .12); }
+.bh-tools td { vertical-align: top; }
+.bh-tools__desc { min-width: 14rem; }
+</style>
 <script>
 function filterEndpoints(q) {
     q = q.toLowerCase();

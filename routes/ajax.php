@@ -274,3 +274,20 @@ $ajax->register('system.log', [
     'input'       => ['name' => ['type' => 'string', 'required' => true, 'max' => 120, 'regex' => '/^[\w.\-]+\.log$/'], 'lines' => 'int|min:50|max:1000'],
     'description' => 'The end of a log file (System → Logs).',
 ]);
+
+// 1.2.50 — Settings screens save without a page load. The form is sent as it
+// would have been posted (`form`, URL-encoded) and saved by SettingsSaver,
+// the same code as the POST /admin/settings/{tab} routes, which remain the
+// fallback when script does not run.
+$ajax->register('settings.save', [
+    'handler'     => [\App\Http\Controllers\Ajax\SettingsActions::class, 'save'],
+    'capability'  => 'manage_settings',
+    'area'        => '/admin/settings',
+    'max_body'    => 262144,
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => [
+        'tab'  => ['type' => 'string', 'required' => true, 'in' => array_keys(\App\Services\SettingsSaver::TABS)],
+        'form' => 'required|string|max:200000',
+    ],
+    'description' => 'Save one Settings screen (General, Reading, Email, Permalinks…).',
+]);

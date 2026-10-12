@@ -84,12 +84,51 @@ final class Router
             'pattern'    => '/' . ltrim($pattern, '/'),
             'handler'    => $handler,
             'middleware' => [],
+            'owner'      => $this->owner,
         ];
         return $this;
     }
 
+    /** The app whose boot() is running (AppService sets it), credited with the routes it adds. */
+    private ?string $owner = null;
+
+    /** Credit the routes added from now on to an app (null: core). Returns the previous owner. */
+    public function setOwner(?string $slug): ?string
+    {
+        $prev = $this->owner;
+        $this->owner = $slug;
+        return $prev;
+    }
+
+    /**
+     * Every registered route, for documentation (the API reference screen):
+     * [['methods' => [...], 'pattern' => '/api/v1/…', 'owner' => app slug|null,
+     *   'fallback' => bool, 'protected' => bool], …]. 'protected' is true when
+     * the route sits behind the Authenticate middleware.
+     */
+    public function routes(): array
+    {
+        $out = [];
+        foreach ([[$this->routes, false], [$this->fallbacks, true]] as [$list, $fallback]) {
+            foreach ($list as $r) {
+                $mw = array_map('strval', (array) ($r['middleware'] ?? []));
+                $out[] = [
+                    'methods'   => array_values((array) $r['methods']),
+                    'pattern'   => (string) $r['pattern'],
+                    'owner'     => $r['owner'] ?? null,
+                    'fallback'  => $fallback,
+                    'protected' => (bool) array_filter($mw, static fn($m) => str_contains($m, 'Authenticate')),
+                ];
+            }
+        }
+        return $out;
+    }
+
     /** @var string[]|null Cached reservedSegments(); cleared whenever a route is added. */
     private ?array $reservedCache = null;
+
+    /** Whether the request being answered is in the admin or the AJAX gateway (set by dispatch). */
+    private bool $privateArea = false;
 
     /**
      * The literal first path segment of every registered route: "admin",
@@ -133,6 +172,7 @@ final class Router
             'pattern'    => $fullPattern,
             'handler'    => $handler,
             'middleware' => $groupMw,
+            'owner'      => $this->owner,
         ];
         return $this;
     }
@@ -164,6 +204,9 @@ final class Router
                 $path = '/';
             }
         }
+
+        // The admin and the AJAX gateway are never for search engines (1.2.50).
+        $this->privateArea = $path === '/admin' || str_starts_with($path, '/admin/') || $path === Request::AJAX_PATH;
 
         foreach ($this->routes as $route) {
             if (!in_array($method, $route['methods'], true)) {
@@ -361,6 +404,16 @@ final class Router
 
     private function emit(Response $response): void
     {
+        /*
+         * X-Robots-Tag on every admin and AJAX response — pages, JSON,
+         * downloads and redirects alike. The meta tag in the admin layouts
+         * only covers HTML, and robots.txt's "Disallow: /admin/" only asks
+         * crawlers not to fetch; neither keeps an address that was linked
+         * from somewhere out of an index the way this header does.
+         */
+        if ($this->privateArea && !isset($response->getHeaders()['X-Robots-Tag'])) {
+            $response->header('X-Robots-Tag', 'noindex, nofollow');
+        }
         $response->send();
     }
 

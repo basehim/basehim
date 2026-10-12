@@ -844,7 +844,15 @@ class AppService
             // Marked before boot() runs, because boot() is where an app
             // registers what needs this flag.
             $this->booted[$slug] = true;
-            $this->callBoot($instance, $app);
+            // Routes added during boot() are credited to the app (API reference).
+            $router = null;
+            try { $router = $app->make('router'); } catch (\Throwable) {}
+            $prevOwner = $router instanceof \App\Core\Router ? $router->setOwner($slug) : null;
+            try {
+                $this->callBoot($instance, $app);
+            } finally {
+                if ($router instanceof \App\Core\Router) $router->setOwner($prevOwner);
+            }
         }
 
         return $instance;

@@ -622,6 +622,10 @@ POST action also needs the CSRF token; every one is rate-limited.
 | `menus.items_add`, `menus.item_update`, `menus.item_remove`, `menus.reorder` | POST | `manage_menus` | The menu builder |
 | `users.activity` | GET | `manage_users` | A user's activity log |
 | `system.log` | GET | `manage_settings` | The end of a log file |
+| `settings.save` | POST | `manage_settings` (and the screen's own area rule) | Save one Settings screen. `tab`: general, reading, writing, discussion, seo, ai, appearance, permalinks, media, email or authorization; `form`: the screen's fields URL-encoded exactly as the form would post them. Same checks as `POST /admin/settings/{tab}` (`SettingsSaver`); answers `{type, message, values}` — `values` are the stored values, so the screen can show what the server adjusted |
+
+The full list on a running site — core's and every active app's, with their
+input fields — is under **API → Reference → AJAX actions**.
 
 Still on their own routes: uploads (`/admin/media/upload`, avatars), which the
 gateway cannot take because it accepts JSON only; and the updater and the

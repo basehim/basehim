@@ -147,6 +147,27 @@ final class McpController
         $scopes = $key['scopes'] ?? [];
         $has = fn(string $s) => in_array($s, $scopes, true);
 
+        // Filter by scope, and strip the internal markers.
+        $out = [];
+        foreach ($this->allTools($scopes) as $tool) {
+            $scope = $tool['_scope'];
+            if ($scope !== null && !$has($scope)) continue;
+            unset($tool['_scope'], $tool['_app']);
+            $out[] = $tool;
+        }
+        return $out;
+    }
+
+    /**
+     * Every tool — core's and those apps contribute — with its '_scope' (null:
+     * always listed) and '_app' marker, before any key's scopes are applied.
+     * The API reference lists them from here, so it cannot fall behind.
+     *
+     * @param string[] $scopes passed to the mcp.tools filter (apps may vary
+     *        what they offer by scope)
+     */
+    public function allTools(array $scopes): array
+    {
         $all = [];
 
         $all[] = [
@@ -525,15 +546,7 @@ final class McpController
             $this->logQuietly('mcp.tools filter failed: ' . $e->getMessage());
         }
 
-        // Filter by scope, and strip the internal markers.
-        $out = [];
-        foreach ($all as $tool) {
-            $scope = $tool['_scope'];
-            if ($scope !== null && !$has($scope)) continue;
-            unset($tool['_scope'], $tool['_app']);
-            $out[] = $tool;
-        }
-        return $out;
+        return $all;
     }
 
     /** Names of tools contributed by apps this request. */

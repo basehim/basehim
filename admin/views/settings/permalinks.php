@@ -113,6 +113,7 @@
                         </div>
                     </label>
 
+                    <div data-settings-live="htaccess">
                     <?php if (!$ht['exists']): ?>
                         <div class="mt-4 rounded-lg bg-slate-50 border border-slate-200 p-4 text-sm text-slate-700">
                             <?= icon('information-circle', 'w-4 h-4 mr-1 text-slate-400') ?>
@@ -136,6 +137,7 @@
                             <pre class="px-4 pb-4 text-[11px] leading-relaxed text-slate-600 overflow-x-auto"><?= htmlspecialchars($htaccessBlock) ?></pre>
                         </details>
                     <?php endif; ?>
+                    </div>
                 </div>
 
                 <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm">
