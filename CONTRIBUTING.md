@@ -102,7 +102,8 @@ docs in [`docs/`](docs/):
 3. Run `php tests/run.php` (with a test database) and add a test for the bug or
    behaviour you changed. Say in the PR description what else you exercised by
    hand.
-4. Update the docs and `CHANGELOG.md` if behaviour changed.
+4. Update the docs if behaviour changed. Release notes are written per version
+   in `docs/changelog/` when a release is prepared; see `CHANGELOG.md`.
 5. Write a commit message that explains the reasoning, not just the diff.
 
 Commit messages follow a loose conventional style:

@@ -23,5 +23,5 @@
 - [ ] Works on PHP 8.1 (no 8.2+ syntax in core)
 - [ ] Any new table or column honours `DB_PREFIX`
 - [ ] New migrations are added as a new numbered file, not edits to a shipped one
-- [ ] Docs and `CHANGELOG.md` updated if behaviour changed
+- [ ] Docs updated if behaviour changed (release notes go in `docs/changelog/` with the release)
 - [ ] No credentials, `.env` contents, or personal data in the diff

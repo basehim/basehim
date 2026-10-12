@@ -42,3 +42,11 @@ docs/**            linguist-documentation
 /docs           export-ignore
 /CONTRIBUTING.md export-ignore
 /tests          export-ignore
+
+# Retired paths: files releases no longer contain. Patches cannot delete files
+# from sites, so an install updated by patches still has them. The CloudHim
+# release sync (1.3.2+) leaves export-ignore paths to the repository, so
+# listing them here keeps a sync from restoring them from such an install.
+/CHANGELOG-*.md      export-ignore
+/RELEASE-NOTES-*.md  export-ignore
+/app/Http/Controllers/Web/CategoryPostController.php export-ignore
