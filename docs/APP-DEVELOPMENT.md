@@ -201,6 +201,20 @@ normal blocks to edit.
 **Content:** `post.before_create` `post.created` `post.before_update`
 `post.updated` `post.before_delete` `post.deleted` `post.before_force_delete`
 `post.restored` `post.content` (filter — the rendered body)
+`post.unfiltered_html` (filter — may this writer publish HTML as written)
+`html.iframe_hosts` (filter — where a filtered post's iframes may point)
+
+Post HTML from anyone without the `unfiltered_html` capability (editors and
+administrators have it) is filtered when it is saved: scripts, event handlers,
+`javascript:` links, forms and iframes from unknown sites are removed (since
+1.2.52). That includes posts your app writes with `$this->api()->posts()` or
+`PostService` while no one is signed in, such as from a scheduled task. If your
+app writes HTML it trusts, return `true` from `post.unfiltered_html`; to allow
+iframes from another provider, add its `host/path` to `html.iframe_hosts`:
+
+```php
+$this->addFilter('html.iframe_hosts', fn(array $h) => [...$h, 'player.example.org/embed/']);
+```
 
 **Users:** `user.before_create` `user.created` `user.updated` `user.deleted`
 
