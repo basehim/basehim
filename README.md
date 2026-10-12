@@ -116,6 +116,14 @@ Installed apps can contribute their own scopes, so your site's list may be
 longer. Whatever your site advertises is authoritative — fetch
 `/.well-known/oauth-authorization-server` to see it.
 
+A token also acts as the account behind it: scopes choose the tools, and the
+account's role decides what those tools may do, exactly as on the REST API. An
+author's `posts:write` token edits that author's posts and no one else's, a
+contributor's goes in for review rather than live, and suspending an account
+stops its tokens and keys at once. Scopes added by apps are granted only to
+administrators unless the app maps them to a capability with the
+`mcp.scope_capabilities` filter.
+
 ### Desktop agent API
 
 For companion apps running on a machine rather than in a chat window:

@@ -235,6 +235,19 @@ normal blocks to edit.
 **Core API** `api` `schedule`
 **Utility** `cache` `config` `request` `session` `log` `allowed` `make`
 
+### Admin routes and access
+
+`adminGet()` / `adminPost()` register under `/admin` behind the same checks as
+core's admin screens: the user must be signed in **and** hold your app's access
+capability, `access_app:{slug}` — roles with `manage_apps` or `manage_options`
+have it; anyone else needs it granted under Users → Access (since 1.2.51; before
+that any signed-in account could open these routes). To open a route to more
+roles, map its path with the `admin.area_policy` filter, e.g.
+`['/admin/events/my-tickets' => 'read']`. Check CSRF in every POST handler
+(`$this->session()->verifyCsrf((string) $request->input('_csrf'))`), or use
+`$this->ajax()` actions, which check it for you.
+Routes you register with plain `get()`/`post()`/`route()` get no checks at all.
+
 Your own tables should use `$this->table('things')` → `app_myapp_things`.
 
 ## Packaging

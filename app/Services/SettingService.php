@@ -30,6 +30,49 @@ class SettingService
         return $out;
     }
 
+    /**
+     * The same values with credentials masked: any key that names a password,
+     * secret, key, token or DSN reads "[redacted]". For handing settings to an
+     * API or MCP client, whatever scope it holds. Works on one group
+     * (key => value) or on all() (group => key => value).
+     */
+    public static function redact(array $values): array
+    {
+        $out = [];
+        foreach ($values as $k => $v) {
+            if (is_array($v)) {
+                $out[$k] = self::redact($v);
+            } elseif (self::isCredential((string) $k)) {
+                $out[$k] = ($v === null || $v === '') ? $v : self::REDACTED;
+            } else {
+                $out[$k] = $v;
+            }
+        }
+        return $out;
+    }
+
+    /** What redact() puts in place of a credential. */
+    public const REDACTED = '[redacted]';
+
+    /**
+     * One group's values without the credentials a client sent back as
+     * "[redacted]": a client that reads the settings, changes one and writes
+     * the group back must not overwrite the stored password with the mask.
+     */
+    public static function withoutRedacted(array $values): array
+    {
+        return array_filter(
+            $values,
+            static fn($v, $k) => !($v === self::REDACTED && self::isCredential((string) $k)),
+            ARRAY_FILTER_USE_BOTH
+        );
+    }
+
+    private static function isCredential(string $key): bool
+    {
+        return (bool) preg_match('/(pass|secret|key|token|dsn|smtp_pw)/i', $key);
+    }
+
     public function get(string $group, string $key, $default = null)
     {
         $all = $this->all();

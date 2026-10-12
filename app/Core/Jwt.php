@@ -38,6 +38,16 @@ final class Jwt
         if (!is_array($header) || !is_array($payload) || !isset($header['alg'])) {
             return null;
         }
+        // Only the algorithms sign() knows. Anything else ("none", a list…) is
+        // simply not our token: until 1.2.51 sign() threw, and a junk bearer
+        // token answered 500 instead of 401.
+        if (!in_array($header['alg'], ['HS256', 'HS384', 'HS512'], true)) {
+            return null;
+        }
+        // Every token Basehim issues expires; one without exp is not ours.
+        if (!isset($payload['exp'])) {
+            return null;
+        }
 
         $expected = self::sign("{$headerEnc}.{$payloadEnc}", $secret, $header['alg']);
         if (!hash_equals($expected, $providedSig)) {

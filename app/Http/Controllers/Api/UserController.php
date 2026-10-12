@@ -37,7 +37,16 @@ class UserController extends ApiController
         $users = $this->app->make(UserService::class);
         $target = $users->find((int)$id);
         if (!$target) return Response::json(['error' => 'Not found'], 404);
-        return Response::json(['data' => $this->safeUser($target)]);
+
+        // The full record (email, role, status, last sign-in, meta) is for the
+        // account itself and for user managers. Anyone else signed in gets the
+        // public profile an author page shows. Until 1.2.51 every signed-in
+        // account, a subscriber included, could list every user's email.
+        if ((int) $target['id'] === (int) $user['id'] || $this->userCan('manage_users')) {
+            return Response::json(['data' => $this->safeUser($target)]);
+        }
+        $public = $this->safeUser(array_intersect_key($target, array_flip(['id', 'display_name', 'bio', 'avatar_media_id'])));
+        return Response::json(['data' => $public]);
     }
 
     public function store(Request $request): Response

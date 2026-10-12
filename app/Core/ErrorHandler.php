@@ -21,7 +21,10 @@ final class ErrorHandler
             error_log($e->getMessage());
         }
 
-        $isApi = isset($_SERVER['REQUEST_URI']) && str_starts_with($_SERVER['REQUEST_URI'], '/api/');
+        $uri = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+        if ($base !== '' && str_starts_with($uri, $base)) $uri = (string) substr($uri, strlen($base));
+        $isApi = str_starts_with($uri, '/api/');
         $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
         $wantsJson = $isApi || str_contains($accept, 'application/json');
         $debug = filter_var(Env::get('APP_DEBUG', 'false'), FILTER_VALIDATE_BOOLEAN);
@@ -40,11 +43,18 @@ final class ErrorHandler
             http_response_code($status);
             header('Content-Type: application/json; charset=utf-8');
         }
+        // A 5xx message is for the log, not the client: it can name tables,
+        // queries, file paths or the database account. Until 1.2.51 it was
+        // returned as the detail even with APP_DEBUG off. A 4xx exception is
+        // raised on purpose to tell the client what to fix, so it keeps its.
+        $detail = ($debug || $status < 500)
+            ? ($e->getMessage() ?: 'An error occurred.')
+            : 'Something went wrong on the server. The error has been logged.';
         $body = [
             'type'   => 'https://basehim.io/errors/exception',
             'title'  => self::titleFromStatus($status),
             'status' => $status,
-            'detail' => $e->getMessage() ?: 'An error occurred.',
+            'detail' => $detail,
         ];
         if ($debug) {
             $body['debug'] = [

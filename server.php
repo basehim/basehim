@@ -24,7 +24,7 @@ if (PHP_SAPI !== 'cli-server') {
 $path = rawurldecode((string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH));
 
 // The same private paths .htaccess refuses, plus every dotfile (.env, .git…).
-if (preg_match('#^/(app|config|database|routes)(/|$)#', $path)
+if (preg_match('#^/(app|config|database|routes|tests)(/|$)#', $path)
     || preg_match('#^/storage(/(?!uploads/)|$)#', $path)
     || $path === '/bootstrap.php'
     // Dotfiles stay private, but /.well-known/ is public by standard: OAuth

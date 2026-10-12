@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use App\Core\Application;
-use App\Core\Config;
 use App\Core\Jwt;
 use App\Core\Request;
 use App\Core\Response;
@@ -70,8 +69,7 @@ final class Authenticate
 
             // 2. Try as a JWT token
             if (!$user) {
-                $secret = $app->make(Config::class)->get('auth.jwt.secret');
-                $payload = Jwt::decode($token, $secret);
+                $payload = Jwt::decode($token, \App\Services\AuthService::jwtSecret());
                 if ($payload && isset($payload['sub'])) {
                     $repo = $app->make(UserRepository::class);
                     $user = $repo->find((int) $payload['sub']);

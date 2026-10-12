@@ -232,33 +232,49 @@ abstract class App
 
     /**
      * Register a GET route inside the authenticated /admin area.
-     * The path is relative to /admin and the route is automatically
-     * protected by the Authenticate middleware — matching how
-     * routes/admin.php registers built-in admin routes.
+     * The path is relative to /admin. The route runs behind the same two
+     * middleware as core's admin routes (routes/admin.php): Authenticate,
+     * then AdminAreaPolicy.
+     *
+     * AdminAreaPolicy gives an app's admin routes the app's access
+     * capability, access_app:{slug}: held by roles with manage_apps or
+     * manage_options, and by anyone granted it under Users > Access. Until
+     * 1.2.51 these routes had Authenticate only, so any signed-in account —
+     * a subscriber included — could open them. To open a route to more roles,
+     * map its path to a capability with the admin.area_policy filter.
+     *
+     * Your handlers still check CSRF on POST:
+     * $this->session()->verifyCsrf((string) $request->input('_csrf')).
      *
      * Example: $this->adminGet('/greeter', [$this, 'show'])
-     *          -> GET /admin/greeter, behind auth.
+     *          -> GET /admin/greeter, signed in with access to this app.
      */
     protected function adminGet(string $pattern, callable|array|string $handler): void
     {
         $this->router()->group(
-            ['prefix' => '/admin', 'middleware' => ['App\\Http\\Middleware\\Authenticate']],
+            ['prefix' => '/admin', 'middleware' => self::ADMIN_MIDDLEWARE],
             function ($router) use ($pattern, $handler) {
                 $router->get($pattern, $handler);
             }
         );
     }
 
-    /** POST companion to adminGet(). */
+    /** POST companion to adminGet(): same middleware. Check CSRF in the handler. */
     protected function adminPost(string $pattern, callable|array|string $handler): void
     {
         $this->router()->group(
-            ['prefix' => '/admin', 'middleware' => ['App\\Http\\Middleware\\Authenticate']],
+            ['prefix' => '/admin', 'middleware' => self::ADMIN_MIDDLEWARE],
             function ($router) use ($pattern, $handler) {
                 $router->post($pattern, $handler);
             }
         );
     }
+
+    /** What every admin route runs behind, core's and apps' alike. */
+    private const ADMIN_MIDDLEWARE = [
+        'App\\Http\\Middleware\\Authenticate',
+        'App\\Http\\Middleware\\AdminAreaPolicy',
+    ];
 
     protected function router(): Router
     {

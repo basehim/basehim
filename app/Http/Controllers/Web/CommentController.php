@@ -21,14 +21,14 @@ class CommentController extends Controller
         $isAjax = $this->isAjax($request);
 
         if (!$this->verifyCsrf($request)) {
-            return $this->respond($isAjax, 'error', 'Security check failed.', $request->input('redirect_to', '/'), 419);
+            return $this->respond($isAjax, 'error', 'Security check failed.', $this->backTo($request), 419);
         }
 
         /** @var SettingService $settings */
         $settings = $this->app->make(SettingService::class);
 
         if (!$settings->get('discussion', 'allow_comments', true)) {
-            return $this->respond($isAjax, 'error', 'Comments are disabled.', $request->input('redirect_to', '/'), 403);
+            return $this->respond($isAjax, 'error', 'Comments are disabled.', $this->backTo($request), 403);
         }
 
         $postId = (int)$request->input('post_id');
@@ -159,6 +159,21 @@ class CommentController extends Controller
 
         $session->flash('success', $msg);
         return Response::redirect(Helpers::postUrl($post) . '#comments');
+    }
+
+    /**
+     * Where a failed non-AJAX submission goes back to: the form's redirect_to,
+     * but only a path on this site. It used to be any URL, so a page elsewhere
+     * could post here and have this site redirect the visitor anywhere.
+     */
+    private function backTo(Request $request): string
+    {
+        $to = $request->input('redirect_to', '/');
+        if (!is_string($to) || $to === '' || $to[0] !== '/' || str_starts_with($to, '//')
+            || str_contains($to, '\\') || preg_match('/[\x00-\x1F\x7F]/', $to)) {
+            return '/';
+        }
+        return $to;
     }
 
     private function isAjax(Request $request): bool

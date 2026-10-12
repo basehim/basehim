@@ -65,6 +65,12 @@ class UploadController extends Controller
         $response->header('ETag', $etag);
         $response->header('Last-Modified', gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
         $response->header('Cache-Control', 'public, max-age=2592000'); // 30 days
+        $response->header('X-Content-Type-Options', 'nosniff');
+        if ($ext === 'svg') {
+            // Opened on its own, an SVG is a document: never let it run script.
+            // Shown with <img> it is unaffected (images never run script).
+            $response->header('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox");
+        }
 
         return $response;
     }

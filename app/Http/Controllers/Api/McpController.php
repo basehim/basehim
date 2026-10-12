@@ -739,6 +739,12 @@ final class McpController
 
         $filters = ['type' => $type];
         if ($status !== 'any') $filters['status'] = $status;
+        // Drafts and pending items are their authors' business unless the
+        // owner may edit others' (as in the admin's lists).
+        $family = $type === 'page' ? 'pages' : 'posts';
+        if ($status !== 'published' && !$this->can("edit_others_{$family}")) {
+            $filters['author_id'] = (int) ($this->authUser()['id'] ?? 0);
+        }
 
         $posts = $this->app()->make(PostService::class);
         $res = $posts->paginate($filters, $page, $perPage);
@@ -772,7 +778,7 @@ final class McpController
         } else {
             throw new McpError('Provide either slug or id', -32602);
         }
-        if (!$item) throw new McpError(ucfirst($type) . ' not found', -32602);
+        if (!$item || !$this->canSee($item)) throw new McpError(ucfirst($type) . ' not found', -32602);
 
         return $this->json([
             'id'      => (int) $item['id'],
@@ -794,8 +800,13 @@ final class McpController
         $status = (string) ($args['status'] ?? 'draft');
         if (!in_array($status, ['draft', 'pending', 'published'], true)) $status = 'draft';
 
+        $family = $type === 'page' ? 'pages' : 'posts';
+        $this->requireCap("edit_{$family}");
+        // Without publish rights it goes in for review, as in the admin.
+        if ($status === 'published' && !$this->can("publish_{$family}")) $status = 'pending';
+
         $posts = $this->app()->make(PostService::class);
-        $authorId = (int) ($this->authKey()['user_id'] ?? 0) ?: 1;
+        $authorId = (int) ($this->authUser()['id'] ?? 0);
 
         $id = $posts->create([
             'type'    => $type,
@@ -829,6 +840,12 @@ final class McpController
             throw new McpError("That id is a {$existing['type']}, not a {$type} — use the matching tool.", -32602);
         }
 
+        $this->requireOnPost($existing, 'edit');
+        $family = $type === 'page' ? 'pages' : 'posts';
+        // A live post changes only with publish rights: otherwise it would go
+        // out unreviewed or be pulled (the REST API's rule).
+        if (($existing['status'] ?? '') === 'published') $this->requireCap("publish_{$family}");
+
         $patch = [];
         foreach (['title', 'content', 'excerpt', 'status'] as $f) {
             if (array_key_exists($f, $args)) $patch[$f] = $args[$f];
@@ -836,6 +853,7 @@ final class McpController
         if (isset($patch['status']) && !in_array($patch['status'], ['draft', 'pending', 'published'], true)) {
             unset($patch['status']);
         }
+        if (($patch['status'] ?? '') === 'published' && !$this->can("publish_{$family}")) $patch['status'] = 'pending';
         if (!$patch) throw new McpError('Nothing to update', -32602);
 
         $posts->update($id, $patch);
@@ -855,6 +873,7 @@ final class McpController
         $posts = $this->app()->make(PostService::class);
         $item = $posts->find($id);
         if (!$item) throw new McpError('Not found', -32602);
+        $this->requireOnPost($item, 'delete');
         // Soft delete only. An assistant should never be able to destroy content
         // irrecoverably — the trash is emptied deliberately from the admin.
         $ok = $posts->delete($id);
@@ -874,7 +893,9 @@ final class McpController
             throw new McpError('term_ids must be an array of term ids', -32602);
         }
         $posts = $this->app()->make(PostService::class);
-        if (!$posts->find($id)) throw new McpError('Post not found', -32602);
+        $post = $posts->find($id);
+        if (!$post) throw new McpError('Post not found', -32602);
+        $this->requireOnPost($post, 'edit');
         $ids = array_values(array_filter(array_map('intval', $args['term_ids']), fn($n) => $n > 0));
         $posts->update($id, ['term_ids' => $ids]);
         return $this->json(['ok' => true, 'id' => $id, 'terms' => $posts->terms($id)]);
@@ -882,6 +903,7 @@ final class McpController
 
     private function doCreateTerm(array $args): string
     {
+        $this->requireCap('manage_taxonomies');
         $tax = trim((string) ($args['taxonomy'] ?? ''));
         $name = trim((string) ($args['name'] ?? ''));
         if ($tax === '' || $name === '') throw new McpError('taxonomy and name are required', -32602);
@@ -902,6 +924,7 @@ final class McpController
 
     private function doListMedia(array $args): string
     {
+        $this->requireCap('upload_media');
         $filters = [];
         $type = (string) ($args['type'] ?? 'any');
         if ($type !== 'any' && $type !== '') $filters['type'] = $type;
@@ -926,6 +949,7 @@ final class McpController
 
     private function doGetMedia(array $args): string
     {
+        $this->requireCap('upload_media');
         $id = (int) ($args['id'] ?? 0);
         if ($id <= 0) throw new McpError('id is required', -32602);
         $m = $this->app()->make(\App\Services\MediaService::class)->find($id);
@@ -954,6 +978,7 @@ final class McpController
 
     private function doListComments(array $args): string
     {
+        $this->requireCap('moderate_comments');
         $filters = [];
         $status = (string) ($args['status'] ?? 'pending');
         if ($status !== 'any' && $status !== '') $filters['status'] = $status;
@@ -989,6 +1014,7 @@ final class McpController
 
     private function doModerateComment(array $args): string
     {
+        $this->requireCap('moderate_comments');
         $id = (int) ($args['id'] ?? 0);
         $status = (string) ($args['status'] ?? '');
         if ($id <= 0) throw new McpError('id is required', -32602);
@@ -1003,20 +1029,16 @@ final class McpController
 
     private function doGetSettings(array $args): string
     {
+        $this->requireCap('manage_settings');
         $group = trim((string) ($args['group'] ?? 'general')) ?: 'general';
         $values = $this->app()->make(SettingService::class)->getGroup($group);
         // Never hand credentials to a client, whatever scope it holds.
-        $redacted = [];
-        foreach ($values as $k => $v) {
-            $redacted[$k] = preg_match('/(pass|secret|key|token|dsn|smtp_pw)/i', (string) $k)
-                ? '[redacted]'
-                : $v;
-        }
-        return $this->json(['group' => $group, 'settings' => $redacted]);
+        return $this->json(['group' => $group, 'settings' => SettingService::redact($values)]);
     }
 
     private function doListUsers(array $args): string
     {
+        $this->requireCap('manage_users');
         $perPage = $this->clampInt($args['per_page'] ?? 20, 1, 50, 20);
         $search = trim((string) ($args['search'] ?? ''));
         $svc = $this->app()->make(\App\Services\UserService::class);
@@ -1121,6 +1143,7 @@ final class McpController
 
     private function doDeleteMenu(array $args): string
     {
+        $this->requireCap('manage_menus');
         $id = (int) ($args['id'] ?? 0);
         if ($id < 1) return $this->json(['error' => 'A numeric menu "id" is required.']);
 
@@ -1138,6 +1161,7 @@ final class McpController
 
     private function doRegenerateThumbnails(): string
     {
+        $this->requireCap('manage_settings');
         $media = $this->app()->make(\App\Services\MediaService::class);
         $r = $media->regenerateAll();
         return $this->json([
@@ -1187,7 +1211,7 @@ final class McpController
             $posts = $this->app()->make(PostService::class);
             $ident = $m[1];
             $post = ctype_digit($ident) ? $posts->find((int) $ident) : $posts->findBySlug($ident, 'post');
-            if (!$post) throw new McpError('Resource not found', -32602);
+            if (!$post || !$this->canSee($post)) throw new McpError('Resource not found', -32602);
             return ['contents' => [[
                 'uri' => $uri,
                 'mimeType' => 'text/html',
@@ -1203,6 +1227,7 @@ final class McpController
 
     private ?array $keyRecord = null;
     private bool $keyResolved = false;
+    private ?array $keyUser = null;
 
     private function authKey(): array
     {
@@ -1233,25 +1258,85 @@ final class McpController
             $oauth = $this->app()->make(\App\Services\McpOAuthService::class)->validateAccessToken($raw);
         } catch (\Throwable) { $oauth = null; }
         if ($oauth) {
-            $this->keyRecord = [
+            $rec = [
                 'user_id' => $oauth['user_id'],
                 'scopes'  => $oauth['scopes'],
                 'name'    => 'OAuth client',
                 'via'     => 'oauth',
             ];
-            return $this->keyRecord;
+        } else {
+            // 2. Basehim API key (direct/programmatic clients: Claude Code, curl…).
+            try {
+                $rec = $this->app()->make(ApiKeyService::class)->validate($raw);
+            } catch (\Throwable) {
+                $rec = null;
+            }
+            if (!$rec) throw new McpError('Unauthorized: invalid or expired credentials.', -32001);
         }
 
-        // 2. Basehim API key (direct/programmatic clients: Claude Code, curl…).
+        // The credential acts as its owner, so the owner must still be an
+        // active account. A suspended, archived or deleted user's keys and
+        // OAuth tokens used to keep working here (the REST API refused them).
+        $user = null;
         try {
-            $rec = $this->app()->make(ApiKeyService::class)->validate($raw);
-        } catch (\Throwable) {
-            $rec = null;
+            $user = $this->app()->make(\App\Core\Database::class)->selectOne(
+                'SELECT * FROM {users} WHERE id = :id AND deleted_at IS NULL',
+                ['id' => (int) ($rec['user_id'] ?? 0)]
+            );
+        } catch (\Throwable) {}
+        if (!$user || ($user['status'] ?? '') !== 'active') {
+            throw new McpError('Unauthorized: the account behind these credentials is not active.', -32001);
         }
-        if (!$rec) throw new McpError('Unauthorized: invalid or expired credentials.', -32001);
 
         $this->keyRecord = $rec;
+        $this->keyUser = $user;
         return $rec;
+    }
+
+    /** The active account the credential belongs to (resolved by authKey()). */
+    private function authUser(): array
+    {
+        $this->authKey();
+        return (array) $this->keyUser;
+    }
+
+    /** Whether the credential's owner holds a capability (role, grants, denials). */
+    private function can(string $cap): bool
+    {
+        return \App\Http\Middleware\CheckCapability::userCan($this->authUser(), $cap);
+    }
+
+    /**
+     * A scope says which tools a credential may call; the owner's role says
+     * what those tools may do — the same rule as the REST API. Without this a
+     * contributor's posts:write token could publish, and edit or trash anyone's
+     * posts.
+     */
+    private function requireCap(string $cap): void
+    {
+        if (!$this->can($cap)) {
+            throw new McpError("Your account does not have the {$cap} capability.", -32002);
+        }
+    }
+
+    /** Edit/delete rights on one post: the type's capability, plus *_others_* for someone else's. */
+    private function requireOnPost(array $post, string $action): void
+    {
+        $type = (string) ($post['type'] ?? 'post');
+        $family = $type === 'page' ? 'pages' : 'posts';
+        $this->requireCap("{$action}_{$family}");
+        if ((int) ($post['author_id'] ?? 0) !== (int) ($this->authUser()['id'] ?? 0)) {
+            $this->requireCap("{$action}_others_{$family}");
+        }
+    }
+
+    /** May the owner read this item? Published: yes. Otherwise: theirs, or edit_others_*. */
+    private function canSee(array $post): bool
+    {
+        if (($post['status'] ?? '') === 'published') return true;
+        $family = ($post['type'] ?? 'post') === 'page' ? 'pages' : 'posts';
+        return (int) ($post['author_id'] ?? 0) === (int) ($this->authUser()['id'] ?? 0)
+            || $this->can("edit_others_{$family}");
     }
 
     private function requireScope(string $scope): void

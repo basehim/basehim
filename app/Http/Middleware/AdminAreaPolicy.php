@@ -122,6 +122,16 @@ final class AdminAreaPolicy
 
         $required = self::requiredFor($path);
 
+        // An app's admin route that no rule covers — a path outside the app's
+        // menu URL, or an app with no menu — still needs access to that app.
+        // Without this fallback such routes were open to every signed-in user.
+        if ($required === null && str_starts_with($path, '/admin/') && !in_array($path, self::OPEN, true)) {
+            try {
+                $owner = $app->make(\App\Core\Router::class)->currentOwner();
+                if ($owner !== null) $required = \App\Services\AccessControl::appCap($owner);
+            } catch (\Throwable) {}
+        }
+
         if ($required === null || CheckCapability::userCan($user, $required)) {
             return $next($request);
         }

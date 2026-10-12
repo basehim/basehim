@@ -241,10 +241,20 @@ final class OAuthController
             'users:read'       => 'manage_users',
             'settings:read'    => 'manage_settings',
         ];
+        // Scopes apps add (mcp.scopes) default to administrators. Until 1.2.51
+        // a scope missing from this map was granted to whoever signed in, a
+        // subscriber included. An app can name the capability its scope needs
+        // with the mcp.scope_capabilities filter: ['myapp:write' => 'edit_posts'].
+        try {
+            $extra = \App\Core\Application::getInstance()->make(\App\Core\HookRegistry::class)
+                ->applyFilters('mcp.scope_capabilities', []);
+            foreach ((array) $extra as $sc => $c) {
+                if (is_string($sc) && is_string($c) && $c !== '' && !isset($map[$sc])) $map[$sc] = $c;
+            }
+        } catch (\Throwable) {}
         $out = [];
         foreach (array_filter(explode(' ', $scope)) as $s) {
-            $cap = $map[$s] ?? null;
-            if ($cap === null) { $out[] = $s; continue; }
+            $cap = $map[$s] ?? 'manage_options';
             try {
                 if (\App\Http\Middleware\CheckCapability::userCan($user, $cap)) $out[] = $s;
             } catch (\Throwable) {}

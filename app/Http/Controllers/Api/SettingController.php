@@ -17,7 +17,10 @@ class SettingController extends ApiController
         }
         /** @var SettingService $settings */
         $settings = $this->app->make(SettingService::class);
-        return Response::json(['data' => $settings->all()]);
+        // Credentials (SMTP password, the update-service key, the site's
+        // signing secret…) are never sent, as on MCP's get_settings. Until
+        // 1.2.51 a settings:read API key read them all in plain text.
+        return Response::json(['data' => SettingService::redact($settings->all())]);
     }
 
     public function publicSettings(Request $request): Response
@@ -39,9 +42,11 @@ class SettingController extends ApiController
         $body = $request->all();
         foreach ($body as $group => $values) {
             if (is_array($values)) {
-                $settings->setMany($group, $values);
+                // GET returns credentials as "[redacted]"; sending one back
+                // unchanged leaves the stored value alone.
+                $settings->setMany($group, SettingService::withoutRedacted($values));
             }
         }
-        return Response::json(['data' => $settings->all()]);
+        return Response::json(['data' => SettingService::redact($settings->all())]);
     }
 }

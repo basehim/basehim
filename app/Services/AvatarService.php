@@ -228,7 +228,7 @@ class AvatarService
         } catch (\Throwable) {}
         try {
             // Author archives and post pages show the photo.
-            Application::getInstance()->make(CacheService::class)->flush();
+            Application::getInstance()->make(\App\Core\Cache::class)->flush();
         } catch (\Throwable) {}
     }
 

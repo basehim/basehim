@@ -64,6 +64,29 @@ class CommentService
         ];
     }
 
+    /**
+     * A commenter's website, as a link it is safe to print in href="": an
+     * http(s) URL with a host, at most 200 characters (the column), or null.
+     * "example.com/me" gets https://. Anything with another scheme —
+     * javascript:, data:, vbscript: — is dropped. Themes print this value
+     * inside href="…"; until 1.2.51 it was stored as typed, so a visitor
+     * could leave a javascript: link that ran on the site when clicked.
+     */
+    public static function safeAuthorUrl(mixed $url): ?string
+    {
+        if (!is_string($url)) return null;
+        $url = trim($url);
+        if ($url === '') return null;
+        if (preg_match('#^[a-z][a-z0-9+.\-]*:#i', $url)) {
+            if (!preg_match('#^https?://#i', $url)) return null;
+        } else {
+            $url = 'https://' . ltrim($url, '/');
+        }
+        if (strlen($url) > 200 || filter_var($url, FILTER_VALIDATE_URL) === false) return null;
+        $host = parse_url($url, PHP_URL_HOST);
+        return is_string($host) && $host !== '' ? $url : null;
+    }
+
     public function create(array $data): int
     {
         $data = $this->hooks->applyFilters('comment.before_create', $data);
@@ -88,7 +111,7 @@ class CommentService
             'author_id' => !empty($data['author_id']) ? (int)$data['author_id'] : null,
             'author_name' => $data['author_name'] ?? null,
             'author_email' => $data['author_email'] ?? null,
-            'author_url' => $data['author_url'] ?? null,
+            'author_url' => self::safeAuthorUrl($data['author_url'] ?? null),
             'author_ip' => $_SERVER['REMOTE_ADDR'] ?? null,
             'content' => $data['content'] ?? '',
             'status' => $data['status'] ?? 'pending',

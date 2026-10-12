@@ -197,6 +197,41 @@ class AuthService
         return $secret = hash('sha256', __DIR__ . php_uname() . (string) @filemtime(__FILE__));
     }
 
+    /** JWT_SECRET values published in .env.example and config/auth.php. */
+    private const PLACEHOLDER_JWT_SECRETS = [
+        'change-me-please-this-must-be-a-long-random-string',
+        'please-change-this-to-a-long-random-string-at-least-32-chars',
+    ];
+
+    /** The key API access tokens are signed with (see jwtSecretFrom()). */
+    public static function jwtSecret(): string
+    {
+        $configured = '';
+        try {
+            $configured = (string) Application::getInstance()->make(Config::class)->get('auth.jwt.secret', '');
+        } catch (\Throwable) {}
+        return self::jwtSecretFrom($configured);
+    }
+
+    /**
+     * JWT_SECRET as configured — unless it is missing, shorter than 32
+     * characters, or one of the placeholders this repository publishes. Then
+     * a key derived from the site's own random secret (secret()) is used.
+     *
+     * The placeholder is public: a site set up by copying .env.example (the
+     * README's from-source route) would accept access tokens anyone can sign,
+     * for any user id, the super admin's included. The installer always wrote
+     * a random JWT_SECRET, so installed sites are unaffected.
+     */
+    public static function jwtSecretFrom(string $configured): string
+    {
+        $configured = trim($configured);
+        if (strlen($configured) >= 32 && !in_array($configured, self::PLACEHOLDER_JWT_SECRETS, true)) {
+            return $configured;
+        }
+        return hash_hmac('sha256', 'basehim-jwt', self::secret());
+    }
+
     public function currentUserId(): ?int
     {
         $id = $this->session->get('user_id');
@@ -214,7 +249,7 @@ class AuthService
      */
     public function issueTokens(array $user, ?string $family = null): array
     {
-        $secret = $this->config->get('auth.jwt.secret');
+        $secret = self::jwtSecret();
         $alg = $this->config->get('auth.jwt.algorithm', 'HS256');
         $issuer = $this->config->get('auth.jwt.issuer', 'basehim');
         $audience = $this->config->get('auth.jwt.audience', 'basehim-client');
@@ -259,7 +294,7 @@ class AuthService
      */
     public function userFromToken(string $token): ?array
     {
-        $secret = $this->config->get('auth.jwt.secret');
+        $secret = self::jwtSecret();
         $payload = Jwt::decode($token, $secret);
         if (!$payload || !isset($payload['sub'])) return null;
 

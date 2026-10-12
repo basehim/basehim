@@ -130,6 +130,20 @@ final class Router
     /** Whether the request being answered is in the admin or the AJAX gateway (set by dispatch). */
     private bool $privateArea = false;
 
+    /** The route being dispatched, while its middleware and handler run. */
+    private ?array $current = null;
+
+    /**
+     * The app that registered the route being dispatched (its slug), or null
+     * for core's routes and outside a dispatch. AdminAreaPolicy uses it to
+     * guard an app's admin routes that its menu URL does not cover.
+     */
+    public function currentOwner(): ?string
+    {
+        $owner = $this->current['owner'] ?? null;
+        return is_string($owner) && $owner !== '' ? $owner : null;
+    }
+
     /**
      * The literal first path segment of every registered route: "admin",
      * "search", "feed", and those of installed apps. A page or post whose slug
@@ -218,6 +232,7 @@ final class Router
                 continue;
             }
 
+            $this->current = $route;
             $response = $this->runMiddleware($route['middleware'], $request, function ($req) use ($route, $params) {
                 return $this->callHandler($route['handler'], $req, $params);
             });
@@ -254,6 +269,7 @@ final class Router
             if ($params === null) {
                 continue;
             }
+            $this->current = $route;
             try {
                 $response = $this->runMiddleware($route['middleware'], $request, function ($req) use ($route, $params) {
                     return $this->callHandler($route['handler'], $req, $params);

@@ -228,6 +228,19 @@ class MediaService
         $mime = finfo_file($finfo, $file['tmp_name']) ?: 'application/octet-stream';
         finfo_close($finfo);
 
+        // An SVG is a document that can run script when opened directly, and
+        // uploads are open to authors: refuse any that could (SvgGuard).
+        if ($ext === 'svg' || $ext === 'svgz' || $mime === 'image/svg+xml') {
+            $raw = (string) @file_get_contents($file['tmp_name']);
+            if (str_starts_with($raw, "\x1f\x8b")) {
+                throw new \RuntimeException('Compressed SVG (.svgz) files are not accepted. Upload the plain .svg.');
+            }
+            $why = SvgGuard::problem($raw);
+            if ($why !== null) {
+                throw new \RuntimeException('This SVG was not uploaded because ' . $why . '. Save it without scripts, event handlers or embedded links and try again.');
+            }
+        }
+
         $ms = $this->mediaSettings();
 
         // Build storage path: /YYYY/MM/{name}.{ext} (or flat if organising is off)
