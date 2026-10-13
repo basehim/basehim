@@ -1093,7 +1093,7 @@ function promptDialog(label, value, cb, opts) {
 }
 
 function toast(msg, type) {
-  if (window.bhToast) { window.bhToast(msg, type || 'success'); return; }
+  if (window.bhToast) { window.bhToast(msg, type || 'success', type === 'warning' ? { timeout: 9000 } : undefined); return; }
   var t = h('div', { class: 'bhe-snackbar', role: 'status', text: msg });
   document.body.appendChild(t);
   setTimeout(function () { t.classList.add('is-leaving'); setTimeout(function () { t.remove(); }, 300); }, 2600);
@@ -4438,7 +4438,7 @@ function bootEditor() {
   updateModeUi();
 
   state.booted = true;
-  if (CONFIG.flash && CONFIG.flash.message) toast(CONFIG.flash.message, CONFIG.flash.type === 'error' ? 'error' : 'success');
+  if (CONFIG.flash && CONFIG.flash.message) toast(CONFIG.flash.message, CONFIG.flash.type === 'error' || CONFIG.flash.type === 'warning' ? CONFIG.flash.type : 'success');
 }
 
 // -- header
@@ -4694,6 +4694,8 @@ function saveDraftAjax(btn) {
     .then(function (d) {
       applySavedDraft(d);
       if (loader) loader.done('Saved');
+      // Content filtered for a role without unfiltered_html (1.2.52).
+      if (d && d.html_notice) toast(d.html_notice, 'warning');
       if (st) st.textContent = 'Saved ' + (d.saved_at_text || '');
       emit('saved', d);
       document.dispatchEvent(new CustomEvent('bh:post-saved', { detail: d }));

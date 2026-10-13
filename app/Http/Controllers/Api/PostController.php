@@ -81,8 +81,8 @@ class PostController extends ApiController
 
         /** @var PostService $posts */
         $posts = $this->app->make(PostService::class);
-        $id = $posts->create($data + ['status' => 'draft'], (int)$user['id']);
-        return Response::json(['data' => $posts->find($id)], 201);
+        $id = $posts->create($data + ['status' => 'draft'], (int)$user['id'], $user);
+        return Response::json(['data' => $posts->find($id)] + $this->htmlWarnings($posts), 201);
     }
 
     public function update(Request $request, string $id): Response
@@ -112,8 +112,19 @@ class PostController extends ApiController
         }
         $data = $this->gatePublishing($data);
 
-        $posts->update((int)$id, $data);
-        return Response::json(['data' => $posts->find((int)$id)]);
+        $posts->update((int)$id, $data, $user);
+        return Response::json(['data' => $posts->find((int)$id)] + $this->htmlWarnings($posts));
+    }
+
+    /**
+     * ['warnings' => [...]] when the content was filtered because the account
+     * lacks unfiltered_html (1.2.52), else nothing: clients that ignore the
+     * key see the same response as before.
+     */
+    private function htmlWarnings(PostService $posts): array
+    {
+        $r = $posts->htmlReport();
+        return $r ? ['warnings' => [$r['message']]] : [];
     }
 
     public function destroy(Request $request, string $id): Response

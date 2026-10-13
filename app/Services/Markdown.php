@@ -40,11 +40,30 @@ final class Markdown
     public const FOR_BLOCKS = ['breaks' => 'smart', 'bold_headings' => true];
 
     private array $opts = [];
+
+    /** @var string[] Raw HTML the last render passed through as written (rawHtmlParts()). */
+    private array $raw = [];
     private int $boldHeadingLevel = 2;
 
     public function __construct(array $opts = [])
     {
         $this->opts = $opts;
+    }
+
+    /**
+     * The raw HTML this Markdown would pass through to the page as written:
+     * whole lines that start with a tag, and tags written inline. Everything
+     * else the renderer produces is its own markup or escaped text. Used to
+     * decide whether Markdown from someone without unfiltered_html can be
+     * kept as written (1.2.52, PostHtmlFilter).
+     *
+     * @return string[]
+     */
+    public static function rawHtmlParts(string $md): array
+    {
+        $m = new self();
+        $m->render($md);
+        return $m->raw;
     }
 
     public static function toHtml(string $md, array $opts = []): string
@@ -237,6 +256,7 @@ final class Markdown
             if (preg_match('/^<(\/?)([a-zA-Z][\w-]*)/', $t)) {
                 $flush();
                 $out[] = $line;
+                $this->raw[] = $line;
                 continue;
             }
 
@@ -413,6 +433,7 @@ final class Markdown
         if ($parts === false) return htmlspecialchars($t, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $out = '';
         foreach ($parts as $n => $p) {
+            if ($n % 2 === 1 && $p !== '') $this->raw[] = $p;
             $out .= ($n % 2 === 1) ? $p : htmlspecialchars($p, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         }
         return $out;
@@ -421,8 +442,10 @@ final class Markdown
     /** Block javascript:/data: URLs in links and images. */
     private function safeUrl(string $u): string
     {
-        $trim = strtolower(trim(html_entity_decode($u, ENT_QUOTES, 'UTF-8')));
-        if (preg_match('/^\s*(javascript|data|vbscript):/i', $trim)) return '#';
+        // Browsers drop tabs, newlines and other control characters inside a
+        // URL ("java\tscript:" runs), so the check ignores them too (1.2.52).
+        $trim = strtolower((string) preg_replace('/[\x00-\x20\x7f]+/', '', html_entity_decode($u, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+        if (preg_match('/^(javascript|data|vbscript):/i', $trim)) return '#';
         return htmlspecialchars($u, ENT_QUOTES);
     }
 }

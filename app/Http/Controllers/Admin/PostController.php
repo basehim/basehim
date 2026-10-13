@@ -250,7 +250,7 @@ class PostController extends Controller
         $data['type'] = $this->type;
         $data = $this->gatePublishing($data);
 
-        $id = $posts->create($data, $this->userId() ?? 1);
+        $id = $posts->create($data, $this->userId() ?? 1, $this->user());
         \App\Services\ActivityLogService::record($this->userId(), $this->type . '.created', $this->type, $id,
             'Created "' . mb_substr((string) ($data['title'] ?? ''), 0, 80) . '"');
 
@@ -261,7 +261,8 @@ class PostController extends Controller
         }
         $this->settleNewTags($request, $id, (string) ($data['status'] ?? 'draft'));
 
-        $this->flash('success', ucfirst($this->type) . ' created.');
+        $report = $posts->htmlReport();
+        $this->flash($report ? 'warning' : 'success', ucfirst($this->type) . ' created.' . ($report ? ' ' . $report['message'] : ''));
         return $this->redirect($this->basePath() . "/{$id}/edit");
     }
 
@@ -295,7 +296,8 @@ class PostController extends Controller
             unset($data['status'], $data['term_ids'], $data['featured_media_id'], $data['comment_status']);
         }
         $data = $this->gatePublishing($data);
-        $posts->update((int)$id, $data);
+        $posts->update((int)$id, $data, $this->user());
+        $report = $posts->htmlReport();
 
         // SEO meta
         $seoFields = $this->extractSeoData($request);
@@ -307,7 +309,7 @@ class PostController extends Controller
 
         \App\Services\ActivityLogService::record($this->userId(), $this->type . '.updated', $this->type, (int)$id,
             'Updated "' . mb_substr((string) ($data['title'] ?? $existing['title'] ?? ''), 0, 80) . '"');
-        $this->flash('success', ucfirst($this->type) . ' updated.');
+        $this->flash($report ? 'warning' : 'success', ucfirst($this->type) . ' updated.' . ($report ? ' ' . $report['message'] : ''));
         return $this->redirect($this->basePath() . "/{$id}/edit");
     }
 

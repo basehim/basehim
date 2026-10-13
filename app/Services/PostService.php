@@ -10,11 +10,98 @@ use App\Core\Helpers;
 
 class PostService
 {
+    /** What the last create()/update() took out of the content (htmlReport()). */
+    private ?array $htmlReport = null;
+
     public function __construct(
         private PostRepository $repo,
         private HookRegistry $hooks,
         private Cache $cache
     ) {}
+
+    /**
+     * May this account publish HTML as written — scripts, any iframe, event
+     * handlers? Only with the unfiltered_html capability (editors and
+     * administrators by default). Everyone else's content goes through
+     * PostHtmlFilter on save. With no account (code running outside a signed-
+     * in request) the answer is no; an app that writes trusted HTML from such
+     * code can say so with the post.unfiltered_html filter.
+     */
+    public function allowsUnfilteredHtml(?array $actor): bool
+    {
+        $allowed = $actor !== null && \App\Http\Middleware\CheckCapability::userCan($actor, 'unfiltered_html');
+        return (bool) $this->hooks->applyFilters('post.unfiltered_html', $allowed, $actor);
+    }
+
+    /**
+     * What the last create() or update() removed from the content because
+     * its writer lacks unfiltered_html, or null when nothing was:
+     * ['removed' => string[], 'converted' => bool, 'message' => string].
+     */
+    public function htmlReport(): ?array
+    {
+        return $this->htmlReport;
+    }
+
+    /**
+     * The acting account: the one passed in, else the request's signed-in
+     * user (set by the Authenticate middleware), else none.
+     */
+    private function actor(?array $actor): ?array
+    {
+        if ($actor !== null) return $actor;
+        try {
+            $app = \App\Core\Application::getInstance();
+            $user = $app->has('auth.user') ? $app->make('auth.user') : null;
+            return is_array($user) ? $user : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /** Filter content and excerpt for writers without unfiltered_html (1.2.52). */
+    private function filterHtml(array $data, ?array $actor, ?array $existing): array
+    {
+        $this->htmlReport = null;
+        if ($existing !== null && !isset($data['content']) && isset($data['content_format'])
+            && $data['content_format'] !== ($existing['content_format'] ?? null)) {
+            // A format change alone re-reads the stored content another way:
+            // check it as it will now be rendered.
+            $data['content'] = (string) ($existing['content'] ?? '');
+        }
+        $hasContent = isset($data['content']) && is_string($data['content']);
+        $hasExcerpt = isset($data['excerpt']) && is_string($data['excerpt']) && str_contains($data['excerpt'], '<');
+        if (!$hasContent && !$hasExcerpt) return $data;
+        if ($this->allowsUnfilteredHtml($this->actor($actor))) return $data;
+
+        $hosts = (array) $this->hooks->applyFilters('html.iframe_hosts', HtmlSanitizer::IFRAME_HOSTS);
+        $removed = [];
+        $converted = false;
+        if ($hasContent) {
+            $format = (string) ($data['content_format'] ?? ($existing['content_format'] ?? 'html'));
+            $r = PostHtmlFilter::filter($data['content'], $format, $hosts);
+            $data['content'] = $r['content'];
+            if ($r['format'] !== null) $data['content_format'] = $r['format'];
+            $removed = $r['removed'];
+            $converted = $r['converted'];
+        }
+        if ($hasExcerpt) {
+            $r = HtmlSanitizer::clean($data['excerpt'], $hosts);
+            $data['excerpt'] = $r['html'];
+            $removed = array_merge($removed, $r['removed']);
+        }
+        $removed = array_values(array_unique($removed));
+        if ($removed || $converted) {
+            $message = $removed
+                ? 'Some HTML was removed because your role cannot publish it: ' . implode(', ', $removed) . '.'
+                : '';
+            if ($converted) {
+                $message = trim($message . ' The Markdown contained HTML, so it was saved as HTML.');
+            }
+            $this->htmlReport = ['removed' => $removed, 'converted' => $converted, 'message' => $message];
+        }
+        return $data;
+    }
 
     public function find(int $id): ?array
     {
@@ -36,9 +123,15 @@ class PostService
         return $this->repo->publishedFeed($page, $perPage, $type);
     }
 
-    public function create(array $data, int $authorId): int
+    /**
+     * @param array|null $actor who is saving (for the HTML filter); defaults
+     *                          to the request's signed-in user
+     */
+    public function create(array $data, int $authorId, ?array $actor = null): int
     {
         $data = $this->hooks->applyFilters('post.before_create', $data);
+        // After the filters, so nothing an app adds bypasses it.
+        $data = $this->filterHtml($data, $actor, null);
 
         $type = $data['type'] ?? 'post';
         $title = trim($data['title'] ?? 'Untitled');
@@ -87,12 +180,15 @@ class PostService
         return $id;
     }
 
-    public function update(int $id, array $data): bool
+    /** @param array|null $actor who is saving (for the HTML filter); see create() */
+    public function update(int $id, array $data, ?array $actor = null): bool
     {
+        $this->htmlReport = null;
         $existing = $this->repo->find($id);
         if (!$existing) return false;
 
         $data = $this->hooks->applyFilters('post.before_update', $data, $existing);
+        $data = $this->filterHtml($data, $actor, $existing);
 
         $payload = [];
         if (isset($data['title'])) $payload['title'] = trim($data['title']);

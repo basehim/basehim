@@ -77,7 +77,7 @@ class UserController extends Controller
             'Posts'  => ['publish_posts', 'edit_others_posts', 'delete_posts', 'delete_others_posts'],
             'Pages'  => ['publish_pages', 'edit_others_pages', 'delete_pages', 'delete_others_pages'],
             'Media'  => ['delete_media'],
-            'Other'  => ['manage_seo', 'read_private_meta'],
+            'Other'  => ['manage_seo', 'read_private_meta', 'unfiltered_html'],
         ];
 
         $overrides = $user ? \App\Http\Middleware\CheckCapability::overridesFor($user) : ['grant' => [], 'deny' => []];

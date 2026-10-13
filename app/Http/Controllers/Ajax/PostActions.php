@@ -87,14 +87,16 @@ final class PostActions
 
         if ($existing === null) {
             $data['type'] = $type;
-            $id = $this->posts->create($data, (int) $user['id']);
+            $id = $this->posts->create($data, (int) $user['id'], $user);
             ActivityLogService::record((int) $user['id'], $type . '.created', $type, $id,
                 'Created "' . mb_substr((string) $data['title'], 0, 80) . '" (draft)');
         } else {
-            $this->posts->update($id, $data);
+            $this->posts->update($id, $data, $user);
             ActivityLogService::record((int) $user['id'], $type . '.updated', $type, $id,
                 'Saved draft "' . mb_substr((string) ($data['title'] ?? $existing['title']), 0, 80) . '"');
         }
+
+        $htmlReport = $this->posts->htmlReport();
 
         if ($ctx->has('seo')) {
             $this->seo->savePostMeta($id, $this->seoFields((array) $ctx->input('seo')));
@@ -128,6 +130,8 @@ final class PostActions
             'saved_at_text'=> Time::time(Time::now()),
             'tags'         => $this->editor->hasTags($type) ? $this->editor->tagsFor($id) : [],
             'pending_tags' => $pending,
+            // Set when the content was filtered (no unfiltered_html, 1.2.52).
+            'html_notice'  => $htmlReport['message'] ?? null,
         ];
     }
 

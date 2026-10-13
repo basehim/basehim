@@ -816,7 +816,7 @@ final class McpController
             'excerpt' => (string) ($args['excerpt'] ?? ''),
             'slug'    => (string) ($args['slug'] ?? ''),
             'status'  => $status,
-        ], $authorId);
+        ], $authorId, $this->authUser());
 
         $created = $posts->find($id);
         return $this->json([
@@ -826,7 +826,7 @@ final class McpController
             'slug' => $created['slug'] ?? '',
             'status' => $created['status'] ?? $status,
             'url' => $this->siteUrl() . '/' . ($created['slug'] ?? ''),
-        ]);
+        ] + $this->htmlNote($posts));
     }
 
     private function doUpdate(array $args, string $type = 'post'): string
@@ -856,14 +856,21 @@ final class McpController
         if (($patch['status'] ?? '') === 'published' && !$this->can("publish_{$family}")) $patch['status'] = 'pending';
         if (!$patch) throw new McpError('Nothing to update', -32602);
 
-        $posts->update($id, $patch);
+        $posts->update($id, $patch, $this->authUser());
         $updated = $posts->find($id);
         return $this->json([
             'updated' => true,
             'id' => $id,
             'status' => $updated['status'] ?? '',
             'slug' => $updated['slug'] ?? '',
-        ]);
+        ] + $this->htmlNote($posts));
+    }
+
+    /** ['warning' => …] when the content was filtered (no unfiltered_html), so the agent can tell its user. */
+    private function htmlNote(PostService $posts): array
+    {
+        $r = $posts->htmlReport();
+        return $r ? ['warning' => $r['message']] : [];
     }
 
     private function doTrash(array $args): string

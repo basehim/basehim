@@ -109,7 +109,8 @@ class RoleController extends Controller
     {
         return [
             'Content'    => ['publish_posts', 'edit_posts', 'edit_others_posts', 'delete_posts', 'delete_others_posts',
-                             'publish_pages', 'edit_pages', 'edit_others_pages', 'delete_pages', 'delete_others_pages'],
+                             'publish_pages', 'edit_pages', 'edit_others_pages', 'delete_pages', 'delete_others_pages',
+                             'unfiltered_html'],
             'Media'      => ['upload_media', 'delete_media'],
             'Moderation' => ['moderate_comments', 'manage_taxonomies', 'manage_menus', 'manage_seo'],
             'Admin'      => ['manage_options', 'manage_users', 'manage_settings', 'manage_apps', 'manage_themes'],

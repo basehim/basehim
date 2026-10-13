@@ -7,7 +7,7 @@
  *   php database/add-prefix.php bh_ --apply   renames the tables, sets DB_PREFIX in .env
  *
  * Installs made with 1.2.29 or earlier have no table prefix, whatever DB_PREFIX
- * was set to (see CHANGELOG-1.2.30). This renames this site's tables — core,
+ * was set to (see docs/changelog/CHANGELOG-1.2.30.md). This renames this site's tables — core,
  * migrations, and every app table (app_*) — in one atomic RENAME TABLE, then
  * writes DB_PREFIX to .env. The old .env is copied to storage/backups/ first
  * (not beside .env, where the web server could serve the copy).
