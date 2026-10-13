@@ -15,6 +15,7 @@ history.
 
 | Version | Date | Summary | Details |
 |---|---|---|---|
+| 1.2.53 | 2026-10-13 | Fix for sites on MySQL: installing and updating work again. | [changelog](docs/changelog/CHANGELOG-1.2.53.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.53.md) |
 | 1.2.52 | 2026-10-13 | Security release: HTML from authors and contributors is now filtered when a post is saved. | [changelog](docs/changelog/CHANGELOG-1.2.52.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.52.md) |
 | 1.2.51 | 2026-10-12 | Security release: app admin pages, MCP permissions, SVG uploads, comment links and REST API responses are locked down. | [changelog](docs/changelog/CHANGELOG-1.2.51.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.51.md) |
 | 1.2.50 | 2026-10-12 | Each site's admin now says which site it is, Settings save without reloading, and the API reference lists every endpoint. | [changelog](docs/changelog/CHANGELOG-1.2.50.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.50.md) |
