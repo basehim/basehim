@@ -24,7 +24,7 @@ jobs:
         php: ['8.1', '8.2', '8.3', '8.4']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -74,7 +74,7 @@ jobs:
           --health-retries=10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -88,14 +88,31 @@ jobs:
           BASEHIM_TEST_DB_HOST: 127.0.0.1
           BASEHIM_TEST_DB_USER: root
           BASEHIM_TEST_DB_PASS: root
-        run: php tests/run.php
+        run: |
+          set -o pipefail
+          php tests/run.php 2>&1 | tee test-output.txt
+
+      # Each failing test as an annotation on the run's summary page, so the
+      # reason shows without opening the log: the test name and the line the
+      # runner printed under it.
+      - name: Summarise failures
+        if: failure()
+        run: |
+          sed 's/\x1b\[[0-9;]*m//g' test-output.txt | awk '
+            function out(msg) { gsub(/%/, "%25", msg); print "::error::" msg; n++ }
+            /^ *✗ / { name = $0; sub(/^ *✗ /, "", name); detail = ""
+                      if ((getline nxt) > 0 && nxt ~ /^      /) { detail = nxt; gsub(/^ +/, "", detail) }
+                      out(name (detail != "" ? " — " detail : "")); next }
+            /Fatal error|Uncaught/ { out($0) }
+            END { if (n == 0) out("The test run failed; see the log of the previous step.") }'
+          tail -n 5 test-output.txt
 
   secrets:
     name: No secrets committed
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Fail if a .env was committed
         run: |

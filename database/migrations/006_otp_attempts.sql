@@ -21,4 +21,16 @@ CREATE TABLE IF NOT EXISTS {auth_login_attempts} (
     UNIQUE KEY `uniq_ident_ip` (`identifier`, `ip`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE {auth_login_attempts} ADD COLUMN IF NOT EXISTS `otp_attempts` INT UNSIGNED NOT NULL DEFAULT 0;
+-- Conditional, the portable way (as 007 does): "ADD COLUMN IF NOT EXISTS" is
+-- MariaDB-only, and on MySQL it is a syntax error that stopped every fresh
+-- install at this file (fixed in 1.2.53).
+SET @has_col = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{@auth_login_attempts}' AND COLUMN_NAME = 'otp_attempts'
+);
+SET @sql = IF(@has_col = 0,
+    'ALTER TABLE {auth_login_attempts} ADD COLUMN `otp_attempts` INT UNSIGNED NOT NULL DEFAULT 0',
+    'DO 0');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

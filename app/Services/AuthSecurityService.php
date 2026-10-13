@@ -57,10 +57,18 @@ final class AuthSecurityService
             );
             // Self-heal for installs created before otp_attempts existed, so the
             // OTP guess cap works even if the migration hasn't been run yet.
+            // Checked first: "ADD COLUMN IF NOT EXISTS" is MariaDB-only, so on
+            // MySQL the old statement always failed (silently, in this try).
             try {
-                $this->db->execute(
-                    'ALTER TABLE {auth_login_attempts} ADD COLUMN IF NOT EXISTS `otp_attempts` INT UNSIGNED NOT NULL DEFAULT 0'
+                $has = $this->db->selectOne(
+                    "SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+                      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{@auth_login_attempts}' AND COLUMN_NAME = 'otp_attempts'"
                 );
+                if ((int) ($has['n'] ?? 1) === 0) {
+                    $this->db->execute(
+                        'ALTER TABLE {auth_login_attempts} ADD COLUMN `otp_attempts` INT UNSIGNED NOT NULL DEFAULT 0'
+                    );
+                }
             } catch (\Throwable) {}
             $this->db->execute(
                 'CREATE TABLE IF NOT EXISTS {auth_remember_tokens} (
