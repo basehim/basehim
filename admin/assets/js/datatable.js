@@ -1,0 +1,596 @@
+/*
+ * Core Data Table — client renderer (vanilla, no dependencies).
+ *
+ * Server-renders the first page (works with no JS), then enhances: search,
+ * filters, sortable columns, pagination, page size, row selection + context
+ * bulk actions, a per-row action menu, a Screen Options panel (show/hide +
+ * drag reorder + density), Table/List/Grid views, and loading/empty/error
+ * states — all through the Basehim.ajax gateway. Writes reuse each feature's
+ * existing CSRF-protected bulk route.
+ */
+(function () {
+    'use strict';
+
+    var SVG = {
+        'chevron-up-down': 'M8 9l4-4 4 4M8 15l4 4 4-4',
+        'chevron-up': 'M5 15l7-7 7 7',
+        'chevron-down': 'M5 9l7 7 7-7',
+        'chevron-left': 'M15 19l-7-7 7-7',
+        'chevron-right': 'M9 5l7 7-7 7',
+        'pencil-square': 'M16.86 4.49l1.69-1.69a1.875 1.875 0 112.65 2.65L6.83 19.82a4.5 4.5 0 01-1.9 1.13l-2.68.8.8-2.68a4.5 4.5 0 011.13-1.9L16.86 4.49z',
+        'inbox': 'M4 8l2-4h12l2 4v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8zM4 12h4l2 3h4l2-3h4',
+        'trash': 'M6 7.5h12M9.75 7.5V6a1.5 1.5 0 011.5-1.5h1.5A1.5 1.5 0 0114.25 6v1.5m-7 0 .64 11a1.5 1.5 0 001.5 1.4h5.22a1.5 1.5 0 001.5-1.4l.64-11',
+        'arrow-up-tray': 'M12 16.5V4.5m0 0L7.5 9M12 4.5 16.5 9M4.5 16.5v2A1.5 1.5 0 006 20h12a1.5 1.5 0 001.5-1.5v-2',
+        'arrow-down-tray': 'M12 4.5v12m0 0L7.5 12M12 16.5 16.5 12M4.5 16.5v2A1.5 1.5 0 006 20h12a1.5 1.5 0 001.5-1.5v-2',
+        'list-bullet': 'M8.25 6.75h12M8.25 12h12M8.25 17.25h12M3.75 6.75h.01M3.75 12h.01M3.75 17.25h.01',
+        'table-cells': 'M3.75 7.5h16.5M3.75 12h16.5m-16.5 4.5h16.5M9 4.5v15M4.5 4.5h15a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75h-15a.75.75 0 01-.75-.75V5.25a.75.75 0 01.75-.75z',
+        'squares': 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+        'magnifying-glass': 'M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z',
+        'x-mark': 'M6 6l12 12M18 6L6 18',
+        'funnel': 'M3 5h18l-7 8v5l-4 2v-7L3 5z'
+    };
+    var DOTS = 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01';
+    var VDOTS = 'M12 6h.01M12 12h.01M12 18h.01';
+    function icon(name) {
+        if (name === 'bars-3') return svg(DOTS, 3);
+        if (name === 'ellipsis-vertical') return svg(VDOTS, 2.6);
+        if (name === 'cog-6-tooth') name = 'cog';
+        var d = SVG[name];
+        if (!d) return window.BasehimIcon ? window.BasehimIcon(name, 'w-4 h-4') : '';
+        return svg(d, 1.8);
+    }
+    function svg(d, w) {
+        return '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
+    }
+    function el(tag, cls, html) { var n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; }
+    function debounce(fn, ms) { var t; return function () { var a = arguments, s = this; clearTimeout(t); t = setTimeout(function () { fn.apply(s, a); }, ms); }; }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    // PHP json_encode of an empty assoc array is [] (a JS array), and setting
+    // string keys on an array is silently dropped by JSON.stringify — which is
+    // why filters never reached the server. Always work with a plain object.
+    function toObj(v) { var o = {}; if (v && typeof v === 'object' && !Array.isArray(v)) { for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k)) o[k] = v[k]; } return o; }
+    function toArr(v) { if (Array.isArray(v)) return v.slice(); if (v == null || v === '') return []; return [v]; }
+
+    function DataTable(root) {
+        var cfg;
+        try { cfg = JSON.parse(root.querySelector('[data-dt-config]').textContent); }
+        catch (e) { if (window.console) console.error('DataTable config parse failed:', e); return; }
+
+        var payload = cfg.initial || {};
+        var catalog = payload.catalog || [];
+        var columns = payload.columns || [];
+        var selected = Object.create(null);   // id -> status
+
+        var state = {
+            page: (payload.meta && payload.meta.page) || 1,
+            perPage: (payload.prefs && payload.prefs.page_size) || 20,
+            sort: payload.sort || null,
+            search: payload.search || '',
+            filters: toObj(payload.filters),
+            density: (payload.prefs && payload.prefs.density) || 'comfortable',
+            view: (payload.prefs && payload.prefs.view) || 'table',
+            order: (payload.prefs && payload.prefs.order) || [],
+            visible: (payload.prefs && payload.prefs.visible) || []
+        };
+
+        var r = {
+            body: root.querySelector('[data-dt-body]'),
+            head: root.querySelector('[data-dt-head]'),
+            cards: root.querySelector('[data-dt-cards]'),
+            count: root.querySelector('[data-dt-count]'),
+            pages: root.querySelector('[data-dt-pages]'),
+            search: root.querySelector('[data-dt-search]'),
+            bulk: root.querySelector('[data-dt-bulk]'),
+            bulkCount: root.querySelector('[data-dt-bulk-count]'),
+            bulkActions: root.querySelector('[data-dt-bulk-actions]'),
+            selectAll: null,
+            optionsBtn: root.querySelector('[data-dt-options]'),
+            panel: root.querySelector('[data-dt-panel]'),
+            perpage: root.querySelector('[data-dt-perpage]')
+        };
+
+        root.setAttribute('data-density', state.density);
+        root.setAttribute('data-view', state.view);
+
+        // Shared floating menus (row actions, and a safety net for z-index).
+        var menu = el('div', 'bh-dt-menu'); menu.style.display = 'none'; document.body.appendChild(menu);
+
+        function colById(id) { for (var i = 0; i < catalog.length; i++) if (catalog[i].id === id) return catalog[i]; return null; }
+
+        // --- data load -------------------------------------------------------
+        function load() {
+            root.classList.add('is-loading');
+            window.Basehim.ajax.get('content.table', {
+                table: cfg.table, page: state.page, per_page: state.perPage,
+                sort: state.sort || '', search: state.search || '',
+                filters: JSON.stringify(state.filters || {}),
+                columns: JSON.stringify(columns ? columns.map(function (c) { return c.id; }) : [])
+            }).then(function (data) {
+                payload = data; columns = data.columns || columns; catalog = data.catalog || catalog;
+                if (data.prefs) { state.order = data.prefs.order; state.visible = data.prefs.visible; }
+                state.sort = data.sort || null;
+                // Keep the current page across filter/sort/view changes, but if
+                // it now overruns the (possibly smaller) result set, drop to the
+                // last page that has rows and reload once.
+                var m = data.meta || {};
+                if (m.last_page && state.page > m.last_page) {
+                    state.page = m.last_page;
+                    load();
+                    return;
+                }
+                renderHead(); renderBody(); renderFoot();
+            }).catch(function (err) {
+                renderError(err && err.message ? err.message : 'Could not load the table.');
+            }).then(function () { root.classList.remove('is-loading'); });
+        }
+
+        // --- header ----------------------------------------------------------
+        function sortPartner(col) {
+            if (!col.sortable || !col.sortable.length) return null;
+            if (state.sort === col.sortable[0] && col.sortable[1]) return col.sortable[1];
+            if (state.sort === col.sortable[1]) return null;
+            return col.sortable[0];
+        }
+        function sortDir(col) {
+            if (!col.sortable || col.sortable.indexOf(state.sort) === -1) return null;
+            return (/(_az|_asc|oldest)$/).test(state.sort) ? 'ascending' : 'descending';
+        }
+        function alignCls(col) { return col.align === 'right' ? 'bh-dt-al-right' : (col.align === 'center' ? 'bh-dt-al-center' : ''); }
+        function renderHead() {
+            var tr = el('tr');
+            var th0 = el('th', 'bh-dt-check'); var all = el('input'); all.type = 'checkbox';
+            all.addEventListener('change', onSelectAll); th0.appendChild(all); r.selectAll = all; tr.appendChild(th0);
+            columns.forEach(function (col) {
+                var cls = alignCls(col); if (col.id === 'thumb') cls += ' bh-dt-col-thumb';
+                var th = el('th', cls.trim());
+                var label = col.id === 'thumb' ? '' : col.label;
+                if (col.sortable && col.sortable.length) {
+                    th.classList.add('bh-dt-sorth'); th.setAttribute('tabindex', '0'); th.setAttribute('role', 'button');
+                    var dir = sortDir(col); if (dir) th.setAttribute('aria-sort', dir);
+                    th.innerHTML = esc(label) + '<span class="bh-dt-caret">' + icon(dir === 'ascending' ? 'chevron-up' : (dir === 'descending' ? 'chevron-down' : 'chevron-up-down')) + '</span>';
+                    var go = function () { state.sort = sortPartner(col); load(); };
+                    th.addEventListener('click', go);
+                    th.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+                } else { th.textContent = label; }
+                tr.appendChild(th);
+            });
+            tr.appendChild(el('th', 'bh-dt-rowactions'));
+            r.head.innerHTML = ''; r.head.appendChild(tr);
+            syncSelectAll();
+        }
+
+        // --- body ------------------------------------------------------------
+        function renderBody() {
+            var rows = payload.rows || [];
+            r.body.innerHTML = ''; r.cards.innerHTML = '';
+            if (!rows.length) { renderEmpty(); syncBulk(); return; }
+            rows.forEach(function (row) { r.body.appendChild(buildRow(row)); r.cards.appendChild(buildCard(row)); });
+            syncBulk();
+        }
+        function rowCheckbox(row) {
+            var cb = el('input'); cb.type = 'checkbox'; cb.className = 'bh-dt-rowcheck'; cb.checked = selected[row.id] !== undefined;
+            cb.addEventListener('change', function () {
+                if (cb.checked) selected[row.id] = row.status || ''; else delete selected[row.id];
+                // keep the twin (table row / card) in sync
+                root.querySelectorAll('[data-dt-rowid="' + row.id + '"] .bh-dt-rowcheck').forEach(function (b) { b.checked = cb.checked; });
+                syncBulk(); syncSelectAll();
+            });
+            return cb;
+        }
+        function actionsButton(row) {
+            var btn = el('button', 'bh-dt-actbtn', icon('ellipsis-vertical'));
+            btn.type = 'button'; btn.title = 'Actions'; btn.setAttribute('aria-haspopup', 'true');
+            btn.addEventListener('click', function (e) { e.stopPropagation(); openMenu(btn, row); });
+            return btn;
+        }
+        function buildRow(row) {
+            var tr = el('tr'); tr.setAttribute('data-dt-row', row.id); tr.setAttribute('data-dt-rowid', row.id);
+            var td0 = el('td', 'bh-dt-check'); td0.appendChild(rowCheckbox(row)); tr.appendChild(td0);
+            columns.forEach(function (col) {
+                var cls = alignCls(col); if (col.id === 'views') cls += ' bh-dt-views';
+                var td = el('td', cls.trim()); td.innerHTML = (row.cells && row.cells[col.id]) || ''; tr.appendChild(td);
+            });
+            var tda = el('td', 'bh-dt-rowactions'); tda.appendChild(actionsButton(row)); tr.appendChild(tda);
+            return tr;
+        }
+        function buildCard(row) {
+            var card = el('div', 'bh-dt-card'); card.setAttribute('data-dt-rowid', row.id);
+            var top = el('div', 'bh-dt-card__top');
+            var chk = el('span', 'bh-dt-check'); chk.appendChild(rowCheckbox(row)); top.appendChild(chk);
+            var cells = row.cells || {};
+            if (cells.thumb) top.appendChild(el('span', 'bh-dt-card__thumb', cells.thumb));
+            var main = el('div', 'bh-dt-card__main');
+            if (cells.title) main.appendChild(el('div', 'bh-dt-card__title', cells.title));
+            if (cells.status) main.appendChild(el('div', 'bh-dt-card__badge', cells.status));
+            top.appendChild(main);
+            top.appendChild(actionsButton(row));
+            card.appendChild(top);
+            var rowsWrap = el('div', 'bh-dt-card__rows'); var any = false;
+            columns.forEach(function (col) {
+                if (['thumb', 'title', 'status'].indexOf(col.id) !== -1) return;
+                var val = cells[col.id]; if (!val) return; any = true;
+                var rr = el('div', 'bh-dt-card__row');
+                rr.appendChild(el('span', 'bh-dt-card__key', esc(col.label)));
+                rr.appendChild(el('span', 'bh-dt-card__val', val));
+                rowsWrap.appendChild(rr);
+            });
+            if (any) card.appendChild(rowsWrap);
+            return card;
+        }
+        function renderEmpty() {
+            var h = '<div class="bh-dt-state">' + icon('inbox') + '<p class="bh-dt-state__title">Nothing to show</p><p>No rows match the current search or filters.</p></div>';
+            r.body.innerHTML = '<tr><td colspan="99">' + h + '</td></tr>'; r.cards.innerHTML = h;
+        }
+        function renderError(msg) {
+            var h = '<div class="bh-dt-state"><p class="bh-dt-state__title">Something went wrong</p><p>' + esc(msg) + '</p></div>';
+            r.body.innerHTML = '<tr><td colspan="99">' + h + '</td></tr>'; r.cards.innerHTML = h;
+        }
+
+        // --- per-row action menu ---------------------------------------------
+        function openMenu(btn, row) {
+            var items = [];
+            if (cfg.editBase) items.push({ label: 'Edit', icon: 'pencil-square', href: cfg.editBase.replace('{id}', row.id) });
+            var bulk = payload.bulk_actions || [];
+            if (bulk.indexOf('publish') !== -1 && row.status !== 'published') items.push({ label: 'Publish', icon: 'arrow-up-tray', action: 'publish', id: row.id });
+            if (bulk.indexOf('draft') !== -1 && row.status === 'published') items.push({ label: 'Move to Draft', icon: 'arrow-down-tray', action: 'draft', id: row.id });
+            if (bulk.indexOf('approve') !== -1 && row.status !== 'approved') items.push({ label: 'Approve', icon: 'arrow-up-tray', action: 'approve', id: row.id });
+            if (bulk.indexOf('delete') !== -1) items.push({ label: 'Move to Trash', icon: 'trash', action: 'delete', danger: true, id: row.id });
+            if (!items.length) return;
+
+            menu.innerHTML = '';
+            items.forEach(function (it) {
+                var node = it.href ? el('a', 'bh-dt-menu__item') : el('button', 'bh-dt-menu__item');
+                if (it.danger) node.classList.add('bh-dt-menu__item--danger');
+                node.innerHTML = icon(it.icon) + '<span>' + esc(it.label) + '</span>';
+                if (it.href) { node.href = it.href; }
+                else node.addEventListener('click', function () { closeMenu(); runBulk(it.action, [it.id]); });
+                menu.appendChild(node);
+            });
+            var b = btn.getBoundingClientRect();
+            menu.style.display = 'block';
+            var mw = menu.offsetWidth || 180;
+            var left = b.right - mw + window.scrollX;
+            if (left < 8) left = 8;
+            menu.style.top = (b.bottom + window.scrollY + 4) + 'px';
+            menu.style.left = left + 'px';
+        }
+        function closeMenu() { menu.style.display = 'none'; }
+        document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu(); });
+        window.addEventListener('resize', closeMenu);
+        root.addEventListener('scroll', closeMenu, true);
+
+        // --- footer / pagination ---------------------------------------------
+        function renderFoot() {
+            var m = payload.meta || { page: 1, last_page: 1, total: 0, per_page: state.perPage };
+            var from = m.total ? ((m.page - 1) * m.per_page + 1) : 0;
+            var to = Math.min(m.page * m.per_page, m.total);
+            if (r.count) r.count.textContent = 'Showing ' + from + ' to ' + to + ' of ' + m.total + ' results';
+            if (!r.pages) return;
+            r.pages.innerHTML = '';
+            var mk = function (html, page, opts) {
+                var b = el('button', 'bh-dt-page' + (opts && opts.current ? ' is-current' : ''), html);
+                if (opts && opts.disabled) b.disabled = true; else b.addEventListener('click', function () { state.page = page; load(); });
+                return b;
+            };
+            r.pages.appendChild(mk(icon('chevron-left'), m.page - 1, { disabled: m.page <= 1 }));
+            pageWindow(m.page, m.last_page).forEach(function (p) {
+                if (p === '…') { r.pages.appendChild(el('span', 'bh-dt-page bh-dt-page--gap', '…')); return; }
+                r.pages.appendChild(mk(String(p), p, { current: p === m.page }));
+            });
+            r.pages.appendChild(mk(icon('chevron-right'), m.page + 1, { disabled: m.page >= m.last_page }));
+        }
+        function pageWindow(cur, last) {
+            var out = [], i; if (last <= 7) { for (i = 1; i <= last; i++) out.push(i); return out; }
+            out.push(1); if (cur > 3) out.push('…');
+            for (i = Math.max(2, cur - 1); i <= Math.min(last - 1, cur + 1); i++) out.push(i);
+            if (cur < last - 2) out.push('…'); out.push(last); return out;
+        }
+
+        // --- selection + context bulk ----------------------------------------
+        function selectedIds() { return Object.keys(selected); }
+        function syncBulk() {
+            var ids = selectedIds(), n = ids.length;
+            if (r.bulkCount) r.bulkCount.textContent = n + (n === 1 ? ' item selected' : ' items selected');
+            if (r.bulk) r.bulk.classList.toggle('is-active', n > 0);
+            if (!r.bulkActions) return;
+            r.bulkActions.innerHTML = '';
+            if (!n) return;
+            var statuses = ids.map(function (id) { return selected[id]; });
+            var anyPublished = statuses.indexOf('published') !== -1;
+            var anyUnpublished = statuses.some(function (s) { return s !== 'published'; });
+            var bulk = payload.bulk_actions || [];
+            var btns = [];
+            if (bulk.indexOf('publish') !== -1 && anyUnpublished) btns.push(['publish', 'Publish', 'publish']);
+            if (bulk.indexOf('draft') !== -1 && anyPublished) btns.push(['draft', 'Unpublish', 'neutral']);
+            if (bulk.indexOf('approve') !== -1) btns.push(['approve', 'Approve', 'publish']);
+            if (bulk.indexOf('delete') !== -1) btns.push(['delete', 'Delete', 'danger']);
+            btns.forEach(function (b) {
+                var btn = el('button', 'bh-dt-bulkbtn bh-dt-bulkbtn--' + b[2], esc(b[1]));
+                btn.type = 'button'; btn.addEventListener('click', function () { runBulk(b[0], selectedIds()); });
+                r.bulkActions.appendChild(btn);
+            });
+            var clear = el('button', 'bh-dt-bulkclear', 'Clear'); clear.type = 'button';
+            clear.addEventListener('click', clearSelection); r.bulkActions.appendChild(clear);
+        }
+        function clearSelection() {
+            selected = Object.create(null);
+            root.querySelectorAll('.bh-dt-rowcheck').forEach(function (cb) { cb.checked = false; });
+            syncBulk(); syncSelectAll();
+        }
+        function syncSelectAll() {
+            if (!r.selectAll) return;
+            var boxes = root.querySelectorAll('tbody .bh-dt-rowcheck');
+            var checked = 0; boxes.forEach(function (b) { if (b.checked) checked++; });
+            r.selectAll.checked = boxes.length > 0 && checked === boxes.length;
+            r.selectAll.indeterminate = checked > 0 && checked < boxes.length;
+        }
+        function onSelectAll() {
+            var on = r.selectAll.checked;
+            (payload.rows || []).forEach(function (row) { if (on) selected[row.id] = row.status || ''; else delete selected[row.id]; });
+            root.querySelectorAll('.bh-dt-rowcheck').forEach(function (cb) { cb.checked = on; });
+            syncBulk();
+        }
+        function runBulk(action, ids) {
+            if (!action || !ids || !ids.length || !cfg.bulkEndpoint) return;
+            if (action === 'delete' && window.bhConfirm) {
+                window.bhConfirm('Move ' + ids.length + ' item(s) to trash?').then(function (ok) { if (ok) submitBulk(action, ids); });
+                return;
+            }
+            submitBulk(action, ids);
+        }
+        function submitBulk(action, ids) {
+            var form = el('form'); form.method = 'POST'; form.action = cfg.bulkEndpoint; form.style.display = 'none';
+            form.appendChild(hidden('_csrf', cfg.csrf)); form.appendChild(hidden('bulk_action', action));
+            ids.forEach(function (id) { form.appendChild(hidden('ids[]', id)); });
+            document.body.appendChild(form); form.submit();
+        }
+        function hidden(name, value) { var i = el('input'); i.type = 'hidden'; i.name = name; i.value = value; return i; }
+
+        // --- view toggle -----------------------------------------------------
+        function setView(v) {
+            if (['table', 'list', 'grid'].indexOf(v) === -1 || v === state.view) return;
+            state.view = v; root.setAttribute('data-view', v);
+            root.querySelectorAll('[data-dt-view]').forEach(function (btn) {
+                btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === v);
+            });
+            savePrefs(true);
+        }
+
+        // --- Screen Options panel (works on a draft until Apply) -------------
+        var draft = null;
+        function renderPanel() {
+            if (!r.panel) return;
+            draft = { visible: state.visible.slice(), order: (state.order && state.order.length ? state.order.slice() : catalog.map(function (c) { return c.id; })), perPage: state.perPage, density: state.density };
+            var list = el('ul', 'bh-dt-collist');
+            draft.order.forEach(function (id) {
+                var c = colById(id); if (!c) return;
+                var li = el('li', 'bh-dt-col'); li.setAttribute('draggable', 'true'); li.setAttribute('data-col', id);
+                li.appendChild(el('span', 'bh-dt-col__grip', icon('bars-3')));
+                var cb = el('input'); cb.type = 'checkbox';
+                cb.checked = draft.visible.indexOf(id) !== -1;      // reflect the DRAFT, not defaults
+                if (c.can_hide === false) { cb.checked = true; cb.disabled = true; }
+                cb.addEventListener('change', function () {
+                    if (cb.checked) { if (draft.visible.indexOf(id) === -1) draft.visible.push(id); }
+                    else draft.visible = draft.visible.filter(function (x) { return x !== id; });
+                });
+                li.appendChild(cb);
+                li.appendChild(el('span', 'bh-dt-col__name', esc(c.label || id)));
+                wireDrag(li, list);
+                list.appendChild(li);
+            });
+            var sizeSel = el('select', 'bh-select bh-select--auto bh-select--sm');
+            (payload.page_sizes || [state.perPage]).forEach(function (s) {
+                var o = el('option'); o.value = s; o.textContent = s; if (s === draft.perPage) o.selected = true; sizeSel.appendChild(o);
+            });
+            sizeSel.addEventListener('change', function () { draft.perPage = parseInt(sizeSel.value, 10) || draft.perPage; });
+            var densSel = el('select', 'bh-select bh-select--auto bh-select--sm');
+            [['comfortable', 'Comfortable'], ['compact', 'Compact']].forEach(function (d) {
+                var o = el('option'); o.value = d[0]; o.textContent = d[1]; if (d[0] === draft.density) o.selected = true; densSel.appendChild(o);
+            });
+            densSel.addEventListener('change', function () { draft.density = densSel.value; });
+
+            r.panel.innerHTML = '';
+            r.panel.appendChild(el('div', 'bh-dt-panel__title', icon('cog-6-tooth') + '<span>Screen Options</span>'));
+            r.panel.appendChild(el('p', 'bh-dt-panel__desc', 'Choose which columns to show and how many rows per page.'));
+            r.panel.appendChild(el('div', 'bh-dt-panel__label', 'Columns'));
+            r.panel.appendChild(list);
+            r.panel.appendChild(el('hr', 'bh-dt-panel__sep'));
+            var row1 = el('div', 'bh-dt-panel__row'); row1.appendChild(el('span', '', 'Rows per page')); row1.appendChild(sizeSel); r.panel.appendChild(row1);
+            var row2 = el('div', 'bh-dt-panel__row'); row2.appendChild(el('span', '', 'Density')); row2.appendChild(densSel); r.panel.appendChild(row2);
+            var actions = el('div', 'bh-dt-panel__actions');
+            var apply = el('button', 'bh-btn bh-btn--primary bh-btn--sm', 'Apply'); apply.addEventListener('click', applyPanel);
+            var reset = el('a', '', 'Reset to default'); reset.href = '#'; reset.className = 'bh-dt-reset';
+            reset.addEventListener('click', function (e) { e.preventDefault(); resetPrefs(); });
+            actions.appendChild(apply); actions.appendChild(reset); r.panel.appendChild(actions);
+        }
+        function wireDrag(li, list) {
+            li.addEventListener('dragstart', function () { li.classList.add('is-dragging'); });
+            li.addEventListener('dragend', function () {
+                li.classList.remove('is-dragging');
+                draft.order = Array.prototype.map.call(list.querySelectorAll('[data-col]'), function (n) { return n.getAttribute('data-col'); });
+            });
+            list.addEventListener('dragover', function (e) {
+                e.preventDefault(); var dragging = list.querySelector('.is-dragging'); if (!dragging) return;
+                var after = null;
+                Array.prototype.forEach.call(list.querySelectorAll('[data-col]:not(.is-dragging)'), function (n) {
+                    var box = n.getBoundingClientRect(); if (e.clientY - box.top - box.height / 2 < 0 && after === null) after = n;
+                });
+                if (after) list.insertBefore(dragging, after); else list.appendChild(dragging);
+            });
+        }
+        function currentPrefs(over) {
+            var p = {
+                visible: state.visible, order: (state.order && state.order.length) ? state.order : columns.map(function (c) { return c.id; }),
+                page_size: state.perPage, density: state.density, view: state.view, sort: state.sort
+            };
+            if (over) for (var k in over) p[k] = over[k];
+            return p;
+        }
+        function rebuildVisibleColumns() {
+            var order = (state.order && state.order.length) ? state.order : catalog.map(function (c) { return c.id; });
+            columns = order.map(colById).filter(function (c) { return c && (state.visible.indexOf(c.id) !== -1 || c.can_hide === false); });
+        }
+        function applyPanel() {
+            state.visible = draft.visible.slice(); state.order = draft.order.slice();
+            state.perPage = draft.perPage; state.density = draft.density;
+            root.setAttribute('data-density', state.density);
+            if (r.perpage) r.perpage.value = String(state.perPage);
+            closePanel(); rebuildVisibleColumns();
+            // Save first, THEN reload — so the reload reads the saved prefs and
+            // does not race the write (which would revive a just-hidden column).
+            savePrefs(false).then(load);
+        }
+        function savePrefs(quiet) {
+            return window.Basehim.ajax.request('content.table_prefs', { table: cfg.table, prefs: JSON.stringify(currentPrefs()) })
+                .then(function (d) {
+                    if (d && d.prefs) { state.visible = d.prefs.visible; state.order = d.prefs.order; }
+                    if (!quiet && window.bhToast) window.bhToast('View saved');
+                })
+                .catch(function (err) { if (window.bhToast) window.bhToast(err.message, 'error'); });
+        }
+        function resetPrefs() {
+            window.Basehim.ajax.request('content.table_prefs_reset', { table: cfg.table })
+                .then(function (d) {
+                    if (d.prefs) { state.visible = d.prefs.visible; state.order = d.prefs.order; state.perPage = d.prefs.page_size; state.density = d.prefs.density; state.view = d.prefs.view; state.sort = d.prefs.sort; }
+                    root.setAttribute('data-density', state.density); root.setAttribute('data-view', state.view);
+                    root.querySelectorAll('[data-dt-view]').forEach(function (btn) { btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === state.view); });
+                    if (r.perpage) r.perpage.value = String(state.perPage);
+                    closePanel(); state.page = 1; rebuildVisibleColumns(); load();
+                }).catch(function (err) { if (window.bhToast) window.bhToast(err.message, 'error'); });
+        }
+        function openPanel() { renderPanel(); r.panel.classList.add('is-open'); if (r.optionsBtn) r.optionsBtn.setAttribute('aria-expanded', 'true'); }
+        function closePanel() { if (r.panel) r.panel.classList.remove('is-open'); if (r.optionsBtn) r.optionsBtn.setAttribute('aria-expanded', 'false'); }
+
+        // --- filters: status (single select) --------------------------------
+        root.querySelectorAll('[data-dt-filter]').forEach(function (sel) {
+            sel.addEventListener('change', function () {
+                var field = sel.getAttribute('data-dt-filter');
+                if (sel.value) state.filters[field] = sel.value; else delete state.filters[field];
+                load();   // keep the current page (clamped after the response)
+            });
+        });
+
+        // --- filters: category / tag (multi-select with search) -------------
+        var termPanels = [];   // close-others support
+        function getSel(field) { return toArr(state.filters[field]).map(String); }
+        function setSel(field, arr) {
+            if (arr && arr.length) state.filters[field] = arr.slice(); else delete state.filters[field];
+        }
+        function buildTermFilter(host) {
+            var taxonomy = host.getAttribute('data-dt-termfilter');
+            var field = taxonomy;                       // filter key == taxonomy slug
+            var label = host.getAttribute('data-dt-label') || taxonomy;
+            var conf = (cfg.filters && cfg.filters[taxonomy]) || { terms: [], total: 0 };
+            var loaded = (conf.terms || []).slice();     // [{id,name,slug,count}]
+            var total = conf.total || loaded.length;
+            var offline = total <= loaded.length;        // everything already here?
+            var names = {};                              // id -> name, for chips/kept selections
+            loaded.forEach(function (t) { names[String(t.id)] = t.name; });
+
+            host.classList.add('bh-dt-filter');
+            var btn = el('button', 'bh-btn bh-btn--secondary bh-dt-filterbtn');
+            btn.type = 'button'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
+            var badge = el('span', 'bh-dt-filterbadge'); badge.style.display = 'none';
+            btn.innerHTML = icon('funnel') + '<span>' + esc(label) + '</span>';
+            btn.appendChild(badge);
+            var panel = el('div', 'bh-dt-panel bh-dt-filterpanel');
+            host.appendChild(btn); host.appendChild(panel);
+
+            var search = el('input', 'bh-input bh-dt-filtersearch');
+            search.type = 'search'; search.placeholder = 'Search ' + label.toLowerCase() + '…';
+            var listWrap = el('div', 'bh-dt-termlist');
+            var foot = el('div', 'bh-dt-filterfoot');
+            var clear = el('button', 'bh-dt-bulkclear', 'Clear'); clear.type = 'button';
+            var hint = el('span', 'bh-dt-filterhint', '');
+            foot.appendChild(hint); foot.appendChild(clear);
+
+            function updateBadge() {
+                var n = getSel(field).length;
+                if (n) { badge.textContent = n; badge.style.display = ''; btn.classList.add('is-active'); }
+                else { badge.style.display = 'none'; btn.classList.remove('is-active'); }
+            }
+            function renderList(terms) {
+                var sel = getSel(field), selSet = {}; sel.forEach(function (id) { selSet[id] = true; });
+                // Keep any selected term that the current search dropped, so it
+                // can still be seen and unticked.
+                var shown = {}, out = [];
+                terms.forEach(function (t) { shown[String(t.id)] = true; out.push(t); });
+                sel.forEach(function (id) { if (!shown[id]) out.unshift({ id: id, name: names[id] || ('#' + id), count: null }); });
+                listWrap.innerHTML = '';
+                if (!out.length) { listWrap.appendChild(el('p', 'bh-dt-termempty', 'No matches.')); return; }
+                out.forEach(function (t) {
+                    var id = String(t.id);
+                    var row = el('label', 'bh-dt-term');
+                    var cb = el('input'); cb.type = 'checkbox'; cb.value = id; cb.checked = !!selSet[id];
+                    cb.addEventListener('change', function () {
+                        var cur = getSel(field);
+                        if (cb.checked) { if (cur.indexOf(id) === -1) cur.push(id); names[id] = t.name; }
+                        else cur = cur.filter(function (x) { return x !== id; });
+                        setSel(field, cur); updateBadge(); load();
+                    });
+                    row.appendChild(cb);
+                    row.appendChild(el('span', 'bh-dt-term__name', esc(t.name)));
+                    if (t.count != null) row.appendChild(el('span', 'bh-dt-term__count', String(t.count)));
+                    listWrap.appendChild(row);
+                });
+            }
+            function offlineFilter(q) {
+                q = q.toLowerCase();
+                return loaded.filter(function (t) {
+                    return !q || (t.name && t.name.toLowerCase().indexOf(q) !== -1) || (t.slug && t.slug.toLowerCase().indexOf(q) !== -1);
+                });
+            }
+            var runSearch = debounce(function () {
+                var q = search.value.trim();
+                if (offline) { renderList(offlineFilter(q)); return; }
+                hint.textContent = 'Searching…';
+                window.Basehim.ajax.get('content.table_terms', {
+                    taxonomy: taxonomy, q: q, limit: conf.limit || 50, selected: getSel(field).join(',')
+                }).then(function (d) {
+                    (d.terms || []).forEach(function (t) { names[String(t.id)] = t.name; });
+                    hint.textContent = ''; renderList(d.terms || []);
+                }).catch(function () { hint.textContent = 'Search failed.'; });
+            }, 250);
+            search.addEventListener('input', runSearch);
+            clear.addEventListener('click', function () { setSel(field, []); updateBadge(); renderList(offline ? loaded : loaded); load(); });
+
+            panel.appendChild(search);
+            panel.appendChild(listWrap);
+            panel.appendChild(foot);
+
+            function open() { closeTermPanels(); renderList(offline ? offlineFilter(search.value.trim()) : loaded); panel.classList.add('is-open'); btn.setAttribute('aria-expanded', 'true'); if (!offline && search.value.trim()) runSearch(); search.focus(); }
+            function close() { panel.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); }
+            btn.addEventListener('click', function (e) { e.stopPropagation(); if (panel.classList.contains('is-open')) close(); else open(); });
+            document.addEventListener('click', function (e) { if (!panel.contains(e.target) && !btn.contains(e.target)) close(); });
+            termPanels.push(close);
+            updateBadge();
+        }
+        function closeTermPanels() { termPanels.forEach(function (c) { c(); }); if (r.panel) closePanel(); }
+        root.querySelectorAll('[data-dt-termfilter]').forEach(buildTermFilter);
+        if (r.search) r.search.addEventListener('input', debounce(function () { state.search = r.search.value.trim(); state.page = 1; load(); }, 300));
+        root.querySelectorAll('[data-dt-view]').forEach(function (btn) {
+            btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === state.view);
+            btn.addEventListener('click', function () { setView(btn.getAttribute('data-dt-view')); });
+        });
+        if (r.perpage) r.perpage.addEventListener('change', function () {
+            state.perPage = parseInt(r.perpage.value, 10) || state.perPage; savePrefs(true).then(load);
+        });
+        if (r.optionsBtn) {
+            r.optionsBtn.addEventListener('click', function (e) { e.stopPropagation(); if (r.panel.classList.contains('is-open')) closePanel(); else openPanel(); });
+            document.addEventListener('click', function (e) { if (r.panel && !r.panel.contains(e.target) && !r.optionsBtn.contains(e.target)) closePanel(); });
+        }
+
+        renderHead(); renderBody(); renderFoot();
+    }
+
+    function init() {
+        document.querySelectorAll('.bh-dt').forEach(function (root) {
+            if (root.__dt || !root.querySelector('[data-dt-config]')) return;
+            root.__dt = true;
+            try { new DataTable(root); } catch (e) { if (window.console) console.error('DataTable:', e); }
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+    window.BasehimDataTable = { init: init };
+})();

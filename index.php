@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 define('BASEHIM_START', microtime(true));
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.2.53');
+define('BASEHIM_VERSION', '1.2.57');
 
 /*
  * Detect the URL prefix where Basehim is installed.
@@ -65,6 +65,7 @@ $router = $app->make(\App\Core\Router::class);
 
 // Load route files — specific prefixes first, web catch-all last
 require __DIR__ . '/routes/ajax.php';
+require __DIR__ . '/routes/tables.php';
 require __DIR__ . '/routes/api.php';
 require __DIR__ . '/routes/admin.php';
 require __DIR__ . '/routes/web.php';
