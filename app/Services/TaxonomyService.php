@@ -22,6 +22,19 @@ class TaxonomyService
 
     public function findTerm(int $id): ?array { return $this->repo->findTerm($id); }
 
+    public function countTermsBySlug(string $slug): int { return $this->repo->countTermsBySlug($slug); }
+
+    /**
+     * Terms for the data-table filter picker: most-used first, optional search,
+     * with $ids force-included so a selected term is never missing from the list.
+     *
+     * @param int[] $ids
+     */
+    public function searchTerms(string $slug, string $q = '', int $limit = 30, array $ids = []): array
+    {
+        return $this->repo->searchTerms($slug, $q, $limit, $ids);
+    }
+
     /**
      * Look up a term by its slug within a taxonomy.
      *   findTermBySlug('category', 'tech') -> term row or null

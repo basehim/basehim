@@ -251,6 +251,28 @@ class PostRepository
         return $this->db->selectOne($sql . ' LIMIT 1', $params) !== null;
     }
 
+    /**
+     * Normalise a term filter value (a single id, or a list of ids as an
+     * array or comma string) to a list of distinct positive integers.
+     *
+     * @return int[]
+     */
+    private static function termIdList(mixed $value): array
+    {
+        if ($value === null || $value === '' || $value === []) {
+            return [];
+        }
+        $raw = is_array($value) ? $value : explode(',', (string) $value);
+        $out = [];
+        foreach ($raw as $v) {
+            $id = (int) $v;
+            if ($id > 0 && !in_array($id, $out, true)) {
+                $out[] = $id;
+            }
+        }
+        return $out;
+    }
+
     public function paginate(array $filters = [], int $page = 1, int $perPage = 10): array
     {
         $type = $filters['type'] ?? 'post';
@@ -270,6 +292,18 @@ class PostRepository
 
         if ($status !== null) { $where[] = 'p.status = :status'; $params['status'] = $status; }
         if ($authorId !== null) { $where[] = 'p.author_id = :author_id'; $params['author_id'] = $authorId; }
+        // Filter by category and/or tag term ids. Each filter accepts one id or
+        // a list of ids: within a filter the match is OR (any of the chosen
+        // terms), and two filters together are AND (must match a chosen
+        // category AND a chosen tag). Only positive integers are ever placed in
+        // the SQL, so nothing user-supplied is interpolated.
+        foreach (['category' => $filters['category'] ?? null, 'tag' => $filters['tag'] ?? null] as $ids) {
+            $list = self::termIdList($ids);
+            if ($list !== []) {
+                $in = implode(',', $list);
+                $where[] = "p.id IN (SELECT pt.post_id FROM {post_term} pt WHERE pt.term_id IN ($in))";
+            }
+        }
         if ($search !== null && $search !== '') {
             $where[] = '(p.title LIKE :search1 OR p.content LIKE :search2 OR p.excerpt LIKE :search3)';
             $like = '%' . $search . '%';
@@ -282,10 +316,12 @@ class PostRepository
 
         // Whitelisted sort orders (never interpolate user input directly).
         $sortMap = [
-            'newest'   => 'COALESCE(p.published_at, p.created_at) DESC',
-            'oldest'   => 'COALESCE(p.published_at, p.created_at) ASC',
-            'title_az' => 'p.title ASC',
-            'title_za' => 'p.title DESC',
+            'newest'    => 'COALESCE(p.published_at, p.created_at) DESC',
+            'oldest'    => 'COALESCE(p.published_at, p.created_at) ASC',
+            'title_az'  => 'p.title ASC',
+            'title_za'  => 'p.title DESC',
+            'views_desc' => 'p.view_count DESC',
+            'views_asc'  => 'p.view_count ASC',
         ];
         $orderBy = $sortMap[$filters['sort'] ?? 'newest'] ?? $sortMap['newest'];
 

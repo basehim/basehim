@@ -15,6 +15,10 @@ history.
 
 | Version | Date | Summary | Details |
 |---|---|---|---|
+| 1.2.57 | 2026-10-15 | Data table filters: working Category/Status, multi-select Category & Tags with search, a linked Tags column, and page numbers preserved across filter/sort/view changes. | [changelog](docs/changelog/CHANGELOG-1.2.57.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.57.md) |
+| 1.2.56 | 2026-10-15 | Data table: Templates fix, Screen Options sync, per-row action menu, sortable Views, thumbnail sizes, Table/List/Grid views, context bulk actions. | [changelog](docs/changelog/CHANGELOG-1.2.56.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.56.md) |
+| 1.2.55 | 2026-10-14 | Data table fixes (mobile, Screen Options), the designed UI, thumbnail + author-avatar columns, and reusable cell components. | [changelog](docs/changelog/CHANGELOG-1.2.55.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.55.md) |
+| 1.2.54 | 2026-10-14 | A shared admin data table (search, filters, sorting, columns, bulk actions), extensible by apps. | [changelog](docs/changelog/CHANGELOG-1.2.54.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.54.md) |
 | 1.2.53 | 2026-10-13 | Fix for sites on MySQL: installing and updating work again. | [changelog](docs/changelog/CHANGELOG-1.2.53.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.53.md) |
 | 1.2.52 | 2026-10-13 | Security release: HTML from authors and contributors is now filtered when a post is saved. | [changelog](docs/changelog/CHANGELOG-1.2.52.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.52.md) |
 | 1.2.51 | 2026-10-12 | Security release: app admin pages, MCP permissions, SVG uploads, comment links and REST API responses are locked down. | [changelog](docs/changelog/CHANGELOG-1.2.51.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.51.md) |

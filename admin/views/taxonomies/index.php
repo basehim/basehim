@@ -154,6 +154,16 @@
             if (first) { first.focus(); first.select(); }
         }
     }
+
+    // Deep link: /admin/taxonomies/{tax}?edit={id} (e.g. from the posts table's
+    // Tags column) opens that term's editor and scrolls it into view.
+    (function () {
+        var m = /[?&]edit=(\d+)/.exec(window.location.search);
+        if (!m) return;
+        var id = m[1], row = document.getElementById('term-row-' + id);
+        toggleTermEdit(id);
+        if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center' });
+    })();
 </script>
 
 <?php $this->endSection(); ?>

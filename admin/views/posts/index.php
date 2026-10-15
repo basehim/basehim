@@ -36,6 +36,19 @@ $csrf = $session->csrfToken();
     </div>
 </div>
 
+<?php
+// 1.2.54 — the Core Data Table. Used for the main list; the trash view and
+// ?view=classic keep the original server-rendered table as a fallback.
+$__useDataTable = empty($trashed) && (($_GET['view'] ?? '') !== 'classic');
+if ($__useDataTable):
+    $__tableKey = ['page' => 'content.pages', 'template' => 'content.templates'][$type] ?? 'content.posts';
+    $this->include('partials.datatable', [
+        'tableKey'     => $__tableKey,
+        'bulkEndpoint' => $base . '/admin/' . $type . 's/bulk',
+        'editBase'     => $base . '/admin/' . $type . 's/{id}/edit',
+    ]);
+else:
+?>
 <!-- Filters -->
 <div class="bh-card bh-card--pad mb-5">
     <form method="GET" class="flex flex-wrap items-center gap-3">
@@ -249,5 +262,6 @@ $csrf = $session->csrfToken();
     });
 })();
 </script>
+<?php endif; // $__useDataTable ?>
 
 <?php $this->endSection(); ?>

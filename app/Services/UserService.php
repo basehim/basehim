@@ -16,6 +16,64 @@ class UserService
 
     public function find(int $id): ?array { return $this->repo->find($id); }
 
+    /**
+     * Read one key from a user's `meta` JSON column.
+     *
+     * `users.meta` has existed since the initial schema; this is the first
+     * reader/writer for it. It is the per-user store for small, user-scoped
+     * state such as Data Table preferences — not a general key/value bag for
+     * large data. Returns $default when the user, the column or the key is
+     * absent or the JSON is unreadable.
+     */
+    public function meta(int $userId, string $key, mixed $default = null): mixed
+    {
+        $user = $this->repo->find($userId);
+        if ($user === null) {
+            return $default;
+        }
+        $meta = $this->decodeMeta($user['meta'] ?? null);
+        return array_key_exists($key, $meta) ? $meta[$key] : $default;
+    }
+
+    /**
+     * Write one key into a user's `meta` JSON column, leaving other keys
+     * untouched. A null value removes the key. The stored JSON is capped so a
+     * client cannot grow the row without bound (preferences are small).
+     */
+    public function setMeta(int $userId, string $key, mixed $value): bool
+    {
+        $user = $this->repo->find($userId);
+        if ($user === null) {
+            return false;
+        }
+        $meta = $this->decodeMeta($user['meta'] ?? null);
+        if ($value === null) {
+            unset($meta[$key]);
+        } else {
+            $meta[$key] = $value;
+        }
+        $json = json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false || strlen($json) > 65535) {
+            return false;
+        }
+        return $this->repo->update($userId, ['meta' => $json]) >= 0;
+    }
+
+    /** @return array<string,mixed> */
+    private function decodeMeta(mixed $raw): array
+    {
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+        return [];
+    }
+
     public function findByEmail(string $email): ?array { return $this->repo->findByEmail($email); }
     public function findByUsername(string $username): ?array { return $this->repo->findByUsername($username); }
 

@@ -43,6 +43,27 @@ if (!function_exists('icon')) {
     }
 }
 
+// Reusable admin cell components (avatar, user cell, thumbnail), so any admin
+// view or data-table column renders them the same way. See App\Core\Admin\Components.
+if (!function_exists('bh_avatar_html')) {
+    function bh_avatar_html(string $name, ?string $url = null, int $size = 28): string
+    {
+        return \App\Core\Admin\Components::avatar($name, $url, $size);
+    }
+}
+if (!function_exists('bh_user_cell')) {
+    function bh_user_cell(string $name, ?string $url = null, ?string $sub = null, int $size = 28): string
+    {
+        return \App\Core\Admin\Components::userCell($name, $url, $sub, $size);
+    }
+}
+if (!function_exists('bh_thumb')) {
+    function bh_thumb(?string $url, string $alt = '', int $size = 38, string $icon = 'photo'): string
+    {
+        return \App\Core\Admin\Components::thumb($url, $alt, $size, $icon);
+    }
+}
+
 /**
  * The Basehim mark.
  *

@@ -291,3 +291,63 @@ $ajax->register('settings.save', [
     ],
     'description' => 'Save one Settings screen (General, Reading, Email, Permalinks…).',
 ]);
+
+// ---------------------------------------------------------------------------
+// 1.2.54 — the Core Data Table system. One read action serves every table in
+// the registry (routes/tables.php); the table's own capability and area are
+// enforced in the handler, so 'read' here is only the floor. Writes stay on
+// each feature's existing CSRF-protected routes. See docs/DATA-TABLE.md.
+// ---------------------------------------------------------------------------
+use App\Http\Controllers\Ajax\TableActions;
+
+$ajax->register('content.table', [
+    'handler'     => [TableActions::class, 'query'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 240, 'per' => 60],
+    'input'       => [
+        'table'    => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-z0-9_.]+$/'],
+        'page'     => 'int|min:1|max:100000',
+        'per_page' => 'int|min:1|max:100',
+        'sort'     => 'string|max:40',
+        'search'   => 'string|max:200',
+        'filters'  => 'string|max:2000',   // JSON object, decoded + checked in the handler
+        'columns'  => 'string|max:2000',   // JSON array of column ids
+    ],
+    'description' => 'One page of a registered admin data table.',
+]);
+
+$ajax->register('content.table_terms', [
+    'handler'     => [TableActions::class, 'terms'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 240, 'per' => 60],   // one per keystroke pause
+    'input'       => [
+        'taxonomy' => ['type' => 'string', 'required' => true, 'max' => 20, 'regex' => '/^[a-z0-9_]+$/'],
+        'q'        => 'string|max:100',
+        'limit'    => 'int|min:1|max:200',
+        'selected' => ['type' => 'string', 'max' => 2000, 'regex' => '/^[0-9,]*$/'],
+    ],
+    'description' => 'Taxonomy terms for a data-table multi-select filter.',
+]);
+
+$ajax->register('content.table_prefs', [
+    'handler'     => [TableActions::class, 'savePrefs'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => [
+        'table' => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-z0-9_.]+$/'],
+        'prefs' => 'required|string|max:8000',
+    ],
+    'description' => "Save this user's column, page-size and density preferences for a table.",
+]);
+
+$ajax->register('content.table_prefs_reset', [
+    'handler'     => [TableActions::class, 'resetPrefs'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => [
+        'table' => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-z0-9_.]+$/'],
+    ],
+    'description' => "Reset a table's preferences to the defaults.",
+]);
