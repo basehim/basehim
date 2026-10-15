@@ -205,7 +205,7 @@ final class UrlMapper
 
     /**
      * The same resized copy WordPress made, stored beside the imported file as
-     * `{uuid}-{W}x{H}.{ext}`. Fetched from the old site the first time it is
+     * `{name}-{W}x{H}.{ext}`. Fetched from the old site the first time it is
      * needed; null when it cannot be (the site is gone, the copy never existed).
      */
     private function variantUrl(array $media, string $size, string $rel, string $originalUrl): ?string
