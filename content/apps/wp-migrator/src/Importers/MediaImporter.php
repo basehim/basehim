@@ -32,6 +32,11 @@ use Basehim\WpMigrator\UrlMapper;
  *   - Files keep their WordPress year/month folder.
  *   - One summary line per batch in the log.
  *
+ * 1.4.2:
+ *   - Imported files keep their real WordPress name (slugified), matching
+ *     core media, instead of a {uuid}.{ext} name. Names are de-duplicated in
+ *     the folder and never collide with a generated thumbnail's name.
+ *
  * Failures are logged and the record is skipped — a single bad file
  * should never abort the migration.
  */
@@ -165,12 +170,19 @@ class MediaImporter extends Importer
                 return 'failed';
             }
 
+            // Keep the file's real WordPress name (slugified), the same scheme
+            // core media uses now, instead of the old {uuid}.{ext}. The row
+            // still carries a UUID of its own in the `uuid` column.
             $uuid = Helpers::uuid();
-            $safeName = $uuid . '.' . $ext;
+            $realName = basename((string) (parse_url($downloadUrl, PHP_URL_PATH) ?: $fileName));
+            $safeName = $this->reserveFileName($absDir, $relDir, $realName, $ext, $mime);
             $absPath = $absDir . '/' . $safeName;
             $relPath = $relDir . '/' . $safeName;
 
             if (!@rename($dl['path'], $absPath) && !(@copy($dl['path'], $absPath))) {
+                // reserveFileName() claimed the name with an empty placeholder;
+                // drop it so a failed write does not leave a 0-byte file behind.
+                if (is_file($absPath) && @filesize($absPath) === 0) @unlink($absPath);
                 $this->warn("could not write {$absPath}");
                 return 'failed';
             }
@@ -281,6 +293,104 @@ class MediaImporter extends Importer
         $m = finfo_file($f, $path);
         finfo_close($f);
         return is_string($m) && $m !== '' ? strtolower($m) : null;
+    }
+
+    /** Core media service, reused for its file-naming rules. */
+    private ?\App\Services\MediaService $media = null;
+    private function media(): \App\Services\MediaService
+    {
+        return $this->media ??= $this->app->make(\App\Services\MediaService::class);
+    }
+
+    /**
+     * A free, URL-friendly file name in $absDir built from the file's real
+     * WordPress name — the same scheme core media uses now, in place of the old
+     * {uuid}.{ext}. "photo.jpg" first, then "photo-2.jpg", "photo-3.jpg" on a
+     * clash, and never a name a generated thumbnail ("photo-medium.webp") could
+     * later overwrite. Falls back to a UUID only if no name can be reserved
+     * (an unwritable directory), so an import never fails over naming alone.
+     */
+    private function reserveFileName(string $absDir, string $relDir, string $realName, string $ext, string $mime): string
+    {
+        $base = $this->media()->fileStem($realName, $mime);
+        $variants = array_keys($this->media()->sizeDefinitions());
+        $taken = $this->takenStems($absDir, $relDir, $base, $variants);
+
+        for ($n = 1; $n <= 100000; $n++) {
+            $stem = $n === 1 ? $base : $base . '-' . $n;
+            if (!$this->stemFree($stem, $taken, $variants)) continue;
+            $name = $stem . '.' . $ext;
+            $h = @fopen($absDir . '/' . $name, 'x');   // exclusive create claims it
+            if ($h === false) {
+                if (!file_exists($absDir . '/' . $name)) break;  // directory refused the write
+                $taken[$stem] = true;                            // appeared since the scan
+                continue;
+            }
+            fclose($h);
+            return $name;
+        }
+        return Helpers::uuid() . '.' . $ext;
+    }
+
+    /**
+     * Whether a stem is free: unused here, and clash-free with the thumbnail
+     * names this file and others would generate. Mirrors core MediaService.
+     *
+     * @param string[] $variants
+     * @param array<string,bool> $taken
+     */
+    private function stemFree(string $stem, array $taken, array $variants): bool
+    {
+        if (isset($taken[$stem])) return false;
+        foreach ($variants as $v) {
+            if (isset($taken[$stem . '-' . $v])) return false;      // our thumbnail hits something
+            $suffix = '-' . $v;
+            if (str_ends_with($stem, $suffix) && isset($taken[substr($stem, 0, -strlen($suffix))])) {
+                return false;                                        // something's thumbnail hits us
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Every stem already used in this folder — files on disk and media rows,
+     * including rows whose file has gone missing — prefix-matched so the query
+     * stays small. Mirrors core MediaService::takenStems().
+     *
+     * @param string[] $variants
+     * @return array<string,bool>
+     */
+    private function takenStems(string $absDir, string $relDir, string $base, array $variants): array
+    {
+        $taken = [];
+        foreach (@scandir($absDir) ?: [] as $f) {
+            if ($f === '.' || $f === '..') continue;
+            $dot = strrpos($f, '.');
+            $taken[$dot === false || $dot === 0 ? $f : substr($f, 0, $dot)] = true;
+        }
+
+        $prefix = $base;
+        foreach ($variants as $v) {
+            if (str_ends_with($prefix, '-' . $v)) { $prefix = substr($prefix, 0, -strlen($v) - 1); break; }
+        }
+        $dirPart = $relDir !== '' ? $relDir . '/' : '';
+        try {
+            $rows = $this->db->select(
+                'SELECT storage_path FROM media WHERE storage_path LIKE :like',
+                ['like' => $dirPart . $prefix . '%']
+            );
+            foreach ($rows as $r) {
+                $p = (string) ($r['storage_path'] ?? '');
+                if (!str_starts_with($p, $dirPart)) continue;
+                $file = substr($p, strlen($dirPart));
+                if ($file === '' || str_contains($file, '/')) continue;
+                $dot = strrpos($file, '.');
+                $taken[$dot === false ? $file : substr($file, 0, $dot)] = true;
+            }
+        } catch (\Throwable) {
+            // The directory listing alone still prevents overwriting a file.
+        }
+        return $taken;
     }
 
     private function uploadRoot(): string
