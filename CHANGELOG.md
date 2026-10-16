@@ -15,6 +15,7 @@ history.
 
 | Version | Date | Summary | Details |
 |---|---|---|---|
+| 1.2.58 | 2026-10-15 | The Comments admin screen moves onto the shared data table — search, Status filter, pagination, and bulk Approve/Unapprove/Spam/Delete. | [changelog](docs/changelog/CHANGELOG-1.2.58.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.58.md) |
 | 1.2.57 | 2026-10-15 | Data table filters: working Category/Status, multi-select Category & Tags with search, a linked Tags column, and page numbers preserved across filter/sort/view changes. | [changelog](docs/changelog/CHANGELOG-1.2.57.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.57.md) |
 | 1.2.56 | 2026-10-15 | Data table: Templates fix, Screen Options sync, per-row action menu, sortable Views, thumbnail sizes, Table/List/Grid views, context bulk actions. | [changelog](docs/changelog/CHANGELOG-1.2.56.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.56.md) |
 | 1.2.55 | 2026-10-14 | Data table fixes (mobile, Screen Options), the designed UI, thumbnail + author-avatar columns, and reusable cell components. | [changelog](docs/changelog/CHANGELOG-1.2.55.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.55.md) |

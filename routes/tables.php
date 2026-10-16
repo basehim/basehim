@@ -227,7 +227,15 @@ $tables->register('comments.list', [
     'default_sort' => '',
     'page_sizes'   => [20, 50, 100],
     'columns'      => [
-        ['id' => 'author', 'label' => 'Author', 'value' => 'author_name', 'can_hide' => false],
+        ['id' => 'author', 'label' => 'Author', 'can_hide' => false, 'render' => static function (array $row): string {
+            $name  = trim((string) ($row['author_name'] ?? ''));
+            $email = trim((string) ($row['author_email'] ?? ''));
+            $h = '<span class="bh-dt-title">' . htmlspecialchars($name !== '' ? $name : 'Anonymous', ENT_QUOTES) . '</span>';
+            if ($email !== '') {
+                $h .= '<span class="bh-dt-sub">' . htmlspecialchars($email, ENT_QUOTES) . '</span>';
+            }
+            return $h;
+        }],
         ['id' => 'content', 'label' => 'Comment', 'render' => static function (array $row): string {
             $text = (string) ($row['content'] ?? '');
             if (mb_strlen($text) > 140) {
@@ -235,7 +243,16 @@ $tables->register('comments.list', [
             }
             return '<span class="bh-dt-sub">' . htmlspecialchars($text, ENT_QUOTES) . '</span>';
         }],
-        ['id' => 'post', 'label' => 'On post', 'value' => 'post_title', 'responsive' => 'tablet-up'],
+        ['id' => 'post', 'label' => 'On post', 'responsive' => 'tablet-up', 'render' => static function (array $row): string {
+            $title = trim((string) ($row['post_title'] ?? ''));
+            if ($title === '') {
+                return '<span class="bh-dt-sub">—</span>';
+            }
+            $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+            $url  = $base . '/admin/posts/' . (int) ($row['post_id'] ?? 0) . '/edit';
+            return '<a class="bh-dt-chip bh-dt-chip--link" href="' . htmlspecialchars($url, ENT_QUOTES) . '">'
+                 . htmlspecialchars($title, ENT_QUOTES) . '</a>';
+        }],
         ['id' => 'status', 'label' => 'Status', 'render' => static function (array $row): string {
             $s = (string) ($row['status'] ?? '');
             $map = ['approved' => 'bg-green-100 text-green-700', 'pending' => 'bg-amber-100 text-amber-700',
@@ -243,8 +260,18 @@ $tables->register('comments.list', [
             return '<span class="bh-dt-badge ' . ($map[$s] ?? 'bg-slate-100 text-slate-600') . '">'
                  . htmlspecialchars(ucfirst($s), ENT_QUOTES) . '</span>';
         }, 'filter' => $commentStatus, 'align' => 'center'],
+        ['id' => 'date', 'label' => 'Date', 'align' => 'right', 'responsive' => 'tablet-up', 'render' => static function (array $row): string {
+            $dt = Time::local($row['created_at'] ?? null);
+            if ($dt === null) {
+                return '';
+            }
+            return '<span class="bh-dt-date">' . htmlspecialchars($dt->format(Time::dateFormat()), ENT_QUOTES) . '</span>'
+                 . '<span class="bh-dt-sub">' . htmlspecialchars($dt->format(Time::timeFormat()), ENT_QUOTES) . '</span>';
+        }],
     ],
-    'row_actions'  => ['edit'],
+    // No per-row Edit screen for comments — moderation happens inline through
+    // the row action menu and bulk bar, which are built from bulk_actions.
+    'row_actions'  => [],
     'bulk_actions' => ['approve', 'pending', 'spam', 'delete'],
     'search_placeholder' => 'Search comments…',
 ]);

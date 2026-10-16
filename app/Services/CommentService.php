@@ -38,8 +38,14 @@ class CommentService
             $params['status'] = $filters['status'];
         }
         if (!empty($filters['search'])) {
-            $where[] = '(c.content LIKE :search OR c.author_name LIKE :search OR c.author_email LIKE :search)';
-            $params['search'] = '%' . $filters['search'] . '%';
+            // Distinct placeholders per column: PDO runs with emulated prepares
+            // off (app/Core/Database.php), where a reused named placeholder
+            // throws HY093 — the same idiom the Post/User/Media repositories use.
+            $where[] = '(c.content LIKE :search1 OR c.author_name LIKE :search2 OR c.author_email LIKE :search3)';
+            $like = '%' . $filters['search'] . '%';
+            $params['search1'] = $like;
+            $params['search2'] = $like;
+            $params['search3'] = $like;
         }
         $whereSql = implode(' AND ', $where);
 

@@ -70,6 +70,53 @@ class CommentController extends Controller
         return $this->back();
     }
 
+    /**
+     * Apply one moderation action to many comments at once — the endpoint the
+     * data table's bulk bar and per-row action menu submit to. Reuses the same
+     * CommentService calls the single-row routes use, so nothing new can be
+     * done in bulk that could not already be done one at a time.
+     */
+    public function bulk(Request $request): Response
+    {
+        if (!$this->verifyCsrf($request)) {
+            $this->flash('error', 'Security check failed.');
+            return $this->back();
+        }
+
+        $action = (string) $request->input('bulk_action', '');
+        $ids = array_values(array_filter(array_map('intval', (array) $request->input('ids', []))));
+        $statusMap = ['approve' => 'approved', 'pending' => 'pending', 'spam' => 'spam'];
+
+        if ((!isset($statusMap[$action]) && $action !== 'delete') || $ids === []) {
+            $this->flash('error', 'Pick a bulk action and at least one comment.');
+            return $this->back();
+        }
+
+        /** @var CommentService $comments */
+        $comments = $this->app->make(CommentService::class);
+        $done = 0;
+        foreach ($ids as $id) {
+            try {
+                if ($action === 'delete') {
+                    if ($comments->delete($id)) {
+                        $done++;
+                    }
+                } else {
+                    if ($comments->setStatus($id, $statusMap[$action])) {
+                        $done++;
+                    }
+                }
+            } catch (\Throwable) {
+                // Skip a single failure; keep going with the rest.
+            }
+        }
+
+        $verb = ['approve' => 'approved', 'pending' => 'unapproved', 'spam' => 'marked as spam', 'delete' => 'deleted'][$action];
+        $this->flash($done > 0 ? 'success' : 'error',
+            sprintf('%d comment%s %s.', $done, $done === 1 ? '' : 's', $verb));
+        return $this->back();
+    }
+
     private function setStatus(Request $request, string $id, string $status, string $verb): Response
     {
         if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }

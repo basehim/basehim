@@ -1,10 +1,26 @@
 <?php $this->extend('layouts.app'); ?>
 <?php $this->section('content'); ?>
+<?php
+$base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
+// The data table is the default. ?view=classic keeps the original
+// server-rendered list as a no-JS / fallback view, like Posts and Pages.
+$classic = (($_GET['view'] ?? '') === 'classic');
+?>
 
 <div class="mb-5">
     <h2 class="text-xl font-semibold text-slate-900">Comments</h2>
     <p class="text-sm text-slate-500">Moderate user comments.</p>
 </div>
+
+<?php if (!$classic): ?>
+
+<?php $this->include('partials.datatable', [
+    'tableKey'      => 'comments.list',
+    'bulkEndpoint'  => $base . '/admin/comments/bulk',
+    'deleteConfirm' => 'Permanently delete {n} comment(s)? This cannot be undone.',
+]); ?>
+
+<?php else: ?>
 
 <!-- Status tabs -->
 <div class="mb-4 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto" style="scrollbar-width:none;">
@@ -20,7 +36,7 @@
     foreach ($tabs as $val => $tab):
         $active = $status === $val;
     ?>
-    <a href="?status=<?= $val ?>" class="px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 whitespace-nowrap flex-shrink-0 <?= $active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50' ?>">
+    <a href="?view=classic&status=<?= $val ?>" class="px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 whitespace-nowrap flex-shrink-0 <?= $active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50' ?>">
         <?= icon($tab['icon'], 'w-3.5 h-3.5') ?>
         <?= $tab['label'] ?>
         <span class="text-xs px-1.5 py-0.5 rounded-full <?= $active ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500' ?>"><?= $tab['count'] ?></span>
@@ -104,5 +120,7 @@
     </div>
     <?php endif; ?>
 </div>
+
+<?php endif; ?>
 
 <?php $this->endSection(); ?>

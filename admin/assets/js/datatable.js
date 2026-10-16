@@ -234,7 +234,9 @@
             if (bulk.indexOf('publish') !== -1 && row.status !== 'published') items.push({ label: 'Publish', icon: 'arrow-up-tray', action: 'publish', id: row.id });
             if (bulk.indexOf('draft') !== -1 && row.status === 'published') items.push({ label: 'Move to Draft', icon: 'arrow-down-tray', action: 'draft', id: row.id });
             if (bulk.indexOf('approve') !== -1 && row.status !== 'approved') items.push({ label: 'Approve', icon: 'arrow-up-tray', action: 'approve', id: row.id });
-            if (bulk.indexOf('delete') !== -1) items.push({ label: 'Move to Trash', icon: 'trash', action: 'delete', danger: true, id: row.id });
+            if (bulk.indexOf('pending') !== -1 && row.status === 'approved') items.push({ label: 'Unapprove', icon: 'arrow-down-tray', action: 'pending', id: row.id });
+            if (bulk.indexOf('spam') !== -1 && row.status !== 'spam') items.push({ label: 'Spam', icon: 'no-symbol', action: 'spam', danger: true, id: row.id });
+            if (bulk.indexOf('delete') !== -1) items.push({ label: (cfg.deleteConfirm ? 'Delete' : 'Move to Trash'), icon: 'trash', action: 'delete', danger: true, id: row.id });
             if (!items.length) return;
 
             menu.innerHTML = '';
@@ -303,6 +305,8 @@
             if (bulk.indexOf('publish') !== -1 && anyUnpublished) btns.push(['publish', 'Publish', 'publish']);
             if (bulk.indexOf('draft') !== -1 && anyPublished) btns.push(['draft', 'Unpublish', 'neutral']);
             if (bulk.indexOf('approve') !== -1) btns.push(['approve', 'Approve', 'publish']);
+            if (bulk.indexOf('pending') !== -1) btns.push(['pending', 'Unapprove', 'neutral']);
+            if (bulk.indexOf('spam') !== -1) btns.push(['spam', 'Spam', 'danger']);
             if (bulk.indexOf('delete') !== -1) btns.push(['delete', 'Delete', 'danger']);
             btns.forEach(function (b) {
                 var btn = el('button', 'bh-dt-bulkbtn bh-dt-bulkbtn--' + b[2], esc(b[1]));
@@ -333,7 +337,8 @@
         function runBulk(action, ids) {
             if (!action || !ids || !ids.length || !cfg.bulkEndpoint) return;
             if (action === 'delete' && window.bhConfirm) {
-                window.bhConfirm('Move ' + ids.length + ' item(s) to trash?').then(function (ok) { if (ok) submitBulk(action, ids); });
+                var dmsg = cfg.deleteConfirm ? cfg.deleteConfirm.replace('{n}', ids.length) : ('Move ' + ids.length + ' item(s) to trash?');
+                window.bhConfirm(dmsg).then(function (ok) { if (ok) submitBulk(action, ids); });
                 return;
             }
             submitBulk(action, ids);

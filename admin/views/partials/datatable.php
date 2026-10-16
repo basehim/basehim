@@ -84,6 +84,7 @@ $__cfg = [
     'base'         => $base,
     'bulkEndpoint' => $bulkEndpoint ?? '',
     'editBase'     => $editBase ?? '',
+    'deleteConfirm'=> $deleteConfirm ?? '',
     'filters'      => $__termFilters,
     'initial'      => $__payload,
 ];
