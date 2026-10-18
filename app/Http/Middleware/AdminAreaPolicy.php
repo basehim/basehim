@@ -33,6 +33,10 @@ final class AdminAreaPolicy
         '/admin/content'    => 'edit_posts',
         '/admin/apps'       => 'manage_apps',
         '/admin/apps/marketplace' => 'manage_apps',
+        // Unified apps + themes marketplace. Gated on manage_apps (the heavier
+        // capability, since the page can install apps); the theme-install
+        // endpoint keeps its own manage_themes gate under /admin/themes.
+        '/admin/marketplace' => 'manage_apps',
         '/admin/widgets'    => 'manage_apps',
         // Legacy paths still resolve (they redirect to /admin/apps), so they
         // are gated identically rather than left unguarded.

@@ -44,8 +44,36 @@ class SystemController extends Controller
             'migrations'  => $svc->migrations(),
             'logFiles'    => $svc->logFiles(),
             'cacheInfo'   => $svc->cacheInfo(),
+            'cron'        => $this->cronInfo(),
             'csrf'        => $session->csrfToken(),
         ]);
+    }
+
+    /**
+     * The cron URL and what it drives (1.2.60): scheduled posts go live on
+     * time, and app tasks run, even when nobody visits. The URL carries the
+     * scheduler's secret token; this page needs manage_settings.
+     *
+     * @return array{url:string,last_sweep:string,scheduled:int,next_at:?string}
+     */
+    private function cronInfo(): array
+    {
+        $out = ['url' => '', 'last_sweep' => '', 'scheduled' => 0, 'next_at' => null];
+        try {
+            /** @var \App\Services\SchedulerService $scheduler */
+            $scheduler = $this->app->make(\App\Services\SchedulerService::class);
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+            $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+            $out['url'] = $scheme . '://' . $host . $base . '/api/v1/schedule/run?token=' . rawurlencode($scheduler->cronToken());
+            $out['last_sweep'] = $scheduler->lastSweep();
+            $db = $this->app->make(\App\Core\Database::class);
+            $row = $db->selectOne("SELECT COUNT(*) AS n, MIN(published_at) AS next_at FROM {posts}
+                                    WHERE status = 'scheduled' AND deleted_at IS NULL");
+            $out['scheduled'] = (int) ($row['n'] ?? 0);
+            $out['next_at'] = !empty($row['next_at']) ? (string) $row['next_at'] : null;
+        } catch (\Throwable) {}
+        return $out;
     }
 
     /** GET /admin/system/log?name=basehim-YYYY-MM-DD.log — tail a log file. */

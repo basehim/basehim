@@ -164,7 +164,6 @@ $router->group(['prefix' => '/admin'], function ($router) {
         // Comments
         $router->get('/comments', ['App\\Http\\Controllers\\Admin\\CommentController', 'index']);
         $router->get('/comments/pending.json', ['App\\Http\\Controllers\\Admin\\CommentController', 'pendingCount']);
-        $router->post('/comments/bulk', ['App\\Http\\Controllers\\Admin\\CommentController', 'bulk']);
         $router->post('/comments/{id}/approve', ['App\\Http\\Controllers\\Admin\\CommentController', 'approve']);
         $router->post('/comments/{id}/spam', ['App\\Http\\Controllers\\Admin\\CommentController', 'spam']);
         $router->post('/comments/{id}/delete', ['App\\Http\\Controllers\\Admin\\CommentController', 'destroy']);
@@ -243,10 +242,24 @@ $router->post('/settings/media/regenerate-batch', ['App\\Http\\Controllers\\Admi
         $router->post('/widgets/areas/{area}/{itemId}/remove', ['App\\Http\\Controllers\\Admin\\WidgetController', 'areaRemove']);
         $router->post('/widgets/areas/{area}/{itemId}/move', ['App\\Http\\Controllers\\Admin\\WidgetController', 'areaMove']);
         $router->post('/widgets/areas/{area}/{itemId}', ['App\\Http\\Controllers\\Admin\\WidgetController', 'areaUpdate']);
+        // ---- Marketplace (unified apps + themes) ----
+        // One page for discovering and installing both. The per-kind browse /
+        // facets / install JSON endpoints stay under /apps and /themes below,
+        // each with its own capability gate; this page calls whichever matches
+        // the open tab.
+        $router->get('/marketplace', ['App\\Http\\Controllers\\Admin\\MarketplaceController', 'index']);
+
         // ---- Apps ----
         $router->get('/apps', ['App\\Http\\Controllers\\Admin\\AppController', 'index']);
         $router->post('/apps/install', ['App\\Http\\Controllers\\Admin\\AppController', 'install']);
-        $router->get('/apps/marketplace', ['App\\Http\\Controllers\\Admin\\AppController', 'marketplace']);
+        // The old marketplace page URLs now redirect to the unified one. The
+        // sub-paths (browse.json / facets.json / install) keep working below.
+        $router->get('/apps/marketplace', function () {
+            $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+            $r = new \App\Core\Response('', 302);
+            $r->header('Location', $base . '/admin/marketplace');
+            return $r;
+        });
         $router->get('/apps/marketplace/browse.json', ['App\\Http\\Controllers\\Admin\\AppController', 'marketplaceBrowse']);
         $router->get('/apps/marketplace/facets.json', ['App\\Http\\Controllers\\Admin\\AppController', 'marketplaceFacets']);
         $router->post('/apps/marketplace/install', ['App\\Http\\Controllers\\Admin\\AppController', 'marketplaceInstall']);
@@ -257,6 +270,8 @@ $router->post('/settings/media/regenerate-batch', ['App\\Http\\Controllers\\Admi
         $router->post('/apps/{slug}/uninstall', ['App\\Http\\Controllers\\Admin\\AppController', 'uninstall']);
         $router->post('/apps/{slug}/delete', ['App\\Http\\Controllers\\Admin\\AppController', 'delete']);
         $router->get('/apps/{slug}/consent', ['App\\Http\\Controllers\\Admin\\AppController', 'consent']);
+        // JSON form of the consent screen, for the in-page activate flow.
+        $router->get('/apps/{slug}/consent.json', ['App\\Http\\Controllers\\Admin\\AppController', 'consentJson']);
         $router->post('/apps/{slug}/consent', ['App\\Http\\Controllers\\Admin\\AppController', 'saveConsent']);
         $router->get('/apps/{slug}/logs', ['App\\Http\\Controllers\\Admin\\AppController', 'logs']);
         $router->post('/apps/{slug}/rescan', ['App\\Http\\Controllers\\Admin\\AppController', 'rescan']);
@@ -265,7 +280,12 @@ $router->post('/settings/media/regenerate-batch', ['App\\Http\\Controllers\\Admi
         // Themes
         $router->get('/themes', ['App\\Http\\Controllers\\Admin\\ThemeController', 'index']);
         $router->post('/themes/install', ['App\\Http\\Controllers\\Admin\\ThemeController', 'install']);
-        $router->get('/themes/marketplace', ['App\\Http\\Controllers\\Admin\\ThemeController', 'marketplace']);
+        $router->get('/themes/marketplace', function () {
+            $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+            $r = new \App\Core\Response('', 302);
+            $r->header('Location', $base . '/admin/marketplace?tab=themes');
+            return $r;
+        });
         $router->get('/themes/marketplace/browse.json', ['App\\Http\\Controllers\\Admin\\ThemeController', 'marketplaceBrowse']);
         $router->get('/themes/marketplace/facets.json', ['App\\Http\\Controllers\\Admin\\ThemeController', 'marketplaceFacets']);
         $router->post('/themes/marketplace/install', ['App\\Http\\Controllers\\Admin\\ThemeController', 'marketplaceInstall']);

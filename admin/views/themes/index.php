@@ -6,7 +6,7 @@
         <h2 class="text-xl font-semibold text-slate-900">Themes</h2>
         <p class="text-sm text-slate-500">Choose how your site looks.</p>
     </div>
-    <a href="<?= $base ?>/admin/themes/marketplace" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm">
+    <a href="<?= $base ?>/admin/marketplace?tab=themes" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm">
         <?= icon('building-storefront', 'w-4 h-4') ?> Browse Marketplace
     </a>
 </div>

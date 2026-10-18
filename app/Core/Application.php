@@ -271,6 +271,14 @@ final class Application
         // Post editor rules shared by the form and the AJAX actions (1.2.47).
         $this->singleton(\App\Services\PostEditorService::class, fn($app) =>
             new \App\Services\PostEditorService($app->make(Database::class)));
+        // Takes scheduled posts live when their time comes (1.2.60).
+        $this->singleton(\App\Services\ScheduledPublisher::class, fn($app) =>
+            new \App\Services\ScheduledPublisher(
+                $app->make(\App\Repositories\PostRepository::class),
+                $app->make(\App\Services\PostService::class),
+                $app->make(Cache::class),
+                $app->make(Logger::class),
+            ));
 
         // Repositories
         $this->singleton(\App\Repositories\PostRepository::class, fn($app) =>
@@ -351,6 +359,14 @@ final class Application
         } catch (\Throwable $e) {
             try { $this->make(Logger::class)->error('Theme boot.php failure: ' . $e->getMessage()); } catch (\Throwable) {}
         }
+
+        // Scheduled posts whose time has come go live now, before this request
+        // is routed, so it already sees them (1.2.60). After apps and the theme
+        // have booted, so their post.published / post.updated listeners run.
+        // Costs one cache-file read when nothing is due; never throws.
+        try {
+            $this->make(\App\Services\ScheduledPublisher::class)->maybeRun();
+        } catch (\Throwable) {}
     }
 
     /**

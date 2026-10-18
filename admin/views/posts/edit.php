@@ -45,6 +45,47 @@ if ($isEdit && !empty($post['slug']) && $type !== 'template') {
     try { $viewUrl = \App\Core\Helpers::postUrl($post, (string) $base); } catch (\Throwable) { $viewUrl = ''; }
 }
 $statusLabels = ['draft' => 'Draft', 'pending' => 'Pending review', 'published' => 'Published', 'scheduled' => 'Scheduled', 'private' => 'Private'];
+// "Scheduled" is reached through the Publish panel (a date is part of it), so
+// the select only lists it for a post that already is scheduled (1.2.60).
+if ($statusVal !== 'scheduled') unset($statusLabels['scheduled']);
+
+// ---- Publish panel (1.2.60) ------------------------------------------------
+// Times are stored in UTC and shown in the site timezone (Settings → General).
+// The panel's date and time fields are site-local; PostPublishing reads them
+// with the same zone on the server, which is the only place that decides.
+$pubEditor     = $app->make(\App\Services\PostEditorService::class);
+$canPublish    = $pubEditor->canPublish($currentUser ?? null, $type);
+$pubStoredUtc  = $isEdit && !empty($post['published_at']) ? (string) $post['published_at'] : '';
+$pubLocal      = $pubStoredUtc !== '' ? \App\Core\Time::local($pubStoredUtc) : null;
+$pubTz         = \App\Core\Time::timezone();
+$pubTzLabel    = \App\Core\Time::abbreviation() . ' · UTC' . \App\Core\Time::offset();
+$pubNowLocal   = \App\Core\Time::local(\App\Core\Time::now());
+$pubIsOut      = in_array($statusVal, ['published', 'scheduled', 'private'], true);
+$pubMode       = $statusVal === 'scheduled' ? 'schedule' : 'now';
+$pubShowPanel  = $type !== 'template';
+$pubDate       = $statusVal === 'scheduled' && $pubLocal ? $pubLocal->format('Y-m-d') : '';
+$pubTime       = $statusVal === 'scheduled' && $pubLocal ? $pubLocal->format('H:i') : '';
+$pubWhen       = $pubLocal ? $pubLocal->format(\App\Core\Time::dateFormat()) . ' at ' . $pubLocal->format(\App\Core\Time::timeFormat()) : '';
+$pubSummary = match ($statusVal) {
+    'published' => 'Published' . ($pubWhen !== '' ? ' ' . $pubWhen : ''),
+    'scheduled' => 'Scheduled for ' . $pubWhen,
+    'private'   => 'Private — only editors can see it',
+    'pending'   => 'Pending review',
+    default     => $isEdit ? 'Draft — not published yet' : 'New — not published yet',
+};
+// The primary button as the server renders it; post-publish.js keeps it in
+// step with the panel. data-status is what the click puts in the status field.
+if ($type === 'template') {
+    [$pubBtnLabel, $pubBtnStatus] = ['Save', ''];
+} elseif ($statusVal === 'scheduled') {
+    [$pubBtnLabel, $pubBtnStatus] = ['Update', ''];
+} elseif ($pubIsOut) {
+    [$pubBtnLabel, $pubBtnStatus] = ['Update', ''];
+} elseif (!$canPublish) {
+    [$pubBtnLabel, $pubBtnStatus] = ['Submit for review', 'pending'];
+} else {
+    [$pubBtnLabel, $pubBtnStatus] = ['Publish', 'published'];
+}
 
 // ---- Block editor: app extension surface ----------------------------------
 // Apps enqueue their editor scripts/styles and extend the runtime config via
@@ -121,13 +162,7 @@ $v = urlencode(BASEHIM_VERSION);
                     <?= $isLive ? 'View' : 'Preview' ?> <?= icon('arrow-top-right-on-square', 'bhe-icon') ?>
                 </a>
             <?php endif; ?>
-            <?php if ($type === 'template'): ?>
-                <button type="submit" class="bhe-btn bhe-btn--primary" id="bhe-publish">Save</button>
-            <?php elseif ($isLive || $statusVal === 'scheduled' || $statusVal === 'private'): ?>
-                <button type="submit" class="bhe-btn bhe-btn--primary" id="bhe-publish">Update</button>
-            <?php else: ?>
-                <button type="submit" class="bhe-btn bhe-btn--primary" id="bhe-publish" data-status="published">Publish</button>
-            <?php endif; ?>
+            <button type="submit" class="bhe-btn bhe-btn--primary" id="bhe-publish"<?= $pubBtnStatus !== '' ? ' data-status="' . $pubBtnStatus . '"' : '' ?>><?= htmlspecialchars($pubBtnLabel) ?></button>
             <div id="bhe-plugin-buttons" class="bhe-plugin-buttons"></div>
             <button type="button" class="bhe-hbtn is-active" id="bhe-settings-toggle" aria-pressed="true" title="Settings (Ctrl+Shift+,)" aria-label="Settings">
                 <svg class="bhe-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
@@ -167,6 +202,67 @@ $v = urlencode(BASEHIM_VERSION);
                           // setting when it arrives, so a save that somehow misses the
                           // panel can never reset them. ?>
                     <input type="hidden" name="_post_settings" value="1">
+
+                    <?php if ($pubShowPanel): ?>
+                    <section class="bhe-panel is-open bh-publish" data-bhe-panel="publish" data-bh-publish
+                             data-tz="<?= htmlspecialchars($pubTz) ?>"
+                             data-now="<?= time() ?>"
+                             data-status="<?= htmlspecialchars($statusVal) ?>"
+                             data-can-publish="<?= $canPublish ? '1' : '0' ?>"
+                             data-type-label="<?= htmlspecialchars(strtolower($typeLabel)) ?>"
+                             data-published-at="<?= $pubStoredUtc !== '' ? htmlspecialchars(\App\Core\Time::iso($pubStoredUtc)) : '' ?>">
+                        <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Publish</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
+                        <div class="bhe-panel__body">
+                            <p class="bh-publish__state bh-publish__state--<?= htmlspecialchars($statusVal) ?>" data-bh-publish-state>
+                                <span class="bh-publish__dot" aria-hidden="true"></span>
+                                <span><?= htmlspecialchars($pubSummary) ?></span>
+                            </p>
+
+                            <?php if ($canPublish): ?>
+                            <fieldset class="bh-publish__modes" data-bh-publish-modes>
+                                <legend class="bhe-label">When</legend>
+                                <div class="bhe-segmented">
+                                    <label class="bh-publish__mode">
+                                        <input type="radio" name="publish_mode" value="now" <?= $pubMode === 'now' ? 'checked' : '' ?>>
+                                        <span data-bh-publish-now-label><?= $statusVal === 'published' ? 'Keep published' : 'Immediately' ?></span>
+                                    </label>
+                                    <label class="bh-publish__mode">
+                                        <input type="radio" name="publish_mode" value="schedule" <?= $pubMode === 'schedule' ? 'checked' : '' ?>>
+                                        <span>Schedule</span>
+                                    </label>
+                                </div>
+                            </fieldset>
+
+                            <div class="bh-publish__when" data-bh-publish-when <?= $pubMode === 'schedule' ? '' : 'hidden' ?>>
+                                <div class="bh-publish__grid">
+                                    <div class="bhe-field">
+                                        <label class="bhe-label" for="bh-publish-date">Date</label>
+                                        <input type="date" id="bh-publish-date" name="publish_date" class="bhe-input"
+                                               value="<?= htmlspecialchars($pubDate) ?>"
+                                               min="<?= htmlspecialchars($pubNowLocal ? $pubNowLocal->format('Y-m-d') : '') ?>" max="2038-01-18"
+                                               aria-describedby="bh-publish-preview bh-publish-error">
+                                    </div>
+                                    <div class="bhe-field">
+                                        <label class="bhe-label" for="bh-publish-time">Time</label>
+                                        <input type="time" id="bh-publish-time" name="publish_time" class="bhe-input" step="60"
+                                               value="<?= htmlspecialchars($pubTime) ?>"
+                                               aria-describedby="bh-publish-preview bh-publish-error">
+                                    </div>
+                                </div>
+                                <p class="bh-publish__tz">
+                                    <?= icon('globe-alt', 'bhe-icon') ?>
+                                    <span>Site time: <strong><?= htmlspecialchars($pubTz) ?></strong> (<?= htmlspecialchars($pubTzLabel) ?>)</span>
+                                </p>
+                                <p class="bh-publish__error" id="bh-publish-error" role="alert" data-bh-publish-error hidden></p>
+                            </div>
+
+                            <p class="bh-publish__preview" id="bh-publish-preview" aria-live="polite" data-bh-publish-preview hidden></p>
+                            <?php elseif (!$pubIsOut): ?>
+                            <p class="bhe-help bh-publish__note">Your role submits <?= htmlspecialchars(strtolower($typeLabel)) ?>s for review. An editor chooses when it goes live.</p>
+                            <?php endif; ?>
+                        </div>
+                    </section>
+                    <?php endif; ?>
 
                     <section class="bhe-panel is-open" data-bhe-panel="summary">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Summary</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
@@ -361,6 +457,7 @@ $v = urlencode(BASEHIM_VERSION);
 <script>window.BasehimEditorConfig = <?= json_encode($nbeConfig, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="<?= $base ?>/admin/assets/js/block-editor.js?v=<?= $v ?>"></script>
 <?php if ($type === 'post'): ?><script src="<?= $base ?>/admin/assets/js/post-tags.js?v=<?= $v ?>"></script><?php endif; ?>
+<?php if ($pubShowPanel): ?><script src="<?= $base ?>/admin/assets/js/post-publish.js?v=<?= $v ?>"></script><?php endif; ?>
 <?php foreach ($nbeScripts as $nbeJs): ?>
 <script src="<?= htmlspecialchars((string) $nbeJs) ?>"></script>
 <?php endforeach; ?>

@@ -59,8 +59,10 @@ $dateCell = static function (array $row): string {
     if ($dt === null) {
         return '';
     }
+    // A scheduled post's date is when it will go live (1.2.60): say so.
+    $when = ($row['status'] ?? '') === 'scheduled' ? 'Goes live ' : '';
     return '<span class="bh-dt-date">' . htmlspecialchars($dt->format(Time::dateFormat()), ENT_QUOTES) . '</span>'
-         . '<span class="bh-dt-sub">' . htmlspecialchars($dt->format(Time::timeFormat()), ENT_QUOTES) . '</span>';
+         . '<span class="bh-dt-sub">' . htmlspecialchars($when . $dt->format(Time::timeFormat()), ENT_QUOTES) . '</span>';
 };
 
 /**

@@ -15,6 +15,7 @@ history.
 
 | Version | Date | Summary | Details |
 |---|---|---|---|
+| 1.2.60 | 2026-10-18 | Schedule posts: a Publish panel in the editor (publish now or schedule in the site timezone), scheduled posts go live on their own, and contributors can no longer schedule or make posts private. | [changelog](docs/changelog/CHANGELOG-1.2.60.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.60.md) |
 | 1.2.58 | 2026-10-15 | The Comments admin screen moves onto the shared data table — search, Status filter, pagination, and bulk Approve/Unapprove/Spam/Delete. | [changelog](docs/changelog/CHANGELOG-1.2.58.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.58.md) |
 | 1.2.57 | 2026-10-15 | Data table filters: working Category/Status, multi-select Category & Tags with search, a linked Tags column, and page numbers preserved across filter/sort/view changes. | [changelog](docs/changelog/CHANGELOG-1.2.57.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.57.md) |
 | 1.2.56 | 2026-10-15 | Data table: Templates fix, Screen Options sync, per-row action menu, sortable Views, thumbnail sizes, Table/List/Grid views, context bulk actions. | [changelog](docs/changelog/CHANGELOG-1.2.56.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.56.md) |

@@ -233,6 +233,26 @@ $dot = ['pass' => 'bg-emerald-400', 'warn' => 'bg-amber-400', 'fail' => 'bg-red-
         </div>
     </div>
 
+    <?php $cron = $cron ?? ['url' => '', 'last_sweep' => '', 'scheduled' => 0, 'next_at' => null]; ?>
+    <div class="bg-white rounded-xl border border-slate-200 p-5 mt-4" id="cron">
+        <h3 class="text-sm font-semibold text-slate-900 mb-1">Scheduled posts and tasks</h3>
+        <p class="text-xs text-slate-500 mb-3">
+            Scheduled posts go live with the first visit after their time. For exact times on a quiet site, have your host call this URL every minute
+            (cPanel → Cron Jobs, command <code class="font-mono">curl -s "URL" &gt;/dev/null</code>). It also runs apps' scheduled tasks. Keep it private: it contains a secret token.
+        </p>
+        <?php if ($cron['url'] !== ''): ?>
+        <div class="flex gap-2 items-stretch">
+            <input type="text" readonly class="bh-input font-mono text-xs" id="cron-url" value="<?= htmlspecialchars($cron['url']) ?>" aria-label="Cron URL">
+            <button type="button" class="bh-btn bh-btn--secondary bh-btn--sm" onclick="var f=document.getElementById('cron-url');f.select();try{navigator.clipboard.writeText(f.value);}catch(e){document.execCommand('copy');}if(window.bhToast)bhToast('Copied');">Copy</button>
+        </div>
+        <?php endif; ?>
+        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-sm">
+            <div><dt class="text-xs text-slate-400">Scheduled posts</dt><dd class="text-slate-800 font-medium"><?= (int) $cron['scheduled'] ?></dd></div>
+            <div><dt class="text-xs text-slate-400">Next goes live</dt><dd class="text-slate-800 font-medium"><?= $cron['next_at'] ? htmlspecialchars(\App\Core\Time::format($cron['next_at'])) : '—' ?></dd></div>
+            <div><dt class="text-xs text-slate-400">Last task sweep</dt><dd class="text-slate-800 font-medium"><?= $cron['last_sweep'] !== '' ? htmlspecialchars(\App\Core\Time::ago($cron['last_sweep'])) : 'Never' ?></dd></div>
+        </dl>
+    </div>
+
     <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4 text-sm text-amber-700">
         <?= icon('light-bulb', 'w-4 h-4 mr-1') ?>
         Tip: after deploying updated PHP files on cPanel, clear the cache here (or from your host's OPcache tool) and hard-refresh (Ctrl+F5) so changes take effect.

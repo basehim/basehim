@@ -108,6 +108,27 @@ $this->registerBlockRenderer('acme/notice', fn(array $data, array $block) =>
 
 Filters: `blocks.pre_render`, `blocks.render.{type}` (receives the block with its `innerBlocks`), `blocks.rendered`, and `blocks.stylesheet` (return another URL, or an empty string to stop the front-end stylesheet being linked).
 
+## Publishing (1.2.60)
+
+The sidebar's **Publish** panel chooses between publishing immediately and
+scheduling for a date and time in the site timezone (Settings → General). It
+posts three fields with the editor form, all optional:
+
+| Field | Value |
+| --- | --- |
+| `publish_mode` | `now` or `schedule` |
+| `publish_date` | `Y-m-d`, site time |
+| `publish_time` | `H:i`, site time |
+
+The server decides (`App\Services\PostPublishing`): scheduling needs the type's
+publish capability and a time still ahead; publishing immediately uses the
+server's clock; a live post keeps its status and date on Update unless the
+author explicitly schedules it (the panel asks for confirmation first). A
+request it cannot honour keeps the stored status and date, saves the rest, and
+says why. The primary button follows the panel: Publish, Schedule, Publish now,
+Update, or Submit for review for roles that cannot publish. Save draft (AJAX)
+never sends these fields.
+
 ## Keyboard shortcuts
 
 Shift+Alt+H in the editor lists them all. The main ones:

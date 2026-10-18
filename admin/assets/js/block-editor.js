@@ -4645,7 +4645,10 @@ function saveDraft() {
 var DRAFT_FIELDS = {
   _csrf: 1, _post_settings: 1, title: 1, slug: 1, content: 1, content_format: 1, excerpt: 1,
   status: 1, comment_status: 1, featured_media_id: 1, 'term_ids[]': 1, 'new_tags[]': 1,
-  seo_meta_title: 1, seo_meta_description: 1, seo_focus: 1, seo_robots: 1, seo_canonical: 1
+  seo_meta_title: 1, seo_meta_description: 1, seo_focus: 1, seo_robots: 1, seo_canonical: 1,
+  // The Publish panel (1.2.60). A draft save is not a publication, so these
+  // are known but never sent: the choice applies when Publish/Schedule runs.
+  publish_mode: 1, publish_date: 1, publish_time: 1
 };
 var SEO_FIELDS = { seo_meta_title: 'meta_title', seo_meta_description: 'meta_description', seo_focus: 'focus_keyword', seo_robots: 'robots', seo_canonical: 'canonical_url' };
 var draftSaving = false;
@@ -4664,7 +4667,7 @@ function draftPayload() {
     if (SEO_FIELDS[k]) { seo[SEO_FIELDS[k]] = v; return; }
     if (k === 'featured_media_id') { var f = parseInt(v, 10); p.featured_media_id = f > 0 ? f : null; return; }
     if (k === 'status') { p.status = v === 'pending' ? 'pending' : 'draft'; return; }
-    if (k === '_csrf' || k === '_post_settings') return;
+    if (k === '_csrf' || k === '_post_settings' || k.indexOf('publish_') === 0) return;
     p[k] = v;
   });
   if (foreign) return null;

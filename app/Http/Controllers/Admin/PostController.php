@@ -248,7 +248,8 @@ class PostController extends Controller
 
         $data = $this->extractData($request);
         $data['type'] = $this->type;
-        $data = $this->gatePublishing($data);
+        $timing = $this->resolvePublishing($request, $data, null);
+        $data = $timing['data'];
 
         $id = $posts->create($data, $this->userId() ?? 1, $this->user());
         \App\Services\ActivityLogService::record($this->userId(), $this->type . '.created', $this->type, $id,
@@ -262,7 +263,8 @@ class PostController extends Controller
         $this->settleNewTags($request, $id, (string) ($data['status'] ?? 'draft'));
 
         $report = $posts->htmlReport();
-        $this->flash($report ? 'warning' : 'success', ucfirst($this->type) . ' created.' . ($report ? ' ' . $report['message'] : ''));
+        $saved = $posts->find($id) ?? [];
+        $this->flashSaved(ucfirst($this->type) . ' created.', $timing, $saved, $report);
         return $this->redirect($this->basePath() . "/{$id}/edit");
     }
 
@@ -295,7 +297,8 @@ class PostController extends Controller
              */
             unset($data['status'], $data['term_ids'], $data['featured_media_id'], $data['comment_status']);
         }
-        $data = $this->gatePublishing($data);
+        $timing = $this->resolvePublishing($request, $data, $existing);
+        $data = $timing['data'];
         $posts->update((int)$id, $data, $this->user());
         $report = $posts->htmlReport();
 
@@ -309,7 +312,7 @@ class PostController extends Controller
 
         \App\Services\ActivityLogService::record($this->userId(), $this->type . '.updated', $this->type, (int)$id,
             'Updated "' . mb_substr((string) ($data['title'] ?? $existing['title'] ?? ''), 0, 80) . '"');
-        $this->flash($report ? 'warning' : 'success', ucfirst($this->type) . ' updated.' . ($report ? ' ' . $report['message'] : ''));
+        $this->flashSaved(ucfirst($this->type) . ' updated.', $timing, $posts->find((int) $id) ?? $existing, $report);
         return $this->redirect($this->basePath() . "/{$id}/edit");
     }
 
@@ -414,18 +417,88 @@ class PostController extends Controller
     }
 
     /**
+     * The status and publication time this save should give the post, read
+     * from the status select and the publish panel by PostPublishing (1.2.60).
+     *
      * Roles without publish_{type}s (e.g. contributor) cannot set a record
-     * live — publish attempts are downgraded to pending review.
+     * live, schedule it or make it private: those requests become pending
+     * review. A request that cannot be honoured (a past or malformed
+     * schedule) leaves the stored status and date as they were — the rest of
+     * the save still goes through, so no work is lost, and the reason is
+     * reported. Without the status field (the settings panel did not
+     * arrive), timing is not touched at all.
+     *
+     * @return array{data:array,error:?string,notice:?string,scheduled:bool}
      */
-    private function gatePublishing(array $data): array
+    private function resolvePublishing(Request $request, array $data, ?array $existing): array
     {
-        $cap = $this->capabilityFor('publish');
-        if (($data['status'] ?? '') === 'published'
-            && !\App\Http\Middleware\CheckCapability::userCan($this->user(), $cap)) {
-            $data['status'] = 'pending';
-            $this->flash('info', 'Submitted for review — your role cannot publish directly.');
+        $out = ['data' => $data, 'error' => null, 'notice' => null, 'scheduled' => false];
+        if (!array_key_exists('status', $data)) return $out;
+
+        $input = ['status' => $data['status']];
+        foreach (['publish_mode', 'publish_date', 'publish_time'] as $f) {
+            $v = $request->input($f);
+            if (is_string($v)) $input[$f] = $v;
         }
-        return $data;
+        $canPublish = \App\Http\Middleware\CheckCapability::userCan($this->user(), $this->capabilityFor('publish'));
+        $r = \App\Services\PostPublishing::resolve($existing, $input, $canPublish, \App\Core\Time::zone(), time());
+
+        if (isset($r['error'])) {
+            // Keep what the post has. A new post is saved as a draft.
+            if ($existing === null) {
+                $out['data']['status'] = 'draft';
+            } else {
+                unset($out['data']['status']);
+            }
+            $out['error'] = $r['error'];
+            return $out;
+        }
+        $out['data']['status'] = $r['status'];
+        if (array_key_exists('published_at', $r)) $out['data']['published_at'] = $r['published_at'];
+        $out['notice'] = $r['notice'] ?? null;
+        $out['scheduled'] = $r['status'] === 'scheduled' && array_key_exists('published_at', $r);
+        return $out;
+    }
+
+    /**
+     * One message for the whole save: the save itself, then what happened to
+     * its timing, then anything the HTML filter removed. (Two flashes would
+     * overwrite each other; the review notice used to be lost this way.)
+     */
+    private function flashSaved(string $saved, array $timing, array $post, ?array $report): void
+    {
+        $type = 'success';
+        $msg = $saved;
+        if ($timing['error'] !== null) {
+            $type = 'error';
+            $msg = $saved . ' The publish settings were not applied: ' . $timing['error']
+                 . ($post !== [] ? ' It is still ' . self::statusPhrase((string) ($post['status'] ?? 'draft')) . '.' : '');
+        } elseif ($timing['scheduled'] && !empty($post['published_at'])) {
+            $at = \App\Core\Time::local($post['published_at']);
+            if ($at) {
+                $msg = 'Scheduled for ' . $at->format(\App\Core\Time::dateFormat()) . ' at ' . $at->format(\App\Core\Time::timeFormat())
+                     . ' (' . \App\Core\Time::abbreviation($post['published_at']) . '). It goes live then; until then only editors can see it.';
+            }
+        } elseif ($timing['notice'] !== null) {
+            $type = 'info';
+            $msg .= ' ' . $timing['notice'];
+        }
+        if ($report) {
+            if ($type === 'success') $type = 'warning';
+            $msg .= ' ' . $report['message'];
+        }
+        $this->flash($type, $msg);
+    }
+
+    private static function statusPhrase(string $status): string
+    {
+        return match ($status) {
+            'published' => 'published',
+            'scheduled' => 'scheduled for its earlier time',
+            'pending'   => 'pending review',
+            'private'   => 'private',
+            default     => 'a draft',
+        };
     }
 
     private function extractData(Request $request): array

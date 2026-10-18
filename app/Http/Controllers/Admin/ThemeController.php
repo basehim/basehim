@@ -28,8 +28,21 @@ class ThemeController extends Controller
 
     public function activate(Request $request, string $slug): Response
     {
-        if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }
+        // The marketplace activates in place and expects JSON; the Themes
+        // screen posts a normal form and expects a redirect with a flash.
+        $json = $request->wantsJson();
+
+        if (!$this->verifyCsrf($request)) {
+            if ($json) return Response::json(['ok' => false, 'error' => 'Security check failed.'], 419);
+            $this->flash('error', 'Security check failed.');
+            return $this->back();
+        }
         $ok = $this->app->make(ThemeService::class)->activate($slug);
+        if ($json) {
+            return $ok
+                ? Response::json(['ok' => true, 'active' => true])
+                : Response::json(['ok' => false, 'error' => 'Theme not found.'], 404);
+        }
         $this->flash($ok ? 'success' : 'error', $ok ? "Theme '{$slug}' activated." : 'Theme not found.');
         return $this->redirect('/admin/themes');
     }

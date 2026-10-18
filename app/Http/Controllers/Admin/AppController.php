@@ -36,7 +36,12 @@ class AppController extends Controller
 
     public function activate(Request $request, string $slug): Response
     {
+        // The marketplace activates in place and expects JSON; the Apps screen
+        // posts a normal form and expects a redirect with a flash.
+        $json = $request->wantsJson();
+
         if (!$this->verifyCsrf($request)) {
+            if ($json) return Response::json(['ok' => false, 'error' => 'Security check failed.'], 419);
             $this->flash('error', 'Security check failed.');
             return $this->back();
         }
@@ -44,24 +49,29 @@ class AppController extends Controller
         try {
             $apps = $this->app->make(AppService::class);
 
-            // An app declaring permissions must be approved first. Send the
-            // operator to the consent screen rather than reporting a failure
-            // they have no way to act on.
+            // An app declaring permissions must be approved first. The JSON
+            // caller opens the consent modal; a browser is sent to the consent
+            // screen rather than shown a failure it has no way to act on.
             if ($apps->needsConsent($slug)) {
+                if ($json) return Response::json(['ok' => false, 'needs_consent' => true]);
                 return $this->redirect('/admin/apps/' . urlencode($slug) . '/consent');
             }
 
             if ($apps->activate($slug)) {
+                if ($json) return Response::json(['ok' => true, 'active' => true]);
                 $this->flash('success', "App '{$slug}' activated.");
             } else {
                 // Requirements are the usual reason, and "could not activate"
                 // on its own leaves the operator with nothing to act on.
                 $problems = $apps->lastRequirementProblems();
-                $this->flash('error', $problems
+                $msg = $problems
                     ? "Cannot activate '{$slug}': " . implode(' ', $problems)
-                    : "Could not activate '{$slug}'.");
+                    : "Could not activate '{$slug}'.";
+                if ($json) return Response::json(['ok' => false, 'error' => $msg]);
+                $this->flash('error', $msg);
             }
         } catch (\Throwable $e) {
+            if ($json) return Response::json(['ok' => false, 'error' => 'Activation failed: ' . $e->getMessage()]);
             $this->flash('error', "Activation failed: " . $e->getMessage());
         }
         return $this->redirect('/admin/apps');
@@ -259,6 +269,36 @@ class AppController extends Controller
     }
 
     /**
+     * GET /admin/apps/{slug}/consent.json — the consent screen as data, for the
+     * marketplace's in-page "Activate" flow. The browser opens a modal from
+     * this and posts the decision back to saveConsent() with Accept: JSON.
+     */
+    public function consentJson(Request $request, string $slug): Response
+    {
+        /** @var AppService $apps */
+        $apps = $this->app->make(AppService::class);
+        $row = $apps->find($slug);
+        if (!$row) {
+            return Response::json(['ok' => false, 'error' => "App '{$slug}' is not installed."], 404);
+        }
+
+        /** @var \App\Services\PermissionBroker $broker */
+        $broker = $this->app->make(\App\Services\PermissionBroker::class);
+        $declared = $broker->declared($slug);
+
+        return Response::json([
+            'ok'            => true,
+            'slug'          => $slug,
+            'name'          => $row['name'] ?? $slug,
+            'needs_consent' => $apps->needsConsent($slug),
+            'consented'     => $broker->hasConsented($slug),
+            'permissions'   => $broker->describeAll($declared),
+            'unknown'       => $broker->unknownDeclared($slug),
+            'granted'       => $broker->grantedFor($slug),
+        ]);
+    }
+
+    /**
      * POST /admin/apps/{slug}/consent — record the decision, then activate.
      *
      * Withholding a permission is allowed: the app runs with less. It may
@@ -267,7 +307,10 @@ class AppController extends Controller
      */
     public function saveConsent(Request $request, string $slug): Response
     {
+        $json = $request->wantsJson();
+
         if (!$this->verifyCsrf($request)) {
+            if ($json) return Response::json(['ok' => false, 'error' => 'Security check failed.'], 419);
             $this->flash('error', 'Security check failed.');
             return $this->redirect('/admin/apps');
         }
@@ -283,15 +326,19 @@ class AppController extends Controller
         if ($request->input('activate')) {
             if ($apps->activate($slug)) {
                 $withheld = $broker->withheld($slug);
+                if ($json) return Response::json(['ok' => true, 'active' => true, 'withheld_count' => count($withheld)]);
                 $note = $withheld ? ' ' . count($withheld) . ' permission(s) withheld.' : '';
                 $this->flash('success', "App '{$slug}' approved and activated.{$note}");
             } else {
                 $problems = $apps->lastRequirementProblems();
-                $this->flash('error', $problems
+                $msg = $problems
                     ? 'Approved, but cannot activate: ' . implode(' ', $problems)
-                    : "Approved, but '{$slug}' could not be activated.");
+                    : "Approved, but '{$slug}' could not be activated.";
+                if ($json) return Response::json(['ok' => false, 'error' => $msg]);
+                $this->flash('error', $msg);
             }
         } else {
+            if ($json) return Response::json(['ok' => true, 'active' => false]);
             $this->flash('success', "Permissions saved for '{$slug}'.");
         }
         return $this->redirect('/admin/apps');

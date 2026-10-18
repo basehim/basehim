@@ -371,6 +371,57 @@ class PostRepository
         return $this->db->update('posts', $data, ['id' => $id]);
     }
 
+    // ------------------------------------------------------------------
+    // Scheduled posts (1.2.60)
+    // ------------------------------------------------------------------
+
+    /**
+     * The ids of scheduled posts whose time has come, oldest first. Trashed
+     * posts are never published.
+     *
+     * @return int[]
+     */
+    public function dueScheduledIds(string $nowUtc, int $limit = 25): array
+    {
+        $limit = max(1, min(200, $limit));
+        return array_map('intval', array_column($this->db->select(
+            "SELECT id FROM {posts}
+              WHERE status = 'scheduled' AND deleted_at IS NULL
+                AND published_at IS NOT NULL AND published_at <= :now
+           ORDER BY published_at ASC, id ASC
+              LIMIT {$limit}",
+            ['now' => $nowUtc]
+        ), 'id'));
+    }
+
+    /** The earliest publication time among scheduled posts (UTC), or null. */
+    public function nextScheduledAt(): ?string
+    {
+        $row = $this->db->selectOne(
+            "SELECT MIN(published_at) AS next_at FROM {posts}
+              WHERE status = 'scheduled' AND deleted_at IS NULL AND published_at IS NOT NULL"
+        );
+        $v = $row['next_at'] ?? null;
+        return is_string($v) && $v !== '' ? $v : null;
+    }
+
+    /**
+     * Take one due scheduled post live, if nobody else has.
+     *
+     * A single conditional UPDATE: the row only changes while it is still
+     * `scheduled` and due, so of two requests racing for the same post exactly
+     * one sees an affected row. That one fires the hooks; the other moves on.
+     */
+    public function claimScheduled(int $id, string $nowUtc): bool
+    {
+        return $this->db->execute(
+            "UPDATE {posts} SET status = 'published'
+              WHERE id = :id AND status = 'scheduled' AND deleted_at IS NULL
+                AND published_at IS NOT NULL AND published_at <= :now",
+            ['id' => $id, 'now' => $nowUtc]
+        ) === 1;
+    }
+
     public function softDelete(int $id): int
     {
         return $this->db->update('posts', ['deleted_at' => date('Y-m-d H:i:s')], ['id' => $id]);

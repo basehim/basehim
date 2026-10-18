@@ -21,6 +21,7 @@ $navItems = [
     ['url' => '/admin/users',         'label' => 'Users',       'icon' => 'users',       'cap' => 'manage_users', 'section' => 'people'],
     ['url' => '/admin/roles',         'label' => 'Roles',       'icon' => 'shield-check',  'cap' => 'manage_users', 'section' => 'people'],
     ['url' => '/admin/apps',          'label' => 'Apps',        'icon' => 'puzzle-piece',        'cap' => 'manage_apps', 'section' => 'system'],
+    ['url' => '/admin/marketplace',   'label' => 'Marketplace', 'icon' => 'building-storefront', 'cap' => 'manage_apps', 'section' => 'system'],
     ['url' => '/admin/widgets',       'label' => 'Widgets',     'icon' => 'squares-2x2', 'cap' => 'manage_apps', 'section' => 'appearance'],
     ['url' => '/admin/customize',     'label' => 'Customize',   'icon' => 'paint-brush', 'cap' => 'manage_settings', 'section' => 'appearance'],
     ['url' => '/admin/themes',        'label' => 'Themes',      'icon' => 'swatch',     'cap' => 'manage_themes', 'section' => 'appearance'],

@@ -157,8 +157,14 @@ class PostService
             'featured_media_id' => !empty($data['featured_media_id']) ? (int)$data['featured_media_id'] : null,
             'parent_id' => !empty($data['parent_id']) ? (int)$data['parent_id'] : null,
             'menu_order' => (int)($data['menu_order'] ?? 0),
-            'published_at' => ($data['status'] ?? 'draft') === 'published' ? date('Y-m-d H:i:s') : null,
+            'published_at' => null,
         ];
+        [$payload['status'], $payload['published_at']] = $this->timing(
+            (string) $payload['status'],
+            array_key_exists('published_at', $data) ? $this->utcOrNull($data['published_at']) : null,
+            array_key_exists('published_at', $data),
+            null
+        );
 
         $id = $this->repo->create($payload);
         } finally {
@@ -175,7 +181,11 @@ class PostService
 
         $post = $this->repo->find($id);
         $this->hooks->doAction('post.created', $post);
+        if (($post['status'] ?? '') === 'published') {
+            $this->hooks->doAction('post.published', $post, null);
+        }
         $this->cache->flushTag('posts');
+        $this->forgetSchedule();
 
         return $id;
     }
@@ -209,11 +219,16 @@ class PostService
             $locked = $this->repo->lockSlugs();
             $payload['slug'] = $this->resolveSlug($slug, $existing['type'], $id);
         }
-        if (isset($data['status'])) {
-            $payload['status'] = $data['status'];
-            if ($data['status'] === 'published' && empty($existing['published_at'])) {
-                $payload['published_at'] = date('Y-m-d H:i:s');
-            }
+        if (isset($data['status']) || array_key_exists('published_at', $data)) {
+            $explicit = array_key_exists('published_at', $data);
+            [$status, $publishedAt] = $this->timing(
+                (string) ($data['status'] ?? $existing['status']),
+                $explicit ? $this->utcOrNull($data['published_at']) : null,
+                $explicit,
+                $existing
+            );
+            if (isset($data['status']) || $status !== $existing['status']) $payload['status'] = $status;
+            if ($publishedAt !== ($existing['published_at'] ?? null)) $payload['published_at'] = $publishedAt;
         }
 
         if (empty($payload)) {
@@ -244,9 +259,104 @@ class PostService
 
         $post = $this->repo->find($id);
         $this->hooks->doAction('post.updated', $post, $existing);
+        if (($post['status'] ?? '') === 'published' && ($existing['status'] ?? '') !== 'published') {
+            $this->hooks->doAction('post.published', $post, $existing);
+        }
         $this->cache->flushTag('posts');
+        $this->forgetSchedule();
 
         return true;
+    }
+
+    /**
+     * Take a scheduled post live because its time has come (1.2.60). Called
+     * by ScheduledPublisher, from any request or from the cron URL.
+     *
+     * The claim is one conditional UPDATE (PostRepository::claimScheduled), so
+     * when two requests race for the same post only one of them publishes it
+     * and fires the hooks: post.updated and post.published run exactly once,
+     * just as they would for a person pressing Publish. The stored
+     * published_at — the time that was chosen — is kept.
+     *
+     * @return array|null the published post, or null when this call did not
+     *                    publish it (not scheduled, not due, or claimed elsewhere)
+     */
+    public function publishScheduled(int $id, ?string $nowUtc = null): ?array
+    {
+        $nowUtc ??= gmdate('Y-m-d H:i:s');
+        $existing = $this->repo->find($id);
+        if (!$existing || ($existing['status'] ?? '') !== 'scheduled') return null;
+        if (!$this->repo->claimScheduled($id, $nowUtc)) return null;
+
+        $this->cache->flushTag('posts');
+        $this->forgetSchedule();
+        $post = $this->repo->find($id) ?? (['status' => 'published'] + $existing);
+        // A listener that throws must not undo a publication that has happened,
+        // nor stop the next due post: log it and carry on.
+        foreach ([['post.updated', [$post, $existing]], ['post.published', [$post, $existing]]] as [$hook, $args]) {
+            try {
+                $this->hooks->doAction($hook, ...$args);
+            } catch (\Throwable $e) {
+                try {
+                    \App\Core\Application::getInstance()->make(\App\Core\Logger::class)
+                        ->error("Scheduled publish: a {$hook} listener failed for post {$id}: " . $e->getMessage());
+                } catch (\Throwable) {}
+            }
+        }
+        return $post;
+    }
+
+    /**
+     * The status and published_at a save ends up with, whatever path it came
+     * by (the editor, a bulk action, the REST API, an app). Callers that read
+     * a person's intent first (PostPublishing) pass an explicit time; the
+     * rules here keep the stored data consistent either way:
+     *
+     *  - published: keeps a past publication date; none, or a future one left
+     *    over from a schedule, becomes now (the server's clock).
+     *  - scheduled: needs a time still ahead. A time that has passed means it
+     *    is due, so it is published now; no time at all leaves it a draft.
+     *  - draft / pending leaving `scheduled`: the date nobody published at is
+     *    dropped.
+     *
+     * @return array{0:string,1:?string} [status, published_at]
+     */
+    private function timing(string $status, ?string $requested, bool $explicit, ?array $existing): array
+    {
+        $now = gmdate('Y-m-d H:i:s');
+        $stored = $existing['published_at'] ?? null;
+        $stored = is_string($stored) && $stored !== '' ? $stored : null;
+        $at = $explicit ? $requested : $stored;
+
+        switch ($status) {
+            case 'published':
+                if ($at === null || $at > $now) $at = $now;
+                return ['published', $at];
+            case 'scheduled':
+                if ($at === null) return ['draft', null];
+                if ($at <= $now) return ['published', $at];
+                return ['scheduled', $at];
+            case 'draft':
+            case 'pending':
+                if (!$explicit && ($existing['status'] ?? null) === 'scheduled') return [$status, null];
+                return [$status, $at];
+            default:
+                return [$status, $at];
+        }
+    }
+
+    /** A UTC "Y-m-d H:i:s" (anything Time can read), or null. */
+    private function utcOrNull(mixed $value): ?string
+    {
+        if ($value === null || $value === '') return null;
+        $dt = \App\Core\Time::utc($value);
+        return $dt?->format('Y-m-d H:i:s');
+    }
+
+    /** The scheduled-post publisher recomputes its next due time on its next look. */
+    private function forgetSchedule(): void
+    {
+        try { $this->cache->delete(ScheduledPublisher::CACHE_KEY); } catch (\Throwable) {}
     }
 
     public function delete(int $id): bool
@@ -258,6 +368,7 @@ class PostService
         $this->repo->softDelete($id);
         $this->hooks->doAction('post.deleted', $existing);
         $this->cache->flushTag('posts');
+        $this->forgetSchedule();
         return true;
     }
 
@@ -266,6 +377,7 @@ class PostService
     {
         $this->repo->restore($id);
         $this->cache->flushTag('posts');
+        $this->forgetSchedule();
         // Fire AFTER the restore so listeners see the live row (e.g. the NAS
         // Storage app re-creating a template's folder).
         $restored = $this->repo->find($id);
@@ -283,6 +395,7 @@ class PostService
         $this->hooks->doAction('post.before_force_delete', $existing);
         $this->repo->forceDelete($id);
         $this->cache->flushTag('posts');
+        $this->forgetSchedule();
         return true;
     }
 
