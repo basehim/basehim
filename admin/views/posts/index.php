@@ -12,7 +12,7 @@ $csrf = $session->csrfToken();
         <h2 class="text-xl font-semibold text-slate-900"><?= $typeLabel ?>s<?= !empty($trashed) ? ' — Trash' : '' ?></h2>
         <p class="text-sm text-slate-500"><?= !empty($trashed) ? 'Items in the trash can be restored or deleted permanently.' : 'Manage your ' . strtolower($typeLabel) . 's.' ?></p>
     </div>
-    <div class="flex items-center gap-2 flex-wrap">
+    <div class="bh-list-actions flex items-center gap-2 flex-wrap">
         <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-sm">
             <a href="<?= $base ?>/admin/<?= $type ?>s" class="px-3 py-1.5 <?= empty($trashed) ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50' ?>">All</a>
             <a href="<?= $base ?>/admin/<?= $type ?>s?view=trash" class="px-3 py-1.5 border-l border-slate-200 <?= !empty($trashed) ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50' ?>">

@@ -141,7 +141,7 @@ $__bulkMeta = [
                     <button type="button" class="bh-dt-viewbtn" data-dt-view="list" title="List view"><?= icon('list-bullet', 'w-4 h-4') ?></button>
                     <button type="button" class="bh-dt-viewbtn" data-dt-view="grid" title="Grid view"><?= icon('squares-2x2', 'w-4 h-4') ?></button>
                 </div>
-                <button type="button" class="bh-btn bh-btn--secondary" data-dt-options aria-haspopup="true" aria-expanded="false"><?= icon('cog-6-tooth', 'w-4 h-4') ?> Screen Options</button>
+                <button type="button" class="bh-btn bh-btn--secondary" data-dt-options aria-haspopup="true" aria-expanded="false" aria-label="Screen Options" title="Screen Options"><?= icon('cog-6-tooth', 'w-4 h-4') ?> <span class="bh-dt-options__label">Screen Options</span></button>
             </div>
             <div class="bh-dt-panel" data-dt-panel></div>
         </div>
@@ -188,7 +188,7 @@ $__bulkMeta = [
     <!-- Footer / pagination -->
     <?php $__m = $__payload['meta']; ?>
     <div class="bh-dt-foot" data-dt-foot>
-        <span class="bh-dt-count" data-dt-count>Showing <?= $__m['total'] ? (($__m['page'] - 1) * $__m['per_page'] + 1) : 0 ?> to <?= min($__m['page'] * $__m['per_page'], $__m['total']) ?> of <?= (int) $__m['total'] ?> results</span>
+        <span class="bh-dt-count" data-dt-count>Showing <?= $__m['total'] ? (($__m['page'] - 1) * $__m['per_page'] + 1) : 0 ?>–<?= min($__m['page'] * $__m['per_page'], $__m['total']) ?> of <?= (int) $__m['total'] ?> <?= htmlspecialchars(strtolower($__def->label) ?: 'results') ?></span>
         <div class="bh-dt-foot__right">
             <div class="bh-dt-pages" data-dt-pages></div>
             <label class="bh-dt-perpage">Rows per page

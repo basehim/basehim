@@ -29,6 +29,8 @@
         'x-mark': 'M6 6l12 12M18 6L6 18',
         'funnel': 'M3 5h18l-7 8v5l-4 2v-7L3 5z',
         'bolt': 'M13 2 4 14h7l-1 8 9-12h-7l1-8z',
+        'calendar': 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5',
+        'chat': 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.12 2.99 2.7 3.23 1.09.16 2.19.28 3.3.37V21l4.18-4.18a1.14 1.14 0 01.78-.33 48.4 48.4 0 005.83-.5c1.58-.23 2.7-1.62 2.7-3.23V6.74c0-1.6-1.12-2.99-2.7-3.23A48.4 48.4 0 0012 3c-2.39 0-4.74.17-7.04.51-1.58.23-2.7 1.62-2.7 3.23v6.02z',
         'eye': 'M2.04 12.32a1 1 0 010-.64C3.42 7.51 7.36 4.5 12 4.5s8.57 3.01 9.96 7.18a1 1 0 010 .64C20.58 16.49 16.64 19.5 12 19.5s-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z'
     };
     var DOTS = 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01';
@@ -165,10 +167,9 @@
         function renderBody() {
             var rows = payload.rows || [];
             r.body.innerHTML = ''; r.cards.innerHTML = '';
-            if (!rows.length) { renderEmpty(); syncBulk(); quickEdit.rehost(); return; }
+            if (!rows.length) { renderEmpty(); syncBulk(); return; }
             rows.forEach(function (row) { r.body.appendChild(buildRow(row)); r.cards.appendChild(buildCard(row)); });
             syncBulk();
-            quickEdit.rehost();
         }
         function rowCheckbox(row) {
             var cb = el('input'); cb.type = 'checkbox'; cb.className = 'bh-dt-rowcheck'; cb.checked = selected[row.id] !== undefined;
@@ -176,9 +177,14 @@
                 if (cb.checked) selected[row.id] = row.status || ''; else delete selected[row.id];
                 // keep the twin (table row / card) in sync
                 root.querySelectorAll('[data-dt-rowid="' + row.id + '"] .bh-dt-rowcheck').forEach(function (b) { b.checked = cb.checked; });
+                markSelected(row.id, cb.checked);
                 syncBulk(); syncSelectAll();
             });
             return cb;
+        }
+        /** The selected look on a row's table row and card (1.2.64). */
+        function markSelected(id, on) {
+            root.querySelectorAll('[data-dt-rowid="' + id + '"]').forEach(function (n) { n.classList.toggle('is-selected', !!on); });
         }
         function actionsButton(row) {
             var btn = el('button', 'bh-dt-actbtn', icon('ellipsis-vertical'));
@@ -194,9 +200,45 @@
                 var td = el('td', cls.trim()); td.innerHTML = (row.cells && row.cells[col.id]) || ''; tr.appendChild(td);
             });
             var tda = el('td', 'bh-dt-rowactions'); tda.appendChild(actionsButton(row)); tr.appendChild(tda);
+            if (selected[row.id] !== undefined) tr.classList.add('is-selected');
             return tr;
         }
-        function buildCard(row) {
+        // Cards. Wide screens (List and Grid views) keep the 1.2.64 card; at
+        // 820px and below, where cards are the only view, a compact card puts
+        // each item on one line (1.2.65). Each column says where it goes on it
+        // (`card`, see Column::CARD_SLOTS); tables that do not say get the
+        // picture, title and status placed by id and every other column as a
+        // label/value pair under the line.
+        var cardsQuery = null;
+        try { cardsQuery = window.matchMedia ? window.matchMedia('(max-width: 820px)') : null; } catch (e) { cardsQuery = null; }
+        function compactCards() { return !!(cardsQuery && cardsQuery.matches); }
+        function buildCard(row) { return compactCards() ? buildCompactCard(row) : buildFullCard(row); }
+        /** Crossing 820px (a phone turned on its side) redraws the cards only. */
+        function rebuildCards() {
+            if (!r.cards || !(payload.rows || []).length) return;
+            r.cards.innerHTML = '';
+            payload.rows.forEach(function (row) { r.cards.appendChild(buildCard(row)); });
+        }
+        if (cardsQuery) {
+            if (cardsQuery.addEventListener) cardsQuery.addEventListener('change', rebuildCards);
+            else if (cardsQuery.addListener) cardsQuery.addListener(rebuildCards);
+        }
+
+        function cardSlot(col) {
+            if (col.card) return col.card;
+            if (col.id === 'thumb') return 'media';
+            if (col.id === 'title') return 'title';
+            if (col.id === 'status') return 'under';
+            return 'row';
+        }
+        /** A cell with nothing to show ('' or a lone dash) is left off the card. */
+        function blankCell(html) {
+            var t = String(html || '').replace(/<[^>]*>/g, '').replace(/&mdash;|&#8212;/g, '—').trim();
+            // A picture or an avatar has no text but is not empty.
+            return (t === '' || t === '—') && !/<(img|svg)\b|bh-thumb|bh-ava/i.test(String(html || ''));
+        }
+        /** Wide screens (List, Grid): title and status on top, every other column below (1.2.64). */
+        function buildFullCard(row) {
             var card = el('div', 'bh-dt-card'); card.setAttribute('data-dt-rowid', row.id);
             var top = el('div', 'bh-dt-card__top');
             var chk = el('span', 'bh-dt-check'); chk.appendChild(rowCheckbox(row)); top.appendChild(chk);
@@ -218,6 +260,61 @@
                 rowsWrap.appendChild(rr);
             });
             if (any) card.appendChild(rowsWrap);
+            if (selected[row.id] !== undefined) card.classList.add('is-selected');
+            return card;
+        }
+        /** 820px and below: one line per item. */
+        function buildCompactCard(row) {
+            var card = el('div', 'bh-dt-card bh-dt-card--compact'); card.setAttribute('data-dt-rowid', row.id);
+            var cells = row.cells || {};
+            var slots = { media: [], title: [], sub: [], under: [], side: [], meta: [], row: [] };
+            columns.forEach(function (col) {
+                var slot = cardSlot(col), html = cells[col.id];
+                if (slot === 'hide' || !slots[slot] || blankCell(html)) return;
+                slots[slot].push({ col: col, html: html });
+            });
+            var join = function (list) { return list.map(function (x) { return x.html; }).join(' '); };
+
+            var body = el('div', 'bh-dt-card__body');
+            var chk = el('span', 'bh-dt-check bh-dt-card__check'); chk.appendChild(rowCheckbox(row)); body.appendChild(chk);
+            if (slots.media.length) { body.appendChild(el('div', 'bh-dt-card__media', join(slots.media))); card.classList.add('has-media'); }
+            var main = el('div', 'bh-dt-card__main');
+            if (slots.title.length) main.appendChild(el('div', 'bh-dt-card__title', join(slots.title)));
+            if (slots.sub.length) main.appendChild(el('div', 'bh-dt-card__sub', join(slots.sub)));
+            if (slots.under.length) main.appendChild(el('div', 'bh-dt-card__under', join(slots.under)));
+            body.appendChild(main);
+            if (slots.side.length || slots.meta.length) {
+                var aside = el('div', 'bh-dt-card__aside');
+                if (slots.side.length) aside.appendChild(el('div', 'bh-dt-card__side', join(slots.side)));
+                if (slots.meta.length) {
+                    var meta = el('div', 'bh-dt-card__meta');
+                    slots.meta.forEach(function (x) {
+                        var item = el('div', 'bh-dt-card__metaitem'); item.title = x.col.label;
+                        // The icon stands for the label; the label is still read out.
+                        item.innerHTML = (x.col.card_icon ? '<span class="bh-dt-card__icon" aria-hidden="true">' + icon(x.col.card_icon) + '</span>'
+                                                           : '<span class="bh-dt-card__metakey" aria-hidden="true">' + esc(x.col.label) + '</span>')
+                            + '<span class="bh-dt-sr">' + esc(x.col.label) + ': </span>'
+                            + '<span class="bh-dt-card__metaval">' + x.html + '</span>';
+                        meta.appendChild(item);
+                    });
+                    aside.appendChild(meta);
+                }
+                body.appendChild(aside);
+            }
+            body.appendChild(actionsButton(row));
+            card.appendChild(body);
+
+            if (slots.row.length) {
+                var rowsWrap = el('div', 'bh-dt-card__rows');
+                slots.row.forEach(function (x) {
+                    var rr = el('div', 'bh-dt-card__row');
+                    rr.appendChild(el('span', 'bh-dt-card__key', esc(x.col.label)));
+                    rr.appendChild(el('span', 'bh-dt-card__val', x.html));
+                    rowsWrap.appendChild(rr);
+                });
+                card.appendChild(rowsWrap);
+            }
+            if (selected[row.id] !== undefined) card.classList.add('is-selected');
             return card;
         }
         function renderEmpty() {
@@ -232,11 +329,11 @@
         // --- per-row action menu ---------------------------------------------
         function openMenu(btn, row) {
             var items = [];
+            // The row on the site first (1.2.62; first since 1.2.63): View when it
+            // is live, Preview otherwise (only shown to people who may edit it).
+            if (row.link && row.link.url) items.push({ label: row.link.live ? 'View' : 'Preview', icon: 'eye', href: row.link.url, newTab: true });
             if (cfg.editBase) items.push({ label: 'Edit', icon: 'pencil-square', href: cfg.editBase.replace('{id}', row.id) });
             if (payload.quick_edit) items.push({ label: 'Quick Edit', icon: 'bolt', quick: true, id: row.id });
-            // The row on the site (1.2.62): View when it is live, Preview otherwise
-            // (the preview is only shown to people who may edit it).
-            if (row.link && row.link.url) items.push({ label: row.link.live ? 'View' : 'Preview', icon: 'eye', href: row.link.url, newTab: true });
             var bulk = payload.bulk_actions || [];
             if (bulk.indexOf('publish') !== -1 && row.status !== 'published') items.push({ label: 'Publish', icon: 'arrow-up-tray', action: 'publish', id: row.id });
             if (bulk.indexOf('draft') !== -1 && row.status === 'published') items.push({ label: 'Move to Draft', icon: 'arrow-down-tray', action: 'draft', id: row.id });
@@ -272,9 +369,13 @@
         window.addEventListener('resize', closeMenu);
         root.addEventListener('scroll', closeMenu, true);
 
-        // --- Quick Edit (1.2.61) ----------------------------------------------
-        // An inline form under one row, built from the field list the table's
-        // QuickEditor returns (content.quick_edit). Saving sends only the
+        // --- Quick Edit (1.2.61; a modal dialog since 1.2.63) ------------------
+        // A form in a modal <dialog>, built from the field list the table's
+        // QuickEditor returns (content.quick_edit). It sits in the page's top
+        // layer and is never moved while open: an earlier inline version moved
+        // itself on window resize, and on phones the keyboard opening resized
+        // the window, took the focused field out of the page and closed the
+        // keyboard again. Saving sends only the
         // fields that changed (content.quick_edit_save) and replaces that row
         // with the re-rendered one: the table's search, filters, sort, page and
         // selection stay as they are. The server checks everything again; this
@@ -284,7 +385,6 @@
             var seq = 0;
 
             function columnIds() { return columns.map(function (c) { return c.id; }); }
-            function tableVisible() { return !!(r.body && r.body.closest('table') && r.body.closest('table').offsetParent !== null); }
             function rowEls(id) {
                 return {
                     tr: r.body.querySelector('tr[data-dt-row="' + id + '"]'),
@@ -293,27 +393,49 @@
             }
             function text(tag, cls, t) { var n = el(tag, cls); n.textContent = t == null ? '' : String(t); return n; }
 
-            /** Put the panel right under its row: a full-width row in the table, or after the card. */
+            /**
+             * The dialog, made once per table: a header (title, the item's name,
+             * Close), and a body that holds the form. Escape and a click on the
+             * backdrop go through close(), which asks first about unsaved changes.
+             */
+            var dlg = null, dlgSub = null, dlgBody = null;
+            function dialog() {
+                if (dlg) return dlg;
+                var tid = 'bh-qe-title-' + cfg.table.replace(/\W/g, '-');
+                dlg = el('dialog', 'bh-qe');
+                dlg.setAttribute('aria-labelledby', tid);
+                var head = el('div', 'bh-qe__head');
+                var titles = el('div', 'bh-qe__titles');
+                var h = text('h2', 'bh-qe__title', 'Quick Edit'); h.id = tid; h.setAttribute('tabindex', '-1');
+                dlgSub = text('p', 'bh-qe__sub', '');
+                titles.appendChild(h); titles.appendChild(dlgSub);
+                var x = el('button', 'bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
+                x.addEventListener('click', function () { close(false); });
+                head.appendChild(titles); head.appendChild(x);
+                dlgBody = el('div', 'bh-qe__body');
+                dlg.appendChild(head); dlg.appendChild(dlgBody);
+                // Escape: the dialog's own cancel event, routed through close().
+                dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(false); });
+                // A click on the backdrop (the dialog element itself, outside its box).
+                dlg.addEventListener('mousedown', function (e) { dlg.__downOnBackdrop = e.target === dlg; });
+                dlg.addEventListener('click', function (e) { if (e.target === dlg && dlg.__downOnBackdrop) close(false); });
+                document.body.appendChild(dlg);
+                return dlg;
+            }
             function host() {
-                if (!cur) return false;
-                var els = rowEls(cur.id);
-                if (cur.hostRow && cur.hostRow.parentNode) cur.hostRow.parentNode.removeChild(cur.hostRow);
-                if (cur.panel.parentNode) cur.panel.parentNode.removeChild(cur.panel);
-                if (els.tr && (tableVisible() || !els.card)) {
-                    var tr = el('tr', 'bh-dt-qe-host'); tr.setAttribute('data-dt-qe-for', cur.id);
-                    var td = el('td'); td.colSpan = 99; td.appendChild(cur.panel); tr.appendChild(td);
-                    els.tr.parentNode.insertBefore(tr, els.tr.nextSibling);
-                    els.tr.classList.add('is-quick-editing');
-                    cur.hostRow = tr;
-                    return true;
+                var d = dialog();
+                dlgBody.textContent = '';
+                dlgBody.appendChild(cur.panel);
+                dlgSub.textContent = cur.title || '';
+                if (!d.open) {
+                    if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
                 }
-                if (els.card) {
-                    els.card.parentNode.insertBefore(cur.panel, els.card.nextSibling);
-                    els.card.classList.add('is-quick-editing');
-                    cur.hostRow = null;
-                    return true;
-                }
-                return false;
+                // Keep the keyboard closed on touch screens until a field is tapped.
+                if (!finePointer()) { var h = d.querySelector('.bh-qe__title'); if (h) h.focus(); }
+                return true;
+            }
+            function finePointer() {
+                try { return !window.matchMedia || window.matchMedia('(pointer: fine)').matches; } catch (e) { return true; }
             }
 
             function open(row, opener) {
@@ -327,15 +449,20 @@
                 go();
             }
 
+            /** The row's title as text, for the dialog header while the form loads. */
+            function rowTitle(row) {
+                var holder = el('div'); holder.innerHTML = (row.cells && row.cells.title) || '';
+                var t = holder.querySelector('.bh-dt-title');
+                return (t ? t.textContent : '').trim();
+            }
+
             function start(row, opener) {
                 var my = ++seq;
-                var panel = el('section', 'bh-dt-qe');
-                panel.setAttribute('role', 'region');
-                panel.setAttribute('aria-label', 'Quick Edit');
+                var panel = el('div', 'bh-dt-qe');
                 panel.setAttribute('aria-busy', 'true');
                 panel.appendChild(el('div', 'bh-dt-qe__loading', '<span class="bh-dt-spinner"></span>'));
                 panel.lastChild.appendChild(text('span', '', 'Loading…'));
-                cur = { id: row.id, row: row, opener: opener || null, panel: panel, title: '', busy: false, inputs: {}, errors: {} };
+                cur = { id: row.id, row: row, opener: opener || null, panel: panel, title: rowTitle(row), busy: false, inputs: {}, errors: {} };
                 host();
                 window.Basehim.ajax.get('content.quick_edit', { table: cfg.table, id: row.id }).then(function (d) {
                     if (!cur || seq !== my) return;
@@ -360,13 +487,9 @@
                 cur.initial = {};
                 panel.removeAttribute('aria-busy');
                 panel.innerHTML = '';
-                panel.setAttribute('aria-label', 'Quick Edit: ' + cur.title);
+                if (dlgSub) dlgSub.textContent = cur.title;
 
                 var f = el('form', 'bh-dt-qe__form'); f.noValidate = true; f.setAttribute('novalidate', '');
-                var head = el('div', 'bh-dt-qe__head');
-                head.appendChild(text('h3', 'bh-dt-qe__title', 'Quick Edit'));
-                head.appendChild(text('span', 'bh-dt-qe__sub', cur.title));
-                f.appendChild(head);
                 var banner = el('div', 'bh-dt-qe__msg'); banner.hidden = true; banner.setAttribute('role', 'alert');
                 f.appendChild(banner); cur.banner = banner;
                 var grid = el('div', 'bh-dt-qe__grid');
@@ -377,11 +500,13 @@
                 var save = text('button', 'bh-btn bh-btn--primary bh-btn--sm', 'Save'); save.type = 'submit';
                 var cancel = text('button', 'bh-btn bh-btn--secondary bh-btn--sm', 'Cancel'); cancel.type = 'button';
                 cancel.addEventListener('click', function () { close(false); });
-                actions.appendChild(save); actions.appendChild(cancel);
+                actions.appendChild(cancel); actions.appendChild(save);
                 f.appendChild(actions);
                 cur.save = save;
                 f.addEventListener('submit', function (e) { e.preventDefault(); submit(false); });
-                f.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); close(false); } });
+                // Escape is the dialog's cancel event (dialog()); where there is no
+                // native dialog, handle it here.
+                f.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !(dlg && typeof dlg.showModal === 'function')) { e.preventDefault(); close(false); } });
                 panel.appendChild(f);
                 cur.form = f;
                 applyShowWhen();
@@ -551,6 +676,9 @@
             }
             function focusFirst() {
                 if (!cur || !cur.form) return;
+                // On a touch screen focusing a field opens the keyboard over the
+                // form before the person has seen it: let them tap a field.
+                if (!finePointer()) return;
                 var first = cur.form.querySelector('input:not([type="hidden"]), select');
                 if (first) first.focus();
             }
@@ -670,9 +798,8 @@
                     return;
                 }
                 var c = cur; cur = null; seq++;
-                if (c.hostRow && c.hostRow.parentNode) c.hostRow.parentNode.removeChild(c.hostRow);
                 if (c.panel.parentNode) c.panel.parentNode.removeChild(c.panel);
-                root.querySelectorAll('.is-quick-editing').forEach(function (n) { n.classList.remove('is-quick-editing'); });
+                if (dlg) { if (typeof dlg.close === 'function' && dlg.open) dlg.close(); else dlg.removeAttribute('open'); }
                 // Back to where the user was: the row's actions button.
                 var els = rowEls(c.id);
                 var back = (els.tr && els.tr.querySelector('.bh-dt-actbtn')) || (els.card && els.card.querySelector('.bh-dt-actbtn')) || c.opener;
@@ -687,13 +814,9 @@
                 open: open,
                 close: close,
                 isOpen: function () { return !!cur; },
-                isDirty: isDirty,
-                /** After the table re-renders: keep the panel under its row, or close it if the row is gone. */
-                rehost: function () { if (cur && !host()) { var c = cur; cur = null; seq++; if (c.panel.parentNode) c.panel.parentNode.removeChild(c.panel); } }
+                isDirty: isDirty
             };
         })();
-        // Crossing the mobile breakpoint swaps table rows for cards: follow the row.
-        window.addEventListener('resize', debounce(function () { quickEdit.rehost(); }, 200));
         // Leaving the page with unsaved Quick Edit changes asks first.
         window.addEventListener('beforeunload', function (e) { if (quickEdit.isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -702,7 +825,7 @@
             var m = payload.meta || { page: 1, last_page: 1, total: 0, per_page: state.perPage };
             var from = m.total ? ((m.page - 1) * m.per_page + 1) : 0;
             var to = Math.min(m.page * m.per_page, m.total);
-            if (r.count) r.count.textContent = 'Showing ' + from + ' to ' + to + ' of ' + m.total + ' results';
+            if (r.count) r.count.textContent = countText(from, to, m.total);
             if (!r.pages) return;
             r.pages.innerHTML = '';
             var mk = function (html, page, opts) {
@@ -717,8 +840,23 @@
             });
             r.pages.appendChild(mk(icon('chevron-right'), m.page + 1, { disabled: m.page >= m.last_page }));
         }
+        function narrowScreen() {
+            try { return !!(window.matchMedia && window.matchMedia('(max-width: 600px)').matches); } catch (e) { return false; }
+        }
+        /** "Showing 1–20 of 50 posts" — the table's own noun (1.2.65). */
+        function countText(from, to, total) {
+            var noun = String(payload.label || '').toLowerCase() || 'results';
+            return 'Showing ' + from + '–' + to + ' of ' + total + ' ' + noun;
+        }
         function pageWindow(cur, last) {
-            var out = [], i; if (last <= 7) { for (i = 1; i <= last; i++) out.push(i); return out; }
+            var out = [], i;
+            // Phones: three numbers around the current page, as space allows (1.2.65).
+            if (narrowScreen()) {
+                var from = Math.max(1, Math.min(cur - 1, last - 2)), to = Math.min(last, from + 2);
+                for (i = from; i <= to; i++) out.push(i);
+                return out;
+            }
+            if (last <= 7) { for (i = 1; i <= last; i++) out.push(i); return out; }
             out.push(1); if (cur > 3) out.push('…');
             for (i = Math.max(2, cur - 1); i <= Math.min(last - 1, cur + 1); i++) out.push(i);
             if (cur < last - 2) out.push('…'); out.push(last); return out;
@@ -755,6 +893,7 @@
         function clearSelection() {
             selected = Object.create(null);
             root.querySelectorAll('.bh-dt-rowcheck').forEach(function (cb) { cb.checked = false; });
+            root.querySelectorAll('.is-selected[data-dt-rowid]').forEach(function (n) { n.classList.remove('is-selected'); });
             syncBulk(); syncSelectAll();
         }
         function syncSelectAll() {
@@ -766,7 +905,7 @@
         }
         function onSelectAll() {
             var on = r.selectAll.checked;
-            (payload.rows || []).forEach(function (row) { if (on) selected[row.id] = row.status || ''; else delete selected[row.id]; });
+            (payload.rows || []).forEach(function (row) { if (on) selected[row.id] = row.status || ''; else delete selected[row.id]; markSelected(row.id, on); });
             root.querySelectorAll('.bh-dt-rowcheck').forEach(function (cb) { cb.checked = on; });
             syncBulk();
         }
@@ -791,7 +930,6 @@
         function setView(v) {
             if (['table', 'list', 'grid'].indexOf(v) === -1 || v === state.view) return;
             state.view = v; root.setAttribute('data-view', v);
-            quickEdit.rehost();   // the open Quick Edit follows its row into the new view
             root.querySelectorAll('[data-dt-view]').forEach(function (btn) {
                 btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === v);
             });
@@ -838,7 +976,8 @@
             r.panel.appendChild(list);
             r.panel.appendChild(el('hr', 'bh-dt-panel__sep'));
             var row1 = el('div', 'bh-dt-panel__row'); row1.appendChild(el('span', '', 'Rows per page')); row1.appendChild(sizeSel); r.panel.appendChild(row1);
-            var row2 = el('div', 'bh-dt-panel__row'); row2.appendChild(el('span', '', 'Density')); row2.appendChild(densSel); r.panel.appendChild(row2);
+            // Density only changes table rows; hidden where only cards show.
+            var row2 = el('div', 'bh-dt-panel__row bh-dt-panel__row--density'); row2.appendChild(el('span', '', 'Density')); row2.appendChild(densSel); r.panel.appendChild(row2);
             var actions = el('div', 'bh-dt-panel__actions');
             var apply = el('button', 'bh-btn bh-btn--primary bh-btn--sm', 'Apply'); apply.addEventListener('click', applyPanel);
             var reset = el('a', '', 'Reset to default'); reset.href = '#'; reset.className = 'bh-dt-reset';

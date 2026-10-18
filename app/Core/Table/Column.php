@@ -39,10 +39,28 @@ namespace App\Core\Table;
  * provider must also accept); an empty list means the column cannot be
  * sorted. `filter` declares a filter this column drives. Neither is assumed:
  * a capability must be declared to exist.
+ *
+ * `card` (1.2.65) places the column on the card used on phones and tablets
+ * and in the List and Grid views — see CARD_SLOTS. `card_icon` names an icon
+ * shown before a `meta` value (eye, calendar, chat, user …). Both are display
+ * hints only.
  */
 final class Column
 {
     public const OWNER_CORE = 'core';
+
+    /**
+     * Where a column goes on a card:
+     *  media  — the picture on the left (a thumbnail)
+     *  title  — the main line (two lines at most)
+     *  sub    — a muted line under the title
+     *  under  — badges and chips under the title (one line)
+     *  side   — a narrow column beside the title (a person)
+     *  meta   — the column on the right, each value with its icon
+     *  row    — a label-over-value pair under the card (the default)
+     *  hide   — not on the card (still in the table)
+     */
+    public const CARD_SLOTS = ['media', 'title', 'sub', 'under', 'side', 'meta', 'row', 'hide'];
 
     /**
      * @param string[]                 $sortable   Sort tokens this column enables (⊆ provider sortKeys)
@@ -65,6 +83,9 @@ final class Column
         public readonly string $responsive = 'always',
         public readonly string $align = 'left',
         public readonly string $owner = self::OWNER_CORE,
+        /** One of CARD_SLOTS, or '' to let the client choose (thumb, title, status by id; otherwise row). */
+        public readonly string $card = '',
+        public readonly ?string $cardIcon = null,
     ) {
     }
 
@@ -91,6 +112,8 @@ final class Column
             'responsive'      => $this->responsive,
             'align'           => $this->align,
             'owner'           => $this->owner,
+            'card'            => $this->card !== '' ? $this->card : null,
+            'card_icon'       => $this->cardIcon,
         ];
     }
 }

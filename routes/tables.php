@@ -37,7 +37,10 @@ $statusBadge = static function (array $row): string {
         'private'   => 'bg-slate-200 text-slate-700',
     ];
     $cls = $map[$status] ?? 'bg-slate-100 text-slate-600';
-    return '<span class="bh-dt-badge ' . $cls . '">' . htmlspecialchars(ucfirst($status), ENT_QUOTES) . '</span>';
+    // data-card-quiet: the usual state, left off cards (1.2.65) so they show
+    // only what needs attention (Draft, Scheduled …).
+    $quiet = $status === 'published' ? ' data-card-quiet' : '';
+    return '<span class="bh-dt-badge ' . $cls . '"' . $quiet . '>' . htmlspecialchars(ucfirst($status), ENT_QUOTES) . '</span>';
 };
 
 /** Title cell: a link to the editor plus the slug. */
@@ -184,22 +187,26 @@ $postLinks = static function (array $rows) use ($db): array {
     return $out;
 };
 
+// `card` places each column on the cards phones show (1.2.65): picture, title
+// with its category and status under it, author beside it, views and date on
+// the right. Tags stay in the table only.
 $postColumns = [
     ['id' => 'thumb',  'label' => 'Image', 'render' => $thumbCell,
-     'default_visible' => true, 'can_hide' => true, 'align' => 'center'],
+     'default_visible' => true, 'can_hide' => true, 'align' => 'center', 'card' => 'media'],
     ['id' => 'title',  'label' => 'Title',  'render' => $titleCell,
-     'sortable' => ['title_az', 'title_za'], 'default_visible' => true, 'can_hide' => false],
-    ['id' => 'author', 'label' => 'Author', 'render' => $authorCell, 'default_visible' => true],
+     'sortable' => ['title_az', 'title_za'], 'default_visible' => true, 'can_hide' => false, 'card' => 'title'],
+    ['id' => 'author', 'label' => 'Author', 'render' => $authorCell, 'default_visible' => true, 'card' => 'side'],
     ['id' => 'category', 'label' => 'Category', 'render' => $categoryCell, 'prepare' => $categoryPrepare,
-     'default_visible' => true, 'responsive' => 'tablet-up'],
+     'default_visible' => true, 'responsive' => 'tablet-up', 'card' => 'under'],
     ['id' => 'tags', 'label' => 'Tags', 'render' => $tagsCell, 'prepare' => $tagsPrepare,
-     'default_visible' => true, 'responsive' => 'tablet-up'],
+     'default_visible' => true, 'responsive' => 'tablet-up', 'card' => 'hide'],
     ['id' => 'status', 'label' => 'Status', 'render' => $statusBadge, 'filter' => $postStatusFilter,
-     'default_visible' => true, 'align' => 'center'],
+     'default_visible' => true, 'align' => 'center', 'card' => 'under'],
     ['id' => 'views',  'label' => 'Views', 'value' => 'view_count', 'default_visible' => true,
-     'sortable' => ['views_desc', 'views_asc'], 'align' => 'center', 'responsive' => 'desktop-only'],
+     'sortable' => ['views_desc', 'views_asc'], 'align' => 'center', 'responsive' => 'desktop-only',
+     'card' => 'meta', 'card_icon' => 'eye'],
     ['id' => 'date',   'label' => 'Date', 'render' => $dateCell, 'sortable' => ['newest', 'oldest'],
-     'default_visible' => true, 'align' => 'right'],
+     'default_visible' => true, 'align' => 'right', 'card' => 'meta', 'card_icon' => 'calendar'],
 ];
 
 $tables->register('content.posts', [
@@ -243,12 +250,12 @@ $tables->register('content.templates', [
     'page_sizes'   => [8, 20, 50, 100],
     'columns'      => [
         ['id' => 'title',  'label' => 'Title', 'render' => $titleCell,
-         'sortable' => ['title_az', 'title_za'], 'default_visible' => true, 'can_hide' => false],
-        ['id' => 'author', 'label' => 'Author', 'render' => $authorCell, 'default_visible' => true],
+         'sortable' => ['title_az', 'title_za'], 'default_visible' => true, 'can_hide' => false, 'card' => 'title'],
+        ['id' => 'author', 'label' => 'Author', 'render' => $authorCell, 'default_visible' => true, 'card' => 'side'],
         ['id' => 'status', 'label' => 'Status', 'render' => $statusBadge, 'filter' => $postStatusFilter,
-         'default_visible' => true, 'align' => 'center'],
+         'default_visible' => true, 'align' => 'center', 'card' => 'under'],
         ['id' => 'date',   'label' => 'Date', 'render' => $dateCell, 'sortable' => ['newest', 'oldest'],
-         'default_visible' => true, 'align' => 'right'],
+         'default_visible' => true, 'align' => 'right', 'card' => 'meta', 'card_icon' => 'calendar'],
     ],
     'row_actions'  => ['edit', 'trash'],
     'bulk_actions' => ['publish', 'draft', 'delete'],
@@ -273,15 +280,15 @@ $tables->register('comments.list', [
                 $h .= '<span class="bh-dt-sub">' . htmlspecialchars($email, ENT_QUOTES) . '</span>';
             }
             return $h;
-        }],
-        ['id' => 'content', 'label' => 'Comment', 'render' => static function (array $row): string {
+        }, 'card' => 'title'],
+        ['id' => 'content', 'label' => 'Comment', 'card' => 'sub', 'render' => static function (array $row): string {
             $text = (string) ($row['content'] ?? '');
             if (mb_strlen($text) > 140) {
                 $text = mb_substr($text, 0, 140) . '…';
             }
             return '<span class="bh-dt-sub">' . htmlspecialchars($text, ENT_QUOTES) . '</span>';
         }],
-        ['id' => 'post', 'label' => 'On post', 'responsive' => 'tablet-up', 'render' => static function (array $row): string {
+        ['id' => 'post', 'label' => 'On post', 'responsive' => 'tablet-up', 'card' => 'under', 'render' => static function (array $row): string {
             $title = trim((string) ($row['post_title'] ?? ''));
             if ($title === '') {
                 return '<span class="bh-dt-sub">—</span>';
@@ -295,10 +302,10 @@ $tables->register('comments.list', [
             $s = (string) ($row['status'] ?? '');
             $map = ['approved' => 'bg-green-100 text-green-700', 'pending' => 'bg-amber-100 text-amber-700',
                     'spam' => 'bg-red-100 text-red-700', 'trash' => 'bg-slate-200 text-slate-700'];
-            return '<span class="bh-dt-badge ' . ($map[$s] ?? 'bg-slate-100 text-slate-600') . '">'
+            return '<span class="bh-dt-badge ' . ($map[$s] ?? 'bg-slate-100 text-slate-600') . '"' . ($s === 'approved' ? ' data-card-quiet' : '') . '>'
                  . htmlspecialchars(ucfirst($s), ENT_QUOTES) . '</span>';
-        }, 'filter' => $commentStatus, 'align' => 'center'],
-        ['id' => 'date', 'label' => 'Date', 'align' => 'right', 'responsive' => 'tablet-up', 'render' => static function (array $row): string {
+        }, 'filter' => $commentStatus, 'align' => 'center', 'card' => 'under'],
+        ['id' => 'date', 'label' => 'Date', 'align' => 'right', 'responsive' => 'tablet-up', 'card' => 'meta', 'card_icon' => 'calendar', 'render' => static function (array $row): string {
             $dt = Time::local($row['created_at'] ?? null);
             if ($dt === null) {
                 return '';

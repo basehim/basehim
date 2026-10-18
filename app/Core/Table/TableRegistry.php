@@ -256,6 +256,10 @@ final class TableRegistry
         $responsive = in_array($responsiveRaw, ['always', 'desktop-only', 'tablet-up'], true) ? (string) $responsiveRaw : 'always';
         $alignRaw = $raw['align'] ?? 'left';
         $align = in_array($alignRaw, ['left', 'center', 'right'], true) ? (string) $alignRaw : 'left';
+        // Card placement (1.2.65): an unknown slot or icon name is ignored, not fatal.
+        $card = isset($raw['card']) && in_array($raw['card'], Column::CARD_SLOTS, true) ? (string) $raw['card'] : '';
+        $cardIcon = isset($raw['card_icon']) && is_string($raw['card_icon']) && preg_match('/^[a-z0-9-]{1,40}$/', $raw['card_icon'])
+            ? $raw['card_icon'] : null;
 
         return new Column(
             id: $id,
@@ -271,6 +275,8 @@ final class TableRegistry
             responsive: $responsive,
             align: $align,
             owner: $owner,
+            card: $card,
+            cardIcon: $cardIcon,
         );
     }
 
