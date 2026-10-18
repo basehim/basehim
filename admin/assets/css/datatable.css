@@ -264,6 +264,14 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-card--compact .bh-dt-card__metaval, .bh-dt-card--compact .bh-dt-card__side .bh-usercell__name { max-width: none; }
 }
 
+/* Select all for cards (1.2.65): the table header's checkbox, for the views
+   that have no table header. Shown wherever the cards are. */
+.bh-dt-cardshead { display: none; align-items: center; gap: .6rem; padding: .6rem 1rem; background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0; font-size: .82rem; font-weight: 600; color: #475569; cursor: pointer; user-select: none; }
+.bh-dt-cardshead input { width: 1rem; height: 1rem; accent-color: #2563eb; cursor: pointer; margin: 0; }
+.bh-dt[data-view="list"] .bh-dt-cardshead, .bh-dt[data-view="grid"] .bh-dt-cardshead { display: flex; }
+.bh-dt-cardshead[hidden] { display: none !important; }
+
 /* View toggle (Table / List / Grid) ---------------------------------------- */
 .bh-dt-views { display: inline-flex; border: 1px solid #cbd5e1; border-radius: var(--dt-r); overflow: hidden; }
 .bh-dt-viewbtn { display: inline-flex; align-items: center; justify-content: center; width: 2.1rem; height: 2.1rem;
@@ -307,6 +315,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-views, .bh-dt-panel__row--density { display: none !important; }
     .bh-dt .bh-dt-cards { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; padding: .75rem; }
     .bh-dt .bh-dt-card { margin: 0; }
+    .bh-dt .bh-dt-cardshead { display: flex; padding: .6rem .75rem .6rem 1.9rem; }
     .bh-dt-tools { margin-left: auto; }
     .bh-dt-search { flex-basis: 100%; }
     .bh-dt-foot { justify-content: center; }
@@ -323,6 +332,9 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt.bh-card { background: transparent; border: 0; }
     .bh-dt > .bh-card--pad { padding: 0 0 .75rem !important; border-bottom: 0 !important; }
     .bh-dt .bh-dt-cards { grid-template-columns: minmax(0, 1fr); gap: .6rem; padding: 0; }
+    /* Lined up with the cards' checkboxes, as a header for them. */
+    .bh-dt .bh-dt-cardshead { margin-bottom: .6rem; padding: .55rem .75rem .55rem .95rem; background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r); }
+    .bh-dt .bh-dt-cardshead input { width: 1.1rem; height: 1.1rem; }
     .bh-dt .bh-dt-wrap { overflow: visible; }
     .bh-dt-foot { margin-top: .6rem; padding: .55rem .6rem .55rem .85rem !important; gap: .5rem; justify-content: space-between;
         background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r); }
@@ -330,6 +342,9 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-perpage { display: none; }   /* in Screen Options */
     .bh-list-actions { width: 100%; justify-content: space-between; }
     .bh-dt-toolbar { gap: .5rem; }
+    /* The count on its own line, the actions (and Clear) on the next. */
+    .bh-dt-bulk { flex-wrap: wrap; gap: .45rem; }
+    .bh-dt-bulk__count { flex-basis: 100%; white-space: nowrap; }
     /* Search and the Screen Options icon share the first line; filters below. */
     .bh-dt-options__label { display: none; }
     .bh-dt-search { flex: 1 1 calc(100% - 4rem); min-width: 0; order: 0; }

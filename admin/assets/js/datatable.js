@@ -98,6 +98,16 @@
 
         // Shared floating menus (row actions, and a safety net for z-index).
         var menu = el('div', 'bh-dt-menu'); menu.style.display = 'none'; document.body.appendChild(menu);
+        // Cards have no table header, so they get their own Select all (1.2.65):
+        // shown wherever the cards are (List, Grid, phones and tablets).
+        if (r.cards && r.cards.parentNode) {
+            r.cardsHead = el('label', 'bh-dt-cardshead');
+            r.cardsAll = el('input'); r.cardsAll.type = 'checkbox';
+            r.cardsAll.addEventListener('change', function () { onSelectAll(r.cardsAll.checked); });
+            r.cardsHead.appendChild(r.cardsAll);
+            r.cardsHead.appendChild(el('span', '', 'Select all'));
+            r.cards.parentNode.insertBefore(r.cardsHead, r.cards);
+        }
 
         function colById(id) { for (var i = 0; i < catalog.length; i++) if (catalog[i].id === id) return catalog[i]; return null; }
 
@@ -143,7 +153,8 @@
         function renderHead() {
             var tr = el('tr');
             var th0 = el('th', 'bh-dt-check'); var all = el('input'); all.type = 'checkbox';
-            all.addEventListener('change', onSelectAll); th0.appendChild(all); r.selectAll = all; tr.appendChild(th0);
+            all.setAttribute('aria-label', 'Select all');
+            all.addEventListener('change', function () { onSelectAll(all.checked); }); th0.appendChild(all); r.selectAll = all; tr.appendChild(th0);
             columns.forEach(function (col) {
                 var cls = alignCls(col); if (col.id === 'thumb') cls += ' bh-dt-col-thumb';
                 var th = el('th', cls.trim());
@@ -167,9 +178,10 @@
         function renderBody() {
             var rows = payload.rows || [];
             r.body.innerHTML = ''; r.cards.innerHTML = '';
-            if (!rows.length) { renderEmpty(); syncBulk(); return; }
+            if (r.cardsHead) r.cardsHead.hidden = !rows.length;
+            if (!rows.length) { renderEmpty(); syncBulk(); syncSelectAll(); return; }
             rows.forEach(function (row) { r.body.appendChild(buildRow(row)); r.cards.appendChild(buildCard(row)); });
-            syncBulk();
+            syncBulk(); syncSelectAll();
         }
         function rowCheckbox(row) {
             var cb = el('input'); cb.type = 'checkbox'; cb.className = 'bh-dt-rowcheck'; cb.checked = selected[row.id] !== undefined;
@@ -188,7 +200,7 @@
         }
         function actionsButton(row) {
             var btn = el('button', 'bh-dt-actbtn', icon('ellipsis-vertical'));
-            btn.type = 'button'; btn.title = 'Actions'; btn.setAttribute('aria-haspopup', 'true');
+            btn.type = 'button'; btn.title = 'Actions'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
             btn.addEventListener('click', function (e) { e.stopPropagation(); openMenu(btn, row); });
             return btn;
         }
@@ -342,6 +354,8 @@
             if (bulk.indexOf('spam') !== -1 && row.status !== 'spam') items.push({ label: 'Spam', icon: 'no-symbol', action: 'spam', danger: true, id: row.id });
             if (bulk.indexOf('delete') !== -1) items.push({ label: (cfg.deleteConfirm ? 'Delete' : 'Move to Trash'), icon: 'trash', action: 'delete', danger: true, id: row.id });
             if (!items.length) return;
+            // The same ⋮ again closes its menu (1.2.65); another ⋮ moves it.
+            if (menuOpener === btn && menu.style.display !== 'none') { closeMenu(); return; }
 
             menu.innerHTML = '';
             items.forEach(function (it) {
@@ -363,8 +377,14 @@
             if (left < 8) left = 8;
             menu.style.top = (b.bottom + window.scrollY + 4) + 'px';
             menu.style.left = left + 'px';
+            if (menuOpener && menuOpener !== btn) menuOpener.setAttribute('aria-expanded', 'false');
+            menuOpener = btn; btn.setAttribute('aria-expanded', 'true');
         }
-        function closeMenu() { menu.style.display = 'none'; }
+        var menuOpener = null;
+        function closeMenu() {
+            menu.style.display = 'none';
+            if (menuOpener) { menuOpener.setAttribute('aria-expanded', 'false'); menuOpener = null; }
+        }
         document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu(); });
         window.addEventListener('resize', closeMenu);
         root.addEventListener('scroll', closeMenu, true);
@@ -896,18 +916,20 @@
             root.querySelectorAll('.is-selected[data-dt-rowid]').forEach(function (n) { n.classList.remove('is-selected'); });
             syncBulk(); syncSelectAll();
         }
+        /** The table's header box and the cards' Select all show the same state. */
         function syncSelectAll() {
-            if (!r.selectAll) return;
-            var boxes = root.querySelectorAll('tbody .bh-dt-rowcheck');
-            var checked = 0; boxes.forEach(function (b) { if (b.checked) checked++; });
-            r.selectAll.checked = boxes.length > 0 && checked === boxes.length;
-            r.selectAll.indeterminate = checked > 0 && checked < boxes.length;
+            var rows = payload.rows || [];
+            var checked = rows.filter(function (row) { return selected[row.id] !== undefined; }).length;
+            [r.selectAll, r.cardsAll].forEach(function (box) {
+                if (!box) return;
+                box.checked = rows.length > 0 && checked === rows.length;
+                box.indeterminate = checked > 0 && checked < rows.length;
+            });
         }
-        function onSelectAll() {
-            var on = r.selectAll.checked;
+        function onSelectAll(on) {
             (payload.rows || []).forEach(function (row) { if (on) selected[row.id] = row.status || ''; else delete selected[row.id]; markSelected(row.id, on); });
             root.querySelectorAll('.bh-dt-rowcheck').forEach(function (cb) { cb.checked = on; });
-            syncBulk();
+            syncBulk(); syncSelectAll();
         }
         function runBulk(action, ids) {
             if (!action || !ids || !ids.length || !cfg.bulkEndpoint) return;

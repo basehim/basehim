@@ -15,7 +15,7 @@ history.
 
 | Version | Date | Summary | Details |
 |---|---|---|---|
-| 1.2.65 | 2026-10-18 | Post and page lists on phones and tablets: one line per post with picture, title and category, author, views and date; no frame around the list; a compact pager. Desktop unchanged. Columns can say where they go on the card. | [changelog](docs/changelog/CHANGELOG-1.2.65.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.65.md) |
+| 1.2.65 | 2026-10-18 | Post and page lists on phones and tablets: one line per post with picture, title and category, author, views and date; no frame around the list; a compact pager; Select all above cards; the ⋮ menu toggles. Desktop table and cards unchanged. Columns can say where they go on the card. | [changelog](docs/changelog/CHANGELOG-1.2.65.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.65.md) |
 | 1.2.64 | 2026-10-18 | The post and page lists take on Quick Edit's look: cleaner cards on phones and tablets, selected items highlighted, no view switch where only cards show. | [changelog](docs/changelog/CHANGELOG-1.2.64.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.64.md) |
 | 1.2.63 | 2026-10-18 | Quick Edit opens in a modal dialog; fixes the keyboard closing on phones; View/Preview first in the row menu; corners match the admin menu. | [changelog](docs/changelog/CHANGELOG-1.2.63.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.63.md) |
 | 1.2.62 | 2026-10-18 | Quick Edit uses the editor's own Categories, Tags and Publish fields; published posts can change their date; View/Preview in the row menu; a compact Quick Edit form. | [changelog](docs/changelog/CHANGELOG-1.2.62.md) · [notes](docs/changelog/RELEASE-NOTES-1.2.62.md) |
