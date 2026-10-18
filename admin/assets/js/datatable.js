@@ -28,7 +28,8 @@
         'magnifying-glass': 'M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z',
         'x-mark': 'M6 6l12 12M18 6L6 18',
         'funnel': 'M3 5h18l-7 8v5l-4 2v-7L3 5z',
-        'bolt': 'M13 2 4 14h7l-1 8 9-12h-7l1-8z'
+        'bolt': 'M13 2 4 14h7l-1 8 9-12h-7l1-8z',
+        'eye': 'M2.04 12.32a1 1 0 010-.64C3.42 7.51 7.36 4.5 12 4.5s8.57 3.01 9.96 7.18a1 1 0 010 .64C20.58 16.49 16.64 19.5 12 19.5s-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z'
     };
     var DOTS = 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01';
     var VDOTS = 'M12 6h.01M12 12h.01M12 18h.01';
@@ -233,6 +234,9 @@
             var items = [];
             if (cfg.editBase) items.push({ label: 'Edit', icon: 'pencil-square', href: cfg.editBase.replace('{id}', row.id) });
             if (payload.quick_edit) items.push({ label: 'Quick Edit', icon: 'bolt', quick: true, id: row.id });
+            // The row on the site (1.2.62): View when it is live, Preview otherwise
+            // (the preview is only shown to people who may edit it).
+            if (row.link && row.link.url) items.push({ label: row.link.live ? 'View' : 'Preview', icon: 'eye', href: row.link.url, newTab: true });
             var bulk = payload.bulk_actions || [];
             if (bulk.indexOf('publish') !== -1 && row.status !== 'published') items.push({ label: 'Publish', icon: 'arrow-up-tray', action: 'publish', id: row.id });
             if (bulk.indexOf('draft') !== -1 && row.status === 'published') items.push({ label: 'Move to Draft', icon: 'arrow-down-tray', action: 'draft', id: row.id });
@@ -247,7 +251,10 @@
                 var node = it.href ? el('a', 'bh-dt-menu__item') : el('button', 'bh-dt-menu__item');
                 if (it.danger) node.classList.add('bh-dt-menu__item--danger');
                 node.innerHTML = icon(it.icon) + '<span>' + esc(it.label) + '</span>';
-                if (it.href) { node.href = it.href; }
+                if (it.href) {
+                    node.href = it.href;
+                    if (it.newTab) { node.target = '_blank'; node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener'); node.addEventListener('click', closeMenu); }
+                }
                 else if (it.quick) node.addEventListener('click', function () { closeMenu(); quickEdit.open(row, btn); });
                 else node.addEventListener('click', function () { closeMenu(); runBulk(it.action, [it.id]); });
                 menu.appendChild(node);
@@ -378,6 +385,7 @@
                 panel.appendChild(f);
                 cur.form = f;
                 applyShowWhen();
+                syncSave();
                 focusFirst();
             }
 
@@ -390,6 +398,27 @@
                 var label = text('label', 'bh-label', fd.label);
                 label.htmlFor = id; label.setAttribute('for', id);
 
+                var F = window.BasehimPostFields;
+                if ((fd.type === 'categories' || fd.type === 'tags' || fd.type === 'publish') && F) {
+                    // The block editor's own components (post-fields.js, 1.2.62).
+                    wrap.classList.add('is-component');
+                    var labelEl = text('span', 'bh-label', fd.label); labelEl.id = id + '-label';
+                    var box = el('div', 'bh-dt-qe__component'); box.id = id;
+                    box.setAttribute('aria-labelledby', id + '-label');
+                    var comp;
+                    if (fd.type === 'categories') comp = F.categories(box, Object.assign({}, fd.value, { label: fd.label, compact: true, filterAt: 10 }));
+                    else if (fd.type === 'tags') comp = F.tags(box, Object.assign({}, fd.value, { immediate: false, names: null, compact: true, cloudLimit: 8, idPrefix: id }));
+                    else comp = F.publish(box, fd.value || {}, { compact: true, names: false, idPrefix: id, targetStatus: function () { return cur && cur.inputs.status ? valueOf('status') : (fd.value || {}).status; } });
+                    var errC = el('p', 'bh-dt-qe__error'); errC.id = id + '-error'; errC.hidden = true;
+                    if (fd.type !== 'publish') wrap.appendChild(labelEl);
+                    wrap.appendChild(box); wrap.appendChild(errC);
+                    if (fd.span) wrap.style.setProperty ? wrap.style.setProperty('--qe-span', String(fd.span)) : (wrap.style['--qe-span'] = String(fd.span));
+                    if (fd.span >= 7) wrap.classList.add('is-wide');
+                    comp.onChange(function () { clearError(fd.name); applyShowWhen(); syncSave(); });
+                    cur.inputs[fd.name] = { def: fd, comp: comp, input: box, wrap: wrap, error: errC };
+                    cur.initial[fd.name] = comparableValue(fd.name, compValue(fd.type, comp));
+                    return wrap;
+                }
                 if (fd.type === 'select') {
                     input = el('select', 'bh-select');
                     (fd.options || []).forEach(function (o) {
@@ -450,15 +479,20 @@
                 if (fd.help) wrap.appendChild(h);
                 wrap.appendChild(err);
 
-                var onChange = function () { clearError(fd.name); applyShowWhen(); };
+                var onChange = function () { clearError(fd.name); applyShowWhen(); syncSave(); };
                 input.addEventListener('input', onChange);
                 input.addEventListener('change', onChange);
+                if (fd.placeholder) input.placeholder = fd.placeholder;
+                if (fd.span) { if (wrap.style.setProperty) wrap.style.setProperty('--qe-span', String(fd.span)); else wrap.style['--qe-span'] = String(fd.span); }
+                if (fd.span >= 7) wrap.classList.add('is-wide');
                 cur.inputs[fd.name] = { def: fd, input: input, wrap: wrap, error: err };
                 return wrap;
             }
 
+            function compValue(type, comp) { return type === 'publish' ? comp.values() : comp.value(); }
             function valueOf(name) {
                 var x = cur.inputs[name]; if (!x) return undefined;
+                if (x.comp) return compValue(x.def.type, x.comp);
                 if (x.def.type === 'toggle') return !!x.input.checked;
                 if (x.def.type === 'checklist') {
                     var out = []; x.input.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { if (cb.checked) out.push(cb.value); });
@@ -466,24 +500,44 @@
                 }
                 return x.input.value;
             }
-            function comparable(name, v) { return cur.inputs[name].def.type === 'checklist' ? v.slice().sort().join(',') : v; }
+            /** A value in a form that compares equal when nothing really changed. */
+            function comparableValue(name, v) {
+                var t = cur.inputs[name] ? cur.inputs[name].def.type : null;
+                if (t === 'checklist' || t === 'categories') return (v || []).map(String).sort().join(',');
+                if (t === 'tags') return JSON.stringify([(v.ids || []).slice().sort(), (v.names || []).map(function (n) { return n.toLowerCase(); }).sort()]);
+                if (t === 'publish') return JSON.stringify(v || {});
+                return v;
+            }
+            function comparable(name, v) { return comparableValue(name, v); }
             function changes() {
                 var out = {};
                 Object.keys(cur.inputs).forEach(function (name) {
+                    if (name === 'publish') return;
                     var v = valueOf(name);
                     if (comparable(name, v) !== cur.initial[name]) out[name] = v;
                 });
-                // A schedule is a status plus its time: they travel together,
-                // and the (hidden) time fields mean nothing for other statuses.
+                // Going out (Published / Scheduled): the Publish control's choice
+                // travels with the status, as the editor's form sends it.
                 var status = cur.inputs.status ? valueOf('status') : undefined;
-                if (status === 'scheduled' && ('status' in out || 'publish_date' in out || 'publish_time' in out)) {
-                    out.status = status;
-                    if (cur.inputs.publish_date) out.publish_date = valueOf('publish_date');
-                    if (cur.inputs.publish_time) out.publish_time = valueOf('publish_time');
-                } else {
-                    delete out.publish_date; delete out.publish_time;
+                var pub = cur.inputs.publish;
+                if (pub && (status === 'published' || status === 'scheduled')) {
+                    var pv = valueOf('publish');
+                    if ('status' in out || comparable('publish', pv) !== cur.initial.publish) {
+                        out.status = status;
+                        Object.keys(pv).forEach(function (k) { out[k] = pv[k]; });
+                    }
                 }
                 return out;
+            }
+            /** Save says what it will do: Publish, Schedule, Publish now, or Save. */
+            function syncSave() {
+                if (!cur || !cur.save || cur.busy) return;
+                var l = 'Save', pub = cur.inputs.publish, st = cur.inputs.status ? valueOf('status') : null;
+                if (pub && (st === 'published' || st === 'scheduled')) {
+                    var pl = pub.comp.label();
+                    if (pl === 'Publish' || pl === 'Schedule' || pl === 'Publish now') l = pl;
+                }
+                cur.save.textContent = l;
             }
             function isDirty() { return !!(cur && cur.inputs && Object.keys(changes()).length); }
 
@@ -492,6 +546,7 @@
                     var x = cur.inputs[name], w = x.def.show_when;
                     if (!w || !cur.inputs[w.field]) return;
                     x.wrap.hidden = (w.in || []).indexOf(String(valueOf(w.field))) === -1;
+                    if (!x.wrap.hidden && x.comp && x.comp.render) x.comp.render();
                 });
             }
             function focusFirst() {
@@ -503,12 +558,19 @@
             function clearError(name) {
                 var x = cur && cur.inputs[name]; if (!x) return;
                 x.error.hidden = true; x.error.textContent = ''; x.input.removeAttribute('aria-invalid'); x.wrap.classList.remove('has-error');
+                if (x.comp && x.comp.showError) x.comp.showError(null);
             }
             function showErrors(fields) {
                 var firstBad = null;
                 Object.keys(fields || {}).forEach(function (name) {
-                    var x = cur.inputs[name];
+                    // The Publish control's three values report on the control.
+                    var x = cur.inputs[name] || (/^publish_/.test(name) ? cur.inputs.publish : null);
                     var msg = [].concat(fields[name]).join(' ');
+                    if (x && x.comp && x.comp.showError && x.def.type === 'publish') {
+                        x.comp.showError(msg); x.wrap.hidden = false; x.wrap.classList.add('has-error');
+                        if (!firstBad) firstBad = x.comp.fields && x.comp.fields.date;
+                        return;
+                    }
                     if (!x) { setBanner('error', msg); return; }
                     x.error.textContent = msg; x.error.hidden = false; x.wrap.hidden = false;
                     x.input.setAttribute('aria-invalid', 'true'); x.wrap.classList.add('has-error');
@@ -532,17 +594,21 @@
                 // Client-side checks first, so a typo costs no round trip.
                 var local = {};
                 Object.keys(values).forEach(function (name) {
+                    if (!cur.inputs[name]) return;   // publish_mode / _date / _time belong to the Publish control
                     var d = cur.inputs[name].def, v = values[name];
                     if (d.required && typeof v === 'string' && v.trim() === '') local[name] = d.label + ' is required.';
                 });
-                if (values.status === 'scheduled' && cur.inputs.publish_date && (!values.publish_date || !values.publish_time)) {
-                    local.publish_date = 'Choose a date and a time to schedule it for.';
-                }
                 if (Object.keys(local).length) { showErrors(local); return; }
+                // The Publish control checks its own date and time (as in the editor).
+                var pub = cur.inputs.publish;
+                if (pub && values.publish_mode !== undefined && pub.comp.check()) { pub.wrap.classList.add('has-error'); return; }
 
                 var st = cur.inputs.status && cur.inputs.status.def.confirm;
-                if (!confirmed && st && values.status !== undefined && st.from.indexOf(cur.initial.status) !== -1 && st.to.indexOf(values.status) !== -1) {
-                    ask(st.message, { danger: true, confirmLabel: 'Continue', cancelLabel: 'Cancel' }).then(function (ok) { if (ok) submit(true); });
+                var msg = null;
+                if (st && values.status !== undefined && st.from.indexOf(cur.initial.status) !== -1 && st.to.indexOf(values.status) !== -1) msg = st.message;
+                else if (pub && values.publish_mode !== undefined) msg = pub.comp.confirmMessage();
+                if (!confirmed && msg) {
+                    ask(msg, { danger: true, confirmLabel: 'Continue', cancelLabel: 'Cancel' }).then(function (ok) { if (ok) submit(true); });
                     return;
                 }
                 send(values, !!confirmed);

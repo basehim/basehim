@@ -58,8 +58,8 @@ abstract class ContentQuickEdit implements QuickEditor
      * The fields this type offers, in order. A field that does not apply to
      * the user or the record is dropped when the form is built.
      *
-     * @return string[] from: title, slug, author, status, publish_date, publish_time,
-     *                  categories, tags, comments, parent, menu_order
+     * @return string[] from: title, slug, author, status, publish, categories, tags,
+     *                  comments, parent, menu_order
      */
     abstract protected function fieldNames(): array;
 
@@ -97,9 +97,12 @@ abstract class ContentQuickEdit implements QuickEditor
         $fields = $this->fields($post, $user, $terms);
         $allowed = [];
         foreach ($fields as $f) $allowed[$f['name']] = $f;
+        // The shared Publish control sends its three values (PostPublishing::resolve()).
+        $keys = array_flip(array_keys($allowed));
+        if (isset($allowed['publish'])) $keys += array_flip(['publish_mode', 'publish_date', 'publish_time']);
         $errors = [];
         foreach (array_keys($values) as $name) {
-            if (!is_string($name) || !isset($allowed[$name])) {
+            if (!is_string($name) || !isset($keys[$name])) {
                 $errors[is_string($name) ? $name : 'field'][] = 'This field cannot be changed here.';
             }
         }
@@ -162,24 +165,32 @@ abstract class ContentQuickEdit implements QuickEditor
         }
 
         // -- Status and publication time ---------------------------------------
-        $wantsTiming = array_key_exists('status', $values) || array_key_exists('publish_date', $values) || array_key_exists('publish_time', $values);
+        // The same reading as the editor's form: the status select, plus the
+        // Publish control's mode, date and time when the post goes out.
+        $wantsTiming = array_key_exists('status', $values) || array_key_exists('publish_mode', $values)
+            || array_key_exists('publish_date', $values) || array_key_exists('publish_time', $values);
         if ($wantsTiming) {
             $status = array_key_exists('status', $values) ? $values['status'] : $post['status'];
             $statusOpts = array_column($allowed['status']['options'] ?? [], 'value');
+            $mode = $values['publish_mode'] ?? null;
             if (!is_string($status) || !in_array($status, $statusOpts, true)) {
                 $errors['status'][] = 'Choose one of the statuses offered.';
+            } elseif ($mode !== null && (!is_string($mode) || !in_array($mode, ['now', 'schedule', 'keep', 'date'], true))) {
+                $errors['publish'][] = 'Choose when to publish.';
             } else {
-                $date = $values['publish_date'] ?? ($allowed['publish_date']['value'] ?? '');
-                $time = $values['publish_time'] ?? ($allowed['publish_time']['value'] ?? '');
-                $input = match ($status) {
-                    'scheduled' => ['status' => 'published', 'publish_mode' => 'schedule',
-                                    'publish_date' => is_string($date) ? $date : '', 'publish_time' => is_string($time) ? $time : ''],
-                    'published' => ['status' => 'published', 'publish_mode' => 'now'],
-                    default     => ['status' => $status],
-                };
+                if (in_array($status, ['published', 'scheduled'], true)) {
+                    // Without a mode, nothing about timing changes: a live post
+                    // keeps its date and a scheduled one its schedule.
+                    $mode ??= in_array($post['status'], ['published', 'scheduled'], true) ? 'keep' : 'now';
+                    $input = ['status' => 'published', 'publish_mode' => $mode,
+                              'publish_date' => is_string($values['publish_date'] ?? null) ? $values['publish_date'] : '',
+                              'publish_time' => is_string($values['publish_time'] ?? null) ? $values['publish_time'] : ''];
+                } else {
+                    $input = ['status' => $status];
+                }
                 $r = PostPublishing::resolve($post, $input, $this->editor->canPublish($user, $type), Time::zone(), time());
                 if (isset($r['error'])) {
-                    $errors[$status === 'scheduled' ? 'publish_date' : 'status'][] = $r['error'];
+                    $errors[isset($allowed['publish']) && in_array($status, ['published', 'scheduled'], true) ? 'publish' : 'status'][] = $r['error'];
                 } else {
                     // Taking a live post off the site is never a side effect.
                     $needsConfirm = $post['status'] === 'published' && $r['status'] !== 'published' && empty($options['confirm']);
@@ -199,7 +210,7 @@ abstract class ContentQuickEdit implements QuickEditor
             $tagIds = $terms['tag_ids'];
             if (array_key_exists('categories', $values)) {
                 $list = is_array($values['categories']) ? $values['categories'] : null;
-                $valid = array_map('intval', array_column($allowed['categories']['options'] ?? [], 'value'));
+                $valid = array_map('intval', array_column($allowed['categories']['value']['options'] ?? [], 'id'));
                 $chosen = $list === null ? null : array_values(array_unique(array_map('intval', array_filter($list, 'is_numeric'))));
                 if ($chosen === null || array_diff($chosen, $valid)) {
                     $errors['categories'][] = 'Choose from the categories listed.';
@@ -208,25 +219,34 @@ abstract class ContentQuickEdit implements QuickEditor
                 }
             }
             if (array_key_exists('tags', $values)) {
-                if (!is_string($values['tags'])) {
-                    $errors['tags'][] = 'Separate tags with commas.';
+                // The Tags component's value: existing tag ids and new names.
+                $v = $values['tags'];
+                $ids = is_array($v) && is_array($v['ids'] ?? null) ? $v['ids'] : null;
+                $names = is_array($v) && is_array($v['names'] ?? null) ? $v['names'] : null;
+                if ($ids === null || $names === null) {
+                    $errors['tags'][] = 'The tags could not be read.';
                 } else {
-                    $names = [];
-                    foreach (explode(',', $values['tags']) as $n) {
-                        $n = PostEditorService::normaliseTagName($n);
-                        if ($n !== '' && !in_array(mb_strtolower($n), array_map('mb_strtolower', $names), true)) $names[] = $n;
+                    $tagIds = [];
+                    $newTagNames = [];
+                    $seen = [];
+                    foreach ($ids as $tid) {
+                        $tag = is_numeric($tid) ? $this->editor->findTag((int) $tid) : null;
+                        if (!$tag) { $errors['tags'][] = 'One of these tags no longer exists.'; break; }
+                        $tagIds[] = (int) $tag['id'];
+                        $seen[mb_strtolower((string) $tag['name'])] = true;
                     }
-                    if (count($names) > PostEditorService::PENDING_MAX) {
-                        $errors['tags'][] = 'Use at most ' . PostEditorService::PENDING_MAX . ' tags.';
-                    } else {
-                        $tagIds = [];
-                        $newTagNames = [];
-                        foreach ($names as $n) {
-                            $tag = $this->editor->findTagByName($n);
-                            if ($tag) $tagIds[] = (int) $tag['id'];
-                            else $newTagNames[] = $n;
-                        }
+                    foreach ($names as $n) {
+                        $n = PostEditorService::normaliseTagName(is_string($n) ? $n : '');
+                        if ($n === '' || isset($seen[mb_strtolower($n)])) continue;
+                        $seen[mb_strtolower($n)] = true;
+                        $tag = $this->editor->findTagByName($n);   // created meanwhile: attach it
+                        if ($tag) $tagIds[] = (int) $tag['id'];
+                        else $newTagNames[] = $n;
                     }
+                    if (count($tagIds) + count($newTagNames) > 200 || count($newTagNames) > PostEditorService::PENDING_MAX) {
+                        $errors['tags'][] = 'That is more tags than a ' . $this->noun() . ' can hold.';
+                    }
+                    $tagIds = array_values(array_unique($tagIds));
                 }
             }
             // PostService replaces every term at once, so send the post's
@@ -336,38 +356,37 @@ abstract class ContentQuickEdit implements QuickEditor
         $out = [];
         foreach ($this->fieldNames() as $name) {
             $f = match ($name) {
-                'title' => ['type' => 'text', 'label' => 'Title', 'value' => (string) $post['title'], 'required' => true, 'max' => 1000, 'wide' => true],
-                'slug' => ['type' => 'slug', 'label' => 'Slug', 'value' => (string) $post['slug'], 'max' => 190,
-                           'help' => 'The last part of the address. Leave empty to make it from the title.'],
+                'title' => ['type' => 'text', 'label' => 'Title', 'value' => (string) $post['title'], 'required' => true, 'max' => 1000, 'span' => 6],
+                'slug' => ['type' => 'slug', 'label' => 'Slug', 'value' => (string) $post['slug'], 'max' => 190, 'span' => 3,
+                           'placeholder' => 'From the title'],
                 'author' => $this->editor->canEditOthers($user, $type) && $this->editor->supports($type, 'author')
-                    ? ['type' => 'select', 'label' => 'Author', 'value' => (string) $post['author_id'], 'options' => $this->authorOptions($post)]
+                    ? ['type' => 'select', 'label' => 'Author', 'value' => (string) $post['author_id'], 'options' => $this->authorOptions($post), 'span' => 3]
                     : null,
                 'status' => ['type' => 'select', 'label' => 'Status', 'value' => (string) $post['status'],
-                             'options' => $this->statusOptions($post, $canPublish), 'help' => $this->statusHelp($post),
-                             'confirm' => ['from' => ['published'], 'to' => ['draft', 'pending', 'private', 'scheduled'],
+                             'options' => $this->statusOptions($post, $canPublish), 'span' => 3,
+                             'confirm' => ['from' => ['published'], 'to' => ['draft', 'pending', 'private'],
                                            'message' => 'This takes the live ' . $this->noun() . ' off the site until it is published again. Continue?']],
-                'publish_date', 'publish_time' => $canPublish ? $this->timeField($name, $post) : null,
+                // The block editor's Publish control (post-fields.js), compact.
+                'publish' => $canPublish
+                    ? ['type' => 'publish', 'label' => 'Publish', 'value' => PostPublishing::panel($post, true, $this->noun()),
+                       'show_when' => ['field' => 'status', 'in' => ['published', 'scheduled']], 'span' => 9]
+                    : null,
+                // The block editor's Categories and Tags components.
                 'categories' => $this->editor->hasCategories($type)
-                    ? ['type' => 'checklist', 'label' => 'Categories', 'value' => array_map('strval', $terms['category_ids']),
-                       'options' => $this->categoryOptions(), 'wide' => true]
+                    ? ['type' => 'categories', 'label' => 'Categories', 'value' => $this->editor->categoriesField($post), 'span' => 5]
                     : null,
                 'tags' => $this->editor->hasTags($type)
-                    ? ['type' => 'tags', 'label' => 'Tags', 'value' => implode(', ', array_merge($terms['tag_names'], $this->editor->pendingTags((int) $post['id']))),
-                       'max' => 2000, 'wide' => true,
-                       'help' => $this->editor->canCreateTags($user, $type)
-                           ? 'Separate with commas. New tags are created when the ' . $this->noun() . ' is published.'
-                           : 'Separate with commas. New tags are created when an editor publishes the ' . $this->noun() . '.']
+                    ? ['type' => 'tags', 'label' => 'Tags', 'value' => $this->editor->tagsField($post, $user, $type), 'span' => 7]
                     : null,
                 'comments' => $this->editor->supports($type, 'comments')
-                    ? ['type' => 'toggle', 'label' => 'Allow comments', 'value' => ($post['comment_status'] ?? 'open') === 'open']
+                    ? ['type' => 'toggle', 'label' => 'Allow comments', 'value' => ($post['comment_status'] ?? 'open') === 'open', 'span' => 3]
                     : null,
                 'parent' => $this->editor->isHierarchical($type)
-                    ? ['type' => 'select', 'label' => 'Parent', 'value' => (string) ($post['parent_id'] ?? ''),
+                    ? ['type' => 'select', 'label' => 'Parent', 'value' => (string) ($post['parent_id'] ?? ''), 'span' => 5,
                        'options' => array_merge([['value' => '', 'label' => '(no parent)']], $this->parentOptions($post))]
                     : null,
                 'menu_order' => $this->editor->isHierarchical($type)
-                    ? ['type' => 'number', 'label' => 'Order', 'value' => (int) ($post['menu_order'] ?? 0), 'min' => -100000, 'max' => 100000,
-                       'help' => 'Lower numbers come first.']
+                    ? ['type' => 'number', 'label' => 'Order', 'value' => (int) ($post['menu_order'] ?? 0), 'min' => -100000, 'max' => 100000, 'span' => 2]
                     : null,
                 default => null,
             };
@@ -376,42 +395,21 @@ abstract class ContentQuickEdit implements QuickEditor
         return $out;
     }
 
-    /** Statuses offered: what the user may choose, plus the current one. */
+    /**
+     * Statuses offered: what the user may choose. "Published" covers going out
+     * now or on a date (the Publish control decides which); "Scheduled" is
+     * listed only for a post that already is.
+     */
     private function statusOptions(array $post, bool $canPublish): array
     {
-        $labels = ['draft' => 'Draft', 'pending' => 'Pending review', 'published' => 'Published',
-                   'scheduled' => 'Scheduled', 'private' => 'Private'];
-        $keys = $canPublish ? ['draft', 'pending', 'published', 'scheduled', 'private'] : ['draft', 'pending'];
-        $opts = [];
-        foreach ($keys as $k) {
-            $label = $labels[$k];
-            if ($k === 'published' && $post['status'] !== 'published') $label = 'Published (now)';
-            $opts[] = ['value' => $k, 'label' => $label];
+        if (!$canPublish) {
+            return [['value' => 'draft', 'label' => 'Draft'], ['value' => 'pending', 'label' => 'Pending review']];
         }
+        $opts = [['value' => 'draft', 'label' => 'Draft'], ['value' => 'pending', 'label' => 'Pending review']];
+        if ($post['status'] === 'scheduled') $opts[] = ['value' => 'scheduled', 'label' => 'Scheduled'];
+        $opts[] = ['value' => 'published', 'label' => $post['status'] === 'scheduled' ? 'Published (now)' : 'Published'];
+        $opts[] = ['value' => 'private', 'label' => 'Private'];
         return $opts;
-    }
-
-    private function statusHelp(array $post): string
-    {
-        $at = !empty($post['published_at']) ? Time::local($post['published_at']) : null;
-        $when = $at ? $at->format(Time::dateFormat()) . ' at ' . $at->format(Time::timeFormat()) : '';
-        return match ((string) $post['status']) {
-            'published' => $when !== '' ? 'Published ' . $when . '. Editing other fields keeps this date.' : '',
-            'scheduled' => 'Goes live ' . $when . ' (' . Time::abbreviation($post['published_at']) . ').',
-            default => 'Choose Scheduled to pick a date and time.',
-        };
-    }
-
-    /** Date or time of the schedule, in the site timezone; shown for Scheduled only. */
-    private function timeField(string $name, array $post): array
-    {
-        $at = $post['status'] === 'scheduled' && !empty($post['published_at']) ? Time::local($post['published_at']) : null;
-        $tz = Time::timezone() . ', UTC' . Time::offset();
-        return $name === 'publish_date'
-            ? ['type' => 'date', 'label' => 'Date', 'value' => $at ? $at->format('Y-m-d') : '',
-               'show_when' => ['field' => 'status', 'in' => ['scheduled']], 'help' => 'Site time (' . $tz . ').']
-            : ['type' => 'time', 'label' => 'Time', 'value' => $at ? $at->format('H:i') : '',
-               'show_when' => ['field' => 'status', 'in' => ['scheduled']]];
     }
 
     /**
@@ -438,18 +436,6 @@ abstract class ContentQuickEdit implements QuickEditor
             $out[] = ['value' => (int) $u['id'], 'label' => $name];
         }
         return $cache[$key] = $out;
-    }
-
-    /** Every category, by name (one query). */
-    protected function categoryOptions(): array
-    {
-        static $cache = null;
-        if ($cache !== null) return $cache;
-        $rows = $this->db->select(
-            "SELECT t.id, t.name FROM {terms} t JOIN {taxonomies} x ON x.id = t.taxonomy_id
-              WHERE x.slug = 'category' ORDER BY t.name LIMIT 1000"
-        );
-        return $cache = array_map(fn($r) => ['value' => (int) $r['id'], 'label' => (string) $r['name']], $rows);
     }
 
     /**

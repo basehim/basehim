@@ -10,7 +10,7 @@ namespace App\Services;
  *
  * The editor sends the status select plus the publish panel's choice:
  *
- *   publish_mode   "now" | "schedule"  (absent from older forms and apps)
+ *   publish_mode   "now" | "schedule" | "keep" | "date"  (absent from older forms and apps)
  *   publish_date   Y-m-d               in the site timezone
  *   publish_time   H:i                 in the site timezone
  *
@@ -25,8 +25,9 @@ namespace App\Services;
  *  - "Now" on a post that is not yet live gives `published` at the server's
  *    current time, never a time the browser sent.
  *  - A post that is already live stays exactly as it is (status and date)
- *    unless the editor explicitly chose "Schedule", which takes it off the
- *    site until the new time. The panel asks for confirmation first.
+ *    unless the editor explicitly chose "Change date" (1.2.62, or "Schedule"
+ *    from 1.2.60 forms): a date that has passed re-dates the live post; a
+ *    future one takes it off the site until then. The panel asks first.
  *  - A refused request never changes the status or the date: the caller gets
  *    an error and keeps what the post already had, so no save loses work and
  *    no mistake publishes anything.
@@ -69,7 +70,7 @@ final class PostPublishing
             return self::keep($current, 'That status is not one this editor offers.');
         }
         $mode = isset($input['publish_mode']) ? (string) $input['publish_mode'] : null;
-        if ($mode !== null && !in_array($mode, ['now', 'schedule'], true)) $mode = null;
+        if ($mode !== null && !in_array($mode, ['now', 'schedule', 'keep', 'date'], true)) $mode = null;
 
         // -- Not going out ----------------------------------------------------
         if (!in_array($requested, self::OUT, true)) {
@@ -93,6 +94,27 @@ final class PostPublishing
         }
 
         // -- published / scheduled -------------------------------------------
+        // "keep": leave a live post's date, or a schedule, as it is.
+        if ($mode === 'keep') {
+            if ($current === 'published') return ['status' => 'published'];
+            if ($current === 'scheduled') { $mode = null; $requested = 'scheduled'; }
+            else $mode = 'now';
+        }
+        // "date" (1.2.62): set the publication date of a live post. A time
+        // that has passed re-dates it and it stays live; a future one
+        // schedules it. On a post that is not live it means "schedule".
+        if ($mode === 'date' && $current !== 'published') $mode = 'schedule';
+        if ($mode === 'date') {
+            $at = self::parseLocal(trim((string) ($input['publish_date'] ?? '')), trim((string) ($input['publish_time'] ?? '')), $zone);
+            if ($at === null) return self::keep($current, 'Choose a valid date and time.');
+            if ($at->getTimestamp() > (int) strtotime(self::MAX_UTC . ' UTC')) {
+                return self::keep($current, 'Choose a date before 19 January 2038.');
+            }
+            $utc = $at->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+            if ($at->getTimestamp() <= $now) return ['status' => 'published', 'published_at' => $utc];
+            return ['status' => 'scheduled', 'published_at' => $utc, 'scheduled_for' => $at];
+        }
+
         // An older form or an app that only sends status="scheduled" means
         // "keep the schedule"; status="published" alone means "now".
         $schedule = $mode === 'schedule' || ($mode === null && $requested === 'scheduled');
@@ -135,6 +157,48 @@ final class PostPublishing
             'status' => 'scheduled',
             'published_at' => $at->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
             'scheduled_for' => $at,
+        ];
+    }
+
+    /**
+     * What the shared Publish control (admin/assets/js/post-fields.js) needs to
+     * show a post's publishing state, in the site timezone (1.2.62). The block
+     * editor's sidebar and Quick Edit both build it here, so the two always
+     * agree on what "now", the timezone and the stored date are.
+     *
+     * @param array|null $post        the stored post, or null for a new one
+     * @param string     $typeLabel   "post", "page" … for the sentences
+     */
+    public static function panel(?array $post, bool $canPublish, string $typeLabel = 'post'): array
+    {
+        $status = $post !== null ? (string) ($post['status'] ?? 'draft') : 'draft';
+        $stored = $post !== null && !empty($post['published_at']) ? (string) $post['published_at'] : '';
+        $local = $stored !== '' ? \App\Core\Time::local($stored) : null;
+        $now = \App\Core\Time::local(\App\Core\Time::now());
+        $when = $local ? $local->format(\App\Core\Time::dateFormat()) . ' at ' . $local->format(\App\Core\Time::timeFormat()) : '';
+        $live = in_array($status, ['published', 'scheduled'], true) && $local !== null;
+        return [
+            'status'       => $status,
+            'can_publish'  => $canPublish,
+            'tz'           => \App\Core\Time::timezone(),
+            'tz_label'     => \App\Core\Time::abbreviation() . ' · UTC' . \App\Core\Time::offset(),
+            'now'          => time(),
+            'published_at' => $stored !== '' ? \App\Core\Time::iso($stored) : '',
+            // The date fields start from the stored time for a live or
+            // scheduled post (so "Change date" edits it), empty otherwise.
+            'date'         => $live ? $local->format('Y-m-d') : '',
+            'time'         => $live ? $local->format('H:i') : '',
+            'mode'         => match ($status) { 'scheduled' => 'schedule', 'published' => 'keep', default => 'now' },
+            'min_date'     => $now ? $now->format('Y-m-d') : '',
+            'max_date'     => '2038-01-18',
+            'type_label'   => $typeLabel,
+            'summary'      => match ($status) {
+                'published' => 'Published' . ($when !== '' ? ' ' . $when : ''),
+                'scheduled' => 'Scheduled for ' . $when,
+                'private'   => 'Private — only editors can see it',
+                'pending'   => 'Pending review',
+                default     => $post !== null ? 'Draft — not published yet' : 'New — not published yet',
+            },
         ];
     }
 

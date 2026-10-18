@@ -14,6 +14,6 @@ final class PostQuickEdit extends ContentQuickEdit
 
     protected function fieldNames(): array
     {
-        return ['title', 'slug', 'author', 'status', 'publish_date', 'publish_time', 'comments', 'categories', 'tags'];
+        return ['title', 'slug', 'author', 'status', 'publish', 'categories', 'tags', 'comments'];
     }
 }

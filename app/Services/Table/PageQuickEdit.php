@@ -18,6 +18,6 @@ final class PageQuickEdit extends ContentQuickEdit
 
     protected function fieldNames(): array
     {
-        return ['title', 'slug', 'author', 'status', 'publish_date', 'publish_time', 'parent', 'menu_order', 'comments'];
+        return ['title', 'slug', 'author', 'status', 'publish', 'parent', 'menu_order', 'comments'];
     }
 }

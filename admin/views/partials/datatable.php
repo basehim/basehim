@@ -209,4 +209,8 @@ $__cssVer = @filemtime(BASEHIM_ROOT . '/admin/assets/css/datatable.css') ?: BASE
 $__jsVer  = @filemtime(BASEHIM_ROOT . '/admin/assets/js/datatable.js') ?: BASEHIM_VERSION;
 ?>
 <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/datatable.css?v=<?= urlencode((string) $__cssVer) ?>">
+<?php if ($__def->quickEdit !== null): $__pfVer = @filemtime(BASEHIM_ROOT . '/admin/assets/js/post-fields.js') ?: BASEHIM_VERSION; ?>
+<?php // Quick Edit draws Categories, Tags and Publish with the block editor's components (1.2.62). ?>
+<script src="<?= $base ?>/admin/assets/js/post-fields.js?v=<?= urlencode((string) $__pfVer) ?>"></script>
+<?php endif; ?>
 <script src="<?= $base ?>/admin/assets/js/datatable.js?v=<?= urlencode((string) $__jsVer) ?>"></script>

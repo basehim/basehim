@@ -283,6 +283,57 @@ final class PostEditorService
     }
 
     // ------------------------------------------------------------------
+    // Shared field configuration (1.2.62)
+    // ------------------------------------------------------------------
+    //
+    // The block editor's sidebar and Quick Edit draw Categories and Tags with
+    // the same components (admin/assets/js/post-fields.js); both build their
+    // settings here so the two can never drift apart.
+
+    /** Every category as [{id, name}], by name (one query; at most 1000). */
+    public function categoryOptions(): array
+    {
+        $rows = $this->db->select(
+            "SELECT t.id, t.name FROM {terms} t JOIN {taxonomies} x ON x.id = t.taxonomy_id
+              WHERE x.slug = 'category' ORDER BY t.name LIMIT 1000"
+        );
+        return array_map(fn($r) => ['id' => (int) $r['id'], 'name' => (string) $r['name']], $rows);
+    }
+
+    /** The category ids on a post. @return int[] */
+    public function categoryIdsFor(int $postId): array
+    {
+        return array_map('intval', array_column($this->db->select(
+            "SELECT t.id FROM {post_term} pt JOIN {terms} t ON t.id = pt.term_id JOIN {taxonomies} x ON x.id = t.taxonomy_id
+              WHERE pt.post_id = :p AND x.slug = 'category' ORDER BY pt.term_order, t.name", ['p' => $postId]), 'id'));
+    }
+
+    /** Settings for the Categories component. */
+    public function categoriesField(?array $post): array
+    {
+        return [
+            'options'  => $this->categoryOptions(),
+            'selected' => $post !== null ? $this->categoryIdsFor((int) $post['id']) : [],
+        ];
+    }
+
+    /**
+     * Settings for the Tags component: the post's tags and pending names,
+     * whether this user's new names become tags on publish, and the post id
+     * (null for a post never saved).
+     */
+    public function tagsField(?array $post, ?array $user, string $type): array
+    {
+        $id = $post !== null ? (int) $post['id'] : null;
+        return [
+            'post_id'    => $id,
+            'can_create' => $this->canCreateTags($user, $type),
+            'tags'       => $id ? array_map(fn($t) => ['id' => $t['id'], 'name' => $t['name']], $this->tagsFor($id)) : [],
+            'pending'    => $id ? $this->pendingTags($id) : [],
+        ];
+    }
+
+    // ------------------------------------------------------------------
     // Pending (not yet created) tags
     // ------------------------------------------------------------------
 

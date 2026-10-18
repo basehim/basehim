@@ -49,30 +49,15 @@ $statusLabels = ['draft' => 'Draft', 'pending' => 'Pending review', 'published' 
 // the select only lists it for a post that already is scheduled (1.2.60).
 if ($statusVal !== 'scheduled') unset($statusLabels['scheduled']);
 
-// ---- Publish panel (1.2.60) ------------------------------------------------
+// ---- Publish panel (1.2.60; shared with Quick Edit since 1.2.62) ---------
 // Times are stored in UTC and shown in the site timezone (Settings → General).
-// The panel's date and time fields are site-local; PostPublishing reads them
-// with the same zone on the server, which is the only place that decides.
+// PostPublishing::panel() builds the control's settings for both screens, and
+// PostPublishing::resolve() is the only place that decides on save.
 $pubEditor     = $app->make(\App\Services\PostEditorService::class);
 $canPublish    = $pubEditor->canPublish($currentUser ?? null, $type);
-$pubStoredUtc  = $isEdit && !empty($post['published_at']) ? (string) $post['published_at'] : '';
-$pubLocal      = $pubStoredUtc !== '' ? \App\Core\Time::local($pubStoredUtc) : null;
-$pubTz         = \App\Core\Time::timezone();
-$pubTzLabel    = \App\Core\Time::abbreviation() . ' · UTC' . \App\Core\Time::offset();
-$pubNowLocal   = \App\Core\Time::local(\App\Core\Time::now());
 $pubIsOut      = in_array($statusVal, ['published', 'scheduled', 'private'], true);
-$pubMode       = $statusVal === 'scheduled' ? 'schedule' : 'now';
 $pubShowPanel  = $type !== 'template';
-$pubDate       = $statusVal === 'scheduled' && $pubLocal ? $pubLocal->format('Y-m-d') : '';
-$pubTime       = $statusVal === 'scheduled' && $pubLocal ? $pubLocal->format('H:i') : '';
-$pubWhen       = $pubLocal ? $pubLocal->format(\App\Core\Time::dateFormat()) . ' at ' . $pubLocal->format(\App\Core\Time::timeFormat()) : '';
-$pubSummary = match ($statusVal) {
-    'published' => 'Published' . ($pubWhen !== '' ? ' ' . $pubWhen : ''),
-    'scheduled' => 'Scheduled for ' . $pubWhen,
-    'private'   => 'Private — only editors can see it',
-    'pending'   => 'Pending review',
-    default     => $isEdit ? 'Draft — not published yet' : 'New — not published yet',
-};
+$pubConfig     = \App\Services\PostPublishing::panel($isEdit ? $post : null, $canPublish, strtolower($typeLabel));
 // The primary button as the server renders it; post-publish.js keeps it in
 // step with the panel. data-status is what the click puts in the status field.
 if ($type === 'template') {
@@ -204,62 +189,11 @@ $v = urlencode(BASEHIM_VERSION);
                     <input type="hidden" name="_post_settings" value="1">
 
                     <?php if ($pubShowPanel): ?>
-                    <section class="bhe-panel is-open bh-publish" data-bhe-panel="publish" data-bh-publish
-                             data-tz="<?= htmlspecialchars($pubTz) ?>"
-                             data-now="<?= time() ?>"
-                             data-status="<?= htmlspecialchars($statusVal) ?>"
-                             data-can-publish="<?= $canPublish ? '1' : '0' ?>"
-                             data-type-label="<?= htmlspecialchars(strtolower($typeLabel)) ?>"
-                             data-published-at="<?= $pubStoredUtc !== '' ? htmlspecialchars(\App\Core\Time::iso($pubStoredUtc)) : '' ?>">
+                    <section class="bhe-panel is-open" data-bhe-panel="publish">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Publish</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body">
-                            <p class="bh-publish__state bh-publish__state--<?= htmlspecialchars($statusVal) ?>" data-bh-publish-state>
-                                <span class="bh-publish__dot" aria-hidden="true"></span>
-                                <span><?= htmlspecialchars($pubSummary) ?></span>
-                            </p>
-
-                            <?php if ($canPublish): ?>
-                            <fieldset class="bh-publish__modes" data-bh-publish-modes>
-                                <legend class="bhe-label">When</legend>
-                                <div class="bhe-segmented">
-                                    <label class="bh-publish__mode">
-                                        <input type="radio" name="publish_mode" value="now" <?= $pubMode === 'now' ? 'checked' : '' ?>>
-                                        <span data-bh-publish-now-label><?= $statusVal === 'published' ? 'Keep published' : 'Immediately' ?></span>
-                                    </label>
-                                    <label class="bh-publish__mode">
-                                        <input type="radio" name="publish_mode" value="schedule" <?= $pubMode === 'schedule' ? 'checked' : '' ?>>
-                                        <span>Schedule</span>
-                                    </label>
-                                </div>
-                            </fieldset>
-
-                            <div class="bh-publish__when" data-bh-publish-when <?= $pubMode === 'schedule' ? '' : 'hidden' ?>>
-                                <div class="bh-publish__grid">
-                                    <div class="bhe-field">
-                                        <label class="bhe-label" for="bh-publish-date">Date</label>
-                                        <input type="date" id="bh-publish-date" name="publish_date" class="bhe-input"
-                                               value="<?= htmlspecialchars($pubDate) ?>"
-                                               min="<?= htmlspecialchars($pubNowLocal ? $pubNowLocal->format('Y-m-d') : '') ?>" max="2038-01-18"
-                                               aria-describedby="bh-publish-preview bh-publish-error">
-                                    </div>
-                                    <div class="bhe-field">
-                                        <label class="bhe-label" for="bh-publish-time">Time</label>
-                                        <input type="time" id="bh-publish-time" name="publish_time" class="bhe-input" step="60"
-                                               value="<?= htmlspecialchars($pubTime) ?>"
-                                               aria-describedby="bh-publish-preview bh-publish-error">
-                                    </div>
-                                </div>
-                                <p class="bh-publish__tz">
-                                    <?= icon('globe-alt', 'bhe-icon') ?>
-                                    <span>Site time: <strong><?= htmlspecialchars($pubTz) ?></strong> (<?= htmlspecialchars($pubTzLabel) ?>)</span>
-                                </p>
-                                <p class="bh-publish__error" id="bh-publish-error" role="alert" data-bh-publish-error hidden></p>
-                            </div>
-
-                            <p class="bh-publish__preview" id="bh-publish-preview" aria-live="polite" data-bh-publish-preview hidden></p>
-                            <?php elseif (!$pubIsOut): ?>
-                            <p class="bhe-help bh-publish__note">Your role submits <?= htmlspecialchars(strtolower($typeLabel)) ?>s for review. An editor chooses when it goes live.</p>
-                            <?php endif; ?>
+                            <?php // Drawn by BasehimPostFields.publish() (post-fields.js), as in Quick Edit. ?>
+                            <div data-bh-publish-mount data-config="<?= htmlspecialchars(json_encode($pubConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>"></div>
                         </div>
                     </section>
                     <?php endif; ?>
@@ -330,59 +264,23 @@ $v = urlencode(BASEHIM_VERSION);
                     <section class="bhe-panel is-open" data-bhe-panel="categories">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Categories</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body">
-                            <div class="bhe-checklist">
-                                <?php foreach ($categories as $cat): ?>
-                                    <label class="bhe-check">
-                                        <input type="checkbox" name="term_ids[]" value="<?= (int) $cat['id'] ?>" <?= in_array((int) $cat['id'], $selectedTermIds, true) ? 'checked' : '' ?>>
-                                        <span><?= htmlspecialchars($cat['name']) ?></span>
-                                    </label>
-                                <?php endforeach; ?>
-                                <?php if (empty($categories)): ?>
-                                    <p class="bhe-muted">No categories yet. <a href="<?= $base ?>/admin/taxonomies/category" style="color:var(--bhe-accent)">Create one</a>.</p>
-                                <?php endif; ?>
-                            </div>
+                            <?php // BasehimPostFields.categories() (post-fields.js), as in Quick Edit. The
+                                  // checkboxes are named term_ids[], so the form posts them as before. ?>
+                            <div data-bh-categories-mount data-config="<?= htmlspecialchars(json_encode($pubEditor->categoriesField($isEdit ? $post : null) + [
+                                'name' => 'term_ids[]', 'label' => 'Categories', 'createUrl' => $base . '/admin/taxonomies/category',
+                            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>"></div>
                         </div>
                     </section>
 
-                    <?php
-                    // Tags (1.2.47): chips with typeahead; existing tags are
-                    // added and removed straight away over AJAX on a saved post,
-                    // new names wait as "pending" and become tags on publish.
-                    $tagEditor = $app->make(\App\Services\PostEditorService::class);
-                    $selectedTags = array_values(array_filter($tags, fn($t) => in_array((int) $t['id'], $selectedTermIds, true)));
-                    $pendingTags = $isEdit ? $tagEditor->pendingTags((int) $post['id']) : [];
-                    $tagsSaved = $isEdit ? ' data-bh-autosaved' : '';
-                    $canCreateTags = $tagEditor->canCreateTags($currentUser ?? null, $type);
-                    ?>
+                    <?php // Tags (1.2.47; shared with Quick Edit since 1.2.62): BasehimPostFields.tags().
+                          // On a saved post, existing tags are added and removed at once over AJAX;
+                          // new names wait as "pending" and become tags on publish. ?>
                     <section class="bhe-panel is-open" data-bhe-panel="tags">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Tags</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body">
-                            <div class="bh-tags" data-bh-tags
-                                 data-post-id="<?= $isEdit ? (int) $post['id'] : '' ?>"
-                                 data-can-create="<?= $canCreateTags ? '1' : '0' ?>">
-                                <div class="bh-tags__chips" data-bh-tags-chips><?php
-                                    foreach ($selectedTags as $tg): ?><span class="bh-tag" data-id="<?= (int) $tg['id'] ?>"><span class="bh-tag__name"><?= htmlspecialchars($tg['name']) ?></span><button type="button" class="bh-tag__x" aria-label="Remove tag <?= htmlspecialchars($tg['name']) ?>">&times;</button><input type="hidden" name="term_ids[]" value="<?= (int) $tg['id'] ?>"<?= $tagsSaved ?>></span><?php endforeach;
-                                    foreach ($pendingTags as $pn): ?><span class="bh-tag is-new" data-name="<?= htmlspecialchars($pn) ?>" title="Created when the post is published"><span class="bh-tag__name"><?= htmlspecialchars($pn) ?></span><button type="button" class="bh-tag__x" aria-label="Remove tag <?= htmlspecialchars($pn) ?>">&times;</button><input type="hidden" name="new_tags[]" value="<?= htmlspecialchars($pn) ?>"<?= $tagsSaved ?>></span><?php endforeach;
-                                ?></div>
-                                <div class="bh-tags__field">
-                                    <label class="bhe-label" for="bh-tags-input">Add a tag</label>
-                                    <input type="text" id="bh-tags-input" class="bhe-input" autocomplete="off" spellcheck="false" maxlength="100"
-                                           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="bh-tags-suggest"
-                                           placeholder="Type to search tags" data-bh-tags-input>
-                                    <ul class="bh-tags__suggest" id="bh-tags-suggest" role="listbox" hidden data-bh-tags-suggest></ul>
-                                </div>
-                                <p class="bh-tags__hint">Separate with commas or press Enter.<?= $canCreateTags
-                                    ? ' New tags are created when the post is published.'
-                                    : ' New tags are created when an editor publishes the post.' ?></p>
-                                <div class="bh-tags__group" data-bh-tags-group="most_used" hidden>
-                                    <span class="bh-tags__group-title">Most used</span>
-                                    <div class="bh-tags__cloud"></div>
-                                </div>
-                                <div class="bh-tags__group" data-bh-tags-group="recent" hidden>
-                                    <span class="bh-tags__group-title">Recently used</span>
-                                    <div class="bh-tags__cloud"></div>
-                                </div>
-                            </div>
+                            <div data-bh-tags-mount data-config="<?= htmlspecialchars(json_encode($pubEditor->tagsField($isEdit ? $post : null, $currentUser ?? null, $type) + [
+                                'typeLabel' => strtolower($typeLabel),
+                            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>"></div>
                         </div>
                     </section>
                     <?php endif; ?>
@@ -456,6 +354,7 @@ $v = urlencode(BASEHIM_VERSION);
 
 <script>window.BasehimEditorConfig = <?= json_encode($nbeConfig, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="<?= $base ?>/admin/assets/js/block-editor.js?v=<?= $v ?>"></script>
+<script src="<?= $base ?>/admin/assets/js/post-fields.js?v=<?= $v ?>"></script>
 <?php if ($type === 'post'): ?><script src="<?= $base ?>/admin/assets/js/post-tags.js?v=<?= $v ?>"></script><?php endif; ?>
 <?php if ($pubShowPanel): ?><script src="<?= $base ?>/admin/assets/js/post-publish.js?v=<?= $v ?>"></script><?php endif; ?>
 <?php foreach ($nbeScripts as $nbeJs): ?>

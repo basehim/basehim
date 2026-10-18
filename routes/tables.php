@@ -152,6 +152,38 @@ $thumbCell = static function (array $row): string {
 $authorCell = static fn (array $row): string =>
     Components::userCell((string) ($row['author_name'] ?? '—'), $row['author_avatar_url'] ?? null, null, 28);
 
+/**
+ * Public addresses for View / Preview (1.2.62). Under category permalinks a
+ * post's URL needs its first category, so they are loaded for the whole page
+ * in one query rather than one per row (Helpers::lookupPrimaryCategory()).
+ * Unpublished rows link to the same address: it serves a preview to people
+ * who may edit them (RendersTheme::canPreview()) and a 404 to everyone else.
+ */
+$postLinks = static function (array $rows) use ($db): array {
+    $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+    $ids = array_values(array_filter(array_map(static fn($r) => ($r['type'] ?? '') === 'post' ? (int) ($r['id'] ?? 0) : 0, $rows)));
+    $cats = [];
+    if ($ids !== [] && \App\Core\Helpers::permalinkStructure() === 'category') {
+        $in = implode(',', $ids);   // ints only — safe to inline
+        foreach ($db->select("SELECT pt.post_id, t.slug FROM {post_term} pt
+                                JOIN {terms} t ON t.id = pt.term_id JOIN {taxonomies} x ON x.id = t.taxonomy_id
+                               WHERE x.slug = 'category' AND pt.post_id IN ($in)
+                            ORDER BY pt.post_id, pt.term_order ASC") as $r) {
+            $cats[(int) $r['post_id']] ??= (string) $r['slug'];
+        }
+    }
+    $out = [];
+    foreach ($rows as $row) {
+        $id = (int) ($row['id'] ?? 0);
+        if ($id <= 0 || (string) ($row['slug'] ?? '') === '' || ($row['type'] ?? '') === 'template') continue;
+        $out[$id] = [
+            'url'  => \App\Core\Helpers::postUrl($row + ['primary_category_slug' => $cats[$id] ?? ''], $base, $cats[$id] ?? ''),
+            'live' => ($row['status'] ?? '') === 'published',
+        ];
+    }
+    return $out;
+};
+
 $postColumns = [
     ['id' => 'thumb',  'label' => 'Image', 'render' => $thumbCell,
      'default_visible' => true, 'can_hide' => true, 'align' => 'center'],
@@ -176,6 +208,7 @@ $tables->register('content.posts', [
     'area'         => '/admin/posts',
     'provider'     => \App\Services\Table\PostTableProvider::class,
     'quick_edit'   => \App\Services\Table\PostQuickEdit::class,
+    'row_links'    => $postLinks,
     'default_sort' => 'newest',
     'page_sizes'   => [8, 20, 50, 100],
     'columns'      => $postColumns,
@@ -190,6 +223,7 @@ $tables->register('content.pages', [
     'area'         => '/admin/pages',
     'provider'     => \App\Services\Table\PageTableProvider::class,
     'quick_edit'   => \App\Services\Table\PageQuickEdit::class,
+    'row_links'    => $postLinks,
     'default_sort' => 'newest',
     'page_sizes'   => [8, 20, 50, 100],
     'columns'      => $postColumns,

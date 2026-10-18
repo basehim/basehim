@@ -217,7 +217,9 @@ class PostController extends Controller
         $session = $this->app->make(\App\Core\Session::class);
 
         $categories = $tax->termsByTaxonomySlug('category');
-        $tags = $tax->termsByTaxonomySlug('tag');
+        // The tag box loads the post's own tags (PostEditorService::tagsField(),
+        // 1.2.62); listing every tag on the site here is no longer needed.
+        $tags = [];
         $selectedTermIds = $post ? array_column($posts->terms((int)$post['id']), 'id') : [];
         $seoData = $post ? $seo->forPost((int)$post['id']) : null;
 

@@ -176,6 +176,8 @@ final class TableService
             }
         }
 
+        $links = $this->links($table, $rows);
+
         // Phase B: pure render() per cell; no I/O here.
         $outRows = [];
         foreach ($rows as $row) {
@@ -187,7 +189,7 @@ final class TableService
                 'id'     => isset($row['id']) ? (int) $row['id'] : null,
                 'status' => isset($row['status']) ? (string) $row['status'] : null,
                 'cells'  => $cells,
-            ];
+            ] + (isset($row['id'], $links[(int) $row['id']]) ? ['link' => $links[(int) $row['id']]] : []);
         }
 
         return [
@@ -232,11 +234,36 @@ final class TableService
             }
             $cells[$col->id] = $this->cell($col, $raw, $prepared);
         }
+        $links = $this->links($table, [$raw]);
         return [
             'id'     => isset($raw['id']) ? (int) $raw['id'] : null,
             'status' => isset($raw['status']) ? (string) $raw['status'] : null,
             'cells'  => $cells,
-        ];
+        ] + (isset($raw['id'], $links[(int) $raw['id']]) ? ['link' => $links[(int) $raw['id']]] : []);
+    }
+
+    /**
+     * Each row's public address for View / Preview (1.2.62), from the table's
+     * row_links callable, once for the whole page. Only http(s) or
+     * root-relative URLs pass; a failing callable costs the links, not the page.
+     *
+     * @return array<int,array{url:string,live:bool}>
+     */
+    private function links(TableDefinition $table, array $rows): array
+    {
+        if ($table->rowLinks === null || $rows === []) return [];
+        try {
+            $raw = ($table->rowLinks)($rows);
+        } catch (\Throwable) {
+            return [];
+        }
+        $out = [];
+        foreach (is_array($raw) ? $raw : [] as $id => $l) {
+            $url = is_array($l) ? (string) ($l['url'] ?? '') : '';
+            if ($url === '' || !preg_match('#^(https?://|/)#i', $url) || str_starts_with($url, '//')) continue;
+            $out[(int) $id] = ['url' => $url, 'live' => !empty($l['live'])];
+        }
+        return $out;
     }
 
     /** Resolve and make-safe one cell's HTML. */

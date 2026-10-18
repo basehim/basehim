@@ -36,6 +36,12 @@ final class TableDefinition
         public readonly string $searchPlaceholder = 'Search…',
         /** A QuickEditor class, or null when the table has no Quick Edit (1.2.61). */
         public readonly ?string $quickEdit = null,
+        /**
+         * callable(array $rows): array<int,array{url:string,live:bool}> — the
+         * public address of each row, by id, for the View / Preview row action
+         * (1.2.62). Called once per page, like a column's prepare().
+         */
+        public readonly mixed $rowLinks = null,
     ) {
     }
 

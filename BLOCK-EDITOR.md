@@ -108,26 +108,36 @@ $this->registerBlockRenderer('acme/notice', fn(array $data, array $block) =>
 
 Filters: `blocks.pre_render`, `blocks.render.{type}` (receives the block with its `innerBlocks`), `blocks.rendered`, and `blocks.stylesheet` (return another URL, or an empty string to stop the front-end stylesheet being linked).
 
-## Publishing (1.2.60)
+## Publishing (1.2.60; shared fields 1.2.62)
 
-The sidebar's **Publish** panel chooses between publishing immediately and
-scheduling for a date and time in the site timezone (Settings → General). It
+The sidebar's **Publish** panel works in the site timezone (Settings →
+General). For a post that is not live it offers **Immediately** or
+**Schedule** (a future date and time); for a live post, **Keep date** or
+**Change date** — a date that has passed re-dates the post and it stays live,
+a future one takes it off the site until then (the editor asks first). It
 posts three fields with the editor form, all optional:
 
 | Field | Value |
 | --- | --- |
-| `publish_mode` | `now` or `schedule` |
+| `publish_mode` | `now`, `schedule`, `keep` or `date` |
 | `publish_date` | `Y-m-d`, site time |
 | `publish_time` | `H:i`, site time |
 
-The server decides (`App\Services\PostPublishing`): scheduling needs the type's
-publish capability and a time still ahead; publishing immediately uses the
-server's clock; a live post keeps its status and date on Update unless the
-author explicitly schedules it (the panel asks for confirmation first). A
-request it cannot honour keeps the stored status and date, saves the rest, and
-says why. The primary button follows the panel: Publish, Schedule, Publish now,
-Update, or Submit for review for roles that cannot publish. Save draft (AJAX)
-never sends these fields.
+The server decides (`App\Services\PostPublishing`): going out needs the
+type's publish capability; publishing immediately uses the server's clock; a
+request it cannot honour keeps the stored status and date, saves the rest and
+says why. The primary button follows the panel: Publish, Schedule, Publish
+now, Update, or Submit for review. Save draft (AJAX) never sends these fields.
+
+**Shared fields.** The Publish panel, Categories and Tags are drawn by
+`admin/assets/js/post-fields.js` (`BasehimPostFields.publish()`,
+`.categories()`, `.tags()`), the same components Quick Edit uses in the Posts
+and Pages lists. The server builds their settings
+(`PostPublishing::panel()`, `PostEditorService::categoriesField()` and
+`tagsField()`) and puts them on mount points (`data-bh-publish-mount`,
+`data-bh-categories-mount`, `data-bh-tags-mount`). The fields still post as
+`status`, `publish_*`, `term_ids[]` and `new_tags[]`, so apps that read the
+form are unaffected.
 
 ## Keyboard shortcuts
 
