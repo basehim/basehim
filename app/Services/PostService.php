@@ -207,6 +207,9 @@ class PostService
         if (isset($data['excerpt'])) $payload['excerpt'] = $data['excerpt'];
         if (isset($data['comment_status'])) $payload['comment_status'] = $data['comment_status'];
         if (isset($data['menu_order'])) $payload['menu_order'] = (int)$data['menu_order'];
+        // Who may change the author is the caller's decision (Quick Edit checks
+        // edit_others_{type}s and that the new author can edit the type).
+        if (isset($data['author_id']) && (int) $data['author_id'] > 0) $payload['author_id'] = (int) $data['author_id'];
         if (array_key_exists('featured_media_id', $data)) {
             $payload['featured_media_id'] = $data['featured_media_id'] ? (int)$data['featured_media_id'] : null;
         }

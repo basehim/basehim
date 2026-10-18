@@ -86,6 +86,11 @@ final class TableRegistry
 
         $defaultSort = (string) ($def['default_sort'] ?? '');
 
+        $quickEdit = $def['quick_edit'] ?? null;
+        if ($quickEdit !== null && (!is_string($quickEdit) || !is_a($quickEdit, QuickEditor::class, true))) {
+            throw new \InvalidArgumentException("Table '{$key}' quick_edit must be a class implementing QuickEditor.");
+        }
+
         $table = new TableDefinition(
             key: $key,
             label: (string) ($def['label'] ?? $key),
@@ -98,6 +103,7 @@ final class TableRegistry
             rowActions: array_values(array_map('strval', (array) ($def['row_actions'] ?? []))),
             bulkActions: array_values(array_map('strval', (array) ($def['bulk_actions'] ?? []))),
             searchPlaceholder: (string) ($def['search_placeholder'] ?? 'Search…'),
+            quickEdit: $quickEdit,
         );
 
         return $this->tables[$key] = $table;

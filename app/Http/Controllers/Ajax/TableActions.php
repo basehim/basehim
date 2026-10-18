@@ -126,6 +126,64 @@ final class TableActions
     }
 
     /**
+     * GET content.quick_edit — the Quick Edit form for one row (1.2.61).
+     *
+     * The table's capability and area are checked first (authorizedTable),
+     * then the table's QuickEditor checks the record itself: its type, whose
+     * it is, and which fields this user may change.
+     */
+    public function quickEditForm(AjaxContext $ctx): array
+    {
+        [$table, $editor] = $this->quickEditor($ctx);
+        $user = $ctx->user();
+        return ['form' => $editor->form((int) $ctx->input('id'), $user)];
+    }
+
+    /**
+     * POST content.quick_edit_save — save the changed fields and return the
+     * row re-rendered with the table's own columns, so the client replaces it
+     * in place without reloading the table (1.2.61).
+     */
+    public function quickEditSave(AjaxContext $ctx): array
+    {
+        [$table, $editor] = $this->quickEditor($ctx);
+        $user = $ctx->user();
+        $values = json_decode((string) $ctx->input('values'), true, 6);
+        if (!is_array($values) || array_is_list($values) && $values !== []) {
+            throw AjaxException::invalid('The changes could not be read.', ['values' => ['Send the changed fields as a JSON object.']]);
+        }
+        $result = $editor->save((int) $ctx->input('id'), $values, $user, [
+            'version' => (string) $ctx->input('version', ''),
+            'confirm' => (bool) $ctx->input('confirm', false),
+        ]);
+
+        $columnIds = $this->decodeList((string) $ctx->input('columns', ''));
+        if ($columnIds === []) {
+            $permitted = $this->registry->columnsFor($table->key, $user);
+            $columnIds = $this->preferences->resolve($ctx->userId(), $table, $permitted)['visible'];
+        }
+        $ctx->log('Quick edit', ['table' => $table->key, 'id' => (int) $ctx->input('id'), 'fields' => array_keys($values)]);
+
+        return [
+            'row'     => $this->service->renderRow($table, $user, $result['row'], $columnIds),
+            'version' => $result['version'],
+            'notices' => $result['notices'],
+        ];
+    }
+
+    /** @return array{0:TableDefinition,1:\App\Core\Table\QuickEditor} */
+    private function quickEditor(AjaxContext $ctx): array
+    {
+        $table = $this->authorizedTable($ctx);
+        if ($table->quickEdit === null) {
+            throw AjaxException::notFound('This table has no Quick Edit.');
+        }
+        /** @var \App\Core\Table\QuickEditor $editor */
+        $editor = \App\Core\Application::getInstance()->make($table->quickEdit);
+        return [$table, $editor];
+    }
+
+    /**
      * Resolve the requested table and enforce its capability and area. A
      * table nobody registered is a 404; a table this user may not see is a 403
      * — the same answers the screen itself would give.

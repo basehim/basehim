@@ -27,7 +27,8 @@
         'squares': 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
         'magnifying-glass': 'M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z',
         'x-mark': 'M6 6l12 12M18 6L6 18',
-        'funnel': 'M3 5h18l-7 8v5l-4 2v-7L3 5z'
+        'funnel': 'M3 5h18l-7 8v5l-4 2v-7L3 5z',
+        'bolt': 'M13 2 4 14h7l-1 8 9-12h-7l1-8z'
     };
     var DOTS = 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01';
     var VDOTS = 'M12 6h.01M12 12h.01M12 18h.01';
@@ -163,9 +164,10 @@
         function renderBody() {
             var rows = payload.rows || [];
             r.body.innerHTML = ''; r.cards.innerHTML = '';
-            if (!rows.length) { renderEmpty(); syncBulk(); return; }
+            if (!rows.length) { renderEmpty(); syncBulk(); quickEdit.rehost(); return; }
             rows.forEach(function (row) { r.body.appendChild(buildRow(row)); r.cards.appendChild(buildCard(row)); });
             syncBulk();
+            quickEdit.rehost();
         }
         function rowCheckbox(row) {
             var cb = el('input'); cb.type = 'checkbox'; cb.className = 'bh-dt-rowcheck'; cb.checked = selected[row.id] !== undefined;
@@ -230,6 +232,7 @@
         function openMenu(btn, row) {
             var items = [];
             if (cfg.editBase) items.push({ label: 'Edit', icon: 'pencil-square', href: cfg.editBase.replace('{id}', row.id) });
+            if (payload.quick_edit) items.push({ label: 'Quick Edit', icon: 'bolt', quick: true, id: row.id });
             var bulk = payload.bulk_actions || [];
             if (bulk.indexOf('publish') !== -1 && row.status !== 'published') items.push({ label: 'Publish', icon: 'arrow-up-tray', action: 'publish', id: row.id });
             if (bulk.indexOf('draft') !== -1 && row.status === 'published') items.push({ label: 'Move to Draft', icon: 'arrow-down-tray', action: 'draft', id: row.id });
@@ -245,6 +248,7 @@
                 if (it.danger) node.classList.add('bh-dt-menu__item--danger');
                 node.innerHTML = icon(it.icon) + '<span>' + esc(it.label) + '</span>';
                 if (it.href) { node.href = it.href; }
+                else if (it.quick) node.addEventListener('click', function () { closeMenu(); quickEdit.open(row, btn); });
                 else node.addEventListener('click', function () { closeMenu(); runBulk(it.action, [it.id]); });
                 menu.appendChild(node);
             });
@@ -260,6 +264,372 @@
         document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu(); });
         window.addEventListener('resize', closeMenu);
         root.addEventListener('scroll', closeMenu, true);
+
+        // --- Quick Edit (1.2.61) ----------------------------------------------
+        // An inline form under one row, built from the field list the table's
+        // QuickEditor returns (content.quick_edit). Saving sends only the
+        // fields that changed (content.quick_edit_save) and replaces that row
+        // with the re-rendered one: the table's search, filters, sort, page and
+        // selection stay as they are. The server checks everything again; this
+        // only shows what the user may change.
+        var quickEdit = (function () {
+            var cur = null;   // { id, row, opener, panel, form, fields, initial, inputs, version, busy }
+            var seq = 0;
+
+            function columnIds() { return columns.map(function (c) { return c.id; }); }
+            function tableVisible() { return !!(r.body && r.body.closest('table') && r.body.closest('table').offsetParent !== null); }
+            function rowEls(id) {
+                return {
+                    tr: r.body.querySelector('tr[data-dt-row="' + id + '"]'),
+                    card: r.cards.querySelector('[data-dt-rowid="' + id + '"]')
+                };
+            }
+            function text(tag, cls, t) { var n = el(tag, cls); n.textContent = t == null ? '' : String(t); return n; }
+
+            /** Put the panel right under its row: a full-width row in the table, or after the card. */
+            function host() {
+                if (!cur) return false;
+                var els = rowEls(cur.id);
+                if (cur.hostRow && cur.hostRow.parentNode) cur.hostRow.parentNode.removeChild(cur.hostRow);
+                if (cur.panel.parentNode) cur.panel.parentNode.removeChild(cur.panel);
+                if (els.tr && (tableVisible() || !els.card)) {
+                    var tr = el('tr', 'bh-dt-qe-host'); tr.setAttribute('data-dt-qe-for', cur.id);
+                    var td = el('td'); td.colSpan = 99; td.appendChild(cur.panel); tr.appendChild(td);
+                    els.tr.parentNode.insertBefore(tr, els.tr.nextSibling);
+                    els.tr.classList.add('is-quick-editing');
+                    cur.hostRow = tr;
+                    return true;
+                }
+                if (els.card) {
+                    els.card.parentNode.insertBefore(cur.panel, els.card.nextSibling);
+                    els.card.classList.add('is-quick-editing');
+                    cur.hostRow = null;
+                    return true;
+                }
+                return false;
+            }
+
+            function open(row, opener) {
+                if (cur && cur.id === row.id) { focusFirst(); return; }
+                var go = function () { close(true); start(row, opener); };
+                if (cur && isDirty()) {
+                    ask('Discard your unsaved Quick Edit changes to "' + cur.title + '"?', { danger: true, confirmLabel: 'Discard', cancelLabel: 'Keep editing' })
+                        .then(function (ok) { if (ok) go(); });
+                    return;
+                }
+                go();
+            }
+
+            function start(row, opener) {
+                var my = ++seq;
+                var panel = el('section', 'bh-dt-qe');
+                panel.setAttribute('role', 'region');
+                panel.setAttribute('aria-label', 'Quick Edit');
+                panel.setAttribute('aria-busy', 'true');
+                panel.appendChild(el('div', 'bh-dt-qe__loading', '<span class="bh-dt-spinner"></span>'));
+                panel.lastChild.appendChild(text('span', '', 'Loading…'));
+                cur = { id: row.id, row: row, opener: opener || null, panel: panel, title: '', busy: false, inputs: {}, errors: {} };
+                host();
+                window.Basehim.ajax.get('content.quick_edit', { table: cfg.table, id: row.id }).then(function (d) {
+                    if (!cur || seq !== my) return;
+                    build(d.form);
+                }).catch(function (err) {
+                    if (!cur || seq !== my) return;
+                    panel.removeAttribute('aria-busy');
+                    panel.innerHTML = '';
+                    var box = el('div', 'bh-dt-qe__msg bh-dt-qe__msg--error'); box.setAttribute('role', 'alert');
+                    box.appendChild(text('span', '', (err && err.message) || 'Quick Edit could not be opened.'));
+                    var close1 = text('button', 'bh-btn bh-btn--secondary bh-btn--sm', 'Close'); close1.type = 'button';
+                    close1.addEventListener('click', function () { close(true); });
+                    box.appendChild(close1); panel.appendChild(box); close1.focus();
+                });
+            }
+
+            function build(form) {
+                var panel = cur.panel;
+                cur.version = form.version;
+                cur.fields = form.fields || [];
+                cur.title = form.title || '';
+                cur.initial = {};
+                panel.removeAttribute('aria-busy');
+                panel.innerHTML = '';
+                panel.setAttribute('aria-label', 'Quick Edit: ' + cur.title);
+
+                var f = el('form', 'bh-dt-qe__form'); f.noValidate = true; f.setAttribute('novalidate', '');
+                var head = el('div', 'bh-dt-qe__head');
+                head.appendChild(text('h3', 'bh-dt-qe__title', 'Quick Edit'));
+                head.appendChild(text('span', 'bh-dt-qe__sub', cur.title));
+                f.appendChild(head);
+                var banner = el('div', 'bh-dt-qe__msg'); banner.hidden = true; banner.setAttribute('role', 'alert');
+                f.appendChild(banner); cur.banner = banner;
+                var grid = el('div', 'bh-dt-qe__grid');
+                cur.fields.forEach(function (fd) { grid.appendChild(field(fd)); });
+                f.appendChild(grid);
+
+                var actions = el('div', 'bh-dt-qe__actions');
+                var save = text('button', 'bh-btn bh-btn--primary bh-btn--sm', 'Save'); save.type = 'submit';
+                var cancel = text('button', 'bh-btn bh-btn--secondary bh-btn--sm', 'Cancel'); cancel.type = 'button';
+                cancel.addEventListener('click', function () { close(false); });
+                actions.appendChild(save); actions.appendChild(cancel);
+                f.appendChild(actions);
+                cur.save = save;
+                f.addEventListener('submit', function (e) { e.preventDefault(); submit(false); });
+                f.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); close(false); } });
+                panel.appendChild(f);
+                cur.form = f;
+                applyShowWhen();
+                focusFirst();
+            }
+
+            function fieldId(name) { return 'bh-dt-qe-' + cfg.table.replace(/\W/g, '-') + '-' + name; }
+
+            function field(fd) {
+                var wrap = el('div', 'bh-dt-qe__field' + (fd.wide ? ' is-wide' : '') + ' bh-dt-qe__field--' + fd.type);
+                wrap.setAttribute('data-qe-field', fd.name);
+                var id = fieldId(fd.name), input, value = fd.value;
+                var label = text('label', 'bh-label', fd.label);
+                label.htmlFor = id; label.setAttribute('for', id);
+
+                if (fd.type === 'select') {
+                    input = el('select', 'bh-select');
+                    (fd.options || []).forEach(function (o) {
+                        var opt = el('option'); opt.value = String(o.value); opt.textContent = o.label;
+                        if (String(o.value) === String(value)) opt.selected = true;
+                        input.appendChild(opt);
+                    });
+                    input.value = String(value == null ? '' : value);
+                    cur.initial[fd.name] = input.value;
+                } else if (fd.type === 'toggle') {
+                    wrap.classList.add('is-toggle');
+                    input = el('input', 'bh-dt-qe__check'); input.type = 'checkbox'; input.checked = !!value;
+                    cur.initial[fd.name] = !!value;
+                } else if (fd.type === 'checklist') {
+                    label = text('span', 'bh-label', fd.label); label.id = id + '-label';
+                    input = el('div', 'bh-dt-qe__checklist'); input.setAttribute('role', 'group'); input.setAttribute('aria-labelledby', id + '-label');
+                    input.id = id;
+                    var chosen = (value || []).map(String);
+                    var opts = fd.options || [];
+                    if (opts.length > 8) {
+                        var filter = el('input', 'bh-input bh-input--sm bh-dt-qe__filter'); filter.type = 'search';
+                        filter.placeholder = 'Filter ' + fd.label.toLowerCase() + '…'; filter.setAttribute('aria-label', 'Filter ' + fd.label.toLowerCase());
+                        filter.addEventListener('input', function () {
+                            var q = filter.value.trim().toLowerCase();
+                            input.querySelectorAll('.bh-dt-qe__opt').forEach(function (n) { n.hidden = q !== '' && n.textContent.toLowerCase().indexOf(q) === -1; });
+                        });
+                        wrap.appendChild(label); wrap.appendChild(filter); label = null;
+                    }
+                    if (!opts.length) input.appendChild(text('p', 'bh-help', 'None yet.'));
+                    opts.forEach(function (o) {
+                        var row = el('label', 'bh-dt-qe__opt');
+                        var cb = el('input'); cb.type = 'checkbox'; cb.value = String(o.value); cb.checked = chosen.indexOf(String(o.value)) !== -1;
+                        row.appendChild(cb); row.appendChild(text('span', '', o.label));
+                        input.appendChild(row);
+                    });
+                    cur.initial[fd.name] = chosen.slice().sort().join(',');
+                } else {
+                    input = el('input', 'bh-input');
+                    input.type = { number: 'number', date: 'date', time: 'time' }[fd.type] || 'text';
+                    if (fd.type === 'slug') { input.setAttribute('spellcheck', 'false'); input.setAttribute('autocapitalize', 'off'); }
+                    if (fd.type === 'time') input.step = 60;
+                    if (fd.type === 'number') { if (fd.min != null) input.min = fd.min; if (fd.max != null) input.max = fd.max; input.step = 1; }
+                    else if (fd.max) input.maxLength = fd.max;
+                    if (fd.required) { input.required = true; input.setAttribute('aria-required', 'true'); }
+                    input.value = value == null ? '' : String(value);
+                    cur.initial[fd.name] = input.value;
+                }
+                if (fd.type !== 'checklist') input.id = id;
+                input.name = fd.name;
+                var described = [];
+                if (fd.help) { var h = text('p', 'bh-help', fd.help); h.id = id + '-help'; described.push(h.id); }
+                var err = el('p', 'bh-dt-qe__error'); err.id = id + '-error'; err.hidden = true;
+                described.push(err.id);
+                input.setAttribute('aria-describedby', described.join(' '));
+
+                if (fd.type === 'toggle') { var lab = el('label', 'bh-dt-qe__togglelabel'); lab.appendChild(input); lab.appendChild(text('span', '', fd.label)); wrap.appendChild(lab); }
+                else { if (label) wrap.appendChild(label); wrap.appendChild(input); }
+                if (fd.help) wrap.appendChild(h);
+                wrap.appendChild(err);
+
+                var onChange = function () { clearError(fd.name); applyShowWhen(); };
+                input.addEventListener('input', onChange);
+                input.addEventListener('change', onChange);
+                cur.inputs[fd.name] = { def: fd, input: input, wrap: wrap, error: err };
+                return wrap;
+            }
+
+            function valueOf(name) {
+                var x = cur.inputs[name]; if (!x) return undefined;
+                if (x.def.type === 'toggle') return !!x.input.checked;
+                if (x.def.type === 'checklist') {
+                    var out = []; x.input.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { if (cb.checked) out.push(cb.value); });
+                    return out;
+                }
+                return x.input.value;
+            }
+            function comparable(name, v) { return cur.inputs[name].def.type === 'checklist' ? v.slice().sort().join(',') : v; }
+            function changes() {
+                var out = {};
+                Object.keys(cur.inputs).forEach(function (name) {
+                    var v = valueOf(name);
+                    if (comparable(name, v) !== cur.initial[name]) out[name] = v;
+                });
+                // A schedule is a status plus its time: they travel together,
+                // and the (hidden) time fields mean nothing for other statuses.
+                var status = cur.inputs.status ? valueOf('status') : undefined;
+                if (status === 'scheduled' && ('status' in out || 'publish_date' in out || 'publish_time' in out)) {
+                    out.status = status;
+                    if (cur.inputs.publish_date) out.publish_date = valueOf('publish_date');
+                    if (cur.inputs.publish_time) out.publish_time = valueOf('publish_time');
+                } else {
+                    delete out.publish_date; delete out.publish_time;
+                }
+                return out;
+            }
+            function isDirty() { return !!(cur && cur.inputs && Object.keys(changes()).length); }
+
+            function applyShowWhen() {
+                Object.keys(cur.inputs).forEach(function (name) {
+                    var x = cur.inputs[name], w = x.def.show_when;
+                    if (!w || !cur.inputs[w.field]) return;
+                    x.wrap.hidden = (w.in || []).indexOf(String(valueOf(w.field))) === -1;
+                });
+            }
+            function focusFirst() {
+                if (!cur || !cur.form) return;
+                var first = cur.form.querySelector('input:not([type="hidden"]), select');
+                if (first) first.focus();
+            }
+
+            function clearError(name) {
+                var x = cur && cur.inputs[name]; if (!x) return;
+                x.error.hidden = true; x.error.textContent = ''; x.input.removeAttribute('aria-invalid'); x.wrap.classList.remove('has-error');
+            }
+            function showErrors(fields) {
+                var firstBad = null;
+                Object.keys(fields || {}).forEach(function (name) {
+                    var x = cur.inputs[name];
+                    var msg = [].concat(fields[name]).join(' ');
+                    if (!x) { setBanner('error', msg); return; }
+                    x.error.textContent = msg; x.error.hidden = false; x.wrap.hidden = false;
+                    x.input.setAttribute('aria-invalid', 'true'); x.wrap.classList.add('has-error');
+                    if (!firstBad) firstBad = x.input;
+                });
+                if (firstBad && firstBad.focus) firstBad.focus();
+            }
+            function setBanner(kind, msg) {
+                if (!cur || !cur.banner) return;
+                cur.banner.className = 'bh-dt-qe__msg' + (kind ? ' bh-dt-qe__msg--' + kind : '');
+                cur.banner.textContent = msg || '';
+                cur.banner.hidden = !msg;
+            }
+
+            function submit(confirmed) {
+                if (!cur || cur.busy || !cur.form) return;
+                var values = changes();
+                Object.keys(cur.inputs).forEach(clearError);
+                setBanner('', '');
+                if (!Object.keys(values).length) { close(false); return; }
+                // Client-side checks first, so a typo costs no round trip.
+                var local = {};
+                Object.keys(values).forEach(function (name) {
+                    var d = cur.inputs[name].def, v = values[name];
+                    if (d.required && typeof v === 'string' && v.trim() === '') local[name] = d.label + ' is required.';
+                });
+                if (values.status === 'scheduled' && cur.inputs.publish_date && (!values.publish_date || !values.publish_time)) {
+                    local.publish_date = 'Choose a date and a time to schedule it for.';
+                }
+                if (Object.keys(local).length) { showErrors(local); return; }
+
+                var st = cur.inputs.status && cur.inputs.status.def.confirm;
+                if (!confirmed && st && values.status !== undefined && st.from.indexOf(cur.initial.status) !== -1 && st.to.indexOf(values.status) !== -1) {
+                    ask(st.message, { danger: true, confirmLabel: 'Continue', cancelLabel: 'Cancel' }).then(function (ok) { if (ok) submit(true); });
+                    return;
+                }
+                send(values, !!confirmed);
+            }
+
+            function send(values, confirmed) {
+                var my = cur;
+                my.busy = true;
+                my.panel.setAttribute('aria-busy', 'true');
+                var loader = window.bhLoader ? window.bhLoader(my.save, 'Saving…') : null;
+                if (!loader) { my.save.disabled = true; }
+                var body = { table: cfg.table, id: my.id, version: my.version, values: JSON.stringify(values), columns: JSON.stringify(columnIds()) };
+                if (confirmed) body.confirm = true;
+                window.Basehim.ajax.request('content.quick_edit_save', body, { timeout: 30000 }).then(function (d) {
+                    if (loader) loader.done('Saved');
+                    replaceRow(d.row);
+                    var notes = d.notices || [];
+                    if (window.bhToast) window.bhToast(notes.length ? 'Saved. ' + notes.join(' ') : 'Saved', notes.length ? 'info' : 'success');
+                    if (cur === my) close(true, true);
+                }).catch(function (err) {
+                    if (cur !== my) return;
+                    if (loader) loader.fail('Not saved');
+                    var code = err && err.code;
+                    if (code === 'CONFIRM_REQUIRED') {
+                        ask(err.message, { danger: true, confirmLabel: 'Continue', cancelLabel: 'Cancel' }).then(function (ok) { if (ok) { my.busy = false; send(values, true); } });
+                        return;
+                    }
+                    if (err && err.fields && Object.keys(err.fields).length) showErrors(err.fields);
+                    var msg = (err && err.message) || 'Not saved.';
+                    if (code === 'NETWORK_ERROR' || code === 'TIMEOUT' || code === 'BAD_RESPONSE' || code === 'INTERNAL_ERROR') {
+                        msg = 'Not saved: ' + msg + ' Your changes are still here; try again.';
+                    }
+                    setBanner('error', msg);
+                }).then(function () {
+                    my.busy = false;
+                    my.panel.removeAttribute('aria-busy');
+                    if (!loader && my.save) my.save.disabled = false;
+                });
+            }
+
+            /** Swap the row (and its card) for the re-rendered one; keep selection. */
+            function replaceRow(row) {
+                if (!row || row.id == null) return;
+                var rows = payload.rows || [];
+                for (var i = 0; i < rows.length; i++) if (rows[i].id === row.id) rows[i] = row;
+                if (selected[row.id] !== undefined) selected[row.id] = row.status || '';
+                var els = rowEls(row.id);
+                if (els.tr) { var tr = buildRow(row); els.tr.parentNode.replaceChild(tr, els.tr); tr.classList.add('is-updated'); }
+                if (els.card) { var c = buildCard(row); els.card.parentNode.replaceChild(c, els.card); c.classList.add('is-updated'); }
+                syncBulk();
+            }
+
+            function close(force, saved) {
+                if (!cur) return;
+                if (!force && isDirty() && !saved) {
+                    var c0 = cur;
+                    ask('Discard your unsaved Quick Edit changes?', { danger: true, confirmLabel: 'Discard', cancelLabel: 'Keep editing' })
+                        .then(function (ok) { if (ok && cur === c0) close(true); });
+                    return;
+                }
+                var c = cur; cur = null; seq++;
+                if (c.hostRow && c.hostRow.parentNode) c.hostRow.parentNode.removeChild(c.hostRow);
+                if (c.panel.parentNode) c.panel.parentNode.removeChild(c.panel);
+                root.querySelectorAll('.is-quick-editing').forEach(function (n) { n.classList.remove('is-quick-editing'); });
+                // Back to where the user was: the row's actions button.
+                var els = rowEls(c.id);
+                var back = (els.tr && els.tr.querySelector('.bh-dt-actbtn')) || (els.card && els.card.querySelector('.bh-dt-actbtn')) || c.opener;
+                if (back && back.focus) back.focus();
+            }
+
+            function ask(message, opts) {
+                return window.bhConfirm ? window.bhConfirm(message, opts) : Promise.resolve(window.confirm(message));
+            }
+
+            return {
+                open: open,
+                close: close,
+                isOpen: function () { return !!cur; },
+                isDirty: isDirty,
+                /** After the table re-renders: keep the panel under its row, or close it if the row is gone. */
+                rehost: function () { if (cur && !host()) { var c = cur; cur = null; seq++; if (c.panel.parentNode) c.panel.parentNode.removeChild(c.panel); } }
+            };
+        })();
+        // Crossing the mobile breakpoint swaps table rows for cards: follow the row.
+        window.addEventListener('resize', debounce(function () { quickEdit.rehost(); }, 200));
+        // Leaving the page with unsaved Quick Edit changes asks first.
+        window.addEventListener('beforeunload', function (e) { if (quickEdit.isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
         // --- footer / pagination ---------------------------------------------
         function renderFoot() {
@@ -355,6 +725,7 @@
         function setView(v) {
             if (['table', 'list', 'grid'].indexOf(v) === -1 || v === state.view) return;
             state.view = v; root.setAttribute('data-view', v);
+            quickEdit.rehost();   // the open Quick Edit follows its row into the new view
             root.querySelectorAll('[data-dt-view]').forEach(function (btn) {
                 btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === v);
             });

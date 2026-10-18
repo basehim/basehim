@@ -331,6 +331,36 @@ $ajax->register('content.table_terms', [
     'description' => 'Taxonomy terms for a data-table multi-select filter.',
 ]);
 
+// Quick Edit (1.2.61): one form read and one save for every table that
+// declares a QuickEditor. The table's capability and area are checked in the
+// handler, the record and each field by the editor.
+$ajax->register('content.quick_edit', [
+    'handler'     => [TableActions::class, 'quickEditForm'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'input'       => [
+        'table' => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-z0-9_.]+$/'],
+        'id'    => 'required|int|min:1',
+    ],
+    'description' => 'The Quick Edit form for one row of a data table.',
+]);
+
+$ajax->register('content.quick_edit_save', [
+    'handler'     => [TableActions::class, 'quickEditSave'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => [
+        'table'   => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-z0-9_.]+$/'],
+        'id'      => 'required|int|min:1',
+        'version' => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-f0-9]+$/'],
+        'values'  => 'required|string|max:20000',   // JSON object of changed fields, checked by the table's QuickEditor
+        'confirm' => 'bool',
+        'columns' => 'string|max:2000',             // JSON array: the columns the client shows
+    ],
+    'description' => 'Save the changed Quick Edit fields of one row and return the row re-rendered.',
+]);
+
 $ajax->register('content.table_prefs', [
     'handler'     => [TableActions::class, 'savePrefs'],
     'capability'  => 'read',

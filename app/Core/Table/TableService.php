@@ -204,6 +204,38 @@ final class TableService
             'page_sizes'   => $table->pageSizes,
             'bulk_actions' => $table->bulkActions,
             'row_actions'  => $table->rowActions,
+            'quick_edit'   => $table->quickEdit !== null,
+        ];
+    }
+
+    /**
+     * One row, rendered exactly as build() renders it, for updating a row in
+     * place after Quick Edit (1.2.61). The same columns (core and app,
+     * capability-gated), the same two-phase prepare()/render(), the same
+     * escaping — just for a single record.
+     *
+     * @param array    $raw       the row in the provider's shape (e.g. PostService::find())
+     * @param string[] $columnIds the columns the client is showing; others are skipped
+     * @return array{id:?int,status:?string,cells:array<string,string>}
+     */
+    public function renderRow(TableDefinition $table, ?array $user, array $raw, array $columnIds): array
+    {
+        $permitted = $this->registry->columnsFor($table->key, $user);
+        $want = array_flip(array_filter($columnIds, 'is_string'));
+        $visible = array_values(array_filter($permitted, fn(Column $c) => isset($want[$c->id]) || !$c->canHide));
+
+        $cells = [];
+        foreach ($visible as $col) {
+            $prepared = null;
+            if ($col->prepare !== null) {
+                try { $prepared = ($col->prepare)([$raw]); } catch (\Throwable) { $prepared = null; }
+            }
+            $cells[$col->id] = $this->cell($col, $raw, $prepared);
+        }
+        return [
+            'id'     => isset($raw['id']) ? (int) $raw['id'] : null,
+            'status' => isset($raw['status']) ? (string) $raw['status'] : null,
+            'cells'  => $cells,
         ];
     }
 

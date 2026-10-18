@@ -34,6 +34,8 @@ final class TableDefinition
         public readonly array $rowActions = [],
         public readonly array $bulkActions = [],
         public readonly string $searchPlaceholder = 'Search…',
+        /** A QuickEditor class, or null when the table has no Quick Edit (1.2.61). */
+        public readonly ?string $quickEdit = null,
     ) {
     }
 

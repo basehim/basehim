@@ -114,6 +114,52 @@ final class PostEditorService
             && ($this->canPublish($user, $type) || CheckCapability::userCan($user, 'manage_taxonomies'));
     }
 
+    /** May the user edit other people's posts of this type (edit_others_{family}s)? */
+    public function canEditOthers(?array $user, string $type): bool
+    {
+        return $user !== null && CheckCapability::userCan($user, $this->capability($type, 'edit_others'));
+    }
+
+    /** Whether the category taxonomy applies to this type (config/cms.php). */
+    public function hasCategories(string $type): bool
+    {
+        try {
+            $types = (array) ($this->app->make(\App\Core\Config::class)->get('cms.taxonomies.category.post_types', ['post']));
+        } catch (\Throwable) {
+            $types = ['post'];
+        }
+        return in_array($type, $types, true);
+    }
+
+    /**
+     * The type's definition from config/cms.php (content_types) or the type
+     * registry: `supports`, `hierarchical` … Empty for an unknown type.
+     */
+    public function typeDefinition(string $type): array
+    {
+        try {
+            $def = (array) $this->app->make(\App\Core\Config::class)->get('cms.content_types.' . $type, []);
+            if ($def !== []) return $def;
+        } catch (\Throwable) {}
+        try {
+            return (array) ($this->app->make(PostTypeRegistry::class)->get($type) ?? []);
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /** Whether a type declares a feature in its `supports` list ('comments', 'author' …). */
+    public function supports(string $type, string $feature): bool
+    {
+        return in_array($feature, (array) ($this->typeDefinition($type)['supports'] ?? []), true);
+    }
+
+    /** Whether the type has parents and an order (pages). */
+    public function isHierarchical(string $type): bool
+    {
+        return !empty($this->typeDefinition($type)['hierarchical']);
+    }
+
     /** Whether the tag taxonomy applies to this type (config/cms.php). */
     public function hasTags(string $type): bool
     {
