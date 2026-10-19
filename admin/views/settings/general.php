@@ -29,11 +29,61 @@
                     <p class="text-xs text-slate-500 mt-1">A short description of your site.</p>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Admin Email</label>
-                    <input type="email" name="admin_email" value="<?= htmlspecialchars($values['admin_email'] ?? '') ?>"
+                <?php
+                    // Administration email (1.2.66): where site notices go. When it is
+                    // your own account's address, you can change your account with it.
+                    $adminEmailNow = strtolower(trim((string) ($values['admin_email'] ?? '')));
+                    $myEmail = strtolower(trim((string) ($currentUser['email'] ?? '')));
+                ?>
+                <div data-admin-email data-initial="<?= htmlspecialchars($adminEmailNow) ?>" data-account="<?= htmlspecialchars($myEmail) ?>">
+                    <label for="bh-admin-email" class="block text-sm font-medium text-slate-700 mb-1.5">Administration Email</label>
+                    <input type="email" id="bh-admin-email" name="admin_email" value="<?= htmlspecialchars($values['admin_email'] ?? '') ?>"
                         class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+                    <p class="text-xs text-slate-500 mt-1">Where site notices go, such as new comments. Also saved as ADMIN_EMAIL in .env.
+                        Your sign-in email is set on <a href="<?= $base ?>/admin/profile" class="text-blue-600 hover:underline">My Profile</a>.</p>
+                    <div data-admin-email-account hidden class="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                        <label class="flex items-start gap-2 text-sm text-slate-700">
+                            <input type="checkbox" name="admin_email_account" value="1" checked class="mt-0.5">
+                            <span>Also change my account email (<strong data-admin-email-mine><?= htmlspecialchars($myEmail) ?></strong>), so I sign in with the new address</span>
+                        </label>
+                        <div data-admin-email-password>
+                            <label for="bh-admin-email-password" class="block text-xs font-medium text-slate-600 mb-1">Current password</label>
+                            <input type="password" id="bh-admin-email-password" name="admin_email_password" autocomplete="current-password"
+                                class="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none bg-white">
+                            <p class="text-xs text-slate-500 mt-1">Needed to change your account email, as on My Profile. With two-step verification on, a code is sent to the new address first.</p>
+                        </div>
+                    </div>
                 </div>
+                <script>
+                (function () {
+                    var box = document.querySelector('[data-admin-email]');
+                    if (!box) return;
+                    var input = box.querySelector('input[name="admin_email"]');
+                    var panel = box.querySelector('[data-admin-email-account]');
+                    var check = box.querySelector('input[name="admin_email_account"]');
+                    var pw = box.querySelector('[data-admin-email-password]');
+                    function norm(v) { return String(v || '').trim().toLowerCase(); }
+                    function sync() {
+                        var initial = box.getAttribute('data-initial'), mine = box.getAttribute('data-account');
+                        // Only when the address being replaced is your own account's.
+                        panel.hidden = !(mine && initial === mine && norm(input.value) !== initial && norm(input.value) !== '');
+                        pw.hidden = !check.checked;
+                    }
+                    input.addEventListener('input', sync);
+                    check.addEventListener('change', sync);
+                    // After an in-page save (settings-save.js), what was saved is the new starting point.
+                    box.closest('form').addEventListener('bh:settings-saved', function (e) {
+                        var d = (e && e.detail) || {};
+                        if (d.values && typeof d.values.admin_email === 'string') box.setAttribute('data-initial', norm(d.values.admin_email));
+                        if (typeof d.account_email === 'string') {
+                            box.setAttribute('data-account', norm(d.account_email));
+                            var m = box.querySelector('[data-admin-email-mine]'); if (m) m.textContent = norm(d.account_email);
+                        }
+                        sync();
+                    });
+                    sync();
+                })();
+                </script>
 
 <?php
                     // Timezone, date and time formats (1.2.45). Times are stored in UTC

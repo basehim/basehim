@@ -556,9 +556,16 @@ $v = urlencode(BASEHIM_VERSION);
     }
     function pickImage() {
         BasehimMedia.openPicker({
+            // 1.2.67: images only, with the current one already selected.
+            types: 'image/*',
+            title: 'Featured image',
+            confirmLabel: 'Set featured image',
+            selected: idInput.value || null,
             onSelect: function (media) {
                 idInput.value = media.id;
-                thumb.src = media.url;
+                var sz = media.sizes;
+                if (typeof sz === 'string') { try { sz = JSON.parse(sz); } catch (e) { sz = null; } }
+                thumb.src = (sz && sz.medium && sz.medium.url) || media.url;
                 preview.classList.remove('hidden');
                 btnSelect.classList.add('hidden');
                 window.BasehimEditorDirty = true;

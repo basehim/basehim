@@ -723,7 +723,13 @@ function Placeholder(opts) {
 function pickMedia(onPick, opts) {
   opts = opts || {};
   if (window.BasehimMedia && BasehimMedia.openPicker) {
-    BasehimMedia.openPicker({ onSelect: function (m) { if (m) onPick(m); } });
+    // 1.2.67: the picker lists only what the block can use (opts.accept, as
+    // the block's upload input has it), and a gallery can take several.
+    BasehimMedia.openPicker({
+      types: opts.accept || '',
+      multiple: !!opts.multiple,
+      onSelect: function (m) { if (m) onPick(m); }
+    });
   } else {
     promptDialog(opts.urlLabel || 'File URL', '', function (url) { if (url) onPick({ url: url }); });
   }
@@ -2217,7 +2223,7 @@ function ui(body, b) {
       var box = h('div', { class: 'bhe-mediafield' });
       if (url) box.appendChild(h('img', { src: url, alt: '' }));
       box.appendChild(h('div', { class: 'bhe-mediafield__actions' }, [
-        h('button', { type: 'button', class: 'bhe-btn bhe-btn--secondary bhe-btn--small', text: url ? 'Replace' : 'Choose', onclick: function () { pickMedia(onPick); } }),
+        h('button', { type: 'button', class: 'bhe-btn bhe-btn--secondary bhe-btn--small', text: url ? 'Replace' : 'Choose', onclick: function () { pickMedia(onPick, { accept: 'image/*' }); } }),
         url && onClear ? h('button', { type: 'button', class: 'bhe-btn bhe-btn--tertiary bhe-btn--small is-danger', text: 'Remove', onclick: onClear }) : null
       ]));
       return field(label, null, box);
@@ -2731,7 +2737,7 @@ function mediaPlaceholderButtons(row, opts) {
       chooseAndUpload(opts.accept, opts.multiple, function (m) { if (m) opts.onPick(m); }, opts.onStart);
     } }));
   }
-  row.appendChild(h('button', { type: 'button', class: 'bhe-btn bhe-btn--secondary', text: 'Media Library', onclick: function (e) { e.stopPropagation(); pickMedia(opts.onPick, { urlLabel: opts.urlLabel }); } }));
+  row.appendChild(h('button', { type: 'button', class: 'bhe-btn bhe-btn--secondary', text: 'Media Library', onclick: function (e) { e.stopPropagation(); pickMedia(opts.onPick, { urlLabel: opts.urlLabel, accept: opts.accept, multiple: opts.multiple }); } }));
   var urlBtn = h('button', { type: 'button', class: 'bhe-btn bhe-btn--tertiary', text: 'Insert from URL' });
   urlBtn.addEventListener('click', function (e) {
     e.stopPropagation();
@@ -2742,7 +2748,7 @@ function mediaPlaceholderButtons(row, opts) {
 
 function replaceMediaMenu(btn, opts) {
   var items = [
-    { icon: 'photo', label: 'Open Media Library', onClick: function () { pickMedia(opts.onPick); } }
+    { icon: 'photo', label: 'Open Media Library', onClick: function () { pickMedia(opts.onPick, { accept: opts.accept }); } }
   ];
   if (window.BasehimMedia && BasehimMedia.uploadFile) items.push({ icon: 'arrow-up-tray', label: 'Upload', onClick: function () { chooseAndUpload(opts.accept, false, function (m) { if (m) opts.onPick(m); }); } });
   items.push({ icon: 'link', label: 'Insert from URL', onClick: function () { promptDialog(opts.urlLabel || 'URL', opts.current || '', function (u) { u = normalizeUrl(u); if (u) opts.onPick({ url: u }); }, { anchor: btn, okLabel: 'Apply' }); } });

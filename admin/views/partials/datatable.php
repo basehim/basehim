@@ -7,7 +7,8 @@
  * admin/assets/js/datatable.js enhances.
  *
  * Variables: $tableKey, $bulkEndpoint, $editBase, optional $heading/$subheading,
- * $newUrl/$newLabel.
+ * $newUrl/$newLabel, $deleteConfirm, $bulkEvents (1.2.67: bulk actions are
+ * handled by the page through the bh:dt-bulk event, not posted as a form).
  */
 
 use App\Core\Application;
@@ -85,6 +86,8 @@ $__cfg = [
     'bulkEndpoint' => $bulkEndpoint ?? '',
     'editBase'     => $editBase ?? '',
     'deleteConfirm'=> $deleteConfirm ?? '',
+    // The host screen runs bulk actions itself, from the bh:dt-bulk event (1.2.67).
+    'bulkEvents'   => !empty($bulkEvents),
     'filters'      => $__termFilters,
     'initial'      => $__payload,
 ];
@@ -168,7 +171,13 @@ $__bulkMeta = [
             </thead>
             <tbody data-dt-body>
                 <?php if (empty($__payload['rows'])): ?>
-                <tr><td colspan="99"><div class="bh-dt-state"><p class="bh-dt-state__title">Nothing to show</p><p>No rows match the current search or filters.</p></div></td></tr>
+                <?php
+                    // The same empty state datatable.js draws (1.2.66).
+                    $__noun = strtolower($__def->label) ?: 'items';
+                    $__filtered = $__payload['search'] !== '' || $__filters !== [];
+                    $__path = $__filtered ? 'M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z' : 'M4 8l2-4h12l2 4v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8zM4 12h4l2 3h4l2-3h4';
+                ?>
+                <tr><td colspan="99"><div class="bh-dt-state bh-dt-state--empty" role="status"><span class="bh-dt-state__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="<?= $__path ?>"/></svg></span><p class="bh-dt-state__title"><?= $__filtered ? 'No matches' : 'Nothing here yet' ?></p><p class="bh-dt-state__text"><?= htmlspecialchars($__filtered ? 'No ' . $__noun . ' match the current search or filters.' : 'There are no ' . $__noun . ' to show yet.') ?></p></div></td></tr>
                 <?php else: foreach ($__payload['rows'] as $__row): ?>
                 <tr data-dt-row="<?= (int) $__row['id'] ?>">
                     <td class="bh-dt-check"><input type="checkbox" class="bh-dt-rowcheck"></td>

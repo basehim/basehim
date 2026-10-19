@@ -143,6 +143,11 @@ class UserService
                 AuthService::revokeTokens($app->make(\App\Core\Database::class), $id);
             } catch (\Throwable) {}
         }
+        // The administration email follows its account's address (1.2.66) when
+        // the person making the change may change settings.
+        if (isset($payload['email']) && $payload['email'] !== strtolower((string) ($existing['email'] ?? ''))) {
+            (new AdminEmailService())->accountEmailChanged((string) ($existing['email'] ?? ''), $payload['email']);
+        }
         $this->hooks->doAction('user.updated', $this->repo->find($id), $existing);
         return true;
     }

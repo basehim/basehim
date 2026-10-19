@@ -320,3 +320,99 @@ $tables->register('comments.list', [
     'bulk_actions' => ['approve', 'pending', 'spam', 'delete'],
     'search_placeholder' => 'Search comments…',
 ]);
+
+// ---------------------------------------------------------------------------
+// Media Library, List view (1.2.67). The grid and the picker read the same
+// MediaService::paginate(); this is that query as a Data Table. File names
+// open the details dialog on the Media Library screen (data-media-open);
+// elsewhere they are plain text.
+// ---------------------------------------------------------------------------
+$mediaKind = static function (array $row): string {
+    $mime = (string) ($row['mime_type'] ?? '');
+    if ($mime === 'image/svg+xml') return 'svg';
+    foreach (['image', 'video', 'audio'] as $k) {
+        if (str_starts_with($mime, $k . '/')) return $k;
+    }
+    return 'document';
+};
+$mediaSizes = static function (array $row): array {
+    $s = $row['sizes'] ?? null;
+    if (is_string($s) && $s !== '') $s = json_decode($s, true);
+    return is_array($s) ? $s : [];
+};
+$mediaKindLabels = ['image' => 'Image', 'svg' => 'SVG', 'video' => 'Video', 'audio' => 'Audio', 'document' => 'Document'];
+
+$tables->register('media.library', [
+    'label'        => 'Files',
+    'capability'   => 'upload_media',
+    'area'         => '/admin/media',
+    'provider'     => \App\Services\Table\MediaTableProvider::class,
+    // The file itself, as "View" in the row menu (new tab).
+    'row_links'    => static function (array $rows): array {
+        $out = [];
+        foreach ($rows as $r) {
+            if (!empty($r['id']) && !empty($r['url'])) $out[(int) $r['id']] = ['url' => (string) $r['url'], 'live' => true];
+        }
+        return $out;
+    },
+    'default_sort' => 'newest',
+    'page_sizes'   => [20, 50, 100],
+    'columns'      => [
+        ['id' => 'thumb', 'label' => 'Preview', 'align' => 'center', 'card' => 'media', 'default_visible' => true,
+         'render' => static function (array $row) use ($mediaKind, $mediaSizes): string {
+            $kind = $mediaKind($row);
+            if ($kind === 'image' || $kind === 'svg') {
+                $s = $mediaSizes($row);
+                // The generated thumbnail, never the original, so the list stays light.
+                $url = $s['thumbnail']['url'] ?? $s['medium']['url'] ?? ($row['url'] ?? null);
+                return Components::thumb($url, (string) ($row['alt_text'] ?? ''), 44);
+            }
+            return Components::thumb(null, '', 44, ['video' => 'film', 'audio' => 'musical-note'][$kind] ?? 'document');
+        }],
+        ['id' => 'name', 'label' => 'File', 'can_hide' => false, 'card' => 'title', 'default_visible' => true,
+         'sortable' => ['title_az', 'title_za'],
+         'render' => static function (array $row): string {
+            $id = (int) ($row['id'] ?? 0);
+            $title = trim((string) ($row['title'] ?? ''));
+            $file = (string) ($row['file_name'] ?? '');
+            $name = $title !== '' ? $title : ((string) ($row['original_name'] ?? '') ?: $file);
+            return '<button type="button" class="bh-dt-title bh-media-open" data-media-open="' . $id . '">'
+                 . htmlspecialchars($name, ENT_QUOTES) . '</button>'
+                 . '<span class="bh-dt-sub">' . htmlspecialchars($file, ENT_QUOTES) . '</span>';
+        }],
+        ['id' => 'type', 'label' => 'Type', 'card' => 'under', 'default_visible' => true,
+         'filter' => ['field' => 'type', 'in' => array_keys($mediaKindLabels)],
+         'render' => static function (array $row) use ($mediaKind, $mediaKindLabels): string {
+            $kind = $mediaKind($row);
+            return '<span class="bh-dt-badge bg-slate-100 text-slate-600" title="' . htmlspecialchars((string) ($row['mime_type'] ?? ''), ENT_QUOTES) . '">'
+                 . $mediaKindLabels[$kind] . '</span>';
+        }],
+        ['id' => 'size', 'label' => 'Size', 'align' => 'right', 'card' => 'meta', 'default_visible' => true,
+         'sortable' => ['size_desc', 'size_asc'],
+         'render' => static fn (array $row): string =>
+            '<span class="bh-dt-sub" style="white-space:nowrap">' . htmlspecialchars(\App\Core\Helpers::bytesFormat((int) ($row['file_size'] ?? 0)), ENT_QUOTES) . '</span>'],
+        ['id' => 'dimensions', 'label' => 'Dimensions', 'align' => 'right', 'responsive' => 'tablet-up', 'card' => 'hide', 'default_visible' => true,
+         'render' => static fn (array $row): string => !empty($row['width']) && !empty($row['height'])
+            ? '<span class="bh-dt-sub" style="white-space:nowrap">' . (int) $row['width'] . ' × ' . (int) $row['height'] . '</span>'
+            : '<span class="bh-dt-sub">—</span>'],
+        ['id' => 'date', 'label' => 'Uploaded', 'align' => 'right', 'card' => 'meta', 'card_icon' => 'calendar', 'default_visible' => true,
+         'sortable' => ['newest', 'oldest'],
+         'render' => static function (array $row): string {
+            $dt = Time::local($row['created_at'] ?? null);
+            if ($dt === null) return '';
+            return '<span class="bh-dt-date">' . htmlspecialchars($dt->format(Time::dateFormat()), ENT_QUOTES) . '</span>'
+                 . '<span class="bh-dt-sub">' . htmlspecialchars($dt->format(Time::timeFormat()), ENT_QUOTES) . '</span>';
+        }],
+        ['id' => 'actions', 'label' => 'Actions', 'align' => 'right', 'card' => 'hide', 'default_visible' => true,
+         'render' => static function (array $row): string {
+            $id = (int) ($row['id'] ?? 0);
+            return '<span class="bh-media-acts">'
+                 . '<button type="button" class="bh-btn bh-btn--ghost bh-btn--sm" data-media-open="' . $id . '" title="Details and edit">' . icon('pencil-square', 'w-4 h-4') . '<span class="bh-sr-only">Details</span></button>'
+                 . '<button type="button" class="bh-btn bh-btn--ghost bh-btn--sm" data-media-copy="' . htmlspecialchars((string) ($row['url'] ?? ''), ENT_QUOTES) . '" title="Copy URL">' . icon('link', 'w-4 h-4') . '<span class="bh-sr-only">Copy URL</span></button>'
+                 . '</span>';
+        }],
+    ],
+    'row_actions'  => [],
+    'bulk_actions' => ['delete'],
+    'search_placeholder' => 'Search files…',
+]);

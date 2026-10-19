@@ -115,29 +115,37 @@
 
     // ── media library ────────────────────────────────────────────────────────
     var grid = q('[data-av-grid]'), more = q('[data-av-more]'), search = q('[data-av-search]');
-    var lib = { page: 1, last: 1, q: '', loaded: false, busy: false };
+    var lib = { page: 1, last: 1, q: '', loaded: false, busy: false, seq: 0 };
     function sizesOf(item) {
         var s = item.sizes;
         if (typeof s === 'string') { try { s = JSON.parse(s); } catch (e) { s = null; } }
         return s || {};
     }
+    // One page at a time through media.list (1.2.67: a new search drops any
+    // answer still on its way for the old one, and Load More cannot send the
+    // same page twice).
     function loadLibrary(reset) {
-        if (!grid || lib.busy) return;
-        if (reset) { lib.page = 1; grid.innerHTML = ''; }
+        if (!grid) return;
+        if (reset) { lib.seq++; lib.page = 1; lib.busy = false; lib.retry = false; grid.innerHTML = ''; }
+        else if (lib.busy) return;
+        var my = lib.seq;
         lib.busy = true;
+        if (more) { more.disabled = true; }
         var params = { type: 'image', per_page: 40, sort: 'newest', page: lib.page };
         if (lib.q) params.q = lib.q;
-        // media.list through the AJAX gateway (1.2.47).
         window.Basehim.ajax.get('media.list', params)
             .then(function (d) {
+                if (my !== lib.seq) return;
                 lib.loaded = true;
                 var items = (d.data || d.items || []).filter(function (m) { return /^image\/(jpeg|png|gif|webp)$/.test(m.mime_type || ''); });
                 var meta = d.meta || {};
                 lib.last = +(meta.last_page || meta.lastPage || 1);
                 items.forEach(function (m) {
+                    if (grid.querySelector('[data-av-id="' + m.id + '"]')) return;
                     var s = sizesOf(m), thumb = (s.thumbnail && s.thumbnail.url) || (s.medium && s.medium.url) || m.url;
                     var b = document.createElement('button');
                     b.type = 'button'; b.title = m.title || m.original_name || '';
+                    b.setAttribute('data-av-id', String(m.id));
                     b.innerHTML = '<img loading="lazy" alt="">';
                     b.firstChild.src = thumb;
                     b.addEventListener('click', function () {
@@ -146,13 +154,27 @@
                     });
                     grid.appendChild(b);
                 });
-                if (!grid.children.length) grid.innerHTML = '<p>No images' + (lib.q ? ' match “' + lib.q.replace(/[<>&]/g, '') + '”' : ' in the media library yet') + '.</p>';
-                more.hidden = lib.page >= lib.last;
+                if (!grid.children.length) {
+                    var p = document.createElement('p');
+                    p.textContent = 'No images' + (lib.q ? ' match “' + lib.q + '”' : ' in the media library yet') + '.';
+                    grid.appendChild(p);
+                }
+                if (more) { more.hidden = lib.page >= lib.last; more.textContent = 'Load more'; }
             })
-            .catch(function () { say('The media library could not be loaded.'); })
-            .finally(function () { lib.busy = false; });
+            .catch(function () {
+                if (my !== lib.seq) return;
+                say('The media library could not be loaded.');
+                // The page did not arrive: offer it again.
+                lib.retry = true;
+                if (more) { more.hidden = false; more.textContent = 'Retry'; }
+            })
+            .finally(function () { if (my === lib.seq) { lib.busy = false; if (more) more.disabled = false; } });
     }
-    if (more) more.addEventListener('click', function () { lib.page++; loadLibrary(false); });
+    if (more) more.addEventListener('click', function () {
+        if (lib.busy) return;
+        if (lib.retry) lib.retry = false; else lib.page++;   // Retry asks for the same page again
+        loadLibrary(false);
+    });
     if (search) {
         var st = null;
         search.addEventListener('input', function () {

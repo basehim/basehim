@@ -15,6 +15,8 @@ final class Env
     /** Keys whose value was quoted in .env: kept as strings, never cast. */
     private static array $quoted = [];
     private static bool $loaded = false;
+    /** The file the values came from, so a value can be written back to it (1.2.66). */
+    private static ?string $path = null;
 
     public static function load(string $path): void
     {
@@ -23,6 +25,7 @@ final class Env
             return;
         }
 
+        self::$path = $path;
         $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($lines as $line) {
             $line = trim($line);
@@ -76,6 +79,12 @@ final class Env
             };
         }
         return $default;
+    }
+
+    /** The .env file that was loaded, or null when none was. */
+    public static function path(): ?string
+    {
+        return self::$path;
     }
 
     public static function set(string $key, mixed $value): void

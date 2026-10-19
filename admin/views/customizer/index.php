@@ -109,7 +109,8 @@ $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
                                     <?php /* The shared media field: core binds it, and the
                                             element fires bh:media when the value changes. No
                                             picker code lives in this screen. */ ?>
-                                    <div class="bh-cz__image" data-bh-media>
+                                    <div class="bh-cz__image" data-bh-media data-bh-media-types="<?= htmlspecialchars((string) ($opt['types'] ?? 'image/*')) ?>"
+                                         data-bh-media-title="<?= htmlspecialchars('Choose ' . strtolower((string) ($opt['label'] ?? 'an image'))) ?>">
                                         <div class="bh-cz__thumb<?= $val ? '' : ' is-empty' ?>" data-bh-media-preview>
                                             <?php if ($val): ?><img src="<?= htmlspecialchars((string) $val) ?>" alt=""><?php endif; ?>
                                         </div>

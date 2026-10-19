@@ -53,8 +53,12 @@ class MediaController extends ApiController
                 ]
             );
             return Response::json(['data' => $created], 201);
-        } catch (\Throwable $e) {
+        } catch (\App\Services\MediaRejected $e) {
             return Response::json(['error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            // Not echoed: a database error can name tables and paths (1.2.67).
+            error_log('[Basehim] API media upload failed: ' . get_class($e) . ': ' . $e->getMessage());
+            return Response::json(['error' => 'The file could not be saved.'], 500);
         }
     }
 

@@ -49,60 +49,101 @@ class MediaRepository
         return $this->db->delete('media', ['id' => $id]);
     }
 
-    public function paginate(array $filters = [], int $page = 1, int $perPage = 24): array
+    /** The type pills / picker groups, each a fixed SQL condition (never user text). */
+    public const TYPE_GROUPS = [
+        'image'    => "(mime_type LIKE 'image/%' AND mime_type <> 'image/svg+xml')",
+        'svg'      => "mime_type = 'image/svg+xml'",
+        'video'    => "mime_type LIKE 'video/%'",
+        'audio'    => "mime_type LIKE 'audio/%'",
+        'document' => "(mime_type NOT LIKE 'image/%' AND mime_type NOT LIKE 'video/%' AND mime_type NOT LIKE 'audio/%')",
+    ];
+
+    /** Sort tokens and their ORDER BY. id breaks ties, so pages never repeat or skip a row. */
+    public const SORTS = [
+        'newest'    => 'created_at DESC, id DESC',
+        'oldest'    => 'created_at ASC, id ASC',
+        'name'      => "COALESCE(NULLIF(title, ''), original_name) ASC, id ASC",
+        'name_desc' => "COALESCE(NULLIF(title, ''), original_name) DESC, id DESC",
+        'largest'   => 'file_size DESC, id DESC',
+        'smallest'  => 'file_size ASC, id ASC',
+        // The same orders under the names the Data Table's sort arrows read
+        // (…_az / …_asc ascending), for the media.library table.
+        'title_az'  => "COALESCE(NULLIF(title, ''), original_name) ASC, id ASC",
+        'title_za'  => "COALESCE(NULLIF(title, ''), original_name) DESC, id DESC",
+        'size_desc' => 'file_size DESC, id DESC',
+        'size_asc'  => 'file_size ASC, id ASC',
+    ];
+
+    /**
+     * WHERE clause for the list filters.
+     *
+     *   type    one of TYPE_GROUPS (a raw MIME prefix still works, as before,
+     *           for REST callers; it is bound, never interpolated)
+     *   types   a list of TYPE_GROUPS keys, OR-ed (the picker: image + svg)
+     *   search  matched literally: % and _ are escaped
+     *   from/to UTC 'Y-m-d H:i:s' bounds on created_at (to is exclusive)
+     *   author_id
+     *
+     * @return array{0:string,1:array}
+     */
+    private function where(array $filters): array
     {
         $where = ['1=1'];
         $params = [];
 
-        if (!empty($filters['type'])) {
-            $t = $filters['type'];
-            if ($t === 'svg') {
-                $where[] = "mime_type = 'image/svg+xml'";
-            } elseif ($t === 'image') {
-                // Images but not SVG (SVG has its own pill).
-                $where[] = "mime_type LIKE 'image/%' AND mime_type <> 'image/svg+xml'";
-            } elseif ($t === 'video') {
-                $where[] = "mime_type LIKE 'video/%'";
-            } elseif ($t === 'audio') {
-                $where[] = "mime_type LIKE 'audio/%'";
-            } elseif ($t === 'document') {
-                $where[] = "mime_type NOT LIKE 'image/%' AND mime_type NOT LIKE 'video/%' AND mime_type NOT LIKE 'audio/%'";
+        if (isset($filters['types']) && is_array($filters['types'])) {
+            $or = [];
+            foreach ($filters['types'] as $t) {
+                if (isset(self::TYPE_GROUPS[$t])) $or[$t] = self::TYPE_GROUPS[$t];
+            }
+            // A list with nothing known in it matches nothing rather than everything.
+            $where[] = $or ? '(' . implode(' OR ', $or) . ')' : '1=0';
+        } elseif (!empty($filters['type'])) {
+            $t = (string) $filters['type'];
+            if (isset(self::TYPE_GROUPS[$t])) {
+                $where[] = self::TYPE_GROUPS[$t];
             } else {
-                // Fallback: treat as a raw mime prefix (back-compat).
+                // Back-compat: a raw mime prefix.
                 $where[] = 'mime_type LIKE :type';
-                $params['type'] = $t . '%';
+                $params['type'] = addcslashes($t, '\\%_') . '%';
             }
         }
         if (!empty($filters['author_id'])) {
             $where[] = 'author_id = :author';
-            $params['author'] = $filters['author_id'];
+            $params['author'] = (int) $filters['author_id'];
         }
-        if (!empty($filters['search'])) {
+        if (isset($filters['search']) && $filters['search'] !== '') {
             $where[] = '(title LIKE :search1 OR original_name LIKE :search2 OR alt_text LIKE :search3)';
-            $like = '%' . $filters['search'] . '%';
+            $like = '%' . addcslashes((string) $filters['search'], '\\%_') . '%';
             $params['search1'] = $like;
             $params['search2'] = $like;
             $params['search3'] = $like;
         }
+        if (!empty($filters['from'])) {
+            $where[] = 'created_at >= :from';
+            $params['from'] = (string) $filters['from'];
+        }
+        if (!empty($filters['to'])) {
+            $where[] = 'created_at < :to';
+            $params['to'] = (string) $filters['to'];
+        }
+        return [implode(' AND ', $where), $params];
+    }
 
-        $whereSql = implode(' AND ', $where);
+    public function paginate(array $filters = [], int $page = 1, int $perPage = 24): array
+    {
+        $perPage = max(1, min(500, $perPage));
+        $page = max(1, $page);
+        [$whereSql, $params] = $this->where($filters);
+
         $countRow = $this->db->selectOne("SELECT COUNT(*) AS c FROM {media} WHERE {$whereSql}", $params);
         $total = (int)($countRow['c'] ?? 0);
 
-        // Whitelisted sort — never interpolate raw user input into SQL.
-        // Note: SQL string literals use single quotes so this works whether or
-        // not the server runs in ANSI_QUOTES mode.
-        $sortMap = [
-            'newest' => 'created_at DESC',
-            'oldest' => 'created_at ASC',
-            'name'   => "COALESCE(NULLIF(title, ''), original_name) ASC",
-            'name_desc' => "COALESCE(NULLIF(title, ''), original_name) DESC",
-            'largest' => 'file_size DESC',
-            'smallest' => 'file_size ASC',
-        ];
-        $orderBy = $sortMap[$filters['sort'] ?? 'newest'] ?? $sortMap['newest'];
+        // Allowlisted sort: never interpolate raw user input into SQL. String
+        // literals use single quotes so ANSI_QUOTES servers are fine too.
+        $orderBy = self::SORTS[$filters['sort'] ?? 'newest'] ?? self::SORTS['newest'];
 
-        $offset = max(0, ($page - 1) * $perPage);
+        $offset = ($page - 1) * $perPage;
         $rows = $this->db->select(
             "SELECT * FROM {media} WHERE {$whereSql}
              ORDER BY {$orderBy}
@@ -110,12 +151,36 @@ class MediaRepository
             $params
         );
         $rows = array_map(fn($r) => $this->decorate($r), $rows);
+        $lastPage = max(1, (int)ceil($total / $perPage));
 
         return [
             'data' => $rows,
             'meta' => ['page' => $page, 'per_page' => $perPage, 'total' => $total,
-                'last_page' => max(1, (int)ceil($total / $perPage))],
+                'last_page' => $lastPage, 'has_more' => $page < $lastPage],
         ];
+    }
+
+    /**
+     * Months that have uploads, newest first, for the date filter:
+     * [['value' => '2026-10', 'count' => 12], …]. Grouped on created_at moved
+     * by $offsetSeconds (the site's UTC offset), so a month is the site's.
+     */
+    public function months(int $offsetSeconds = 0, int $limit = 120): array
+    {
+        $offsetSeconds = max(-50400, min(50400, $offsetSeconds));
+        $limit = max(1, min(600, $limit));
+        $rows = $this->db->select(
+            "SELECT DATE_FORMAT(DATE_ADD(created_at, INTERVAL {$offsetSeconds} SECOND), '%Y-%m') AS ym, COUNT(*) AS c
+               FROM {media} WHERE created_at IS NOT NULL
+              GROUP BY ym ORDER BY ym DESC LIMIT {$limit}"
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            if (preg_match('/^\d{4}-\d{2}$/', (string) ($r['ym'] ?? ''))) {
+                $out[] = ['value' => (string) $r['ym'], 'count' => (int) $r['c']];
+            }
+        }
+        return $out;
     }
 
     /** Where-clause for raster images; with $onlyMissing, those with no generated sizes yet. */
@@ -153,16 +218,13 @@ class MediaRepository
      * Counts per broad media category, for the filter pills. SVG is split out
      * of images since it's often handled differently in a CMS.
      */
-    public function typeCounts(?string $search = null): array
+    public function typeCounts(?string $search = null, array $filters = []): array
     {
-        $where = ['1=1'];
-        $params = [];
-        if ($search !== null && $search !== '') {
-            $where[] = '(title LIKE :s1 OR original_name LIKE :s2 OR alt_text LIKE :s3)';
-            $like = '%' . $search . '%';
-            $params['s1'] = $like; $params['s2'] = $like; $params['s3'] = $like;
-        }
-        $whereSql = implode(' AND ', $where);
+        // The same search and date as the list, without the type itself, so
+        // each pill says how many items it would show.
+        unset($filters['type'], $filters['types']);
+        if ($search !== null && $search !== '') $filters['search'] = $search;
+        [$whereSql, $params] = $this->where($filters);
         // Aggregate in SQL rather than pulling every row into PHP — scales to
         // large libraries.
         $rows = $this->db->select("SELECT mime_type, COUNT(*) AS c FROM {media} WHERE {$whereSql} GROUP BY mime_type", $params);

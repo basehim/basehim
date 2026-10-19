@@ -129,6 +129,8 @@
                     var warn = data.type === 'error';
                     applyValues(form, data.values);
                     retitle(data);
+                    // A screen's own script can follow what was saved (1.2.66).
+                    try { form.dispatchEvent(new CustomEvent('bh:settings-saved', { detail: data })); } catch (e) { /* old browsers: nothing listens */ }
                     var box = notice(warn ? 'error' : 'success', data.message || 'Settings saved.');
                     // Saved with a warning (.htaccess not written, bad catalog JSON):
                     // the settings did save, so the button says so; the banner

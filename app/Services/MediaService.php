@@ -92,7 +92,34 @@ class MediaService
         }
         return $clean;
     }
-    public function typeCounts(?string $search = null): array { return $this->repo->typeCounts($search); }
+    public function typeCounts(?string $search = null, array $filters = []): array { return $this->repo->typeCounts($search, $filters); }
+
+    /** Months with uploads in the site's timezone, newest first (the date filter). */
+    public function months(): array
+    {
+        $out = [];
+        foreach ($this->repo->months(\App\Core\Time::offsetSeconds()) as $m) {
+            $d = \DateTimeImmutable::createFromFormat('!Y-m', $m['value']);
+            $out[] = $m + ['label' => $d ? $d->format('F Y') : $m['value']];
+        }
+        return $out;
+    }
+
+    /**
+     * UTC bounds of a 'YYYY-MM' month in the site's timezone, for the
+     * from/to list filters. Null for anything else.
+     *
+     * @return array{from:string,to:string}|null
+     */
+    public static function monthBounds(string $ym): ?array
+    {
+        if (!preg_match('/^(\d{4})-(0[1-9]|1[0-2])$/', $ym, $m) || (int) $m[1] < 1970 || (int) $m[1] > 2200) return null;
+        $zone = \App\Core\Time::zone();
+        $start = new \DateTimeImmutable($m[1] . '-' . $m[2] . '-01 00:00:00', $zone);
+        $end = $start->modify('+1 month');
+        $utc = new \DateTimeZone('UTC');
+        return ['from' => $start->setTimezone($utc)->format('Y-m-d H:i:s'), 'to' => $end->setTimezone($utc)->format('Y-m-d H:i:s')];
+    }
 
     public function paginate(array $filters = [], int $page = 1, int $perPage = 24): array
     {
@@ -151,9 +178,61 @@ class MediaService
                 fn($s) => strtolower(trim($s, " .\t")),
                 explode(',', $raw)
             )));
-            return $list ?: $configDefault;
+            $list = array_values(array_diff($list, self::NEVER_ALLOWED));
+            return $list ?: array_values(array_diff($configDefault, self::NEVER_ALLOWED));
         }
-        return $configDefault;
+        return array_values(array_diff($configDefault, self::NEVER_ALLOWED));
+    }
+
+    /**
+     * Extensions no setting can allow (1.2.67). storage/uploads is served
+     * straight from disk by most web servers, so a .php there would run as
+     * the site, and an .html would run script on the site's origin. The list
+     * in Settings → Media is typed by hand; this is the floor under it.
+     */
+    public const NEVER_ALLOWED = [
+        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'pht', 'phps', 'phar', 'inc',
+        'cgi', 'pl', 'py', 'rb', 'sh', 'bash', 'asp', 'aspx', 'jsp', 'jspx', 'cfm',
+        'exe', 'dll', 'so', 'bat', 'cmd', 'com', 'msi', 'scr', 'vbs', 'ps1', 'jar',
+        'htaccess', 'htpasswd', 'ini', 'html', 'htm', 'xhtml', 'shtml', 'xht', 'hta', 'js', 'mjs', 'svgz',
+    ];
+
+    /** Raster image extensions: their content must be a raster image. */
+    private const IMAGE_MIMES = [
+        'jpg' => ['image/jpeg'], 'jpeg' => ['image/jpeg'], 'jpe' => ['image/jpeg'],
+        'png' => ['image/png'], 'gif' => ['image/gif'], 'webp' => ['image/webp'],
+        'avif' => ['image/avif', 'image/heif'], 'bmp' => ['image/bmp', 'image/x-ms-bmp'],
+        'ico' => ['image/vnd.microsoft.icon', 'image/x-icon'],
+    ];
+
+    /** Content refused whatever the extension says: programs, scripts and web pages. */
+    private const DANGEROUS_MIMES = [
+        'text/x-php', 'application/x-php', 'application/x-httpd-php', 'text/x-shellscript',
+        'application/x-executable', 'application/x-dosexec', 'application/x-msdownload',
+        'application/x-sharedlib', 'application/x-mach-binary', 'application/x-elf',
+        'text/html', 'application/xhtml+xml', 'application/javascript', 'text/javascript',
+    ];
+
+    /**
+     * Why this file's content may not be stored under this extension, or null.
+     * Public so a test (or an app importing files) can ask before storing.
+     */
+    public static function contentProblem(string $ext, string $mime): ?string
+    {
+        $ext = strtolower($ext);
+        if (in_array($ext, self::NEVER_ALLOWED, true)) {
+            return 'Files of type ".' . $ext . '" cannot be uploaded.';
+        }
+        if (in_array($mime, self::DANGEROUS_MIMES, true)) {
+            return 'This file looks like a program or web page, not a .' . $ext . ' file.';
+        }
+        // A raster image name must hold a raster image. Which one is not
+        // enforced: a PNG saved as .jpg is common and harmless (browsers read
+        // the content), while a page or script named .jpg is not.
+        if (isset(self::IMAGE_MIMES[$ext]) && (!str_starts_with($mime, 'image/') || $mime === 'image/svg+xml')) {
+            return 'This file is not a valid .' . $ext . ' image (its content does not match its name).';
+        }
+        return null;
     }
 
     /** Max upload size in bytes from {settings}, falling back to config. */
@@ -177,7 +256,7 @@ class MediaService
     public function upload(array $file, int $authorId, array $allowed, int $maxBytes, array $meta = []): array
     {
         if (!isset($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
-            throw new \RuntimeException('No file uploaded.');
+            throw new MediaRejected('No file uploaded.');
         }
         return $this->store($file, $authorId, $allowed, $maxBytes, $meta, true);
     }
@@ -197,7 +276,7 @@ class MediaService
     public function importFile(string $path, string $name, int $authorId, array $allowed, int $maxBytes, array $meta = []): array
     {
         if (!is_file($path) || !is_readable($path)) {
-            throw new \RuntimeException('File not found or not readable.');
+            throw new MediaRejected('File not found or not readable.');
         }
         return $this->store([
             'name'     => $name,
@@ -210,17 +289,24 @@ class MediaService
     private function store(array $file, int $authorId, array $allowed, int $maxBytes, array $meta, bool $isHttpUpload): array
     {
         if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-            throw new \RuntimeException('Upload error: ' . ($file['error'] ?? 'unknown'));
+            $code = (int) ($file['error'] ?? -1);
+            throw new MediaRejected(match ($code) {
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'The file is larger than this server accepts.',
+                UPLOAD_ERR_PARTIAL => 'The file only partly arrived. Please try again.',
+                UPLOAD_ERR_NO_FILE => 'No file was selected.',
+                default => 'The server could not receive the file (upload error ' . $code . ').',
+            });
         }
-        $size = (int)($file['size'] ?? 0);
+        // The size of what arrived, not what the browser claimed.
+        $size = is_file((string) ($file['tmp_name'] ?? '')) ? (int) filesize($file['tmp_name']) : (int) ($file['size'] ?? 0);
         if ($size <= 0 || $size > $maxBytes) {
-            throw new \RuntimeException('File exceeds maximum size of ' . Helpers::bytesFormat($maxBytes) . '.');
+            throw new MediaRejected('File exceeds maximum size of ' . Helpers::bytesFormat($maxBytes) . '.');
         }
 
         $originalName = (string) ($file['name'] ?? 'upload');
         $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
         if (!in_array($ext, $allowed, true)) {
-            throw new \RuntimeException('File type ".' . $ext . '" not allowed.');
+            throw new MediaRejected('File type ".' . $ext . '" not allowed.');
         }
 
         // Detect MIME
@@ -228,16 +314,22 @@ class MediaService
         $mime = finfo_file($finfo, $file['tmp_name']) ?: 'application/octet-stream';
         finfo_close($finfo);
 
+        // The content must be what the name says (1.2.67).
+        $problem = self::contentProblem($ext, $mime);
+        if ($problem !== null) {
+            throw new MediaRejected($problem);
+        }
+
         // An SVG is a document that can run script when opened directly, and
         // uploads are open to authors: refuse any that could (SvgGuard).
         if ($ext === 'svg' || $ext === 'svgz' || $mime === 'image/svg+xml') {
             $raw = (string) @file_get_contents($file['tmp_name']);
             if (str_starts_with($raw, "\x1f\x8b")) {
-                throw new \RuntimeException('Compressed SVG (.svgz) files are not accepted. Upload the plain .svg.');
+                throw new MediaRejected('Compressed SVG (.svgz) files are not accepted. Upload the plain .svg.');
             }
             $why = SvgGuard::problem($raw);
             if ($why !== null) {
-                throw new \RuntimeException('This SVG was not uploaded because ' . $why . '. Save it without scripts, event handlers or embedded links and try again.');
+                throw new MediaRejected('This SVG was not uploaded because ' . $why . '. Save it without scripts, event handlers or embedded links and try again.');
             }
         }
 
@@ -252,7 +344,7 @@ class MediaService
         $absDir = rtrim($this->uploadPath, '/') . ($relDir !== '' ? '/' . $relDir : '');
         if (!is_dir($absDir)) {
             if (!@mkdir($absDir, 0775, true) && !is_dir($absDir)) {
-                throw new \RuntimeException('Could not create upload directory.');
+                throw new MediaRejected('Could not create upload directory.');
             }
         }
 
@@ -284,7 +376,7 @@ class MediaService
             : @copy($file['tmp_name'], $absPath);
         if (!$placed) {
             @unlink($absPath);
-            throw new \RuntimeException('Could not move uploaded file.');
+            throw new MediaRejected('Could not move uploaded file.');
         }
         @chmod($absPath, 0644);
 
@@ -440,7 +532,7 @@ class MediaService
                 if ($h === false) {
                     if (!file_exists($absDir . '/' . $name)) {
                         // Not a collision: the directory refused the write.
-                        throw new \RuntimeException('Could not write to the upload directory.');
+                        throw new MediaRejected('Could not write to the upload directory.');
                     }
                     // Appeared since the directory was read.
                     $taken[$stem] = true;
@@ -455,7 +547,7 @@ class MediaService
                 fclose($lock);
             }
         }
-        throw new \RuntimeException('Could not find a free file name for "' . $base . '.' . $ext . '".');
+        throw new MediaRejected('Could not find a free file name for "' . $base . '.' . $ext . '".');
     }
 
     /** @param array<string,bool> $taken */
@@ -658,23 +750,61 @@ class MediaService
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
+    /**
+     * Delete one item: true once its row is gone.
+     *
+     * See deleteWithReport() for the order and for what "gone" means; this
+     * keeps the boolean older callers expect.
+     */
     public function delete(int $id): bool
     {
+        return in_array($this->deleteWithReport($id)['status'], ['deleted', 'partial'], true);
+    }
+
+    /**
+     * Delete one item and say exactly what happened (1.2.67).
+     *
+     * The row goes first: if the database refuses, nothing on disk has been
+     * touched and the item is still whole ('failed'). Before 1.2.67 the files
+     * went first, so a failed row delete left a library entry pointing at
+     * nothing. Then the original and its generated copies are removed; any
+     * that could not be are reported ('partial', with their names relative to
+     * the uploads folder) rather than called a success.
+     *
+     * @return array{status:'deleted'|'partial'|'missing'|'failed', leftover?:string[]}
+     */
+    public function deleteWithReport(int $id): array
+    {
         $row = $this->repo->find($id);
-        if (!$row) return false;
+        if (!$row) return ['status' => 'missing'];
 
-        $abs = rtrim($this->uploadPath, '/') . '/' . $row['storage_path'];
-        $dir = dirname($abs);
-        if (is_file($abs)) @unlink($abs);
-
-        // Remove generated variants too, so nothing is orphaned on disk.
-        foreach ($this->decodeSizes($row['sizes'] ?? null) as $v) {
-            if (!empty($v['file'])) { $f = $dir . '/' . $v['file']; if (is_file($f)) @unlink($f); }
+        try {
+            $removed = $this->repo->delete($id);
+        } catch (\Throwable $e) {
+            return ['status' => 'failed'];
+        }
+        if ($removed < 1) {
+            // Someone else deleted it a moment ago: the same end state.
+            return $this->repo->find($id) ? ['status' => 'failed'] : ['status' => 'missing'];
         }
 
-        $this->repo->delete($id);
+        $root = rtrim($this->uploadPath, '/');
+        $rel = ltrim((string) ($row['storage_path'] ?? ''), '/');
+        $relDir = dirname($rel) === '.' ? '' : dirname($rel) . '/';
+        $files = [$rel];
+        foreach ($this->decodeSizes($row['sizes'] ?? null) as $v) {
+            // Only a bare file name: a stored path cannot point anywhere else.
+            if (!empty($v['file']) && basename((string) $v['file']) === (string) $v['file']) $files[] = $relDir . $v['file'];
+        }
+        $leftover = [];
+        foreach (array_unique($files) as $f) {
+            if ($f === '' || str_contains($f, '..')) continue;
+            $abs = $root . '/' . $f;
+            if (is_file($abs) && !@unlink($abs) && is_file($abs)) $leftover[] = $f;
+        }
+
         $this->hooks->doAction('media.deleted', $row);
-        return true;
+        return $leftover ? ['status' => 'partial', 'leftover' => $leftover] : ['status' => 'deleted'];
     }
 
     private function decodeSizes($sizes): array

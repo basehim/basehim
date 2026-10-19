@@ -26,6 +26,7 @@
         'table-cells': 'M3.75 7.5h16.5M3.75 12h16.5m-16.5 4.5h16.5M9 4.5v15M4.5 4.5h15a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75h-15a.75.75 0 01-.75-.75V5.25a.75.75 0 01.75-.75z',
         'squares': 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
         'magnifying-glass': 'M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z',
+        'alert': 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z',
         'x-mark': 'M6 6l12 12M18 6L6 18',
         'funnel': 'M3 5h18l-7 8v5l-4 2v-7L3 5z',
         'bolt': 'M13 2 4 14h7l-1 8 9-12h-7l1-8z',
@@ -112,7 +113,12 @@
         function colById(id) { for (var i = 0; i < catalog.length; i++) if (catalog[i].id === id) return catalog[i]; return null; }
 
         // --- data load -------------------------------------------------------
+        // Each load gets a number; a response that is not the latest one is
+        // dropped (1.2.67), so a slow answer to an old search never replaces
+        // the answer to the new one.
+        var loadSeq = 0;
         function load() {
+            var my = ++loadSeq;
             root.classList.add('is-loading');
             window.Basehim.ajax.get('content.table', {
                 table: cfg.table, page: state.page, per_page: state.perPage,
@@ -120,6 +126,7 @@
                 filters: JSON.stringify(state.filters || {}),
                 columns: JSON.stringify(columns ? columns.map(function (c) { return c.id; }) : [])
             }).then(function (data) {
+                if (my !== loadSeq) return;
                 payload = data; columns = data.columns || columns; catalog = data.catalog || catalog;
                 if (data.prefs) { state.order = data.prefs.order; state.visible = data.prefs.visible; }
                 state.sort = data.sort || null;
@@ -133,10 +140,46 @@
                     return;
                 }
                 renderHead(); renderBody(); renderFoot();
+                emit('bh:dt-loaded', { table: cfg.table, meta: data.meta || {}, sort: state.sort, search: state.search, filters: toObj(state.filters) });
             }).catch(function (err) {
+                if (my !== loadSeq) return;
                 renderError(err && err.message ? err.message : 'Could not load the table.');
-            }).then(function () { root.classList.remove('is-loading'); });
+            }).then(function () { if (my === loadSeq) root.classList.remove('is-loading'); });
         }
+
+        /**
+         * Events on the table's root element (1.2.67), for a screen that hosts
+         * a table and needs to drive it or react to it. See docs/DATA-TABLE.md.
+         *   bh:dt-loaded  (out)  after each load: { table, meta, sort, search, filters }
+         *   bh:dt-bulk    (out, cancelable) before a bulk action is submitted as
+         *                 a form: { table, action, ids }. preventDefault() to
+         *                 run it yourself (say, over AJAX).
+         *   bh:dt-query   (in)   { search?, filters?, sort? } — merged, page 1, load
+         *   bh:dt-reload  (in)   { clearSelection? } — reload the current page
+         */
+        function emit(name, detail, cancelable) {
+            var ev;
+            try { ev = new CustomEvent(name, { bubbles: true, cancelable: !!cancelable, detail: detail }); }
+            catch (e) { return true; }
+            return root.dispatchEvent(ev);
+        }
+        root.addEventListener('bh:dt-query', function (e) {
+            var d = (e && e.detail) || {};
+            if (typeof d.search === 'string') { state.search = d.search.trim(); if (r.search && r.search.value !== d.search) r.search.value = d.search; }
+            if (d.filters && typeof d.filters === 'object') {
+                Object.keys(d.filters).forEach(function (k) {
+                    var v = d.filters[k];
+                    if (v === '' || v == null || (Array.isArray(v) && !v.length)) delete state.filters[k]; else state.filters[k] = v;
+                });
+            }
+            if (typeof d.sort === 'string') state.sort = d.sort || null;
+            state.page = 1;
+            load();
+        });
+        root.addEventListener('bh:dt-reload', function (e) {
+            if (e && e.detail && e.detail.clearSelection) clearSelection();
+            load();
+        });
 
         // --- header ----------------------------------------------------------
         function sortPartner(col) {
@@ -329,12 +372,24 @@
             if (selected[row.id] !== undefined) card.classList.add('is-selected');
             return card;
         }
+        // Empty and error states (1.2.66): a large icon in a circle, centred
+        // above the message. The same markup is printed by the partial on the
+        // first page, so the server's paint and the script's match.
+        function stateHtml(kind, iconName, title, text) {
+            return '<div class="bh-dt-state bh-dt-state--' + kind + '" role="status">'
+                + '<span class="bh-dt-state__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="' + SVG[iconName] + '"/></svg></span>'
+                + '<p class="bh-dt-state__title">' + esc(title) + '</p><p class="bh-dt-state__text">' + esc(text) + '</p></div>';
+        }
         function renderEmpty() {
-            var h = '<div class="bh-dt-state">' + icon('inbox') + '<p class="bh-dt-state__title">Nothing to show</p><p>No rows match the current search or filters.</p></div>';
+            var noun = String(payload.label || '').toLowerCase() || 'items';
+            var filtered = !!state.search || Object.keys(state.filters || {}).length > 0;
+            var h = filtered
+                ? stateHtml('empty', 'magnifying-glass', 'No matches', 'No ' + noun + ' match the current search or filters.')
+                : stateHtml('empty', 'inbox', 'Nothing here yet', 'There are no ' + noun + ' to show yet.');
             r.body.innerHTML = '<tr><td colspan="99">' + h + '</td></tr>'; r.cards.innerHTML = h;
         }
         function renderError(msg) {
-            var h = '<div class="bh-dt-state"><p class="bh-dt-state__title">Something went wrong</p><p>' + esc(msg) + '</p></div>';
+            var h = stateHtml('error', 'alert', 'Something went wrong', msg);
             r.body.innerHTML = '<tr><td colspan="99">' + h + '</td></tr>'; r.cards.innerHTML = h;
         }
 
@@ -932,7 +987,7 @@
             syncBulk(); syncSelectAll();
         }
         function runBulk(action, ids) {
-            if (!action || !ids || !ids.length || !cfg.bulkEndpoint) return;
+            if (!action || !ids || !ids.length || (!cfg.bulkEndpoint && !cfg.bulkEvents)) return;
             if (action === 'delete' && window.bhConfirm) {
                 var dmsg = cfg.deleteConfirm ? cfg.deleteConfirm.replace('{n}', ids.length) : ('Move ' + ids.length + ' item(s) to trash?');
                 window.bhConfirm(dmsg).then(function (ok) { if (ok) submitBulk(action, ids); });
@@ -941,6 +996,8 @@
             submitBulk(action, ids);
         }
         function submitBulk(action, ids) {
+            if (!emit('bh:dt-bulk', { table: cfg.table, action: action, ids: ids.slice() }, true)) return;
+            if (!cfg.bulkEndpoint) return;
             var form = el('form'); form.method = 'POST'; form.action = cfg.bulkEndpoint; form.style.display = 'none';
             form.appendChild(hidden('_csrf', cfg.csrf)); form.appendChild(hidden('bulk_action', action));
             ids.forEach(function (id) { form.appendChild(hidden('ids[]', id)); });
@@ -1069,7 +1126,8 @@
             sel.addEventListener('change', function () {
                 var field = sel.getAttribute('data-dt-filter');
                 if (sel.value) state.filters[field] = sel.value; else delete state.filters[field];
-                load();   // keep the current page (clamped after the response)
+                state.page = 1;   // a new filter starts at its first page (1.2.67)
+                load();
             });
         });
 

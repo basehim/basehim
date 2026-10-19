@@ -54,6 +54,9 @@ final class SettingsActions
             // A renamed site retitles the open tab and the sidebar at once.
             $out['site_title'] = \App\Core\AdminHead::siteName();
             $out['document_title'] = \App\Core\AdminHead::title(SettingsSaver::label($tab) . ' Settings');
+            // The account email may have changed with the administration email (1.2.66).
+            $me = $app->make(\App\Services\UserService::class)->find((int) ($ctx->userId() ?? 0));
+            $out['account_email'] = (string) ($me['email'] ?? '');
         }
         return $out;
     }

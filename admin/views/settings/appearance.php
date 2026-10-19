@@ -123,6 +123,8 @@
                 return;
             }
             window.BasehimMedia.openPicker({
+                types: 'image/*',
+                title: name === 'favicon' ? 'Choose a favicon' : 'Choose a logo',
                 onSelect: function (media) {
                     if (media && media.url) setUrl(media.url);
                 }

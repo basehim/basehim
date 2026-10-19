@@ -16,26 +16,20 @@ class MediaController extends Controller
     {
         /** @var MediaService $media */
         $media = $this->app->make(MediaService::class);
-        $page = max(1, (int)$request->query('page', 1));
-        $search = (string)$request->query('q', '');
-
-        $filters = [];
-        if ($search !== '') $filters['search'] = $search;
-
-        $result = $media->paginate($filters, $page, 24);
-
         $session = $this->app->make(Session::class);
         $config = $this->app->make(Config::class);
 
+        // The grid loads itself through media.list and the List view is a
+        // Data Table, so the page needs only the total for its heading.
         return $this->view('media.index', [
             'title' => 'Media Library',
             'currentUser' => $this->user(),
-            'items' => $result['data'],
-            'meta' => $result['meta'],
-            'search' => $search,
+            'total' => $media->totalCount(),
             'csrf' => $session->csrfToken(),
-            'maxSize' => $config->get('cms.media.max_upload_size', 64 * 1024 * 1024),
-            'allowedTypes' => $config->get('cms.media.allowed_types', []),
+            // What this site accepts, as Settings → Media says (the same lists
+            // upload() checks), not the config defaults.
+            'maxSize' => $media->maxUploadBytes((int) $config->get('cms.media.max_upload_size', 64 * 1024 * 1024)),
+            'allowedTypes' => $media->allowedTypes((array) $config->get('cms.media.allowed_types', [])),
         ]);
     }
 
@@ -172,9 +166,17 @@ class MediaController extends Controller
                 ], 201);
             }
             $this->flash('success', 'File uploaded successfully.');
-        } catch (\Throwable $e) {
+        } catch (\App\Services\MediaRejected $e) {
+            // MediaService's own messages: written for the person uploading.
             if ($isAjax) return Response::json(['error' => $e->getMessage()], 422);
             $this->flash('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            // Anything else (a database error, say) may name tables or paths:
+            // it goes to the log, and the browser gets a plain sentence.
+            if (function_exists('error_log')) error_log('[Basehim] Media upload failed: ' . get_class($e) . ': ' . $e->getMessage());
+            $msg = 'The file could not be saved. Please try again.';
+            if ($isAjax) return Response::json(['error' => $msg], 500);
+            $this->flash('error', $msg);
         }
 
         return $this->redirect('/admin/media');

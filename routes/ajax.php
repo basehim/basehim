@@ -154,18 +154,33 @@ $ajax->register('media.list', [
         'page'     => 'int|min:1|max:100000',
         'per_page' => 'int|min:1|max:100',
         'q'        => 'string|max:200',
+        // Checked against the type groups in MediaActions::filtersFrom().
         'type'     => 'string|max:20',
+        'types'    => 'string|max:100',
+        'month'    => ['type' => 'string', 'max' => 7, 'regex' => '/^(all|\d{4}-\d{2})$/'],
+        'months'   => 'bool',
         'sort'     => 'string|in:newest,oldest,name,name_desc,largest,smallest',
     ],
-    'description' => 'One page of the media library.',
+    'description' => 'One page of the media library; meta.has_more says whether there is another.',
+]);
+
+$ajax->register('media.get', [
+    'handler'     => [MediaActions::class, 'get'],
+    'methods'     => ['GET'],
+    'capability'  => 'upload_media',
+    'area'        => '/admin/media',
+    'rate_limit'  => ['max' => 240, 'per' => 60],
+    'input'       => ['id' => 'required|int|min:1'],
+    'description' => 'One media item, with whether you may edit or delete it.',
 ]);
 
 $ajax->register('media.delete', [
     'handler'     => [MediaActions::class, 'delete'],
     'capability'  => 'upload_media',
     'area'        => '/admin/media',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
     'input'       => ['ids' => ['type' => 'array', 'required' => true, 'min' => 1, 'max' => 500, 'items' => 'int|min:1']],
-    'description' => "Delete files; someone else's need delete_media.",
+    'description' => "Delete files, with a result for each; someone else's need delete_media.",
 ]);
 
 $ajax->register('media.regenerate_batch', [

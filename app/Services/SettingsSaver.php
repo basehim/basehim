@@ -57,7 +57,7 @@ final class SettingsSaver
     {
         unset($in['_csrf']);
         return match ($tab) {
-            'general'       => $this->general($in),
+            'general'       => $this->general($in, $user),
             'email'         => $this->email($in),
             'authorization' => $this->authorization($in, $user),
             'permalinks'    => $this->permalinks($in),
@@ -81,8 +81,29 @@ final class SettingsSaver
         return self::result(true, 'success', self::label($tab) . ' settings saved.');
     }
 
-    private function general(array $in): array
+    private function general(array $in, ?array $user = null): array
     {
+        // Administration email (1.2.66): validated, written to .env too, and —
+        // when it was your own account's address and you ask — your account
+        // changes with it, through the same protected change as My Profile.
+        // The two helper fields are never stored as settings.
+        $wantAccount = !empty($in['admin_email_account']);
+        $password = (string) ($in['admin_email_password'] ?? '');
+        unset($in['admin_email_account'], $in['admin_email_password']);
+        $adminEmail = new AdminEmailService($this->app);
+        $oldAdmin = $adminEmail->current();
+        $newAdmin = null;
+        if (array_key_exists('admin_email', $in)) {
+            $newAdmin = strtolower(trim((string) $in['admin_email']));
+            // Checked when it changes; an address saved before (admin@localhost
+            // on a test install) must not stop the rest of the screen saving.
+            if ($newAdmin !== $oldAdmin && !filter_var($newAdmin, FILTER_VALIDATE_EMAIL)) {
+                return self::result(false, 'error', 'Enter a valid administration email address.');
+            }
+            $in['admin_email'] = $newAdmin;
+        }
+        $adminChanged = $newAdmin !== null && $newAdmin !== $oldAdmin;
+
         // The timezone used to be a free-text field that nothing read. It is a
         // list now; anything not in it is refused rather than stored.
         $tz = $in['timezone'] ?? null;
@@ -99,8 +120,32 @@ final class SettingsSaver
         if ($wk !== null && !in_array((string) $wk, ['0', '1', '2', '3', '4', '5', '6'], true)) {
             return self::result(false, 'error', 'Pick a day for the start of the week.');
         }
+        // Your account first: a wrong password must leave everything unsaved.
+        $accountNote = '';
+        if ($adminChanged && $wantAccount && is_array($user) && isset($user['id'])
+            && strtolower((string) ($user['email'] ?? '')) === $oldAdmin) {
+            $r = $adminEmail->changeOwnAccount($user, $newAdmin, $password);
+            if ($r['status'] === 'error') {
+                return self::result(false, 'error', $r['message']);
+            }
+            $accountNote = $r['message'];
+        }
         $res = $this->generic('general', $in);
         \App\Core\Time::reset();
+        // .env follows the setting; this also repairs a site whose setting was
+        // changed before 1.2.66, the next time General is saved.
+        $envBehind = $newAdmin !== null && filter_var($newAdmin, FILTER_VALIDATE_EMAIL)
+            && strtolower(trim((string) (\App\Core\Env::get(AdminEmailService::ENV_KEY, '') ?? ''))) !== $newAdmin;
+        if ($adminChanged || $envBehind) {
+            $notes = [];
+            if ($accountNote !== '') $notes[] = $accountNote;
+            if (!$adminEmail->writeEnv($newAdmin)) {
+                $notes[] = 'ADMIN_EMAIL in .env could not be updated (the file is not writable); it is only the default used before this setting exists.';
+            }
+            if ($notes) {
+                $res = self::result(true, 'success', $res['message'] . ' ' . implode(' ', $notes));
+            }
+        }
         return $res;
     }
 
