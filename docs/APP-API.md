@@ -97,6 +97,10 @@ public function boot(): void
 task. The consequence is honest and worth designing around: **a site with no
 traffic runs nothing.** "Hourly" means "hourly, whenever someone next visits".
 
+Scheduled **posts** do not wait for this sweep: core publishes them before the
+first request after their time is routed, and on every cron URL call (1.2.60).
+The cron URL still makes them punctual on a site with few visitors.
+
 For punctual execution, point a real crontab at the token URL shown in
 `GET /api/v1/schedule` or on Admin → System:
 

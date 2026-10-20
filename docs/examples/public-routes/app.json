@@ -1,0 +1,11 @@
+{
+    "name": "Public Routes Example",
+    "slug": "public-routes",
+    "version": "1.0.0",
+    "description": "Registers public pages and a small JSON API through Basehim's site routes: GET /example, GET /example/{slug}, GET and POST /api/example.",
+    "namespace": "Basehim\\PublicRoutesExample",
+    "entry": "App",
+    "icon": "heroicon:globe-alt",
+    "requires": { "php": ">=8.1", "basehim": ">=1.2.72" },
+    "developer": { "name": "Basehim" }
+}

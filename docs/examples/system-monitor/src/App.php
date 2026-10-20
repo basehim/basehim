@@ -5,103 +5,138 @@ namespace Example\SystemMonitor;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Services\Dashboard\WidgetContext;
+use App\Services\Dashboard\WidgetUnavailable;
 
 /**
- * Example app showing how an app uses Basehim core's built-in
- * Agent API. It does two things:
+ * Example app: what the server this site runs on is doing.
  *
- *   1. Ships a desktop module (desktop-modules/sysmon.pkg.json). Because core
- *      auto-registers and pushes auto_install modules on activation, the
- *      desktop app gains the "sysmon" metrics collector just by activating this
- *      app — no manual module upload.
+ * Copy this folder to content/apps/system-monitor and activate it. It shows:
  *
- *   2. Provides an admin page + JSON API that reads agents and their reported
- *      metrics through $this->agents(), and can ask an agent for a fresh
- *      snapshot via a queued command.
+ *   - an admin page (adminGet) behind the app's access capability, rendered in
+ *     the admin layout with adminView() and an app template;
+ *   - a dashboard card (registerWidget with 'surfaces' => ['dashboard']) fed
+ *     by a data provider, with a setting, a cache and an action;
+ *   - the "unavailable" state, for hosts that hide load and memory figures.
  *
- * The actual charts/UI are left as a stub — this is about the connectivity
- * pattern, not the dashboard.
+ * Everything comes from PHP itself (sys_getloadavg, disk_free_space,
+ * /proc/meminfo where readable) — no agents, no extensions, nothing to install.
+ *
+ * Until 1.2.70 this example called $this->agents(), a desktop-agent API core
+ * never shipped, and fataled when copied in (issues.md BH-004).
  */
 class App extends \App\Core\App
 {
     public function boot(): void
     {
         $this->addAdminMenu([
-            'url'   => '/admin/sysmon',
+            'url'   => '/admin/system-monitor',
             'label' => 'System Monitor',
-            'icon'  => 'fa-gauge-high',
+            'icon'  => 'cpu-chip',
         ]);
 
-        // Admin page (renders agents + a placeholder for charts).
-        $this->adminGet('/sysmon', [$this, 'page']);
+        // GET /admin/system-monitor — signed in, with access_app:system-monitor.
+        $this->adminGet('/system-monitor', [$this, 'page']);
 
-        // JSON: list agents with their latest metrics.
-        $this->adminGet('/sysmon/api/agents.json', [$this, 'apiAgents']);
-
-        // JSON: ask a specific agent for an immediate metrics snapshot.
-        $this->adminPost('/sysmon/api/snapshot', [$this, 'apiSnapshot']);
-
-        // JSON: poll a queued command's result.
-        $this->adminGet('/sysmon/api/command/{id}.json', [$this, 'apiCommand']);
+        // A dashboard card. Keys are namespaced: this is 'system-monitor.server'.
+        $this->registerWidget('server', [
+            'title'       => 'Server',
+            'description' => 'Load, memory and free disk space on the server this site runs on.',
+            'icon'        => 'cpu-chip',
+            'surfaces'    => ['dashboard'],
+            'capability'  => 'access_app:' . $this->slug(),
+            'fields'      => [
+                ['key' => 'warn_disk', 'label' => 'Warn when free disk is below (%)', 'type' => 'number',
+                 'min' => 1, 'max' => 50, 'default' => 10],
+            ],
+            'dashboard'   => [
+                'view'    => 'status',
+                'sizes'   => ['third', 'half'],
+                'size'    => 'third',
+                'cache'   => ['ttl' => 60, 'scope' => 'global'],
+                'refresh' => 300,
+                'data'    => [$this, 'card'],
+                'actions' => [
+                    ['id' => 'open', 'label' => 'Open System Monitor', 'url' => (defined('BASEHIM_BASE') ? BASEHIM_BASE : '') . '/admin/system-monitor', 'icon' => 'arrow-top-right-on-square'],
+                ],
+            ],
+        ]);
     }
 
-    public function onActivate(): void
-    {
-        // Nothing required here for desktop modules — core auto-registers and
-        // pushes desktop-modules/*.pkg.json on activation. This hook is just for
-        // any app-specific setup you might want.
-    }
-
-    public function onDeactivate(): void
-    {
-        // Optional: stop offering our desktop module to agents.
-        // $this->agents()->unregisterModule($this->slug(), 'sysmon');
-    }
-
-    // ---- Admin page ----
+    /** The admin page. */
     public function page(Request $request): Response
     {
-        $agents = $this->agents()->agents();
-        $rows = '';
-        foreach ($agents as $a) {
-            $m = $a['metrics'] ?? [];
-            $rows .= sprintf(
-                '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
-                htmlspecialchars((string) $a['name']),
-                $a['online'] ? '🟢 online' : '⚪ offline',
-                htmlspecialchars((string) ($m['cpu'] ?? '—')),
-                htmlspecialchars((string) ($m['mem'] ?? '—'))
-            );
+        return Response::make($this->adminView('page', 'System Monitor', ['m' => $this->readings()]));
+    }
+
+    /** The dashboard card's data: a status list. */
+    public function card(WidgetContext $ctx): array
+    {
+        $m = $this->readings();
+        if ($m['load'] === null && $m['mem_used_pct'] === null && $m['disk_free_pct'] === null) {
+            // Not an error: this host doesn't let PHP see these figures.
+            throw new WidgetUnavailable('This host does not let PHP read load, memory or disk figures.');
         }
-        $html = '<h1>System Monitor</h1>'
-              . '<p>Agents reporting to this site. Charts would render here from the metrics stream.</p>'
-              . '<table class="table"><thead><tr><th>Agent</th><th>Status</th><th>CPU</th><th>Memory</th></tr></thead>'
-              . '<tbody>' . ($rows ?: '<tr><td colspan="4">No agents yet.</td></tr>') . '</tbody></table>';
-        return Response::make($this->adminView('layout', 'System Monitor', ['content' => $html]) ?? $html);
+        $warnDisk = (int) $ctx->setting('warn_disk', 10);
+        $items = [];
+        if ($m['load'] !== null) {
+            $perCore = $m['cores'] > 0 ? $m['load'][0] / $m['cores'] : $m['load'][0];
+            $items[] = ['label' => 'Load (1 min)', 'detail' => number_format($m['load'][0], 2) . ($m['cores'] ? " on {$m['cores']} cores" : ''),
+                        'state' => $perCore >= 1.5 ? 'error' : ($perCore >= 0.8 ? 'warn' : 'ok')];
+        }
+        if ($m['mem_used_pct'] !== null) {
+            $items[] = ['label' => 'Memory used', 'detail' => $m['mem_used_pct'] . '%',
+                        'state' => $m['mem_used_pct'] >= 95 ? 'error' : ($m['mem_used_pct'] >= 85 ? 'warn' : 'ok')];
+        }
+        if ($m['disk_free_pct'] !== null) {
+            $items[] = ['label' => 'Disk free', 'detail' => $m['disk_free'] . ' (' . $m['disk_free_pct'] . '%)',
+                        'state' => $m['disk_free_pct'] < $warnDisk / 2 ? 'error' : ($m['disk_free_pct'] < $warnDisk ? 'warn' : 'ok')];
+        }
+        $items[] = ['label' => 'PHP', 'detail' => PHP_VERSION, 'state' => 'ok'];
+        $problems = count(array_filter($items, fn($i) => $i['state'] !== 'ok'));
+        return [
+            'summary' => $problems === 0 ? 'The server looks healthy.' : ($problems === 1 ? '1 reading needs a look.' : "{$problems} readings need a look."),
+            'items'   => $items,
+        ];
     }
 
-    // ---- JSON: agents + metrics ----
-    public function apiAgents(Request $request): Response
+    /** Everything PHP can see, with null for what this host hides. */
+    private function readings(): array
     {
-        return Response::json(['ok' => true, 'agents' => $this->agents()->agents()]);
+        $load = function_exists('sys_getloadavg') ? @sys_getloadavg() : false;
+
+        $cores = 0;
+        $cpuinfo = @file_get_contents('/proc/cpuinfo');
+        if (is_string($cpuinfo)) $cores = substr_count($cpuinfo, "\nprocessor") + (str_starts_with($cpuinfo, 'processor') ? 1 : 0);
+
+        $memUsedPct = null;
+        $meminfo = @file_get_contents('/proc/meminfo');
+        if (is_string($meminfo) && preg_match('/MemTotal:\s+(\d+)/', $meminfo, $t) && preg_match('/MemAvailable:\s+(\d+)/', $meminfo, $a) && (int) $t[1] > 0) {
+            $memUsedPct = (int) round(100 - ((int) $a[1] / (int) $t[1] * 100));
+        }
+
+        $free = @disk_free_space(BASEHIM_ROOT);
+        $total = @disk_total_space(BASEHIM_ROOT);
+        $diskFreePct = ($free !== false && $total) ? (int) round($free / $total * 100) : null;
+
+        return [
+            'load'          => is_array($load) ? array_map('floatval', $load) : null,
+            'cores'         => $cores,
+            'mem_used_pct'  => $memUsedPct,
+            'disk_free'     => $free !== false ? $this->bytes((float) $free) : null,
+            'disk_total'    => $total ? $this->bytes((float) $total) : null,
+            'disk_free_pct' => $diskFreePct,
+            'php'           => PHP_VERSION,
+            'server'        => (string) ($_SERVER['SERVER_SOFTWARE'] ?? 'unknown'),
+            'os'            => php_uname('s') . ' ' . php_uname('r'),
+        ];
     }
 
-    // ---- JSON: request a fresh snapshot from an agent ----
-    public function apiSnapshot(Request $request): Response
+    private function bytes(float $b): string
     {
-        $agentId = (int) $request->input('agent_id', 0);
-        if ($agentId <= 0) return Response::json(['ok' => false, 'error' => 'agent_id required'], 400);
-        // Queue a command; the desktop "sysmon" module responds by pushing
-        // metrics on its next heartbeat (or directly acking with a snapshot).
-        $cmdId = $this->agents()->sendCommand($agentId, 'metrics-snapshot', [], $this->slug());
-        return Response::json(['ok' => true, 'command_id' => $cmdId]);
-    }
-
-    // ---- JSON: poll a command's result ----
-    public function apiCommand(Request $request, string $id): Response
-    {
-        $status = $this->agents()->commandStatus((int) $id);
-        if (!$status) return Response::json(['ok' => false, 'error' => 'Not found'], 404);
-        return Response::json(['ok' => true, 'command' => $status]);
+        $u = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $i = 0;
+        while ($b >= 1024 && $i < 4) { $b /= 1024; $i++; }
+        return round($b, 1) . ' ' . $u[$i];
     }
 }

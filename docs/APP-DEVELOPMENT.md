@@ -123,7 +123,7 @@ class App extends \App\Core\App
 
 Fires when your version changes on disk, **however** the files arrived: the
 marketplace upgrade flow, a ZIP upload, an FTP drop, or a core patch that
-bundled them. Fired at most once per version change per request.
+bundled them, and again after a failure until it succeeds.
 
 It also fires on **downgrades** — only you know whether unwinding your schema is
 safe — so compare rather than assume:
@@ -137,8 +137,28 @@ public function onUpgrade(string $from, string $to): void
 }
 ```
 
-A throw is logged and swallowed, so a bad handler can't lock you out of the Apps
-screen.
+Since 1.2.73 core keeps two versions per app: `version` (its files) and
+`schema_version` (what its data was migrated to). `schema_version` moves only
+after `onUpgrade()` returns:
+
+- **A throw** is recorded in the app's report (Apps → Report), and an active
+  app is switched off, because its new code expects the new schema. Fix the
+  cause and activate it: activation runs `onUpgrade($from, $to)` again from the
+  last version that succeeded, and starts the app only if it passes.
+- **Two requests at once** cannot both run it: a per-app database lock is held
+  while it runs, and the versions are re-read inside it.
+- **Make it idempotent anyway** (`CREATE TABLE IF NOT EXISTS`, check a column
+  before adding it): a retry starts from the top of your handler.
+
+The other lifecycle methods report truthfully too (1.2.73):
+
+- `onActivate()` runs **before** the app is marked active. If it throws, the
+  app stays off and the Apps screen says why. It used to be marked active
+  first and reported "activated" whatever happened.
+- `onInstall()` that throws is recorded, and runs again when the app is next
+  activated. Until it has succeeded, `schema_version` is empty.
+- `onDeactivate()` and `onUninstall()` failures are logged; they never stop the
+  app being switched off or removed.
 
 ## Custom content types
 
@@ -242,7 +262,7 @@ $this->addFilter('html.iframe_hosts', fn(array $h) => [...$h, 'player.example.or
 **AJAX** `ajax` `useAjaxClient` — actions browsers call through `POST /ajax` (APP-AJAX.md)
 **Admin** `addAdminMenu` `addAdminStyle` `addAdminScript` `adminView`
 **Editor** `addEditorScript` `addEditorStyle` `addEditorConfig` `registerBlockRenderer`
-**Widgets** `registerWidget`
+**Widgets** `registerWidget` — dashboard cards with `'surfaces' => ['dashboard']`: [DASHBOARD-WIDGETS.md](DASHBOARD-WIDGETS.md)
 **Views/assets** `view` `asset`
 **Settings** `getSetting` `setSetting` `deleteSetting` `allSettings`
 **Database** `table` `legacyTable` `renameLegacyTable` `schema` `db`
@@ -301,6 +321,23 @@ panel wants.
 Tags typed in the editor that do not exist yet are kept with the post and
 created when it is published (`PostEditorService::settleNewTags()`), by
 whoever publishes it.
+
+## Public pages and endpoints (1.2.72)
+
+Register public routes with `$this->router()->site()` in `boot()`: GET, POST,
+PUT, PATCH, DELETE, parameters, names, and per-route `auth`, `can`, `csrf` and
+`rate`. Render pages in the active theme with `App\Core\Http\SitePage`. Core
+routes, `/admin` and other apps' routes are protected. See
+[PUBLIC-ROUTES.md](PUBLIC-ROUTES.md) and `docs/examples/public-routes`.
+
+## When an app fails (1.2.71)
+
+Basehim validates an app's code before loading it and switches off an app that
+cannot load or whose `boot()` throws. The rest of the site keeps running.
+Exceptions from `boot()` are no longer just logged: the app is switched off and
+its registrations are removed. Don't give your methods the names of the base
+class's methods (`schema`, `table`, `get`, `db` …) unless you mean to override
+them compatibly. See [APP-FAULT-ISOLATION.md](APP-FAULT-ISOLATION.md).
 
 ## Gotchas
 

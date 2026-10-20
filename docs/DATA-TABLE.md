@@ -235,6 +235,53 @@ server-rendered table.
 The CSS and JS are versioned by their file modification time, so a changed
 asset is picked up by browsers immediately — no release bump or hard refresh.
 
+### Driving a table from its page (1.2.67)
+
+A screen that hosts a table can steer it and react to it through events on
+the table's root element (`.bh-dt`). Nothing else about the table changes.
+
+| Event | Direction | `detail` |
+|---|---|---|
+| `bh:dt-query` | dispatch it | `{ search?, filters?, sort? }`. Merged into the table's state; back to page 1; reload. An empty filter value removes that filter. |
+| `bh:dt-reload` | dispatch it | `{ clearSelection? }`. Reload the current page. |
+| `bh:dt-loaded` | listen | `{ table, meta, sort, search, filters }`, after every load. |
+| `bh:dt-bulk` | listen (cancelable) | `{ table, action, ids }`, after any confirmation and before the bulk action is posted as a form. Call `preventDefault()` to run it yourself, for example over AJAX. |
+
+Pass `'bulkEvents' => true` to the partial when the page handles bulk
+actions itself and there is no `bulkEndpoint`. The Media Library does this
+for `media.library`: Delete goes to `media.delete`, which reports each file,
+and the table reloads in place.
+
+```js
+var dt = document.querySelector('.my-screen .bh-dt');
+dt.dispatchEvent(new CustomEvent('bh:dt-query', { detail: { search: 'cat', filters: { type: 'image' } } }));
+dt.addEventListener('bh:dt-bulk', function (e) {
+    e.preventDefault();
+    Basehim.ajax.request('my.bulk', { ids: e.detail.ids }).then(function () {
+        dt.dispatchEvent(new CustomEvent('bh:dt-reload', { detail: { clearSelection: true } }));
+    });
+});
+```
+
+Also from 1.2.67: an answer that arrives after a newer request is dropped, so a
+slow response to an old search never replaces a newer one. Changing a filter
+goes back to page 1.
+
+### `media.library` (1.2.67)
+
+The Media Library's List view. Provider `App\Services\Table\MediaTableProvider`
+wraps `MediaService::paginate()`, which is the same query the grid and the picker use.
+
+- **Columns:** `thumb` (the generated thumbnail), `name` (opens the details
+  dialog), `type`, `size`, `dimensions`, `date`, `actions`.
+- **Filters:** `type` (`image`, `svg`, `video`, `audio`, `document`), and
+  `month` (`YYYY-MM` in the site's timezone).
+- **Sorts:** `newest`, `oldest`, `title_az`, `title_za`, `size_desc`, `size_asc`.
+- **Capability:** `upload_media`, area `/admin/media`.
+
+Apps add columns with the `datatable.columns.media.library` filter, like any
+other table.
+
 ## Reusable cell components
 
 `App\Core\Admin\Components` renders the things that recur across admin

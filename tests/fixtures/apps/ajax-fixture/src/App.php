@@ -144,6 +144,47 @@ class App extends \App\Core\App
                 $this->log('REFUSED ' . $name . ': ' . $e->getMessage(), [], 'warning');
             }
         }
+
+        $this->registerFixtureDashboardCards();
+    }
+
+    /** Dashboard widgets (1.2.68) — tests/Integration/DashboardTest.php. */
+    private function registerFixtureDashboardCards(): void
+    {
+        // A native stat card with a setting.
+        $this->registerWidget('tally', [
+            'surfaces'    => ['dashboard'],
+            'title'      => 'Fixture tally',
+            'icon'       => 'chart-bar',
+            'capability' => 'read',
+            'fields'     => [['key' => 'start', 'label' => 'Start at', 'type' => 'number', 'min' => 0, 'max' => 100, 'default' => 7]],
+            'dashboard'  => [
+                'view' => 'stat',
+                'size' => 'third',
+                'data' => fn($ctx) => ['items' => [['label' => 'Tally', 'value' => (int) $ctx->setting('start') + 1]]],
+            ],
+        ]);
+        // A card whose provider always fails.
+        $this->registerWidget('broken', [
+            'surfaces'    => ['dashboard'],
+            'title'     => 'Fixture broken',
+            'dashboard' => ['view' => 'list', 'data' => function () { throw new \RuntimeException('fixture-secret-detail'); }],
+        ]);
+        // Administrators only.
+        $this->registerWidget('admin-card', [
+            'surfaces'    => ['dashboard'],
+            'title'      => 'Fixture admin card',
+            'capability' => 'manage_options',
+            'dashboard'  => ['view' => 'list', 'default' => false, 'data' => fn() => ['items' => [['title' => 'fixture-admin-only-data']]]],
+        ]);
+        // A pre-1.2.68 widget: HTML from a render callback, every surface.
+        $this->registerWidget('legacy-box', [
+            'title'  => 'Fixture legacy box',
+            'render' => fn(array $s, string $surface) => '<p class="fixture-legacy">legacy on ' . htmlspecialchars($surface) . '</p>',
+            'dashboard' => ['width' => 'half', 'priority' => 200],
+        ]);
+        // Refused: another owner's key, and core's namespace.
+        $this->registerWidget('core.hijack', ['title' => 'Nope', 'render' => fn() => 'x']);
     }
 
     public function echo(AjaxContext $ctx): array

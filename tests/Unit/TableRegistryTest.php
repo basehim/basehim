@@ -129,3 +129,25 @@ test('table registry: a capability-gated column is removed for a user who lacks 
     $cols = $r->columnsFor('content.posts', null);
     assert_false(in_array('secret', array_map(fn($c) => $c->id, $cols), true), 'gated column removed, not hidden');
 });
+
+test('table registry: a column can say where it goes on a card (1.2.65); bad values are ignored', function () {
+    $hooks = new HookRegistry();
+    $r = new TableRegistry($hooks, new Logger(sys_get_temp_dir()));
+    $r->register('content.posts', good_table(['columns' => [
+        ['id' => 'title', 'label' => 'Title', 'value' => 'title', 'can_hide' => false, 'card' => 'title'],
+        ['id' => 'views', 'label' => 'Views', 'value' => 'views', 'card' => 'meta', 'card_icon' => 'eye'],
+        ['id' => 'odd', 'label' => 'Odd', 'value' => 'x', 'card' => 'sideways', 'card_icon' => '<svg onload=x>'],
+        ['id' => 'plain', 'label' => 'Plain', 'value' => 'y'],
+    ]]));
+    $hooks->addFilter('datatable.columns.content.posts', function (array $cols) {
+        $cols[] = ['id' => 'seo.score', 'label' => 'SEO', 'render' => fn($row) => 'x', 'owner' => 'seo', 'card' => 'under'];
+        return $cols;
+    });
+    $by = [];
+    foreach ($r->columnsFor('content.posts', null) as $c) { $by[$c->id] = $c->toClientArray(); }
+    assert_same('title', $by['title']['card']);
+    assert_same(['meta', 'eye'], [$by['views']['card'], $by['views']['card_icon']]);
+    assert_same([null, null], [$by['odd']['card'], $by['odd']['card_icon']], 'unknown slot and icon dropped');
+    assert_same([null, null], [$by['plain']['card'], $by['plain']['card_icon']], 'unset: the client chooses');
+    assert_same('under', $by['seo.score']['card'], 'apps can place their columns');
+});

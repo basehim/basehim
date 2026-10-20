@@ -195,9 +195,16 @@ function bh_test_teardown(array $env, $proc, bool $keep): void
         proc_terminate($proc);
         proc_close($proc);
     }
-    $fixture = $env['root'] . '/content/apps/ajax-fixture';
-    if (is_file($fixture . '/' . BH_FIXTURE_MARKER)) {
-        bh_rrmdir($fixture);
+    // The fixture app, and any app a test installed (bh_install_app()).
+    foreach (glob($env['root'] . '/content/apps/*', GLOB_ONLYDIR) ?: [] as $dir) {
+        if (is_file($dir . '/' . BH_FIXTURE_MARKER)) bh_rrmdir($dir);
+    }
+    // The test site shares storage/cache with a local install in the same
+    // checkout. Settings cached from the test database ("Title Test Site")
+    // would otherwise show on that site until they expired (issues.md BH-002).
+    // Only cache entries are removed; the folder stays.
+    foreach (glob($env['root'] . '/storage/cache/*') ?: [] as $entry) {
+        is_dir($entry) ? bh_rrmdir($entry) : @unlink($entry);
     }
     if ($keep) {
         bh_out("\n  Kept: database {$env['db']['name']}, files in {$env['tmp']}\n");
@@ -283,4 +290,54 @@ function bh_rrmdir(string $dir): void
         is_dir("$dir/$e") ? bh_rrmdir("$dir/$e") : @unlink("$dir/$e");
     }
     @rmdir($dir);
+}
+
+/**
+ * Install a throw-away app for a test: writes content/apps/{slug} (marked, so
+ * teardown removes it) and its apps row. $files maps paths inside the app to
+ * contents; app.json is written from $manifest unless given.
+ */
+function bh_install_app(string $slug, array $files, array $manifest = [], string $status = 'active'): string
+{
+    $dir = $GLOBALS['__bh_env']['root'] . '/content/apps/' . $slug;
+    if (is_dir($dir) && !is_file($dir . '/' . BH_FIXTURE_MARKER)) {
+        throw new \RuntimeException("{$dir} exists and is not a test app; refusing to overwrite it.");
+    }
+    bh_rrmdir($dir);
+    @mkdir($dir, 0755, true);
+    $manifest += ['name' => $slug, 'slug' => $slug, 'version' => '1.0.0', 'namespace' => 'BhTest\\' . str_replace(' ', '', ucwords(str_replace('-', ' ', $slug))), 'entry' => 'App'];
+    $files += ['app.json' => json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)];
+    foreach ($files as $path => $content) {
+        @mkdir(dirname($dir . '/' . $path), 0755, true);
+        file_put_contents($dir . '/' . $path, $content);
+    }
+    file_put_contents($dir . '/' . BH_FIXTURE_MARKER, "Installed by tests/run.php; removed afterwards.\n");
+    $db = bh_db();
+    $db->execute('DELETE FROM {apps} WHERE slug = :s', ['s' => $slug]);
+    $db->insert('apps', ['slug' => $slug, 'name' => $manifest['name'], 'version' => $manifest['version'], 'status' => $status, 'vendor' => 'tests']);
+    return $dir;
+}
+
+/** Remove an app installed with bh_install_app(), and its report. */
+function bh_remove_app(string $slug): void
+{
+    $env = $GLOBALS['__bh_env'];
+    $dir = $env['root'] . '/content/apps/' . $slug;
+    if (is_file($dir . '/' . BH_FIXTURE_MARKER)) bh_rrmdir($dir);
+    bh_db()->execute('DELETE FROM {apps} WHERE slug = :s', ['s' => $slug]);
+    @unlink($env['tmp'] . '/app-health/' . $slug . '.json');
+}
+
+/** An app's health record as the server wrote it, or null. */
+function bh_app_health(string $slug): ?array
+{
+    $f = $GLOBALS['__bh_env']['tmp'] . '/app-health/' . $slug . '.json';
+    $d = is_file($f) ? json_decode((string) file_get_contents($f), true) : null;
+    return is_array($d) ? $d : null;
+}
+
+function bh_app_status(string $slug): ?string
+{
+    $row = bh_db()->selectOne('SELECT status FROM {apps} WHERE slug = :s', ['s' => $slug]);
+    return $row['status'] ?? null;
 }

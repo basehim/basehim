@@ -1,10 +1,12 @@
 {
-    "name": "System Resource Monitor",
+    "name": "System Monitor",
     "slug": "system-monitor",
-    "version": "0.1.0",
-    "description": "Example app: shows CPU/RAM/disk from desktop agents using the core Agent API. Ships a desktop module that collects metrics; it auto-installs on activation.",
-    "author": "Example",
+    "version": "1.0.0",
+    "description": "Example app: server load, memory and disk on an admin page and as a dashboard card. Shows an admin route behind the app's access capability, an app view in the admin layout, a dashboard widget with a data provider and settings, and the unavailable state.",
+    "author": "Basehim",
     "namespace": "Example\\SystemMonitor",
     "src": "src",
-    "entry": "App"
+    "entry": "App",
+    "icon": "heroicon:cpu-chip",
+    "requires": { "php": ">=8.1", "basehim": ">=1.2.69" }
 }

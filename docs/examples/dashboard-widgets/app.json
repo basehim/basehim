@@ -1,0 +1,12 @@
+{
+    "name": "Dashboard Widgets Example",
+    "slug": "dashboard-example",
+    "version": "1.0.0",
+    "description": "Example app: registers dashboard cards of every native kind — a stat card, a table with settings, a status card with an action, a card fed by the app's own AJAX action, and a pre-1.2.68 HTML widget. Copy into content/apps/ to try it.",
+    "author": "Basehim",
+    "namespace": "Example\\DashboardWidgets",
+    "src": "src",
+    "entry": "App",
+    "icon": "heroicon:squares-2x2",
+    "requires": { "php": ">=8.1", "basehim": ">=1.2.68" }
+}

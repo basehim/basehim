@@ -35,13 +35,28 @@ admin/assets/**    linguist-vendored
 content/themes/*/assets/**  linguist-vendored
 docs/**            linguist-documentation
 
-# Keep release archives lean
+# What the download zip and the CloudHim release sync do with each path
+# (1.2.74, BH-018). The download zip is `git archive`, so export-ignore keeps a
+# path out of it. CloudHim (1.3.4+) reads two more rules from this file:
+#
+#   export-ignore                 the repository's own: a release sync never
+#                                 writes or deletes it, and it is not in the zip
+#   basehim-sync                  written by a sync whenever a release ships it,
+#                                 never deleted by one, and in the zip
+#   export-ignore basehim-sync    written by a sync, never deleted, not in the zip
+#
+# docs/ is part of the download (changelogs, guides, example apps). tests/ is
+# kept on GitHub but out of the download. Until 1.2.74 both were plain
+# export-ignore, so neither ever reached the repository.
+/docs           basehim-sync
+/docs/audits    export-ignore
+/tests          export-ignore basehim-sync
+/.gitattributes export-ignore basehim-sync
+
+# Repository tooling: not in the download, never touched by a sync.
 /.github        export-ignore
-/.gitattributes export-ignore
 /.gitignore     export-ignore
-/docs           export-ignore
 /CONTRIBUTING.md export-ignore
-/tests          export-ignore
 
 # Retired paths: files releases no longer contain. Patches cannot delete files
 # from sites, so an install updated by patches still has them. The CloudHim

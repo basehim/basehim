@@ -109,7 +109,10 @@ test('editor: a double click (same idempotency key) creates one post', function 
     $title = 'Once only ' . bin2hex(random_bytes(3));
     assert_same(200, $b->ajax('posts.save_draft', ['type' => 'post', 'title' => $title], $key)->status);
     assert_error($b->ajax('posts.save_draft', ['type' => 'post', 'title' => $title], $key), 409, 'DUPLICATE_REQUEST');
-    assert_same(1, (int) bh_db()->selectOne('SELECT COUNT(*) AS n FROM {posts} WHERE title = :t', ['t' => $title])['n']);
+    // Counted in PHP: Dolt can't run `WHERE title = …` on a column in a
+    // FULLTEXT index ("Full-Text index found in filter…", issues.md BH-009).
+    $titles = array_column(bh_db()->select('SELECT title FROM {posts} ORDER BY id DESC LIMIT 200'), 'title');
+    assert_same(1, count(array_keys($titles, $title, true)));
 });
 
 // ---------------------------------------------------------------------------
@@ -209,7 +212,13 @@ test('actions: media.list and media.delete follow the media rules', function () 
     $admins = new_media('admin');
     $res = $author->ajax('media.delete', ['ids' => [$own, $admins]]);
     assert_same(200, $res->status, $res->body);
-    assert_same(['deleted' => 1, 'failed' => 0, 'denied' => 1, 'missing' => 0], $res->json()['data']);
+    $data = $res->json()['data'];
+    assert_same(['deleted' => 1, 'failed' => 0, 'denied' => 1, 'missing' => 0],
+        array_intersect_key($data, array_flip(['deleted', 'failed', 'denied', 'missing'])));
+    // 1.2.67: each id is reported on its own as well.
+    $byId = array_column((array) ($data['results'] ?? []), 'status', 'id');
+    assert_same('deleted', $byId[$own] ?? null);
+    assert_same('denied', $byId[$admins] ?? null);
     assert_true(media_exists($admins));
     assert_error($author->ajax('media.delete', ['ids' => [$admins]]), 403, 'FORBIDDEN');
 });

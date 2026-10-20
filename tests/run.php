@@ -100,6 +100,8 @@ file_put_contents($envFile, implode("\n", [
     'DB_PREFIX=' . $db['prefix'],
     // High enough not to interfere; the global limit has its own test.
     'AJAX_RATE_LIMIT=5000',
+    // App fault-isolation reports, kept apart from a local site's (1.2.71).
+    'APP_HEALTH_DIR=' . $tmp . '/app-health',
     '',
 ]));
 \App\Core\Env::load($envFile);

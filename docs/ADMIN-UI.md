@@ -135,6 +135,56 @@ Basehim.ajax.request('media.update', { id: 42, alt_text: input.value })
 `err.message` is written for people and safe to show. Actions are registered
 in PHP; see APP-AJAX.md.
 
+## Media picker (JavaScript)
+
+Every admin screen has one picker: `BasehimMedia.openPicker()`. It reads the
+library from the server one page at a time (40 files per page). **Load more**
+fetches the next page and adds it to the grid. Search, type and date filters
+start the list over. Use the picker; do not build your own.
+
+```js
+BasehimMedia.openPicker({
+    types: 'image/*',              // or ['image', 'svg'], 'video', 'audio', 'document'; '' = everything
+    multiple: false,               // true: click to add or remove; the button says "Select (3)"
+    selected: currentId,           // an id or a list of ids, already selected when the picker opens
+    title: 'Choose a hero image',
+    confirmLabel: 'Use image',
+    onSelect: function (item) {},          // once for each chosen file
+    onSelectMany: function (items) {},     // multiple: all at once (optional)
+    onCancel: function () {}
+});
+```
+
+- **`item`:** the media row as `media.list` returns it: `id`, `url`, `mime_type`, `sizes`,
+  `alt_text`, `caption`, `title`, `width`, `height`, `file_size` and so on. `url` is the
+  original file. For a preview, use `sizes.medium.url` or `sizes.thumbnail.url`.
+- **`types`:** only narrows the list. What a person may see is decided by the server
+  (`upload_media`).
+- **Uploads:** a file uploaded in the picker appears first and is selected.
+- **Alt text and caption:** edited in the picker's side panel. They save as you type.
+
+Without any JavaScript, mark up a field and it works:
+
+```html
+<div data-bh-media data-bh-media-types="image" data-bh-media-title="Choose a logo">
+  <input type="hidden" name="logo" data-bh-media-value value="/uploads/logo.png">
+  <input type="hidden" name="logo_id" data-bh-media-id value="12">   <!-- optional -->
+  <div data-bh-media-preview></div>
+  <button type="button" data-bh-media-pick>Choose</button>
+  <button type="button" data-bh-media-clear>Remove</button>
+</div>
+```
+
+When the field changes it fires `bh:media` with `{ media, value }`. A theme's
+customizer `image` option can set `'types' => 'image/*'`, which is the default.
+
+The picker uses these AJAX actions, which a screen can also call directly:
+
+- **`media.list`:** `page`, `per_page` (up to 100), `q`, `type`, `types`,
+  `month` (`YYYY-MM`), `sort`. The response has `meta.has_more`. Page 1 also
+  carries the type counts, and the month list when you send `months=1`.
+- **`media.get`:** one item, with `can.edit` and `can.delete`.
+
 ## Also automatic
 
 - Tables scroll sideways on narrow screens.
