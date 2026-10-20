@@ -204,6 +204,53 @@ $canAct = $status !== 'missing';
     </div>
 </section>
 
+<?php $routes = $routes ?? ['active' => [], 'refused' => [], 'hides' => []]; ?>
+<?php if ($routes['active'] || $routes['refused']): ?>
+<!-- Routes (1.2.72) -->
+<section class="bg-white rounded-xl border border-slate-200 mb-5">
+    <header class="px-4 sm:px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+        <h3 class="text-sm font-semibold text-slate-800">Routes</h3>
+        <span class="text-xs text-slate-500"><?= count($routes['active']) ?> in use<?php if ($routes['refused']): ?> · <span class="text-amber-700"><?= count($routes['refused']) ?> refused</span><?php endif; ?></span>
+    </header>
+    <div class="p-4 sm:p-5 space-y-4">
+        <?php if ($routes['refused']): ?>
+        <div>
+            <h4 class="text-xs font-semibold text-amber-700 mb-1">Refused</h4>
+            <ul class="divide-y divide-slate-100">
+                <?php foreach ($routes['refused'] as $r): ?>
+                <li class="py-2"><code class="text-xs font-mono text-slate-800"><?= $h($r['route']) ?></code><div class="text-xs text-slate-600 mt-0.5"><?= $h($r['reason']) ?></div></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <?php endif; ?>
+        <?php if ($routes['hides']): ?>
+        <div class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            <?php foreach ($routes['hides'] as $x): ?>
+                <div><code class="font-mono"><?= $h($x['path']) ?></code> is answered by this app, so the published <?= $h($x['type']) ?> “<?= $h($x['title']) ?>” at that address cannot be reached. Change the <?= $h($x['type']) ?>'s slug or the app's route.</div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <?php if ($routes['active']): ?>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead><tr class="text-left text-slate-500"><th class="py-1 pr-3 font-semibold">Method</th><th class="py-1 pr-3 font-semibold">Path</th><th class="py-1 pr-3 font-semibold">Kind</th><th class="py-1 font-semibold">Checks</th></tr></thead>
+                <tbody class="divide-y divide-slate-100">
+                <?php foreach ($routes['active'] as $r): ?>
+                    <tr>
+                        <td class="py-1.5 pr-3 font-mono text-slate-700"><?= $h(implode(', ', $r['methods'])) ?></td>
+                        <td class="py-1.5 pr-3 font-mono text-slate-900 break-all"><?= $h($r['pattern']) ?><?php if ($r['name']): ?> <span class="text-slate-400">(<?= $h($r['name']) ?>)</span><?php endif; ?></td>
+                        <td class="py-1.5 pr-3 text-slate-600"><?= $h(['admin' => 'Admin', 'site' => 'Public', 'legacy' => 'Public (get/post helper)'][$r['area']] ?? $r['area']) ?></td>
+                        <td class="py-1.5 text-slate-600"><?= $h(implode(', ', array_filter([$r['area'] === 'admin' ? 'sign-in, app access' : null, $r['auth'] ? 'sign-in' : null, $r['csrf'] ? 'CSRF' : null])) ?: '—') ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
+</section>
+<?php endif; ?>
+
 <?php if ($history): ?>
 <section class="bg-white rounded-xl border border-slate-200 mb-5">
     <header class="px-4 sm:px-5 py-3 border-b border-slate-100">

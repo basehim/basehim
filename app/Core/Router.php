@@ -111,6 +111,7 @@ final class Router
         $this->routes = array_values(array_filter($this->routes, static fn($r) => ($r['owner'] ?? null) !== $slug));
         $this->fallbacks = array_values(array_filter($this->fallbacks, static fn($r) => ($r['owner'] ?? null) !== $slug));
         $this->reservedCache = null;
+        $this->table = null;
         return $before - count($this->routes) - count($this->fallbacks);
     }
 
@@ -194,15 +195,327 @@ final class Router
             $fullPattern = rtrim($fullPattern, '/');
         }
 
+        // Which area the route serves (1.2.72). Core's own routes are 'core'.
+        // An app's route is 'admin' when it sits under /admin behind the
+        // admin middleware (adminGet/adminPost), else it is a public route
+        // added with the original helpers ('legacy').
+        $area = 'core';
+        if ($this->owner !== null) {
+            $area = (str_starts_with($fullPattern . '/', '/admin/') && self::hasAdminAuth($groupMw)) ? 'admin' : 'legacy';
+            // The same app registering the same route again (boot code run
+            // twice) is not a second route.
+            if ($this->isRepeat($this->owner, $area, $methods, $fullPattern)) return $this;
+        }
+
         $this->reservedCache = null;
+        $this->table = null;
         $this->routes[] = [
             'methods'    => $methods,
             'pattern'    => $fullPattern,
             'handler'    => $handler,
             'middleware' => $groupMw,
             'owner'      => $this->owner,
+            'area'       => $area,
+            'options'    => [],
+            'seq'        => ++$this->seq,
         ];
         return $this;
+    }
+
+    // ------------------------------------------------------------------
+    // Public site routes for apps (1.2.72) — see docs/PUBLIC-ROUTES.md
+    // ------------------------------------------------------------------
+
+    /**
+     * The registrar an app uses for its public pages and endpoints:
+     *
+     *     $site = $this->router()->site();     // in the app's boot()
+     *     $site->get('/shop', [$this, 'index']);
+     *     $site->get('/shop/{slug}', [$this, 'show'], ['where' => ['slug' => '[a-z0-9-]+']]);
+     *     $site->post('/api/shop/cart', [$this, 'add'], ['rate' => [30, 60]]);
+     *
+     * Routes are credited to the app whose boot() is running. Outside an
+     * app's boot nothing can be registered here.
+     */
+    public function site(): \App\Core\Routing\SiteRoutes
+    {
+        return new \App\Core\Routing\SiteRoutes($this, $this->owner);
+    }
+
+    /**
+     * Store a route checked by SiteRoutes. Not for direct use.
+     *
+     * @internal
+     */
+    public function addSiteRoute(string $owner, array $methods, string $pattern, callable|array|string $handler, array $middleware, array $options): bool
+    {
+        if ($this->isRepeat($owner, 'site', $methods, $pattern)) return true;
+        $this->reservedCache = null;
+        $this->table = null;
+        $this->routes[] = [
+            'methods'    => $methods,
+            'pattern'    => $pattern,
+            'handler'    => $handler,
+            'middleware' => $middleware,
+            'owner'      => $owner,
+            'area'       => 'site',
+            'options'    => $options,
+            'seq'        => ++$this->seq,
+        ];
+        return true;
+    }
+
+    /** Whether a route name is taken already (by any app). */
+    public function hasName(string $name): bool
+    {
+        foreach ($this->routes as $r) {
+            if (($r['options']['name'] ?? null) === $name) return true;
+        }
+        return false;
+    }
+
+    private function isRepeat(string $owner, string $area, array $methods, string $pattern): bool
+    {
+        foreach ($this->routes as $r) {
+            if (($r['owner'] ?? null) === $owner && ($r['area'] ?? '') === $area
+                && $r['pattern'] === $pattern && $r['methods'] === $methods) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function hasAdminAuth(array $middleware): bool
+    {
+        foreach ($middleware as $mw) {
+            if (is_string($mw) && str_contains($mw, 'Middleware\\Authenticate') && !str_contains($mw, ':api')) return true;
+        }
+        return false;
+    }
+
+    /** Monotonic registration counter, for a stable order. */
+    private int $seq = 0;
+
+    /** @var array{routes: array, rejected: array}|null the effective route table, built on first dispatch */
+    private ?array $table = null;
+
+    /**
+     * Paths only core may serve. A public app route under one of these is
+     * refused: /admin needs the admin middleware (adminGet/adminPost), the
+     * rest belong to core's gateway, API, OAuth and file serving.
+     */
+    public const RESERVED_PREFIXES = ['/admin', '/ajax', '/api/v1', '/mcp', '/oauth', '/.well-known', '/uploads', '/content', '/storage', '/install.php'];
+
+    /**
+     * Core routes an app may take over, and only by asking for it with the
+     * 'replace' option: the home page and search. Every other core route
+     * always wins over an app's.
+     */
+    public const REPLACEABLE = ['GET /', 'GET /search'];
+
+    /**
+     * The routes in the order they are tried, and the app routes that were
+     * refused. Precedence (deterministic, whatever order apps boot in):
+     *
+     *  1. app routes that replace a replaceable core route ('replace' => true);
+     *  2. core's routes whose first segment is literal (/admin/…, /api/v1/…,
+     *     /search, /feed, /posts/{slug} …);
+     *  3. app routes, admin and public, most specific first: more literal
+     *     segments, then fewer parameters, then a wildcard last, then
+     *     registration order;
+     *  4. core's content catch-alls (/{slug}, /{category}/{slug}), so an app's
+     *     /shop is reached before a page lookup, as before.
+     *
+     * Refused, with the reason logged once and shown in the app's report:
+     * a public route under a reserved prefix or under /admin, one whose first
+     * segment is a parameter (it would swallow every page), one a core route
+     * already answers (same method and path shape), and one another app
+     * registered first.
+     *
+     * @return array{routes: array<int, array>, rejected: array<int, array>}
+     */
+    public function table(): array
+    {
+        if ($this->table !== null) return $this->table;
+
+        $core = [];
+        $coreCatch = [];
+        $apps = [];
+        foreach ($this->routes as $r) {
+            if (($r['owner'] ?? null) === null) {
+                $first = explode('/', trim($r['pattern'], '/'))[0] ?? '';
+                if ($first !== '' && $first[0] === '{') $coreCatch[] = $r; else $core[] = $r;
+            } else {
+                $apps[] = $r;
+            }
+        }
+
+        $accepted = [];
+        $replacing = [];
+        $rejected = [];
+        $reject = static function (array $r, string $reason, string $detail) use (&$rejected): void {
+            $rejected[] = [
+                'owner' => $r['owner'], 'area' => $r['area'], 'methods' => array_values(array_diff($r['methods'], ['HEAD'])) ?: $r['methods'],
+                'pattern' => $r['pattern'], 'reason' => $reason, 'detail' => $detail,
+            ];
+        };
+
+        foreach ($apps as $r) {
+            $pattern = $r['pattern'];
+            $public = $r['area'] !== 'admin';
+            $first = explode('/', trim($pattern, '/'))[0] ?? '';
+
+            if ($first !== '' && $first[0] === '{') {
+                $reject($r, 'catch-all', 'Its first segment is a parameter, so it would answer every page of the site. Start it with a fixed word (/shop/{slug}), or use fallback() for URLs nothing else serves.');
+                continue;
+            }
+            if ($public && ($pattern === '/admin' || str_starts_with($pattern, '/admin/'))) {
+                $reject($r, 'admin-path', 'A public route cannot live under /admin, where it would skip the admin sign-in and permission checks. Register it with adminGet()/adminPost().');
+                continue;
+            }
+            if ($pattern === Request::AJAX_PATH) {
+                $reject($r, 'reserved', 'The AJAX gateway is core\'s. Register AJAX actions with ajax().');
+                continue;
+            }
+            if ($r['area'] === 'site') {
+                foreach (self::RESERVED_PREFIXES as $prefix) {
+                    if ($pattern === $prefix || str_starts_with($pattern, $prefix . '/')) {
+                        $reject($r, 'reserved', "Paths under {$prefix} are reserved for core.");
+                        continue 2;
+                    }
+                }
+            }
+
+            // A core route answering the same method and path shape (or, for
+            // a fixed path, any core route that matches it).
+            $hit = null;
+            foreach ($core as $c) {
+                if (!array_intersect(array_diff($r['methods'], ['HEAD']) ?: $r['methods'], $c['methods'])) continue;
+                if (self::shape($c['pattern']) === self::shape($pattern)
+                    || (!str_contains($pattern, '{') && $this->match($c['pattern'], $pattern) !== null)) {
+                    $hit = $c;
+                    break;
+                }
+            }
+            if ($hit !== null) {
+                $key = ($r['methods'][0] ?? 'GET') . ' ' . $hit['pattern'];
+                if ($r['area'] === 'site' && !empty($r['options']['replace']) && in_array($key, self::REPLACEABLE, true) && !isset($replacing[$key])) {
+                    $replacing[$key] = $r;
+                    continue;
+                }
+                $reject($r, 'core-conflict', "Core already serves {$key}" . ($hit['pattern'] !== $pattern ? " (matches {$pattern})" : '') . '. Core routes always win' . (in_array($key, self::REPLACEABLE, true) ? "; to take this one over, register it with ['replace' => true]." : '.'));
+                continue;
+            }
+
+            // An earlier app route with the same method and shape.
+            foreach ($accepted as $a) {
+                if (!array_intersect(array_diff($r['methods'], ['HEAD']) ?: $r['methods'], $a['methods'])) continue;
+                if (self::shape($a['pattern']) === self::shape($pattern)) {
+                    $by = $a['owner'] === $r['owner'] ? 'this app, earlier' : "the app '{$a['owner']}'";
+                    $reject($r, 'duplicate', "{$a['pattern']} is already registered by {$by}; the first registration is kept.");
+                    continue 2;
+                }
+            }
+            $accepted[] = $r;
+        }
+
+        usort($accepted, static function (array $a, array $b): int {
+            return self::specificity($b['pattern']) <=> self::specificity($a['pattern']) ?: $a['seq'] <=> $b['seq'];
+        });
+
+        return $this->table = [
+            'routes' => array_merge(array_values($replacing), $core, $accepted, $coreCatch),
+            'rejected' => $rejected,
+        ];
+    }
+
+    /** App routes that were refused, with the reason. */
+    public function rejected(?string $owner = null): array
+    {
+        $all = $this->table()['rejected'];
+        return $owner === null ? $all : array_values(array_filter($all, static fn($r) => $r['owner'] === $owner));
+    }
+
+    /** "/shop/{slug}" and "/shop/{id}" have the same shape: "/shop/{}". */
+    private static function shape(string $pattern): string
+    {
+        // A wildcard ({p:*}) or optional ({p?}) segment is a different shape.
+        return (string) preg_replace_callback('/\{[a-zA-Z_]\w*(\?|:\*)?\}/', static fn($m) => '{' . ($m[1] ?? '') . '}', $pattern);
+    }
+
+    /** Sort key: literal segments first, then fewer parameters, wildcards last. */
+    private static function specificity(string $pattern): array
+    {
+        $lit = 0; $params = 0; $wild = 0;
+        foreach (explode('/', trim($pattern, '/')) as $seg) {
+            if ($seg === '') continue;
+            if ($seg[0] !== '{') { $lit++; continue; }
+            if (str_ends_with($seg, ':*}')) $wild++; else $params++;
+        }
+        return [$lit, -$wild, -$params];
+    }
+
+    /**
+     * The URL of a named route, with its parameters filled in and the install
+     * base in front: $router->url('shop.item', ['slug' => 'blue-mug']).
+     * Null when no accepted route has that name or a parameter is missing.
+     */
+    public function url(string $name, array $params = []): ?string
+    {
+        foreach ($this->table()['routes'] as $r) {
+            if (($r['options']['name'] ?? null) !== $name) continue;
+            $missing = false;
+            $path = preg_replace_callback('/\{([a-zA-Z_]\w*)(\?|:\*)?\}/', function ($m) use ($params, &$missing) {
+                $v = $params[$m[1]] ?? null;
+                if ($v === null || $v === '') {
+                    if (($m[2] ?? '') !== '?') $missing = true;
+                    return '';
+                }
+                return ($m[2] ?? '') === ':*'
+                    ? implode('/', array_map('rawurlencode', explode('/', (string) $v)))
+                    : rawurlencode((string) $v);
+            }, $r['pattern']);
+            if ($missing) return null;
+            $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+            return $base . '/' . ltrim(rtrim((string) $path, '/'), '/');
+        }
+        return null;
+    }
+
+    /** The route being dispatched (methods, pattern, owner, area, options), or null. */
+    public function currentRoute(): ?array
+    {
+        if ($this->current === null) return null;
+        $r = $this->current;
+        unset($r['handler']);
+        return $r;
+    }
+
+    private function logAppRouteFailure(array $route, Request $request, \Throwable $e): void
+    {
+        $root = defined('BASEHIM_ROOT') ? (string) BASEHIM_ROOT : '';
+        $where = str_replace($root . '/', '', $e->getFile()) . ':' . $e->getLine();
+        $msg = sprintf("Route %s %s failed: %s: %s (%s)", $request->method, $route['pattern'], get_class($e),
+            str_replace($root . '/', '', $e->getMessage()), $where);
+        try { $this->app->make(\App\Services\AppLogger::class)->log((string) $route['owner'], 'error', $msg, []); } catch (\Throwable) {}
+    }
+
+    /** Write each refused route to the core log and its app's log, once a day. */
+    private function logRejected(): void
+    {
+        $rejected = $this->table()['rejected'];
+        if (!$rejected) return;
+        try {
+            $cache = $this->app->make(Cache::class);
+            foreach ($rejected as $r) {
+                $key = 'routes.rejected.' . sha1(json_encode($r));
+                if ($cache->has($key)) continue;
+                $cache->set($key, 1, 86400);
+                $msg = sprintf("App '%s': route %s %s not registered (%s). %s", (string) $r['owner'], implode('|', $r['methods']), $r['pattern'], $r['reason'], $r['detail']);
+                try { $this->app->make(Logger::class)->warning($msg, ['app' => $r['owner'], 'reason' => $r['reason']]); } catch (\Throwable) {}
+                try { $this->app->make(\App\Services\AppLogger::class)->log((string) $r['owner'], 'warning', $msg, []); } catch (\Throwable) {}
+            }
+        } catch (\Throwable) {}
     }
 
     public function group(array $attributes, callable $callback): void
@@ -236,20 +549,49 @@ final class Router
         // The admin and the AJAX gateway are never for search engines (1.2.50).
         $this->privateArea = $path === '/admin' || str_starts_with($path, '/admin/') || $path === Request::AJAX_PATH;
 
-        foreach ($this->routes as $route) {
+        // A path with "." or ".." segments or a NUL byte, encoded or not, is
+        // never a page: refuse it before any handler sees it (1.2.72).
+        if (self::malformedPath($path)) {
+            $this->emit($this->errorResponse($request, 400, 'Bad Request', 'The address is not valid.'));
+            return;
+        }
+
+        $table = $this->table()['routes'];
+        $this->logRejected();
+
+        foreach ($table as $route) {
             if (!in_array($method, $route['methods'], true)) {
                 continue;
             }
 
-            $params = $this->match($route['pattern'], $path);
+            $params = $this->match($route['pattern'], $path, $route['options']['where'] ?? []);
             if ($params === null) {
                 continue;
             }
 
+            // Public app routes get their parameters decoded and checked: a
+            // parameter may not smuggle in a slash or a NUL byte.
+            if (($route['area'] ?? '') === 'site') {
+                $decoded = self::decodeParams($route['pattern'], $params);
+                if ($decoded === null) {
+                    $this->emit($this->errorResponse($request, 400, 'Bad Request', 'A part of the address is not valid.'));
+                    return;
+                }
+                $params = $decoded;
+            }
+
             $this->current = $route;
-            $response = $this->runMiddleware($route['middleware'], $request, function ($req) use ($route, $params) {
-                return $this->callHandler($route['handler'], $req, $params);
-            });
+            try {
+                $response = $this->runMiddleware($route['middleware'], $request, function ($req) use ($route, $params) {
+                    return $this->callHandler($route['handler'], $req, $params);
+                });
+            } catch (\Throwable $e) {
+                // An app's route failed: say which app, route and kind of
+                // failure in its own log, then let the error page answer
+                // (core's ErrorHandler: no details for visitors).
+                if (($route['owner'] ?? null) !== null) $this->logAppRouteFailure($route, $request, $e);
+                throw $e;
+            }
 
             /*
              * A matched route that answers 404 is still a miss as far as the
@@ -317,6 +659,17 @@ final class Router
             return;
         }
 
+        // The path exists, but not for this method: 405 with the methods it
+        // does take. Core's content catch-alls are left out, or every POST to
+        // an unknown one-segment path would claim to be a 405 (1.2.72).
+        $allowed = $this->allowedMethods($table, $path);
+        if ($allowed) {
+            $r = $this->errorResponse($request, 405, 'Method Not Allowed', "This address accepts " . implode(', ', $allowed) . '.');
+            $r->header('Allow', implode(', ', $allowed));
+            $this->emit($r);
+            return;
+        }
+
         // 404 fallback
         $response = $this->notFound($request);
         $this->emit($response);
@@ -343,22 +696,78 @@ final class Router
         return null;
     }
 
-    private function match(string $pattern, string $path): ?array
+    /** @return string[] the methods other routes accept for this path (none: it is unknown) */
+    private function allowedMethods(array $table, string $path): array
+    {
+        $out = [];
+        foreach ($table as $r) {
+            if (($r['owner'] ?? null) === null) {
+                $first = explode('/', trim($r['pattern'], '/'))[0] ?? '';
+                if ($first !== '' && $first[0] === '{') continue;
+            }
+            if ($this->match($r['pattern'], $path, $r['options']['where'] ?? []) !== null) {
+                foreach ($r['methods'] as $m) $out[$m] = true;
+            }
+        }
+        $out = array_keys($out);
+        sort($out);
+        return $out;
+    }
+
+    private static function malformedPath(string $path): bool
+    {
+        $decoded = rawurldecode($path);
+        if (str_contains($decoded, "\0") || str_contains($path, "\0")) return true;
+        foreach (explode('/', $decoded) as $seg) {
+            if ($seg === '.' || $seg === '..') return true;
+        }
+        return false;
+    }
+
+    /** @return array<string,string>|null decoded parameters, or null when one is not allowed */
+    private static function decodeParams(string $pattern, array $params): ?array
+    {
+        $wild = [];
+        if (preg_match_all('/\{([a-zA-Z_]\w*):\*\}/', $pattern, $m)) $wild = array_flip($m[1]);
+        foreach ($params as $k => $v) {
+            $d = rawurldecode((string) $v);
+            if (str_contains($d, "\0") || (!isset($wild[$k]) && str_contains($d, '/'))) return null;
+            if (!mb_check_encoding($d, 'UTF-8')) return null;
+            $params[$k] = $d;
+        }
+        return $params;
+    }
+
+    /** A plain error answer, JSON for API-style requests, with no internals. */
+    private function errorResponse(Request $request, int $status, string $title, string $detail): Response
+    {
+        if (str_starts_with($request->path(), '/api/') || $request->wantsJson()) {
+            return Response::json(['type' => 'about:blank', 'title' => $title, 'status' => $status, 'detail' => $detail], $status);
+        }
+        $html = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<title>' . $status . ' ' . htmlspecialchars($title) . '</title><style>body{font:16px/1.5 system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:grid;place-items:center;min-height:100vh;margin:0}main{text-align:center;padding:2rem}p{color:#475569}</style></head>'
+            . '<body><main><h1>' . $status . ' ' . htmlspecialchars($title) . '</h1><p>' . htmlspecialchars($detail) . '</p></main></body></html>';
+        return Response::html($html, $status);
+    }
+
+    private function match(string $pattern, string $path, array $where = []): ?array
     {
         // Convert {param} to a named group.
         // {param}    - matches one path segment ([^/]+)
         // {param:*}  - matches anything including slashes (.+) — for catch-all paths like uploads
         // {param?}   - optional segment
-        $regex = preg_replace_callback('/\{([a-zA-Z_]\w*)(\?|:\*)?\}/', function ($m) {
+        $regex = preg_replace_callback('/\{([a-zA-Z_]\w*)(\?|:\*)?\}/', function ($m) use ($where) {
             $name = $m[1];
             $mod = $m[2] ?? '';
+            // A 'where' constraint (validated by SiteRoutes) narrows one segment.
+            $seg = isset($where[$name]) ? '(?:' . $where[$name] . ')' : '[^/]+';
             if ($mod === '?') {
-                return '(?:/(?P<' . $name . '>[^/]+))?';
+                return '(?:/(?P<' . $name . '>' . $seg . '))?';
             }
             if ($mod === ':*') {
                 return '(?P<' . $name . '>.+)';
             }
-            return '(?P<' . $name . '>[^/]+)';
+            return '(?P<' . $name . '>' . $seg . ')';
         }, $pattern);
 
         // Handle optional segments cleanly

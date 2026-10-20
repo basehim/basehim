@@ -395,6 +395,7 @@ class AppController extends Controller
         if ($from !== '' && !preg_match('#^/[A-Za-z0-9/_\-.]{0,200}$#', $from)) $from = '';
 
         return $this->view('apps.health', [
+            'routes'      => $this->appRoutes($slug),
             'title'       => (($row['name'] ?? null) ?: $slug) . ' — report',
             'currentUser' => $this->user(),
             'app'         => $row ?: ['slug' => $slug, 'name' => $slug, 'status' => 'missing', 'version' => $record['version'] ?? ''],
@@ -403,6 +404,53 @@ class AppController extends Controller
             'from'        => $from,
             'csrf'        => $this->app->make(Session::class)->csrfToken(),
         ]);
+    }
+
+    /**
+     * The app's routes as registered in this request (1.2.72): those in use,
+     * those refused (and why), and published content a public route hides.
+     *
+     * @return array{active: array, refused: array, hides: array}
+     */
+    private function appRoutes(string $slug): array
+    {
+        $out = ['active' => [], 'refused' => [], 'hides' => []];
+        try {
+            $router = $this->app->make(\App\Core\Router::class);
+            foreach ($router->table()['routes'] as $r) {
+                if (($r['owner'] ?? null) !== $slug) continue;
+                $out['active'][] = [
+                    'methods' => array_values(array_diff($r['methods'], ['HEAD'])) ?: $r['methods'],
+                    'pattern' => $r['pattern'], 'area' => $r['area'] ?? '', 'name' => $r['options']['name'] ?? null,
+                    'auth' => !empty($r['options']['auth']), 'csrf' => !empty($r['options']['csrf']),
+                ];
+            }
+            foreach ($router->rejected($slug) as $r) {
+                $out['refused'][] = ['route' => implode('|', $r['methods']) . ' ' . $r['pattern'], 'reason' => $r['detail']];
+            }
+            foreach (\App\Core\Routing\SiteRoutes::refused($slug) as $r) {
+                $out['refused'][] = ['route' => $r['route'], 'reason' => $r['reason']];
+            }
+            // A published page or post at /{slug} is hidden by an app route
+            // with that first segment (app routes are tried before the page lookup).
+            $firsts = [];
+            foreach ($out['active'] as $r) {
+                if ($r['area'] === 'admin' || !in_array('GET', $r['methods'], true)) continue;
+                $seg = explode('/', trim($r['pattern'], '/'))[0] ?? '';
+                if ($seg !== '' && $seg[0] !== '{') $firsts[$seg] = '/' . $seg;
+            }
+            if ($firsts) {
+                $db = $this->app->make(\App\Core\Database::class);
+                $params = [];
+                $in = [];
+                foreach (array_keys($firsts) as $i => $seg) { $params['s' . $i] = $seg; $in[] = ':s' . $i; }
+                $rows = $db->select("SELECT title, slug, type FROM {posts} WHERE status = 'published' AND deleted_at IS NULL AND slug IN (" . implode(',', $in) . ')', $params);
+                foreach ($rows as $row) {
+                    $out['hides'][] = ['path' => $firsts[$row['slug']] ?? '/' . $row['slug'], 'title' => $row['title'], 'type' => $row['type']];
+                }
+            }
+        } catch (\Throwable) {}
+        return $out;
     }
 
     /**

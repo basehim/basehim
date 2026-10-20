@@ -214,6 +214,13 @@ abstract class App
 
     // ------------------------------------------------------------------
     // Routes — register custom front-end / admin routes from an app.
+    //
+    // For public pages and endpoints prefer $this->router()->site() (1.2.72):
+    // PUT/PATCH/DELETE, parameter constraints, names, auth, capabilities,
+    // CSRF and rate limits per route, and pages in the active theme through
+    // App\Core\Http\SitePage. See docs/PUBLIC-ROUTES.md. The helpers below
+    // keep working as before; since 1.2.72 a route they add is refused when
+    // it is under /admin, starts with a parameter, or is one core serves.
     // ------------------------------------------------------------------
 
     /** Register a GET route. */
