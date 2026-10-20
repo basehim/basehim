@@ -274,6 +274,10 @@ $router->post('/settings/media/regenerate-batch', ['App\\Http\\Controllers\\Admi
         $router->get('/apps/{slug}/consent.json', ['App\\Http\\Controllers\\Admin\\AppController', 'consentJson']);
         $router->post('/apps/{slug}/consent', ['App\\Http\\Controllers\\Admin\\AppController', 'saveConsent']);
         $router->get('/apps/{slug}/logs', ['App\\Http\\Controllers\\Admin\\AppController', 'logs']);
+        // Fault isolation (1.2.71): the report of an app that failed, and a
+        // check (or check-and-activate) after it was fixed.
+        $router->get('/apps/{slug}/health', ['App\\Http\\Controllers\\Admin\\AppController', 'health']);
+        $router->post('/apps/{slug}/validate', ['App\\Http\\Controllers\\Admin\\AppController', 'validate']);
         $router->post('/apps/{slug}/rescan', ['App\\Http\\Controllers\\Admin\\AppController', 'rescan']);
 
 

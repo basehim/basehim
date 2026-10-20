@@ -919,6 +919,28 @@ try {
                 </div>
             <?php endif; ?>
 
+            <?php
+            // Apps switched off after a failure (1.2.71), for those who can act on it.
+            $__failedApps = [];
+            if (!empty($currentUser) && \App\Http\Middleware\CheckCapability::userCan($currentUser, 'manage_apps')
+                && !str_contains((string) ($_SERVER['REQUEST_URI'] ?? ''), '/admin/apps')) {
+                try {
+                    $__guard = \App\Core\Application::getInstance()->make(\App\Services\AppHealth\AppGuard::class);
+                    $__failedApps = $__guard->quarantined();
+                } catch (\Throwable) {}
+            }
+            if ($__failedApps): ?>
+                <div class="mb-4 px-4 py-3 rounded-lg border bg-red-50 border-red-200 text-red-800 text-sm flex items-start gap-2" role="status">
+                    <?= icon('exclamation-triangle', 'w-4 h-4 mt-0.5 shrink-0') ?>
+                    <div class="min-w-0">
+                        <?= count($__failedApps) === 1 ? 'An app was' : count($__failedApps) . ' apps were' ?> switched off because <?= count($__failedApps) === 1 ? 'it' : 'they' ?> failed to load. The rest of the site is working.
+                        <?php foreach (array_slice($__failedApps, 0, 3, true) as $__slug => $__rec): ?>
+                            <a class="font-semibold underline ml-1" href="<?= $base ?>/admin/apps/<?= urlencode((string) $__slug) ?>/health"><?= htmlspecialchars((string) $__slug) ?> — view report</a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <?= $this->yieldSection('content') ?>
         </main>
     </div>

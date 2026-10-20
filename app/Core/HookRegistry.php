@@ -20,12 +20,45 @@ final class HookRegistry
     /** @var array<string, array<int, array{callback: callable, priority: int, accepted_args: int}>> */
     private array $filters = [];
 
+    /**
+     * The app whose boot() is running, so its listeners can be removed again
+     * if that boot fails part-way (1.2.71, AppGuard). Null: core or anything
+     * registered outside an app's boot.
+     */
+    private ?string $owner = null;
+
+    /** Credit listeners added from now on to an app (null: none). Returns the previous owner. */
+    public function setOwner(?string $owner): ?string
+    {
+        $prev = $this->owner;
+        $this->owner = $owner;
+        return $prev;
+    }
+
+    /**
+     * Remove every action and filter credited to an app, so a boot that failed
+     * part-way leaves nothing behind. Returns how many were removed.
+     */
+    public function forgetOwner(string $owner): int
+    {
+        $removed = 0;
+        foreach (['actions', 'filters'] as $kind) {
+            foreach ($this->{$kind} as $tag => $list) {
+                $kept = array_values(array_filter($list, static fn($h) => ($h['owner'] ?? null) !== $owner));
+                $removed += count($list) - count($kept);
+                $this->{$kind}[$tag] = $kept;
+            }
+        }
+        return $removed;
+    }
+
     public function addAction(string $tag, callable $callback, int $priority = 10, int $acceptedArgs = 1): void
     {
         $this->actions[$tag][] = [
             'callback'      => $callback,
             'priority'      => $priority,
             'accepted_args' => $acceptedArgs,
+            'owner'         => $this->owner,
         ];
         usort($this->actions[$tag], fn($a, $b) => $a['priority'] <=> $b['priority']);
     }
@@ -50,6 +83,7 @@ final class HookRegistry
             'callback'      => $callback,
             'priority'      => $priority,
             'accepted_args' => $acceptedArgs,
+            'owner'         => $this->owner,
         ];
         usort($this->filters[$tag], fn($a, $b) => $a['priority'] <=> $b['priority']);
     }

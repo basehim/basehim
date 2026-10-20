@@ -52,6 +52,27 @@ final class WidgetRegistry
     private array $rejected = [];
 
     /**
+     * Remove every widget (and alias) an owner registered — 'app:{slug}' — so
+     * an app whose boot() failed part-way leaves no cards behind (1.2.71,
+     * AppGuard). Core's widgets cannot be removed this way.
+     */
+    public function forgetOwner(string $owner): int
+    {
+        if ($owner === '' || $owner === 'core') return 0;
+        $n = 0;
+        foreach ($this->widgets as $key => $w) {
+            if (($w['source'] ?? '') === $owner) {
+                unset($this->widgets[$key]);
+                $n++;
+            }
+        }
+        foreach ($this->aliases as $alias => $key) {
+            if (!isset($this->widgets[$key])) unset($this->aliases[$alias]);
+        }
+        return $n;
+    }
+
+    /**
      * Register (or, for the same owner, replace) a widget.
      *
      * @param string $key  Unique slug, e.g. 'weather.current' or 'my-app.stats'.

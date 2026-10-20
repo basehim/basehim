@@ -251,6 +251,27 @@ class AppService
             return false;
         }
 
+        // Validate the app's code before it runs on every request (1.2.71):
+        // always afresh, so an app that was switched off after a failure is
+        // only turned back on once its current files pass.
+        $guard = $this->guard();
+        if ($guard !== null) {
+            $dir = $this->dirFor($slug);
+            $manifest = $this->readManifest($dir) ?? [];
+            $report = $guard->validateNow($slug, $dir, $manifest);
+            if (!$report['ok']) {
+                $msgs = array_map(static fn($e) => (string) $e['message'], array_slice($report['errors'], 0, 3));
+                $more = count($report['errors']) - count($msgs);
+                $this->lastRequirementProblems = ['Its code did not pass validation: ' . implode(' ', $msgs) . ($more > 0 ? " (and {$more} more)" : '')];
+                $this->logSafe("App '{$slug}' cannot activate: it did not pass validation.");
+                return false;
+            }
+            $rec = $guard->record($slug);
+            if (($row['status'] ?? '') === 'error' || in_array($rec['state'] ?? '', ['quarantined', 'off', 'invalid'], true)) {
+                $guard->beginRetry($slug);
+            }
+        }
+
         $this->db->execute(
             "UPDATE {apps} SET status = 'active', activated_at = NOW() WHERE slug = :slug",
             ['slug' => $slug]
@@ -265,12 +286,15 @@ class AppService
         $row = $this->find($slug);
         if (!$row) return false;
 
-        // Fire onDeactivate while the app is still bootable.
+        // Fire onDeactivate while the app is still bootable. An app switched
+        // off after a failure is not loaded for this (AppGuard refuses), so
+        // switching off a broken app cannot break the request doing it.
         $this->fireLifecycle($slug, 'onDeactivate');
         $this->db->execute(
             "UPDATE {apps} SET status = 'inactive', activated_at = NULL WHERE slug = :slug",
             ['slug' => $slug]
         );
+        $this->guard()?->released($slug);
         return true;
     }
 
@@ -288,7 +312,7 @@ class AppService
             return false;
         }
 
-        if ($row['status'] === 'active') {
+        if (in_array($row['status'], ['active', 'error'], true)) {
             $this->deactivate($slug);
         }
 
@@ -331,6 +355,7 @@ class AppService
 
         // Remove DB row.
         $this->db->delete('apps', ['slug' => $slug]);
+        $this->guard()?->released($slug, forget: true);
 
         if ($deleteFiles) {
             $this->deleteFiles($slug);
@@ -378,6 +403,10 @@ class AppService
         // Scan at install time so the operator sees any flags before deciding
         // whether to activate. Never blocks the install.
         $this->scanApp($slug);
+
+        // And validate its code (1.2.71), so a problem is on the Apps screen
+        // before anyone activates it. Never blocks the install either.
+        try { $this->validate($slug); } catch (\Throwable) {}
 
         return ['slug' => $slug, 'manifest' => $staged['manifest']];
     }
@@ -637,6 +666,11 @@ class AppService
         //     fires the lifecycle hooks.
         $this->forgetInstance($slug);
 
+        // 2c. Validate the new code before any of it runs (1.2.71). An active
+        //     app that fails is switched off; its upgrade hooks are then not
+        //     run (AppGuard refuses to load it) and the report says why.
+        try { $this->validate($slug); } catch (\Throwable) {}
+
         // 3. Refresh DB row from the new manifest.
         try { $this->sync(); } catch (\Throwable $e) { $this->logSafe("upgrade sync failed for {$slug}: " . $e->getMessage()); }
 
@@ -712,6 +746,9 @@ class AppService
     /** Like fireLifecycle but passes arguments (e.g. onUpgrade(from,to)). */
     private function fireLifecycleArgs(string $slug, string $method, array $args): void
     {
+        $guard = $this->guard();
+        $outer = $guard?->currentApp() !== null;
+        if (!$outer) $guard?->begin($slug, 'lifecycle:' . $method);
         try {
             $app = Application::getInstance();
             // Resolve fresh: callers reach here after the app's files may have
@@ -722,6 +759,8 @@ class AppService
             }
         } catch (\Throwable $e) {
             $this->logSafe("App lifecycle '{$method}' failed for {$slug}: " . $e->getMessage());
+        } finally {
+            if (!$outer) $guard?->end();
         }
     }
 
@@ -732,6 +771,12 @@ class AppService
 
     /**
      * Bootstrap every active app: register its namespace and call boot().
+     *
+     * Since 1.2.71 each app goes through AppGuard: an app whose files changed
+     * is validated before any of its code is included (all such apps at once,
+     * in parallel), a quarantined app is skipped, and an app that throws
+     * while loading or booting has its partial registrations removed and is
+     * switched off — the other apps, the theme and the page carry on.
      */
     public function bootActive(Application $app): void
     {
@@ -742,18 +787,174 @@ class AppService
             return;
         }
 
+        $guard = $this->guard();
+        if ($guard === null) {
+            // Without the guard (it could not be built), boot as before.
+            foreach ($rows as $row) {
+                try { $this->loadAndBoot($app, $row['slug']); } catch (\Throwable $e) { $this->logSafe("App '{$row['slug']}' failed to boot: " . $e->getMessage()); }
+            }
+            return;
+        }
+        $guard->registerShutdown();
+        $this->answerForDisabledApps($app, $guard);
+
+        // Validate, in one go, every active app whose files (or core) changed.
+        $apps = [];
         foreach ($rows as $row) {
+            $slug = (string) $row['slug'];
+            $dir = $this->dirFor($slug);
+            $manifest = $this->readManifest($dir);
+            if ($manifest === null) continue;
+            $apps[$slug] = ['dir' => $dir, 'manifest' => $manifest];
+        }
+        $this->validatedForBoot = array_fill_keys($guard->preflightActive($apps), true);
+
+        $booted = [];
+        foreach ($rows as $row) {
+            $slug = (string) $row['slug'];
+            if (!isset($this->validatedForBoot[$slug])) continue;
+            if ($this->bootGuarded($app, $guard, $slug, (string) ($row['version'] ?? ''))) $booted[] = $slug;
+        }
+        $this->validatedForBoot = [];
+
+        // Close any open recovery, and remember each app's URL prefixes so
+        // its screens can show the report if it is ever switched off.
+        if ($booted) {
+            $byOwner = [];
             try {
-                $this->loadAndBoot($app, $row['slug']);
-            } catch (\Throwable $e) {
-                try {
-                    $app->make(Logger::class)->error(
-                        'App failed to boot',
-                        ['app' => $row['slug'], 'error' => $e->getMessage()]
-                    );
-                } catch (\Throwable) {}
+                foreach ($app->make('router')->routes() as $r) {
+                    if (is_string($r['owner'] ?? null)) $byOwner[$r['owner']][] = $r;
+                }
+            } catch (\Throwable) {}
+            foreach ($booted as $slug) {
+                try { $guard->booted($slug, $byOwner[$slug] ?? []); } catch (\Throwable) {}
             }
         }
+    }
+
+    /** Apps that passed validation for this boot (so loadAndBoot need not ask again). @var array<string,true> */
+    private array $validatedForBoot = [];
+
+    /**
+     * Load and boot one app inside the guard's boundary.
+     *
+     * @return bool true when it booted
+     */
+    private function bootGuarded(Application $app, \App\Services\AppHealth\AppGuard $guard, string $slug, string $version): bool
+    {
+        $guard->begin($slug, 'load', $version);
+        $hooks = $this->hooks;
+        $prevHookOwner = $hooks->setOwner($slug);
+        try {
+            $this->loadAndBoot($app, $slug);
+            return isset($this->instances[$slug]);
+        } catch (\Throwable $e) {
+            $stage = $this->bootStage ?? 'load';
+            $this->rollback($app, $slug);
+            $guard->failed($slug, $version, $stage, $e);
+            return false;
+        } finally {
+            $hooks->setOwner($prevHookOwner);
+            $this->bootStage = null;
+            $guard->end();
+        }
+    }
+
+    /** Stage of the app being booted, for the failure report. */
+    private ?string $bootStage = null;
+
+    private function setStage(string $stage): void
+    {
+        $this->bootStage = $stage;
+        $this->guard()?->stage($stage);
+    }
+
+    /**
+     * Take back everything an app registered before it failed: routes, hooks
+     * (which carry its menu items, assets and head/footer output), AJAX
+     * actions, widgets and content types. Other apps' registrations are not
+     * touched.
+     */
+    private function rollback(Application $app, string $slug): void
+    {
+        $removed = [];
+        try { $removed['routes'] = $app->make('router')->forgetOwner($slug); } catch (\Throwable) {}
+        try { $removed['hooks'] = $this->hooks->forgetOwner($slug); } catch (\Throwable) {}
+        try { $removed['ajax'] = $app->make(\App\Core\Ajax\AjaxRegistry::class)->forgetOwner($slug); } catch (\Throwable) {}
+        try { $removed['widgets'] = $app->make(\App\Core\WidgetRegistry::class)->forgetOwner('app:' . $slug); } catch (\Throwable) {}
+        try { $removed['post_types'] = $app->make(\App\Services\PostTypeRegistry::class)->forgetOwner($slug); } catch (\Throwable) {}
+        if (function_exists('bh_assets')) {
+            $reg = &bh_assets();
+            foreach (['styles', 'scripts'] as $k) {
+                foreach (array_keys($reg[$k] ?? []) as $handle) {
+                    if (str_starts_with((string) $handle, $slug . '-')) unset($reg[$k][$handle]);
+                }
+            }
+        }
+        unset($this->instances[$slug], $this->booted[$slug]);
+        $this->logSafe("App '{$slug}' registrations removed after a failed boot: " . json_encode($removed));
+    }
+
+    /**
+     * Requests for a switched-off app's own URLs: its admin screens send an
+     * administrator to its report (core's page, not the app's), and its
+     * public pages answer 503 instead of a misleading 404.
+     */
+    private function answerForDisabledApps(Application $app, \App\Services\AppHealth\AppGuard $guard): void
+    {
+        $prev = $this->hooks->setOwner(null);
+        $this->hooks->addFilter('route.miss', static function ($handled, $request = null, $path = '') use ($guard) {
+            if ($handled !== null || !is_string($path) || $path === '') return $handled;
+            $owner = $guard->ownerOfPath($path);
+            if ($owner === null) return $handled;
+            $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+            $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+            if ($owner['admin'] && in_array($method, ['GET', 'HEAD'], true)) {
+                return \App\Core\Response::redirect($base . '/admin/apps/' . rawurlencode($owner['slug']) . '/health?from=' . rawurlencode($path));
+            }
+            $r = \App\Core\Response::view('errors.app-disabled', ['admin' => $owner['admin']], 503);
+            $r->header('Retry-After', '3600');
+            return $r;
+        }, 5, 3);
+        $this->hooks->setOwner($prev);
+    }
+
+    private function readManifest(string $dir): ?array
+    {
+        $file = $this->manifestFileIn($dir);
+        if ($file === null) return null;
+        $m = json_decode((string) @file_get_contents($file), true);
+        return is_array($m) ? $m : null;
+    }
+
+    /** The fault-isolation guard, or null if it cannot be built. */
+    public function guard(): ?\App\Services\AppHealth\AppGuard
+    {
+        try {
+            return Application::getInstance()->make(\App\Services\AppHealth\AppGuard::class);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Validate an app's files now and save the report (Apps screen, after an
+     * install or update). An active app that fails is switched off at once,
+     * before the next request loads it.
+     */
+    public function validate(string $slug): ?array
+    {
+        $guard = $this->guard();
+        if ($guard === null) return null;
+        $dir = $this->dirFor($slug);
+        $manifest = $this->readManifest($dir);
+        if ($manifest === null) return null;
+        $report = $guard->validateNow($slug, $dir, $manifest);
+        $row = $this->find($slug);
+        if (!$report['ok'] && ($row['status'] ?? '') === 'active') {
+            $guard->safeToLoad($slug, $dir, $manifest, true);
+        }
+        return $report;
     }
 
     /**
@@ -813,6 +1014,21 @@ class AppService
         $manifest = json_decode((string)file_get_contents($manifestFile), true);
         if (!is_array($manifest)) return null;
 
+        // No app code is included before the guard has seen it (1.2.71): a
+        // quarantined app is not loaded, and one whose files changed is
+        // validated first. Boot has validated every active app already.
+        if (!isset($this->validatedForBoot[$slug])) {
+            $guard = $this->guard();
+            if ($guard !== null) {
+                $active = (($this->find($slug)['status'] ?? '') === 'active');
+                if (!$guard->safeToLoad($slug, $appDir, $manifest, $active, fresh: true)) {
+                    $this->logSafe("App '{$slug}' was not loaded: it is switched off or did not pass validation. See Apps → {$slug} → Report.");
+                    return null;
+                }
+            }
+        }
+        $this->setStage('autoload');
+
         $namespace = $manifest['namespace'] ?? null;
         $srcDir = $manifest['src'] ?? 'src';
         // Entry class: an explicit manifest value wins, otherwise "App".
@@ -837,6 +1053,7 @@ class AppService
             return null;
         }
 
+        $this->setStage('construct');
         $instance = $this->instantiate($app, $className, $slug, $manifest, $appDir);
         $this->instances[$slug] = $instance;
 
@@ -849,6 +1066,7 @@ class AppService
             try { $router = $app->make('router'); } catch (\Throwable) {}
             $prevOwner = $router instanceof \App\Core\Router ? $router->setOwner($slug) : null;
             try {
+                $this->setStage('boot');
                 $this->callBoot($instance, $app);
             } finally {
                 if ($router instanceof \App\Core\Router) $router->setOwner($prevOwner);
@@ -858,24 +1076,21 @@ class AppService
         return $instance;
     }
 
+    /**
+     * Call the app's boot(). Since 1.2.71 an exception is not swallowed here:
+     * it reaches bootGuarded(), which removes what the app registered and
+     * switches it off. Before, a boot() that failed half-way left the app
+     * running with whatever it had registered up to that point.
+     */
     private function callBoot(object $instance, Application $app): void
     {
-        try {
-            $ref = new \ReflectionMethod($instance, 'boot');
-            // Apps extending the base class take no args; a bare boot(Application)
-            // implementation is also supported, so honour whichever it declares.
-            if ($ref->getNumberOfParameters() === 0) {
-                $instance->boot();
-            } else {
-                $instance->boot($app);
-            }
-        } catch (\Throwable $e) {
-            try {
-                $app->make(Logger::class)->error(
-                    'App boot() threw',
-                    ['class' => $instance::class, 'error' => $e->getMessage()]
-                );
-            } catch (\Throwable) {}
+        $ref = new \ReflectionMethod($instance, 'boot');
+        // Apps extending the base class take no args; a bare boot(Application)
+        // implementation is also supported, so honour whichever it declares.
+        if ($ref->getNumberOfParameters() === 0) {
+            $instance->boot();
+        } else {
+            $instance->boot($app);
         }
     }
 
@@ -900,8 +1115,12 @@ class AppService
      */
     private function fireLifecycle(string $slug, string $method): void
     {
+        $guard = $this->guard();
+        $outer = $guard?->currentApp() !== null;
         try {
             $app = Application::getInstance();
+            // Credit an engine fatal in this app's code to the app (1.2.71).
+            if (!$outer) $guard?->begin($slug, 'lifecycle:' . $method);
             $instance = $this->loadAndBoot($app, $slug, callBoot: false);
             if ($instance && method_exists($instance, $method)) {
                 $instance->{$method}();
@@ -913,6 +1132,8 @@ class AppService
                     ['app' => $slug, 'error' => $e->getMessage()]
                 );
             } catch (\Throwable) {}
+        } finally {
+            if (!$outer) $guard?->end();
         }
     }
 
@@ -1028,9 +1249,16 @@ class AppService
 
             // instance() resolves without calling boot(), which is what the
             // other lifecycle hooks use too.
-            $instance = $this->instance($app, $slug);
-            if ($instance === null || !method_exists($instance, 'onUpgrade')) return;
-            $instance->onUpgrade($from, $to);
+            $guard = $this->guard();
+            $outer = $guard?->currentApp() !== null;
+            if (!$outer) $guard?->begin($slug, 'lifecycle:onUpgrade', $to);
+            try {
+                $instance = $this->instance($app, $slug);
+                if ($instance === null || !method_exists($instance, 'onUpgrade')) return;
+                $instance->onUpgrade($from, $to);
+            } finally {
+                if (!$outer) $guard?->end();
+            }
         } catch (\Throwable $e) {
             $this->logSafe("App '{$slug}' onUpgrade({$from}, {$to}) failed: " . $e->getMessage());
         }
@@ -1444,6 +1672,12 @@ class AppService
         // a minute on many hosts — while the new manifest is already read.
         // Clearing it makes the next request run the version just installed.
         if (function_exists('opcache_reset')) { @opcache_reset(); }
+
+        // Validate the new files first (1.2.71): an active app that no longer
+        // loads is switched off now, before sync() runs its upgrade code and
+        // before the next request includes it.
+        $this->forgetInstance($expectedSlug);
+        try { $this->validate($expectedSlug); } catch (\Throwable) {}
 
         // Refresh the DB row's version/manifest without disturbing active state.
         $this->sync();

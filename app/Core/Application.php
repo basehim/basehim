@@ -270,6 +270,20 @@ final class Application
             );
         });
 
+        // Fault isolation for apps (1.2.71): validation before an app's code
+        // is loaded, quarantine when it fails. Database and loggers are
+        // resolved lazily, so the guard works while either is unavailable.
+        $this->singleton(\App\Services\AppHealth\AppGuard::class, function ($app) {
+            return new \App\Services\AppHealth\AppGuard(
+                // APP_HEALTH_DIR moves the reports (the test suite uses its own).
+                new \App\Services\AppHealth\HealthStore((string) (Env::get('APP_HEALTH_DIR', '') ?: BASEHIM_ROOT . '/storage/app-health')),
+                new \App\Services\AppHealth\Preflight(BASEHIM_ROOT),
+                static fn() => $app->make(Database::class),
+                static fn() => $app->make(Logger::class),
+                static fn() => $app->make(\App\Services\AppLogger::class),
+            );
+        });
+
         // Apps live in content/apps/. Nothing else is scanned.
         $this->singleton(\App\Services\AppService::class, function ($app) {
             return new \App\Services\AppService(

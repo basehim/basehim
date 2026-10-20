@@ -115,6 +115,22 @@ final class AjaxRegistry
         return $ns;
     }
 
+    /**
+     * Remove every action an app registered, so an app whose boot() failed
+     * part-way exposes none (1.2.71, AppGuard). Returns how many were removed.
+     */
+    public function forgetOwner(string $owner): int
+    {
+        $n = 0;
+        foreach ($this->actions as $name => $action) {
+            if ($action->owner === $owner && $owner !== self::OWNER_CORE) {
+                unset($this->actions[$name]);
+                $n++;
+            }
+        }
+        return $n;
+    }
+
     public function get(string $name): ?AjaxAction
     {
         return $this->actions[$name] ?? null;

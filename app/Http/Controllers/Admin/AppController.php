@@ -29,6 +29,7 @@ class AppController extends Controller
             'installed'   => $installed,
             'available'   => $available,
             'meta'        => $apps->metaAll(),
+            'health'      => $apps->guard()?->store()->all() ?? [],
             'csrf'        => $session->csrfToken(),
             'canUpload'   => class_exists(\ZipArchive::class),
         ]);
@@ -371,6 +372,84 @@ class AppController extends Controller
             'dates'       => $dates,
             'date'        => $date,
         ]);
+    }
+
+    /**
+     * GET /admin/apps/{slug}/health — the app's failure report (1.2.71).
+     *
+     * Rendered by core, never by the app, so it opens even when the app
+     * cannot load. Behind manage_apps (AdminAreaPolicy, /admin/apps).
+     */
+    public function health(Request $request, string $slug): Response
+    {
+        /** @var AppService $apps */
+        $apps = $this->app->make(AppService::class);
+        $row = $apps->find($slug);
+        $guard = $apps->guard();
+        $record = $guard?->record($slug);
+        if (!$row && !$record) {
+            $this->flash('error', "App '{$slug}' is not installed.");
+            return $this->redirect('/admin/apps');
+        }
+        $from = (string) $request->query('from', '');
+        if ($from !== '' && !preg_match('#^/[A-Za-z0-9/_\-.]{0,200}$#', $from)) $from = '';
+
+        return $this->view('apps.health', [
+            'title'       => (($row['name'] ?? null) ?: $slug) . ' — report',
+            'currentUser' => $this->user(),
+            'app'         => $row ?: ['slug' => $slug, 'name' => $slug, 'status' => 'missing', 'version' => $record['version'] ?? ''],
+            'record'      => $record,
+            'isolation'   => $guard?->preflight()->isolation(),
+            'from'        => $from,
+            'csrf'        => $this->app->make(Session::class)->csrfToken(),
+        ]);
+    }
+
+    /**
+     * POST /admin/apps/{slug}/validate — check the app's code again now,
+     * without activating it. With "activate=1", activate it if it passes —
+     * the recovery path for an app that was switched off.
+     */
+    public function validate(Request $request, string $slug): Response
+    {
+        $back = '/admin/apps/' . urlencode($slug) . '/health';
+        if (!$this->verifyCsrf($request)) {
+            $this->flash('error', 'Security check failed.');
+            return $this->redirect($back);
+        }
+        /** @var AppService $apps */
+        $apps = $this->app->make(AppService::class);
+        if (!$apps->find($slug)) {
+            $this->flash('error', "App '{$slug}' is not installed.");
+            return $this->redirect('/admin/apps');
+        }
+
+        if ((string) $request->input('activate', '') === '1') {
+            if ($apps->needsConsent($slug)) {
+                return $this->redirect('/admin/apps/' . urlencode($slug) . '/consent');
+            }
+            try {
+                if ($apps->activate($slug)) {
+                    $this->flash('success', "The app passed validation and was activated. If it fails while starting, it is switched off again and this page shows why.");
+                } else {
+                    $problems = $apps->lastRequirementProblems();
+                    $this->flash('error', $problems ? implode(' ', $problems) : 'The app could not be activated.');
+                }
+            } catch (\Throwable $e) {
+                $this->flash('error', 'Activation failed: ' . $e->getMessage());
+            }
+            return $this->redirect($back);
+        }
+
+        $report = $apps->validate($slug);
+        if ($report === null) {
+            $this->flash('error', 'The app could not be checked: its app.json is missing or unreadable.');
+        } elseif ($report['ok']) {
+            $this->flash('success', 'The app passed validation' . ($report['isolated'] ? ', including the isolated load test.' : ' (the isolated load test is not available on this server).'));
+        } else {
+            $this->flash('error', 'The app did not pass validation: ' . count($report['errors']) . ' problem(s). See below.');
+        }
+        return $this->redirect($back);
     }
 
     /** POST /admin/apps/{slug}/rescan — re-run the static scanner. */

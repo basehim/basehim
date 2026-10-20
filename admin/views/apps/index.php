@@ -56,7 +56,10 @@ $appIcon = function (array $row) use ($base, $meta): string {
 };
 
 /* Decode one app's permission + scan state (used for stats and per card). */
-$appState = function (array $p) use ($available): array {
+$health = $health ?? [];
+$appState = function (array $p) use ($available, $health): array {
+    $rec = $health[$p['slug']] ?? null;
+    $hstate = (string) ($rec['state'] ?? '');
     $perms = json_decode((string) ($p['permissions'] ?? ''), true);
     $perms = is_array($perms) ? $perms : [];
     $granted = json_decode((string) ($p['granted_permissions'] ?? ''), true);
@@ -70,6 +73,11 @@ $appState = function (array $p) use ($available): array {
         'withheld'     => array_values(array_diff($perms, $granted)),
         'scanHigh'     => is_array($scan) ? (int) ($scan['high'] ?? 0) : 0,
         'awaiting'     => $perms && empty($p['consented_at']),
+        // 1.2.71: switched off after a failure, or failed validation.
+        'failed'       => ($p['status'] ?? '') === 'error' || $hstate === 'quarantined',
+        'invalid'      => $hstate === 'invalid' && ($p['status'] ?? '') !== 'active',
+        'failure'      => $rec['failure'] ?? null,
+        'validation'   => $rec['validation'] ?? null,
     ];
 };
 
@@ -80,7 +88,7 @@ $attention   = 0;
 foreach ($installed as $p) {
     $s = $appState($p);
     if ($s['active']) $activeCount++;
-    if (!$s['filesPresent'] || ($s['awaiting'] && $s['active']) || $s['scanHigh'] > 0) $attention++;
+    if (!$s['filesPresent'] || ($s['awaiting'] && $s['active']) || $s['scanHigh'] > 0 || $s['failed'] || $s['invalid']) $attention++;
 }
 $inactiveCount = $totalCount - $activeCount;
 
@@ -178,6 +186,9 @@ $btnDanger  = $btnBase . ' border-slate-200 text-red-600 hover:border-red-300 ho
     $withheld = $s['withheld'];
     $scanHigh = $s['scanHigh'];
     $awaiting = $s['awaiting'];
+    $failed = $s['failed'];
+    $invalid = $s['invalid'];
+    $healthUrl = $base . '/admin/apps/' . urlencode($p['slug']) . '/health';
     $m = $meta[$p['slug']] ?? null;
 
     $who = [];
@@ -186,7 +197,7 @@ $btnDanger  = $btnBase . ' border-slate-200 text-red-600 hover:border-red-300 ho
     $desc = ($m['description'] ?? '') !== '' ? $m['description'] : ($p['description'] ?? '');
     $consentUrl = $base . '/admin/apps/' . urlencode($p['slug']) . '/consent';
     ?>
-    <div class="bg-white rounded-xl border border-slate-200 p-4 flex flex-col">
+    <div class="bg-white rounded-xl border <?= $failed ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200' ?> p-4 flex flex-col" <?= $failed ? 'data-app-failed' : '' ?>>
         <!-- Head: icon · name · status -->
         <div class="flex items-start gap-3">
             <div class="w-11 h-11 rounded-xl bg-slate-100 grid place-items-center text-slate-500 overflow-hidden shrink-0">
@@ -195,10 +206,16 @@ $btnDanger  = $btnBase . ' border-slate-200 text-red-600 hover:border-red-300 ho
             <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold text-slate-800 truncate"><?= htmlspecialchars($p['name']) ?></h3>
+                    <?php if ($failed): ?>
+                    <span class="shrink-0 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">
+                        <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Disabled — error
+                    </span>
+                    <?php else: ?>
                     <span class="shrink-0 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-semibold <?= $isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500' ?>">
                         <?php if ($isActive): ?><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><?php endif; ?>
                         <?= $isActive ? 'Active' : 'Inactive' ?>
                     </span>
+                    <?php endif; ?>
                 </div>
                 <div class="text-[11px] text-slate-400 truncate mt-0.5">
                     v<?= htmlspecialchars((string) ($p['version'] ?? '')) ?> · <?= htmlspecialchars((string) ($p['vendor'] ?? '')) ?>/<?= htmlspecialchars((string) ($p['slug'] ?? '')) ?>
@@ -209,6 +226,23 @@ $btnDanger  = $btnBase . ' border-slate-200 text-red-600 hover:border-red-300 ho
 
         <?php if ($desc !== ''): ?>
         <p class="text-xs text-slate-500 leading-relaxed mt-3 line-clamp-2"><?= htmlspecialchars($desc) ?></p>
+        <?php endif; ?>
+
+        <?php if ($failed): $f = $s['failure'] ?? []; ?>
+        <div class="mt-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-800">
+            <div class="font-semibold flex items-center gap-1.5"><?= icon('exclamation-triangle', 'w-4 h-4') ?> Switched off to protect your site</div>
+            <?php if ($f): ?>
+            <p class="mt-1 break-words line-clamp-3"><?= htmlspecialchars((string) ($f['message'] ?? '')) ?></p>
+            <p class="mt-1 text-red-700/80"><?= htmlspecialchars(function_exists('bh_datetime') && !empty($f['at']) ? bh_datetime($f['at']) : (string) ($f['at'] ?? '')) ?> · <?= htmlspecialchars((string) ($f['stage'] ?? '')) ?></p>
+            <?php else: ?>
+            <p class="mt-1">It failed while loading. The report has the details.</p>
+            <?php endif; ?>
+        </div>
+        <?php elseif ($invalid): $v = $s['validation'] ?? []; ?>
+        <div class="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
+            <div class="font-semibold">Cannot be activated yet</div>
+            <p class="mt-1 break-words line-clamp-3"><?= htmlspecialchars((string) ($v['errors'][0]['message'] ?? 'Its code did not pass validation.')) ?></p>
+        </div>
         <?php endif; ?>
 
         <?php if ($m && $m['problems']): ?>
@@ -249,7 +283,14 @@ $btnDanger  = $btnBase . ' border-slate-200 text-red-600 hover:border-red-300 ho
 
         <!-- Actions -->
         <div class="mt-auto pt-3 flex items-center gap-1.5 flex-wrap border-t border-slate-100">
-            <?php if ($isActive): ?>
+            <?php if ($failed): ?>
+                <a href="<?= $healthUrl ?>" class="<?= $btnPrimary ?>"><?= icon('document-magnifying-glass', 'w-4 h-4') ?> View report</a>
+                <form method="POST" action="<?= $base ?>/admin/apps/<?= urlencode($p['slug']) ?>/validate">
+                    <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
+                    <input type="hidden" name="activate" value="1">
+                    <button class="<?= $btnNeutral ?>"><?= icon('arrow-path', 'w-4 h-4') ?> Retry</button>
+                </form>
+            <?php elseif ($isActive): ?>
                 <form method="POST" action="<?= $base ?>/admin/apps/<?= urlencode($p['slug']) ?>/deactivate">
                     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                     <button class="<?= $btnNeutral ?>"><?= icon('power', 'w-4 h-4') ?> Deactivate</button>
@@ -266,6 +307,9 @@ $btnDanger  = $btnBase . ' border-slate-200 text-red-600 hover:border-red-300 ho
             <a href="<?= $base ?>/admin/apps/<?= urlencode($p['slug']) ?>/logs" class="<?= $btnNeutral ?>">
                 <?= icon('document-text', 'w-4 h-4') ?> Logs
             </a>
+            <?php if ($invalid): ?>
+            <a href="<?= $healthUrl ?>" class="<?= $btnNeutral ?>"><?= icon('document-magnifying-glass', 'w-4 h-4') ?> Report</a>
+            <?php endif; ?>
             <?php if ($perms): ?>
             <a href="<?= $consentUrl ?>" class="<?= $btnNeutral ?>">
                 <?= icon('shield-check', 'w-4 h-4') ?> Permissions

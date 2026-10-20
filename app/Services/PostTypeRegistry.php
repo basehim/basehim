@@ -87,6 +87,19 @@ class PostTypeRegistry
         unset($this->types[$this->sanitize($slug)]);
     }
 
+    /** Remove every type an app registered (1.2.71, AppGuard). Returns how many. */
+    public function forgetOwner(string $slug): int
+    {
+        $n = 0;
+        foreach ($this->types as $type => $def) {
+            if ($slug !== '' && ($def['app'] ?? '') === $slug) {
+                unset($this->types[$type]);
+                $n++;
+            }
+        }
+        return $n;
+    }
+
     /** App-registered types only. */
     public function custom(): array
     {
@@ -157,6 +170,9 @@ class PostTypeRegistry
         if ($this->menuHooked) return;
         $this->menuHooked = true;
 
+        // Core's listener, even when the first type is registered from an
+        // app's boot(): it must survive that app being rolled back (1.2.71).
+        $prevOwner = $this->hooks->setOwner(null);
         $this->hooks->addFilter('admin.menu', function (array $items): array {
             foreach ($this->types as $slug => $type) {
                 if (empty($type['menu'])) continue;
@@ -175,6 +191,7 @@ class PostTypeRegistry
             }
             return $items;
         });
+        $this->hooks->setOwner($prevOwner);
     }
 
     private function sanitize(string $slug): string

@@ -101,6 +101,20 @@ final class Router
     }
 
     /**
+     * Remove every route (and fallback) credited to an app, so an app whose
+     * boot() failed part-way answers no URL (1.2.71, AppGuard). Returns how
+     * many were removed.
+     */
+    public function forgetOwner(string $slug): int
+    {
+        $before = count($this->routes) + count($this->fallbacks);
+        $this->routes = array_values(array_filter($this->routes, static fn($r) => ($r['owner'] ?? null) !== $slug));
+        $this->fallbacks = array_values(array_filter($this->fallbacks, static fn($r) => ($r['owner'] ?? null) !== $slug));
+        $this->reservedCache = null;
+        return $before - count($this->routes) - count($this->fallbacks);
+    }
+
+    /**
      * Every registered route, for documentation (the API reference screen):
      * [['methods' => [...], 'pattern' => '/api/v1/…', 'owner' => app slug|null,
      *   'fallback' => bool, 'protected' => bool], …]. 'protected' is true when
