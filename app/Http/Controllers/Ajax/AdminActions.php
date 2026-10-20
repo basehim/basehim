@@ -34,6 +34,11 @@ final class AdminActions
         if (!$reg->has($key)) {
             throw AjaxException::notFound('That widget is not available.');
         }
+        // A widget's own capability applies to previews too (1.2.68): a
+        // contributor could otherwise render an admin-only dashboard widget.
+        if (!\App\Core\WidgetRegistry::userCan($reg->get($key), $ctx->user())) {
+            throw AjaxException::forbidden();
+        }
         $settings = self::jsonObject($ctx->input('settings') ?? '{}', 'settings');
         return ['html' => $reg->render($key, $settings, (string) ($ctx->input('surface') ?? 'editor'))];
     }

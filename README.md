@@ -230,9 +230,12 @@ php -r "echo password_hash('YourPassword', PASSWORD_BCRYPT, ['cost' => 12]) . PH
 
 Subdirectory installs work out of the box — Basehim detects its own base path.
 
-`DB_PREFIX` lets several sites share one database, which matters on shared
-hosting where you get a fixed number. Set it before installing and leave it
-alone afterwards.
+Every install gets its own random table prefix (three characters and an
+underscore, such as `k7q_`), chosen by the installer and written to `.env` as
+`DB_PREFIX`. Several sites can share one database, which matters on shared
+hosting where you get a fixed number, and table names can't be guessed. To use
+a prefix of your own, put `DB_PREFIX` in `.env` before installing. Never
+change it afterwards.
 
 ## Directory map
 
@@ -329,10 +332,15 @@ class App extends \App\Core\App
         $this->get('/hello', fn() => 'Hello from an app!');
         $this->post('/admin/myapp', [$this, 'saveSettings']);
 
-        // Dashboard widget
+        // Dashboard widget (docs/DASHBOARD-WIDGETS.md)
         $this->registerWidget('stats', [
-            'title'  => 'Site Stats',
-            'render' => fn() => '<p>Hello 👋</p>',
+            'surfaces'    => ['dashboard'],
+            'title'      => 'Site Stats',
+            'capability' => 'edit_posts',
+            'dashboard'  => [
+                'view' => 'stat',
+                'data' => fn($ctx) => ['items' => [['label' => 'Hello', 'value' => 42]]],
+            ],
         ]);
 
         // Admin sidebar item
@@ -354,7 +362,7 @@ class App extends \App\Core\App
 | `get($pattern, $handler)` / `post(...)` / `route([...], ...)` | Register HTTP routes |
 | `routeGroup($attrs, $cb)` | Group routes with shared prefix/middleware |
 | `addAdminMenu(['url'=>'…','label'=>'…','icon'=>'…'])` | Add a sidebar item |
-| `registerWidget($key, $def)` | Contribute a widget (editor/frontend/dashboard) |
+| `registerWidget($key, $def)` | Contribute a widget (editor/frontend/dashboard); dashboard cards: [docs/DASHBOARD-WIDGETS.md](docs/DASHBOARD-WIDGETS.md) |
 | `getSetting($key, $default = null)` | Read an app-scoped setting |
 | `setSetting($key, $value)` | Write an app-scoped setting |
 | `deleteSetting($key)` / `allSettings()` / `dropAllSettings()` | Manage settings |
@@ -414,8 +422,12 @@ directly, every download SHA-256 verified.
   complete example in the tree: a batched multi-step wizard, its own tables
   created on activate and dropped on uninstall, admin views with a sidebar
   entry, app-scoped settings, and bundled assets.
-- `docs/examples/system-monitor/` — a compact reference app showing lifecycle
-  hooks, a scheduled task, and the permission manifest.
+- `docs/examples/system-monitor/` — a small working app: an admin page behind
+  the app's access capability, rendered in the admin layout, and a dashboard
+  card with a data provider, a setting and an action.
+- `docs/examples/dashboard-widgets/` — every kind of dashboard card: stat,
+  table with settings, status with an action, a card fed by the app's own
+  AJAX action, and an HTML widget.
 
 Full guides live in [`docs/`](docs/):
 [theme development](docs/THEME-DEVELOPMENT.md),

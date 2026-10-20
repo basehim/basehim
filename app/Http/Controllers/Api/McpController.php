@@ -812,7 +812,7 @@ final class McpController
             'type'    => $type,
             'title'   => $title,
             'content' => (string) ($args['content'] ?? ''),
-            'content_format' => in_array(($args['content_format'] ?? 'html'), ['html','markdown','blocks'], true) ? $args['content_format'] : 'html',
+            'content_format' => in_array(($args['content_format'] ?? 'html'), ['html','markdown','blocks'], true) ? ($args['content_format'] ?? 'html') : 'html',
             'excerpt' => (string) ($args['excerpt'] ?? ''),
             'slug'    => (string) ($args['slug'] ?? ''),
             'status'  => $status,

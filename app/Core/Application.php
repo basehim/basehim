@@ -88,6 +88,41 @@ final class Application
         // Widget registry — apps & themes register widgets here during boot.
         $this->singleton(WidgetRegistry::class, fn() => new WidgetRegistry());
 
+        // The dashboard engine (1.2.68): layouts per user in users.meta, the
+        // site default in settings, data and actions behind each widget's
+        // capability. See docs/DASHBOARD-WIDGETS.md.
+        $this->singleton(\App\Services\Dashboard\DashboardService::class, fn($app) =>
+            new \App\Services\Dashboard\DashboardService(
+                $app->make(WidgetRegistry::class),
+                new \App\Services\Dashboard\UserMetaLayoutStore(
+                    $app->make(\App\Services\UserService::class),
+                    $app->make(\App\Services\SettingService::class)
+                ),
+                $app->make(Cache::class),
+                static function (string $owner) use ($app): string {
+                    static $memo = [];
+                    if (isset($memo[$owner])) return $memo[$owner];
+                    if ($owner === 'core') return $memo[$owner] = 'Basehim';
+                    [$kind, $slug] = array_pad(explode(':', $owner, 2), 2, '');
+                    if ($kind === 'app') {
+                        try {
+                            $row = $app->make(\App\Services\AppService::class)->find($slug);
+                            if (!empty($row['name'])) return $memo[$owner] = (string) $row['name'];
+                        } catch (\Throwable) {}
+                    }
+                    $label = ucwords(str_replace(['-', '_'], ' ', $slug ?: $owner));
+                    return $memo[$owner] = ($kind === 'theme' ? $label . ' theme' : $label);
+                },
+                static function (string $level, string $message, string $owner) use ($app): void {
+                    try {
+                        if (str_starts_with($owner, 'app:')) {
+                            $app->make(\App\Services\AppLogger::class)->log(substr($owner, 4), $level, $message, []);
+                        }
+                        $app->make(Logger::class)->log($level, '[dashboard] ' . $message, ['owner' => $owner]);
+                    } catch (\Throwable) {}
+                }
+            ));
+
         // Widget-area registry — themes/apps declare the regions ("sidebars")
         // where frontend widgets can be placed.
         $this->singleton(\App\Core\WidgetAreaRegistry::class, fn() => new \App\Core\WidgetAreaRegistry());
@@ -745,6 +780,9 @@ final class Application
             'fields'      => $termFields,
             'render'      => $termList('tag', '/tag/', 'tag'),
         ]);
+
+        // The admin dashboard's own cards (1.2.68), registered like any app's.
+        \App\Services\Dashboard\CoreDashboardWidgets::register($reg);
     }
 
 

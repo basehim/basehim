@@ -1,181 +1,134 @@
 <?php $this->extend('layouts.app'); ?>
 <?php $this->section('content'); ?>
-
 <?php
-function fmtBytes($b) {
-    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    $i = 0;
-    while ($b >= 1024 && $i < count($units) - 1) { $b /= 1024; $i++; }
-    return round($b, 1) . ' ' . $units[$i];
+/**
+ * Dashboard (1.2.68) — see DashboardController and docs/DASHBOARD-WIDGETS.md.
+ *
+ * This template prints the frame (greeting, Customize, the empty grid, the
+ * Add Widgets panel) and the data dashboard.js builds the cards from. Card
+ * contents are drawn in the browser with textContent, never from strings
+ * pasted into markup; the only HTML here that comes from a widget is a
+ * pre-1.2.68 widget's own render output, in its own hidden holder.
+ */
+$__v = urlencode((string) (@filemtime(BASEHIM_ROOT . '/admin/assets/js/dashboard.js') ?: BASEHIM_VERSION));
+$__cv = urlencode((string) (@filemtime(BASEHIM_ROOT . '/admin/assets/css/dashboard.css') ?: BASEHIM_VERSION));
+$__name = (string) ($currentUser['display_name'] ?? '') ?: (string) ($currentUser['username'] ?? 'there');
+
+// Every icon the cards can use, rendered once by the PHP icon set (the JS set
+// is a subset), so a widget's icon looks the same here as in the sidebar.
+$__icons = [];
+foreach ($catalog as $__w) {
+    $__icons[$__w['icon']] = icon($__w['icon'], 'w-4 h-4');
+    foreach ($__w['actions'] as $__a) {
+        if ($__a['icon'] !== '') $__icons[$__a['icon']] = icon($__a['icon'], 'w-4 h-4');
+    }
 }
+foreach (['arrow-path', 'chevron-down', 'ellipsis-vertical', 'cog-6-tooth', 'eye-slash', 'x-mark', 'plus',
+          'bars-2', 'arrow-up', 'arrow-down', 'check', 'exclamation-triangle', 'information-circle', 'no-symbol',
+          'x-circle', 'check-circle', 'question-mark-circle', 'arrow-uturn-left', 'magnifying-glass', 'arrow-top-right-on-square',
+          'squares-plus', 'arrow-right'] as $__i) {
+    $__icons[$__i] = icon($__i, 'w-4 h-4');
+}
+
+$__boot = [
+    'layout'         => $layout,
+    'catalog'        => $catalog,
+    'sizes'          => \App\Core\WidgetRegistry::SIZES,
+    'hasSiteDefault' => $hasSiteDefault,
+    'canSetDefault'  => $canSetDefault,
+    'icons'          => $__icons,
+    'legacy'         => array_keys($legacyHtml),
+];
 ?>
+<link rel="stylesheet" href="<?= $base ?>/admin/assets/css/dashboard.css?v=<?= $__cv ?>">
 
-<!-- Welcome -->
-<div class="bg-gradient-to-r from-blue-600 to-blue-500 rounded-2xl shadow-lg shadow-blue-200/50 px-6 py-6 mb-6 text-white">
-    <div class="flex items-start justify-between flex-wrap gap-3">
-        <div>
-            <h2 class="text-xl font-semibold mb-1">Welcome back, <?= htmlspecialchars($currentUser['display_name'] ?? 'there') ?>!</h2>
-            <p class="text-blue-100 text-sm">Here's what's happening with <strong><?= htmlspecialchars($siteName) ?></strong> today.</p>
+<div class="bh-dash" data-bh-dash>
+    <header class="bh-dash-head">
+        <div class="bh-dash-head__text">
+            <h1 class="bh-dash-head__title">Welcome back, <?= htmlspecialchars($__name) ?></h1>
+            <p class="bh-dash-head__sub"><?= htmlspecialchars((string) $siteName) ?></p>
         </div>
-        <div class="flex gap-2">
-            <a href="<?= $base ?>/admin/posts/create" class="bg-white text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-lg text-sm font-medium shadow flex items-center gap-2">
-                <?= icon('pencil-square', 'w-4 h-4') ?> New Post
-            </a>
-            <a href="<?= $base ?>/admin/media" class="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-                <?= icon('arrow-up-tray', 'w-4 h-4') ?> Upload
-            </a>
-        </div>
-    </div>
-</div>
-
-<!-- Stat cards -->
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <div class="bg-white rounded-xl border border-slate-200 p-5">
-        <div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-slate-500">Posts</span>
-            <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 grid place-items-center">
-                <?= icon('newspaper', 'w-4 h-4') ?>
-            </div>
-        </div>
-        <div class="text-2xl font-semibold text-slate-900"><?= number_format($stats['posts']) ?></div>
-        <div class="text-xs text-slate-500 mt-1">
-            <?= $stats['posts_published'] ?> published · <?= $stats['posts_draft'] ?> drafts
-        </div>
-    </div>
-
-    <div class="bg-white rounded-xl border border-slate-200 p-5">
-        <div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-slate-500">Pages</span>
-            <div class="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 grid place-items-center">
-                <?= icon('document-text', 'w-4 h-4') ?>
-            </div>
-        </div>
-        <div class="text-2xl font-semibold text-slate-900"><?= number_format($stats['pages']) ?></div>
-        <div class="text-xs text-slate-500 mt-1">Static pages</div>
-    </div>
-
-    <div class="bg-white rounded-xl border border-slate-200 p-5">
-        <div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-slate-500">Media</span>
-            <div class="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 grid place-items-center">
-                <?= icon('photo', 'w-4 h-4') ?>
-            </div>
-        </div>
-        <div class="text-2xl font-semibold text-slate-900"><?= number_format($stats['media']) ?></div>
-        <div class="text-xs text-slate-500 mt-1"><?= fmtBytes($stats['media_size']) ?> total</div>
-    </div>
-
-    <div class="bg-white rounded-xl border border-slate-200 p-5">
-        <div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-slate-500">Comments</span>
-            <div class="w-10 h-10 rounded-lg bg-cyan-50 text-cyan-600 grid place-items-center">
-                <?= icon('chat-bubble-left-right', 'w-4 h-4') ?>
-            </div>
-        </div>
-        <div class="text-2xl font-semibold text-slate-900"><?= number_format($stats['comments']) ?></div>
-        <div class="text-xs text-slate-500 mt-1">
-            <?php if ($stats['comments_pending'] > 0): ?>
-                <a href="<?= $base ?>/admin/comments" class="text-amber-600 hover:underline">
-                    <?= icon('exclamation-circle', 'w-4 h-4') ?>
-                    <?= $stats['comments_pending'] ?> pending
-                </a>
-            <?php else: ?>
-                All reviewed
+        <div class="bh-dash-head__actions" data-bh-dash-view-actions>
+            <?php if ($canWrite): ?>
+                <a href="<?= $base ?>/admin/posts/create" class="bh-btn bh-btn--secondary bh-btn--sm"><?= icon('pencil-square', 'w-4 h-4') ?> New post</a>
             <?php endif; ?>
+            <?php if ($canUpload): ?>
+                <a href="<?= $base ?>/admin/media" class="bh-btn bh-btn--secondary bh-btn--sm"><?= icon('arrow-up-tray', 'w-4 h-4') ?> Upload</a>
+            <?php endif; ?>
+            <button type="button" class="bh-btn bh-btn--primary bh-btn--sm" data-bh-dash-customize>
+                <?= icon('adjustments-horizontal', 'w-4 h-4') ?> Customize
+            </button>
         </div>
-    </div>
-</div>
+    </header>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Recent posts -->
-    <div class="bg-white rounded-xl border border-slate-200 p-5 lg:col-span-2">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-slate-900">Recent Posts</h3>
-            <a href="<?= $base ?>/admin/posts" class="text-sm text-blue-600 hover:text-blue-700">View all <?= icon('arrow-right', 'w-3.5 h-3.5') ?></a>
+    <div class="bh-dash-editbar" data-bh-dash-editbar hidden role="region" aria-label="Customize dashboard">
+        <div class="bh-dash-editbar__text">
+            <strong>Customizing your dashboard</strong>
+            <span>Drag cards by their handle, or use the arrows. Changes apply when you save.</span>
         </div>
-        <?php if (empty($recentPosts)): ?>
-            <div class="text-center py-12 text-slate-500">
-                <?= icon('folder-open', 'w-10 h-10 text-slate-300 mb-3') ?>
-                <p>No posts yet. <a href="<?= $base ?>/admin/posts/create" class="text-blue-600 hover:underline">Create your first one</a>.</p>
-            </div>
-        <?php else: ?>
-            <div class="divide-y divide-slate-100">
-                <?php foreach ($recentPosts as $post): ?>
-                <div class="py-3 flex items-center justify-between gap-4">
-                    <div class="min-w-0 flex-1">
-                        <a href="<?= $base ?>/admin/posts/<?= $post['id'] ?>/edit" class="block text-sm font-medium text-slate-900 hover:text-blue-600 truncate">
-                            <?= htmlspecialchars($post['title']) ?>
-                        </a>
-                        <div class="text-xs text-slate-500 mt-0.5">
-                            by <?= htmlspecialchars($post['author_name'] ?? 'Unknown') ?> · <?= bh_date($post['created_at'], 'M j, Y') ?>
-                        </div>
-                    </div>
-                    <span class="text-xs px-2 py-1 rounded-full font-medium <?php
-                        $status = $post['status'];
-                        echo $status === 'published' ? 'bg-green-50 text-green-700' :
-                            ($status === 'draft' ? 'bg-slate-100 text-slate-600' :
-                            ($status === 'scheduled' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'));
-                    ?>">
-                        <?= ucfirst($status) ?>
-                    </span>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
+        <div class="bh-dash-editbar__actions">
+            <button type="button" class="bh-btn bh-btn--secondary bh-btn--sm" data-bh-dash-add><?= icon('squares-plus', 'w-4 h-4') ?> Add widgets</button>
+            <button type="button" class="bh-btn bh-btn--ghost bh-btn--sm" data-bh-dash-reset><?= icon('arrow-uturn-left', 'w-4 h-4') ?> Reset to default</button>
+            <?php if ($canSetDefault): ?>
+                <button type="button" class="bh-btn bh-btn--ghost bh-btn--sm" data-bh-dash-sitedefault>Use as site default</button>
+            <?php endif; ?>
+            <span class="bh-dash-editbar__sep" aria-hidden="true"></span>
+            <button type="button" class="bh-btn bh-btn--ghost bh-btn--sm" data-bh-dash-cancel>Cancel</button>
+            <button type="button" class="bh-btn bh-btn--primary bh-btn--sm" data-bh-dash-save>Save changes</button>
+        </div>
     </div>
 
-    <!-- Recent comments -->
-    <div class="bg-white rounded-xl border border-slate-200 p-5">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-slate-900">Recent Comments</h3>
-            <a href="<?= $base ?>/admin/comments" class="text-sm text-blue-600 hover:text-blue-700">View all</a>
-        </div>
-        <?php if (empty($recentComments)): ?>
-            <div class="text-center py-10 text-slate-500">
-                <?= icon('no-symbol', 'w-8 h-8 text-slate-300 mb-2') ?>
-                <p class="text-sm">No comments yet.</p>
-            </div>
-        <?php else: ?>
-            <div class="space-y-3">
-                <?php foreach ($recentComments as $c): ?>
-                <div class="text-sm">
-                    <div class="font-medium text-slate-900"><?= htmlspecialchars($c['author_name'] ?? 'Anonymous') ?></div>
-                    <p class="text-slate-600 text-xs mt-0.5 line-clamp-2"><?= htmlspecialchars(mb_substr($c['content'], 0, 120)) ?></p>
-                    <div class="text-xs text-slate-400 mt-1">
-                        on <?= htmlspecialchars($c['post_title'] ?? '(deleted)') ?>
-                    </div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
+    <div class="bh-dash-grid" data-bh-dash-grid aria-label="Dashboard widgets"></div>
+
+    <div class="bh-empty bh-dash-blank" data-bh-dash-blank hidden>
+        <span class="bh-empty__icon"><?= icon('squares-2x2') ?></span>
+        <p class="bh-empty__title">Your dashboard is empty</p>
+        <p class="bh-empty__text">Add the widgets you want to see first when you sign in.</p>
+        <div class="bh-empty__actions"><button type="button" class="bh-btn bh-btn--primary" data-bh-dash-add-blank>Add widgets</button></div>
     </div>
+
+    <p class="bh-dash-sr" aria-live="polite" data-bh-dash-live></p>
+    <noscript><p class="bh-dash-noscript">The dashboard needs JavaScript to load its widgets.</p></noscript>
 </div>
 
-<?php
-// Dashboard widgets contributed by apps & themes.
-$dashWidgets = \App\Core\Application::getInstance()
-    ->make(\App\Core\WidgetRegistry::class)->all('dashboard');
-if (!empty($dashWidgets)):
-    $reg = \App\Core\Application::getInstance()->make(\App\Core\WidgetRegistry::class);
-    $widthClass = fn($w) => match ($w) { 'full' => 'lg:col-span-3', 'half' => 'lg:col-span-2', default => 'lg:col-span-1' };
-?>
-<div class="mt-6">
-    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Widgets</h3>
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <?php foreach ($dashWidgets as $w): ?>
-        <div class="<?= $widthClass($w['dashboard']['width'] ?? 'third') ?> bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-                <?= icon(htmlspecialchars($w['icon']), 'w-4 h-4 text-slate-400') ?>
-                <h4 class="font-semibold text-slate-800 text-sm"><?= htmlspecialchars($w['title']) ?></h4>
-            </div>
-            <div class="p-4 text-sm text-slate-600">
-                <?= $reg->render($w['key'], [], 'dashboard') ?>
-            </div>
+<!-- Add widgets -->
+<div class="bh-dash-drawer" data-bh-dash-drawer hidden>
+    <div class="bh-dash-drawer__scrim" data-bh-dash-drawer-close></div>
+    <aside class="bh-dash-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="bh-dash-drawer-title">
+        <div class="bh-dash-drawer__head">
+            <h2 id="bh-dash-drawer-title" class="bh-dash-drawer__title">Add widgets</h2>
+            <button type="button" class="bh-dash-icon-btn" data-bh-dash-drawer-close aria-label="Close"><?= icon('x-mark', 'w-5 h-5') ?></button>
         </div>
-        <?php endforeach; ?>
-    </div>
+        <div class="bh-dash-drawer__search">
+            <label class="bh-dash-sr" for="bh-dash-search">Search widgets</label>
+            <input id="bh-dash-search" type="search" class="bh-input bh-input--sm" placeholder="Search widgets" autocomplete="off" data-bh-dash-search>
+        </div>
+        <div class="bh-dash-drawer__body" data-bh-dash-catalog></div>
+    </aside>
 </div>
-<?php endif; ?>
+
+<!-- Widget settings -->
+<dialog class="bh-dash-dialog" data-bh-dash-settings aria-labelledby="bh-dash-settings-title">
+    <form method="dialog" class="bh-dash-dialog__form" data-bh-dash-settings-form novalidate>
+        <div class="bh-dash-dialog__head">
+            <h2 id="bh-dash-settings-title" class="bh-dash-dialog__title" data-bh-dash-settings-title>Widget settings</h2>
+            <button type="button" class="bh-dash-icon-btn" data-bh-dash-settings-cancel aria-label="Close"><?= icon('x-mark', 'w-5 h-5') ?></button>
+        </div>
+        <div class="bh-dash-dialog__body" data-bh-dash-settings-fields></div>
+        <div class="bh-dash-dialog__foot">
+            <button type="button" class="bh-btn bh-btn--ghost" data-bh-dash-settings-cancel>Cancel</button>
+            <button type="submit" class="bh-btn bh-btn--primary" data-bh-dash-settings-save>Save changes</button>
+        </div>
+    </form>
+</dialog>
+
+<?php // Pre-1.2.68 widgets' own HTML, moved into their cards by dashboard.js. ?>
+<?php foreach ($legacyHtml as $__id => $__html): ?>
+<div hidden data-bh-dash-legacy="<?= htmlspecialchars((string) $__id, ENT_QUOTES) ?>"><?= $__html ?></div>
+<?php endforeach; ?>
+
+<script>window.BH_DASHBOARD = <?= json_encode($__boot, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;</script>
+<script src="<?= $base ?>/admin/assets/js/dashboard.js?v=<?= $__v ?>"></script>
 
 <?php
 // Background update check — runs after the dashboard has painted so it never

@@ -58,6 +58,50 @@ class UserRepository
         return $this->db->update('users', $data, ['id' => $id]);
     }
 
+    /**
+     * Change a user's `meta` under a row lock (1.2.70, issues.md BH-008).
+     *
+     * $change gets the current raw column and returns the new JSON string, or
+     * null to leave it as it is. The row is read with SELECT … FOR UPDATE
+     * inside a transaction, so a second request changing the same user's meta
+     * waits for this one instead of overwriting it with what it read earlier.
+     * Inside a transaction someone else already opened, it joins that one.
+     *
+     * @param callable(?string):?string $change
+     * @return bool false when there is no such user
+     */
+    public function lockedMetaUpdate(int $id, callable $change): bool
+    {
+        $pdo = $this->db->connection();
+        $run = function () use ($id, $change): bool {
+            $row = $this->db->selectOne(
+                'SELECT meta FROM {users} WHERE id = :id AND deleted_at IS NULL FOR UPDATE',
+                ['id' => $id]
+            );
+            if ($row === null) return false;
+            $new = $change($row['meta'] ?? null);
+            if ($new !== null) {
+                $this->db->execute('UPDATE {users} SET meta = :m WHERE id = :id', ['m' => $new, 'id' => $id]);
+            }
+            return true;
+        };
+        if ($pdo->inTransaction()) {
+            return $run();
+        }
+        // A deadlock or serialization failure (SQLSTATE 40001, MySQL 1213) is
+        // the server telling us to try again, so do: the change is re-applied
+        // to whatever is there now.
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return (bool) $this->db->transaction(fn() => $run());
+            } catch (\PDOException $e) {
+                $retry = $e->getCode() === '40001' || (int) ($e->errorInfo[1] ?? 0) === 1213;
+                if (!$retry || $attempt >= 5) throw $e;
+                usleep(random_int(5000, 40000) * $attempt);
+            }
+        }
+    }
+
     public function softDelete(int $id): int
     {
         return $this->db->update('users', ['deleted_at' => date('Y-m-d H:i:s')], ['id' => $id]);

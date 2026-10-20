@@ -29,6 +29,8 @@
   var pane = document.getElementById('nml-pane');
   var paneBody = document.getElementById('nml-pane-body');
   var paneClose = document.getElementById('nml-pane-close');
+  var paneSub = document.getElementById('nml-pane-sub');
+  var paneFoot = document.getElementById('nml-pane-foot');
   var paneBackdrop = document.getElementById('nml-pane-backdrop');
   var gridPanel = root.querySelector('[data-nml-panel="grid"]');
   var listPanel = root.querySelector('[data-nml-panel="list"]');
@@ -167,6 +169,27 @@
     countEl.textContent = plural(total, 'file') + (filtered() ? ' match.' : ' in your library.');
   }
 
+  // ---- grid: thumbnails show a shimmer until they arrive (1.2.70) ----
+  // 'load' and 'error' don't bubble, so listen in the capture phase.
+  function markThumb(ev){
+    var img = ev.target;
+    if (!img || img.tagName !== 'IMG') return;
+    var box = img.closest && img.closest('.nml-card__media--img');
+    if (box) box.classList.add(ev.type === 'error' ? 'is-broken' : 'is-loaded');
+  }
+  document.addEventListener('load', markThumb, true);
+  document.addEventListener('error', markThumb, true);
+  // Images already in the browser's cache can finish before the listener
+  // sees them; catch those after each render.
+  function markCachedThumbs(root){
+    (root || document).querySelectorAll('.nml-card__media--img img').forEach(function (img){
+      if (img.complete) {
+        var box = img.closest('.nml-card__media--img');
+        if (box) box.classList.add(img.naturalWidth ? 'is-loaded' : 'is-broken');
+      }
+    });
+  }
+
   // ---- grid: render ----
   function cardHtml(m){
     var k = kind(m.mime_type);
@@ -200,6 +223,7 @@
     if (!state.items.length){ renderState(filtered() ? 'nomatch' : 'empty'); return; }
     gridEl.className = gridClass();
     gridEl.innerHTML = state.items.map(cardHtml).join('');
+    markCachedThumbs(gridEl);
   }
   function appendCards(items){
     if (!items.length) return;
@@ -207,6 +231,7 @@
     tmp.innerHTML = items.map(cardHtml).join('');
     var first = tmp.firstElementChild;
     while (tmp.firstChild) gridEl.appendChild(tmp.firstChild);
+    markCachedThumbs(gridEl);
     // Keyboard users carry on from the first new file.
     if (first && moreWrap.contains(document.activeElement)) first.focus();
   }
@@ -281,9 +306,14 @@
     var ro = can.edit ? '' : ' readonly';
 
     paneBody.innerHTML =
-      '<div class="nml-pane__preview nml-pane__preview--' + k + ((k === 'image' || k === 'svg') ? ' is-loading' : '') + '" id="nml-pane-preview">' + preview + '</div>'
+      // The box keeps the image's shape while it loads (1.2.70). Before, it
+      // had no height until the image arrived — on phones, where the preview
+      // stacks above the fields, the "Loading original…" pill inside it was
+      // clipped away and the dialog showed a blank gap.
+      '<div class="nml-pane__preview nml-pane__preview--' + k + ((k === 'image' || k === 'svg') ? ' is-loading' : '') + '" id="nml-pane-preview"'
+      + ((k === 'image' && +m.width > 0 && +m.height > 0) ? ' style="--nml-ar:' + (+m.width) + ' / ' + (+m.height) + '"' : '')
+      + '>' + preview + '</div>'
       + '<div class="nml-pane__side">'
-      + '<div class="nml-pane__name">' + esc(m.original_name || m.file_name || '') + '</div>'
 
       + '<form class="nml-pane__section" id="nml-meta-form" novalidate>'
       +   '<label class="nml-pane__lbl" for="nml-f-title">Title</label>'
@@ -296,8 +326,7 @@
       +   '<textarea class="nml-pane__in" id="nml-f-caption" data-f="caption" rows="2"' + ro + '>' + esc(m.caption || '') + '</textarea>'
       +   '<label class="nml-pane__lbl" for="nml-f-desc">Description</label>'
       +   '<textarea class="nml-pane__in" id="nml-f-desc" data-f="description" rows="3"' + ro + '>' + esc(m.description || '') + '</textarea>'
-      +   (can.edit ? '<button type="submit" class="nml-pane__save" id="nml-save-meta">Save changes</button><span class="nml-pane__saved hidden" id="nml-saved" role="status">Saved</span>'
-                    : '<p class="nml-pane__note">You can view this file. Editing it needs permission to edit other people\'s files.</p>')
+      +   (can.edit ? '' : '<p class="nml-pane__note">You can view this file. Editing it needs permission to edit other people\'s files.</p>')
       + '</form>'
 
       + '<div class="nml-pane__section">'
@@ -324,6 +353,17 @@
       + '</div>'
       + '</div>';
 
+    // Header: the file's name under the title. Footer: Close, and Save
+    // changes for people who may edit — submits the form from outside it.
+    if (paneSub) paneSub.textContent = m.original_name || m.file_name || '';
+    if (paneFoot){
+      paneFoot.innerHTML = '<span class="nml-pane__saved hidden" id="nml-saved" role="status">Saved</span>'
+        + '<button type="button" class="bh-btn bh-btn--secondary" id="nml-pane-done">Close</button>'
+        + (can.edit ? '<button type="submit" form="nml-meta-form" class="bh-btn bh-btn--primary" id="nml-save-meta">Save changes</button>' : '');
+      paneFoot.hidden = false;
+      var doneBtn = document.getElementById('nml-pane-done');
+      if (doneBtn) doneBtn.addEventListener('click', closePane);
+    }
     pane.classList.add('is-open');
     pane.setAttribute('aria-hidden', 'false');
     paneBackdrop.classList.remove('hidden');
@@ -424,6 +464,8 @@
     paneBackdrop.classList.add('hidden');
     paneToken++;
     paneBody.innerHTML = '';   // stops a playing video
+    if (paneFoot){ paneFoot.innerHTML = ''; paneFoot.hidden = true; }
+    if (paneSub) paneSub.textContent = '';
     state.selectedId = null;
     highlightSelected();
     if (paneOpener && document.contains(paneOpener)){ try { paneOpener.focus(); } catch (e){} }

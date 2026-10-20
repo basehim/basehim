@@ -42,21 +42,27 @@ class UserService
      */
     public function setMeta(int $userId, string $key, mixed $value): bool
     {
-        $user = $this->repo->find($userId);
-        if ($user === null) {
-            return false;
-        }
-        $meta = $this->decodeMeta($user['meta'] ?? null);
-        if ($value === null) {
-            unset($meta[$key]);
-        } else {
-            $meta[$key] = $value;
-        }
-        $json = json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        if ($json === false || strlen($json) > 65535) {
-            return false;
-        }
-        return $this->repo->update($userId, ['meta' => $json]) >= 0;
+        // Under a row lock (1.2.70, issues.md BH-008). This used to read the
+        // whole JSON, change one key and write it all back with nothing in
+        // between, so two saves at the same moment — Data Table preferences in
+        // one tab, the dashboard layout in another — could silently drop one.
+        $ok = true;
+        $found = $this->repo->lockedMetaUpdate($userId, function (?string $raw) use ($key, $value, &$ok): ?string {
+            $meta = $this->decodeMeta($raw);
+            if ($value === null) {
+                if (!array_key_exists($key, $meta)) return null;   // nothing to remove
+                unset($meta[$key]);
+            } else {
+                $meta[$key] = $value;
+            }
+            $json = json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if ($json === false || strlen($json) > 65535) {
+                $ok = false;
+                return null;
+            }
+            return $json;
+        });
+        return $found && $ok;
     }
 
     /** @return array<string,mixed> */

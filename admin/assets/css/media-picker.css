@@ -650,11 +650,22 @@
   box-shadow:0 20px 60px rgba(15,23,42,.28); transform:translate(-50%, -48%) scale(.97); opacity:0; visibility:hidden;
   transition:transform .22s ease, opacity .22s ease, visibility .22s ease; z-index:60; display:flex; flex-direction:column; }
 .nml-pane.is-open { transform:translate(-50%, -50%) scale(1); opacity:1; visibility:visible; }
-.nml-pane__head { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--nml-line); }
-.nml-pane__title { font-size:14px; font-weight:600; }
-.nml-pane__close { border:0; background:none; font-size:16px; color:#94a3b8; cursor:pointer; }
-.nml-pane__close:hover { color:#475569; }
-.nml-pane__body { padding:16px 18px; overflow-y:auto; flex:1; }
+/* 1.2.70: header, body and footer as in the Quick Edit dialog (datatable.css). */
+.nml-pane__head { flex:none; display:flex; align-items:flex-start; gap:.75rem; padding:.85rem 1rem .75rem 1.15rem; border-bottom:1px solid #e2e8f0; }
+.nml-pane__titles { min-width:0; flex:1; }
+.nml-pane__title { margin:0; font-size:1rem; font-weight:600; line-height:1.35; color:#0f172a; }
+.nml-pane__sub { margin:.1rem 0 0; font-size:.8rem; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nml-pane__sub:empty { display:none; }
+.nml-pane__close { flex:none; display:inline-grid; place-items:center; width:2rem; height:2rem; margin:-.15rem -.25rem 0 0;
+  border:0; border-radius:.5rem; background:none; color:#64748b; cursor:pointer; }
+.nml-pane__close:hover { background:#f1f5f9; color:#0f172a; }
+.nml-pane__close:focus-visible { outline:2px solid #93c5fd; outline-offset:1px; }
+.nml-pane__close svg { width:1.15rem; height:1.15rem; }
+.nml-pane__foot { flex:none; display:flex; align-items:center; justify-content:flex-end; gap:.5rem; padding:.7rem 1.15rem; border-top:1px solid #e2e8f0; background:#fff; border-radius:0 0 16px 16px; }
+.nml-pane__foot[hidden] { display:none; }
+.nml-pane__foot .bh-btn { border-radius:.5rem; min-width:5.5rem; }
+.nml-pane__foot .nml-pane__saved { margin:0 auto 0 0; }
+.nml-pane__body { padding:16px 18px; overflow-y:auto; flex:1 1 auto; min-height:0; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
 .nml-pane__preview { background:#f1f5f9; border-radius:10px; overflow:hidden; margin-bottom:10px; display:flex; align-items:center; justify-content:center; max-height:280px; }
 .nml-pane__preview img { max-width:100%; max-height:280px; object-fit:contain; display:block; }
 .nml-pane__preview video { max-width:100%; max-height:280px; background:#000; }
@@ -971,6 +982,22 @@
     .nm-footer { padding: 0.75rem; }
 }
 
+/* Phones (1.2.70): the details dialog fills the screen like Quick Edit — the
+   header on top, the fields scrolling, Close / Save changes full width in a
+   footer above the home indicator, 16px text so iOS doesn't zoom. */
+@media (max-width: 600px) {
+  .nml-pane { top:0; left:0; width:100vw; max-width:100vw; height:100vh; height:100dvh; max-height:100vh; max-height:100dvh;
+    border-radius:0; transform:translateY(16px); }
+  .nml-pane.is-open { transform:none; }
+  .nml-pane__body { padding:.8rem .9rem; }
+  .nml-pane__foot { border-radius:0; padding:.65rem .9rem calc(.65rem + env(safe-area-inset-bottom, 0px)); }
+  .nml-pane__foot .bh-btn { flex:1; }
+  .nml-pane__foot .nml-pane__saved { display:none; }
+  .nml-pane__in { font-size:16px; }
+  .nml-pane__actions .nml-pane__btn { flex:1; justify-content:center; }
+}
+@media (prefers-reduced-motion: reduce) { .nml-pane { transition:none; } }
+
 /* ── Media library: the original loads over a generated preview (1.2.16) ── */
 .nml-pane__preview { position:relative; }
 .nml-pane__preview img { transition:filter .35s ease; }
@@ -981,6 +1008,30 @@
 .nml-pane__preview.is-loading .nml-pane__loader { display:inline-flex; }
 .nml-pane__preview.is-error img { filter:none; }
 .nml-pane__preview.is-error .nml-pane__loader { display:inline-flex; }
+/* 1.2.70: while the image loads the box keeps the image's shape (--nml-ar,
+   set from its dimensions), so the loader has somewhere to sit. Without it
+   the box was 0px tall on phones and the pill was clipped out of sight. */
+.nml-pane__preview--image.is-loading,
+.nml-pane__preview--svg.is-loading,
+.nml-pane__preview--image.is-error { min-height:12rem; }
+.nml-pane__preview--image.is-loading { width:100%; aspect-ratio:var(--nml-ar, 4 / 3); }
+@media (min-width: 768px) { .nml-pane__preview--image.is-loading { aspect-ratio:auto; } }
+.nml-pane__preview.is-loading img { max-width:100%; max-height:100%; }
+
+/* Grid thumbnails: a soft shimmer until the image arrives; a muted icon
+   tile if it can't load. */
+.nml-card__media--img:not(.is-loaded):not(.is-broken) {
+    background:linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%); background-size:200% 100%;
+    animation:nml-shimmer 1.3s ease-in-out infinite;
+}
+.nml-grid--masonry .nml-card__media--img:not(.is-loaded):not([style]) { min-height:9rem; }
+.nml-card__media--img.is-broken { min-height:9rem; }
+.nml-card__media--img.is-broken::after {
+    content:"Preview unavailable"; position:absolute; inset:0; display:grid; place-items:center;
+    font-size:12px; color:#94a3b8;
+}
+@keyframes nml-shimmer { from { background-position:100% 0; } to { background-position:-100% 0; } }
+@media (prefers-reduced-motion: reduce) { .nml-card__media--img:not(.is-loaded):not(.is-broken) { animation:none; } }
 .nml-pane__sizes span:last-child { text-align:right; line-height:1.6; }
 .nml-pane__sizes a { color:#2563eb; text-decoration:none; }
 .nml-pane__sizes a:hover { text-decoration:underline; }

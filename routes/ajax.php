@@ -396,3 +396,79 @@ $ajax->register('content.table_prefs_reset', [
     ],
     'description' => "Reset a table's preferences to the defaults.",
 ]);
+
+// ---------------------------------------------------------------------------
+// 1.2.68 — the dashboard. 'read' on every action: the dashboard is open to
+// every signed-in role. Each widget's own capability, visibility rule and
+// action capabilities are enforced inside DashboardService, against the
+// user's stored layout — see app/Http/Controllers/Ajax/DashboardActions.php.
+// ---------------------------------------------------------------------------
+
+use App\Http\Controllers\Ajax\DashboardActions;
+
+$ajax->register('widgets.dashboard_state', [
+    'handler'     => [DashboardActions::class, 'state'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'description' => "This user's dashboard layout and the widgets they may add.",
+]);
+
+$ajax->register('widgets.dashboard_data', [
+    'handler'     => [DashboardActions::class, 'data'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'input'       => [
+        'ids'   => ['type' => 'string', 'required' => true, 'max' => 1400, 'regex' => '/^[a-z0-9,-]+$/'],
+        'force' => 'bool',
+    ],
+    'description' => 'Data for some of this user\'s dashboard cards; each succeeds or fails on its own.',
+]);
+
+$ajax->register('widgets.dashboard_save', [
+    'handler'     => [DashboardActions::class, 'save'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => ['layout' => 'required|string|max:20000'],
+    'description' => 'Save the order, size and visibility of the cards on this user\'s dashboard.',
+]);
+
+$ajax->register('widgets.dashboard_update', [
+    'handler'     => [DashboardActions::class, 'update'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => [
+        'id'        => ['type' => 'string', 'required' => true, 'max' => 41, 'regex' => '/^[a-z][a-z0-9-]{2,40}$/'],
+        'collapsed' => 'bool',
+        'visible'   => 'bool',
+        'settings'  => 'string|max:8000',
+    ],
+    'description' => 'Collapse, remove, restore or configure one dashboard card.',
+]);
+
+$ajax->register('widgets.dashboard_reset', [
+    'handler'     => [DashboardActions::class, 'reset'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 10, 'per' => 60],
+    'description' => 'Reset this user\'s dashboard to the site default.',
+]);
+
+$ajax->register('widgets.dashboard_action', [
+    'handler'     => [DashboardActions::class, 'action'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => [
+        'id'     => ['type' => 'string', 'required' => true, 'max' => 41, 'regex' => '/^[a-z][a-z0-9-]{2,40}$/'],
+        'action' => ['type' => 'string', 'required' => true, 'max' => 40, 'regex' => '/^[a-z0-9][a-z0-9_-]{0,39}$/'],
+    ],
+    'description' => 'Run one of a dashboard card\'s own actions.',
+]);
+
+$ajax->register('widgets.dashboard_default', [
+    'handler'     => [DashboardActions::class, 'siteDefault'],
+    'capability'  => 'manage_settings',
+    'rate_limit'  => ['max' => 10, 'per' => 60],
+    'input'       => ['clear' => 'bool'],
+    'description' => 'Make the current dashboard the site default for people who have not customised theirs, or clear it.',
+]);

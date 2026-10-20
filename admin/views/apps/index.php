@@ -201,7 +201,7 @@ $btnDanger  = $btnBase . ' border-slate-200 text-red-600 hover:border-red-300 ho
                     </span>
                 </div>
                 <div class="text-[11px] text-slate-400 truncate mt-0.5">
-                    v<?= htmlspecialchars($p['version']) ?> · <?= htmlspecialchars($p['vendor']) ?>/<?= htmlspecialchars($p['slug']) ?>
+                    v<?= htmlspecialchars((string) ($p['version'] ?? '')) ?> · <?= htmlspecialchars((string) ($p['vendor'] ?? '')) ?>/<?= htmlspecialchars((string) ($p['slug'] ?? '')) ?>
                     <?php if ($who): ?> · <?= implode(' · ', $who) ?><?php endif; ?>
                 </div>
             </div>

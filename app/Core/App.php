@@ -183,6 +183,12 @@ abstract class App
      *
      * @param string $key Unique key; auto-namespaced to '{app-slug}.{key}'
      *                     unless it already contains a dot.
+     *
+     * Dashboard cards (1.2.68) use this same method with
+     * 'surfaces' => ['dashboard'] — see docs/DASHBOARD-WIDGETS.md. There is
+     * deliberately no separate registerDashboardWidget(): any method added to
+     * this base class breaks every installed app that already declares one of
+     * that name with a narrower visibility (issues.md BH-014).
      * @param array  $def title, render (fn(array $settings, string $surface): string),
      *                     description, icon, surfaces, fields, dashboard — see
      *                     WidgetRegistry::register().
@@ -192,7 +198,11 @@ abstract class App
         if (!str_contains($key, '.') && $this->slug !== '') {
             $key = $this->slug . '.' . $key;
         }
+        // Always this app's: a 'source' in $def is overwritten, so an app can't
+        // register in core's or another app's name (1.2.68).
         $def['source'] = 'app:' . $this->slug;
+        // Stays void: apps that override this method keep a compatible signature.
+        // A refused definition is written to this app's log.
         $this->widgets()->register($key, $def);
     }
 

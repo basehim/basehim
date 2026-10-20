@@ -119,11 +119,18 @@ $__canEditOthers = $__user ? ($__canDeleteOthers || \App\Http\Middleware\CheckCa
 
   <!-- Details dialog -->
   <div id="nml-pane" class="nml-pane" role="dialog" aria-modal="true" aria-labelledby="nml-pane-title" aria-hidden="true">
+    <?php /* 1.2.70: laid out like the Quick Edit dialog — a title with the
+             file name under it, the fields scrolling, and Close / Save
+             changes in a footer that stays in view. Full screen on phones. */ ?>
     <div class="nml-pane__head">
-      <span class="nml-pane__title" id="nml-pane-title">File details</span>
-      <button type="button" class="nml-pane__close" id="nml-pane-close" aria-label="Close"><?= icon('x-mark', 'w-4 h-4') ?></button>
+      <div class="nml-pane__titles">
+        <h2 class="nml-pane__title" id="nml-pane-title">File details</h2>
+        <p class="nml-pane__sub" id="nml-pane-sub"></p>
+      </div>
+      <button type="button" class="nml-pane__close" id="nml-pane-close" aria-label="Close"><?= icon('x-mark', 'w-5 h-5') ?></button>
     </div>
     <div class="nml-pane__body" id="nml-pane-body"></div>
+    <div class="nml-pane__foot" id="nml-pane-foot" hidden></div>
   </div>
   <div id="nml-pane-backdrop" class="nml-pane-backdrop hidden"></div>
 

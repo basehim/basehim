@@ -20,7 +20,9 @@ declare(strict_types=1);
 // App\Core\BASEHIM_ROOT" — PHP resolves an unknown bare constant against the
 // current namespace before giving up.
 define('BASEHIM_ROOT', __DIR__);
-define('BASEHIM_VERSION', '1.2.59');
+// Read from index.php, the single source of truth. A literal here went stale
+// (it said 1.2.59 on 1.2.69), and the installer showed the wrong version.
+define('BASEHIM_VERSION', preg_match("/define\\('BASEHIM_VERSION',\\s*'([^']+)'\\)/", (string) @file_get_contents(__DIR__ . '/index.php'), $__vm) ? $__vm[1] : '0.0.0');
 define('BASEHIM_INSTALLING', true);
 
 
@@ -109,11 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'DB_PASSWORD' => $_POST['db_password'] ?? '',
             'APP_URL'     => trim($_POST['app_url'] ?? ''),
             'SITE_TITLE'  => trim($_POST['site_title'] ?? 'Basehim'),
-            // Up to 1.2.29 the form had no prefix field and the .env written at
-            // the end had no DB_PREFIX line, so every install was unprefixed —
-            // even with DB_PREFIX set in .env beforehand, as the README says.
-            'DB_PREFIX'   => trim($_POST['db_prefix'] ?? ''),
-            'REPLACE_EXISTING' => !empty($_POST['replace_existing']),
+            // Chosen below, never typed in (1.2.70).
+            'DB_PREFIX'   => '',
         ];
 
         // Test connection
@@ -123,29 +122,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+00:00'",
             ]);
-            if (!preg_match('/^[A-Za-z0-9_]{0,32}$/', $cfg['DB_PREFIX'])) {
-                // Same rule as App\Core\Database: the prefix goes into identifiers.
-                $errors[] = 'Table prefix may only contain letters, numbers and underscores (at most 32), for example "bh_".';
-                $step = 2;
-            } else {
-                // The schema step drops every Basehim table under this prefix so a
-                // retry starts clean. In a database where another site already uses
-                // the same prefix, that would delete the other site — so ask first.
-                $check = $pdo->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
-                $check->execute([$cfg['DB_PREFIX'] . 'users']);
-                if ((int) $check->fetchColumn() > 0 && !$cfg['REPLACE_EXISTING']) {
-                    $errors[] = sprintf(
-                        'This database already contains Basehim tables %s (%susers, …). Choose a different table prefix, or tick "Replace existing tables" to delete them and install fresh.',
-                        $cfg['DB_PREFIX'] === '' ? 'without a prefix' : 'with the prefix "' . $cfg['DB_PREFIX'] . '"',
-                        $cfg['DB_PREFIX']
-                    );
-                    $step = 2;
-                } else {
-                    $_SESSION['install_db_config'] = $cfg;
-                    header('Location: install.php?step=3');
-                    exit;
-                }
-            }
+            // Every install gets its own random table prefix (1.2.70), so
+            // several sites can share a database and nobody can guess this
+            // site's table names. It isn't shown or asked for. A DB_PREFIX
+            // already in .env (set by a host or a deploy script) is kept.
+            $cfg['DB_PREFIX'] = installerPrefix($pdo, $_SESSION['install_db_config'] ?? null);
+            $_SESSION['install_db_config'] = $cfg;
+            header('Location: install.php?step=3');
+            exit;
         } catch (PDOException $e) {
             $errors[] = 'Database connection failed: ' . $e->getMessage();
             $step = 2;
@@ -430,6 +414,47 @@ ENV;
 
 // --- Requirements check -----------------------------------------------------
 
+/**
+ * The table prefix for this install: three random characters and an
+ * underscore, e.g. "k7q_". The first is a letter so the name never starts with
+ * a digit. A prefix is used only if no table in the database starts with it,
+ * so the schema step (which drops this install's tables before creating them,
+ * to make a retry safe) can never touch another site's tables.
+ *
+ * Kept for the rest of the wizard: going back to step 2 and on again, or
+ * retrying the schema step, reuses the same prefix.
+ *
+ * DB_PREFIX already set in .env (by a host or a deploy script, as the README
+ * describes) wins over a random one.
+ */
+function installerPrefix(PDO $pdo, ?array $previous): string
+{
+    $fromEnv = (string) (\App\Core\Env::get('DB_PREFIX', '') ?? '');
+    if ($fromEnv !== '' && preg_match('/^[A-Za-z0-9_]{1,32}$/', $fromEnv)) {
+        return $fromEnv;
+    }
+    $taken = static function (string $prefix) use ($pdo): bool {
+        $q = $pdo->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE ?');
+        $q->execute([str_replace('_', '\\_', $prefix) . '%']);
+        return (int) $q->fetchColumn() > 0;
+    };
+    // Same wizard, same database: keep the prefix it already chose, even if a
+    // first attempt created some of its tables.
+    $prev = (string) ($previous['DB_PREFIX'] ?? '');
+    if ($prev !== '' && preg_match('/^[a-z][a-z0-9]{2}_$/', $prev)
+        && ($previous['DB_DATABASE'] ?? null) === ($_POST['db_database'] ?? null)
+        && ($previous['DB_HOST'] ?? null) === ($_POST['db_host'] ?? null)) {
+        return $prev;
+    }
+    $letters = 'abcdefghijklmnopqrstuvwxyz';
+    $chars = $letters . '0123456789';
+    for ($i = 0; $i < 50; $i++) {
+        $prefix = $letters[random_int(0, 25)] . $chars[random_int(0, 35)] . $chars[random_int(0, 35)] . '_';
+        if (!$taken($prefix)) return $prefix;
+    }
+    throw new PDOException('Could not find a free table prefix in this database.');
+}
+
 function checkRequirements(): array
 {
     return [
@@ -566,19 +591,6 @@ $allOk = $step === 1 ? !in_array(false, array_column($requirements, 'ok'), true)
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Table Prefix <span class="font-normal text-slate-400">(optional)</span></label>
-                        <input name="db_prefix" maxlength="32" pattern="[A-Za-z0-9_]{0,32}" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none font-mono" value="<?= htmlspecialchars((string) ($_POST['db_prefix'] ?? \App\Core\Env::get('DB_PREFIX', ''))) ?>" placeholder="bh_">
-                        <p class="text-xs text-slate-500 mt-1">Letters, numbers and _ only. Put in front of every table name (<code>bh_users</code>, <code>bh_posts</code>…) so several sites can share one database. Choose it now — it can't be changed from the admin later.</p>
-                    </div>
-                    <div class="flex items-start md:pt-7">
-                        <label class="flex items-start gap-2 text-sm text-slate-700">
-                            <input type="checkbox" name="replace_existing" value="1" class="mt-1" <?= !empty($_POST['replace_existing']) ? 'checked' : '' ?>>
-                            <span>Replace existing tables
-                                <span class="block text-xs text-slate-500">Only to delete an earlier Basehim install that uses this same prefix.</span></span>
-                        </label>
-                    </div>
-
-                    <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1.5">Database User</label>
                         <input name="db_username" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none" value="<?= htmlspecialchars($_POST['db_username'] ?? '') ?>">
                     </div>
@@ -618,7 +630,7 @@ $allOk = $step === 1 ? !in_array(false, array_column($requirements, 'ok'), true)
                     <?php foreach (['users','posts','post_meta','post_revisions','media','taxonomies','terms','post_term','comments','settings','seo_meta','menus','menu_items','apps','refresh_tokens','notifications','activity_log'] as $t): ?>
                         <div class="flex items-center gap-2 text-slate-600">
                             <i class="fa-solid fa-table text-blue-500 text-xs"></i>
-                            <code class="text-xs"><?= htmlspecialchars((string) ($_SESSION['install_db_config']['DB_PREFIX'] ?? '') . $t) ?></code>
+                            <code class="text-xs"><?= htmlspecialchars($t) ?></code>
                         </div>
                     <?php endforeach; ?>
                 </div>
