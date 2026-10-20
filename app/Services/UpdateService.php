@@ -784,11 +784,12 @@ class UpdateService
 
     private function clearCaches(): void
     {
+        // Every entry, sub-folders included (1.2.73, BH-025): the old glob only
+        // reached top-level files, and every cached value lives in a
+        // sub-folder, so nothing cached survived an update by design but all
+        // of it did in practice.
         try {
-            $cacheDir = BASEHIM_ROOT . '/storage/cache';
-            foreach (glob($cacheDir . '/*') ?: [] as $f) {
-                if (is_file($f)) @unlink($f);
-            }
+            (new \App\Core\Cache(BASEHIM_ROOT . '/storage/cache'))->flush();
         } catch (\Throwable) {}
         if (function_exists('opcache_reset')) @opcache_reset();
     }

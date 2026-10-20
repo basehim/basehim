@@ -199,12 +199,21 @@ class SchedulerService
 
         try {
             $now = date('Y-m-d H:i:s');
+            // Only tasks whose handler is registered this request (1.2.73,
+            // BH-023). Rows of an app that is switched off, quarantined or
+            // uninstalled stay due and untouched; selected first by age, five
+            // of them used to fill every sweep and no other task ever ran.
+            [$owned, $params] = $this->registeredFilter();
+            if ($owned === null) {
+                return $result;
+            }
+            $params['now'] = $now;
             $due = $this->db->select(
                 'SELECT * FROM {scheduled_tasks}
-                  WHERE next_run_at <= :now
+                  WHERE next_run_at <= :now AND (' . $owned . ')
                ORDER BY next_run_at ASC
                   LIMIT ' . self::MAX_PER_SWEEP,
-                ['now' => $now]
+                $params
             );
 
             foreach ($due as $task) {
@@ -231,6 +240,41 @@ class SchedulerService
         }
 
         return $result;
+    }
+
+    /**
+     * SQL matching the (app, task) pairs that have a handler this request,
+     * with its parameters; [null, []] when there are none.
+     *
+     * @return array{0: ?string, 1: array<string,string>}
+     */
+    private function registeredFilter(): array
+    {
+        $clauses = [];
+        $params = [];
+        $i = 0;
+        foreach ($this->handlers as $slug => $tasks) {
+            if (!is_array($tasks) || $tasks === []) continue;
+            $keys = [];
+            foreach (array_keys($tasks) as $key) {
+                $keys[] = ':k' . $i;
+                $params['k' . $i++] = (string) $key;
+            }
+            $params['s' . $i] = (string) $slug;
+            $clauses[] = '(app_slug = :s' . $i++ . ' AND task_key IN (' . implode(', ', $keys) . '))';
+        }
+        return $clauses === [] ? [null, []] : [implode(' OR ', $clauses), $params];
+    }
+
+    /** Remove every task row of an app (uninstall). Returns rows removed. */
+    public function forgetApp(string $slug): int
+    {
+        unset($this->handlers[$slug]);
+        try {
+            return $this->db->execute('DELETE FROM {scheduled_tasks} WHERE app_slug = :s', ['s' => $slug]);
+        } catch (\Throwable) {
+            return 0;
+        }
     }
 
     /**
@@ -347,7 +391,9 @@ class SchedulerService
      */
     private function acquireLock(): bool
     {
-        $dir = BASEHIM_ROOT . '/storage/cache';
+        // storage/locks, not storage/cache (1.2.73): clearing the cache
+        // deleted a held lock file, and a second run could then start.
+        $dir = BASEHIM_ROOT . '/storage/locks';
         if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) return false;
 
         $handle = @fopen($dir . '/scheduler.lock', 'c');

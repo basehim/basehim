@@ -225,18 +225,59 @@ final class Database
         return $stmt->rowCount();
     }
 
-    public function transaction(\Closure $callback): mixed
+    /**
+     * Run $callback in a transaction: commit when it returns, roll back and
+     * rethrow when it throws.
+     *
+     * Since 1.2.73:
+     *  - a call inside another transaction joins it instead of failing with
+     *    "There is already an active transaction": the inner work commits or
+     *    rolls back with the outer, so a service that wraps its own writes can
+     *    be called from an app's (or another service's) transaction;
+     *  - a deadlock, lock-wait timeout or serialization failure (1213, 1205,
+     *    SQLSTATE 40001) rolls back and runs $callback again, up to $attempts
+     *    times. The server undid the whole transaction, so the callback must
+     *    only do database work it is safe to repeat (no mail, no HTTP);
+     *  - the original exception always reaches the caller, even when the
+     *    server already ended the transaction (DDL commits implicitly).
+     */
+    public function transaction(\Closure $callback, int $attempts = 3): mixed
     {
         $pdo = $this->connection();
-        $pdo->beginTransaction();
-        try {
-            $result = $callback($this);
-            $pdo->commit();
-            return $result;
-        } catch (\Throwable $e) {
-            $pdo->rollBack();
-            throw $e;
+        if ($pdo->inTransaction()) {
+            return $callback($this);
         }
+        $attempts = max(1, $attempts);
+        for ($try = 1; ; $try++) {
+            $pdo->beginTransaction();
+            try {
+                $result = $callback($this);
+                if ($pdo->inTransaction()) $pdo->commit();
+                return $result;
+            } catch (\Throwable $e) {
+                try {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                } catch (\Throwable) {
+                    // The original error matters more than a failed rollback.
+                }
+                if ($try >= $attempts || !self::isRetryable($e)) throw $e;
+                usleep(random_int(5_000, 25_000) * $try);
+            }
+        }
+    }
+
+    /** A deadlock, lock-wait timeout or serialization failure: safe to run again. */
+    public static function isRetryable(\Throwable $e): bool
+    {
+        if (!$e instanceof PDOException) return false;
+        $driverCode = (int) ($e->errorInfo[1] ?? 0);
+        return $e->getCode() === '40001' || in_array($driverCode, [1213, 1205], true);
+    }
+
+    /** Whether a transaction is open on this connection. */
+    public function inTransaction(): bool
+    {
+        return $this->pdo !== null && $this->pdo->inTransaction();
     }
 
     public function lastInsertId(): string

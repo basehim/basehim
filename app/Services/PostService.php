@@ -132,6 +132,10 @@ class PostService
         $data = $this->hooks->applyFilters('post.before_create', $data);
         // After the filters, so nothing an app adds bypasses it.
         $data = $this->filterHtml($data, $actor, null);
+        // Checked before anything is written (1.2.73, BH-026): an unknown term
+        // id failed on the foreign key AFTER the post was saved, the caller
+        // saw an error, retried, and got a second post.
+        $this->assertTermIds($data);
 
         $type = $data['type'] ?? 'post';
         $title = trim($data['title'] ?? 'Untitled');
@@ -166,17 +170,20 @@ class PostService
             null
         );
 
-        $id = $this->repo->create($payload);
+        // The post, its terms and its default category are one write
+        // (1.2.73): all of it is saved, or none of it.
+        $id = $this->repo->transaction(function () use ($payload, $data, $type): int {
+            $id = $this->repo->create($payload);
+            if (!empty($data['term_ids']) && is_array($data['term_ids'])) {
+                $this->repo->attachTerms($id, $data['term_ids']);
+            }
+            if ($type === 'post') {
+                $this->ensureCategory($id);
+            }
+            return $id;
+        });
         } finally {
             if ($locked) $this->repo->unlockSlugs();
-        }
-
-        // Attach terms (categories / tags)
-        if (!empty($data['term_ids']) && is_array($data['term_ids'])) {
-            $this->repo->attachTerms($id, $data['term_ids']);
-        }
-        if ($type === 'post') {
-            $this->ensureCategory($id);
         }
 
         $post = $this->repo->find($id);
@@ -199,6 +206,7 @@ class PostService
 
         $data = $this->hooks->applyFilters('post.before_update', $data, $existing);
         $data = $this->filterHtml($data, $actor, $existing);
+        $this->assertTermIds($data);
 
         $payload = [];
         if (isset($data['title'])) $payload['title'] = trim($data['title']);
@@ -234,30 +242,32 @@ class PostService
             if ($publishedAt !== ($existing['published_at'] ?? null)) $payload['published_at'] = $publishedAt;
         }
 
-        if (empty($payload)) {
-            // Still allow term updates without other changes
+        // The row, its terms and its category in one transaction (1.2.73).
+        $terms = function () use ($id, $data, $existing): void {
             if (isset($data['term_ids']) && is_array($data['term_ids'])) {
                 $this->repo->attachTerms($id, $data['term_ids']);
             }
             if ($existing['type'] === 'post') {
+                // Covers a post saved with every category unticked, and a post
+                // from before 1.2.7 that never had one.
                 $this->ensureCategory($id);
             }
+        };
+
+        if (empty($payload)) {
+            // Still allow term updates without other changes
+            if ($locked) $this->repo->unlockSlugs();
+            $this->repo->transaction($terms);
             return true;
         }
 
         try {
-            $this->repo->update($id, $payload);
+            $this->repo->transaction(function () use ($id, $payload, $terms): void {
+                $this->repo->update($id, $payload);
+                $terms();
+            });
         } finally {
             if ($locked) $this->repo->unlockSlugs();
-        }
-
-        if (isset($data['term_ids']) && is_array($data['term_ids'])) {
-            $this->repo->attachTerms($id, $data['term_ids']);
-        }
-        if ($existing['type'] === 'post') {
-            // Covers a post saved with every category unticked, and a post
-            // from before 1.2.7 that never had one.
-            $this->ensureCategory($id);
         }
 
         $post = $this->repo->find($id);
@@ -475,6 +485,23 @@ class PostService
      * "feed", an app's prefix — are skipped, since /{slug} would never reach
      * the content. Other types keep their own namespace, as before.
      */
+    /**
+     * Refuse term ids that are not terms, before anything is written.
+     *
+     * @throws \InvalidArgumentException naming the unknown ids
+     */
+    private function assertTermIds(array $data): void
+    {
+        if (!isset($data['term_ids'])) return;
+        if (!is_array($data['term_ids'])) {
+            throw new \InvalidArgumentException('term_ids must be a list of term ids.');
+        }
+        $bad = $this->repo->unknownTermIds($data['term_ids']);
+        if ($bad) {
+            throw new \InvalidArgumentException('Unknown term id(s): ' . implode(', ', array_slice($bad, 0, 10)) . '.');
+        }
+    }
+
     private function resolveSlug(string $base, string $type, ?int $excludeId = null): string
     {
         // Leave room for a "-N" suffix inside the 200-character column.
@@ -503,8 +530,11 @@ class PostService
             if ($termId > 0) {
                 $this->repo->attachTerms($postId, array_merge($this->repo->termIds($postId), [$termId]));
             }
-        } catch (\Throwable) {
-            // A post without a category still has a valid URL (/posts/{slug}).
+        } catch (\Throwable $e) {
+            // A deadlock has already undone the surrounding transaction: let
+            // it reach Database::transaction(), which runs the save again.
+            if (\App\Core\Database::isRetryable($e)) throw $e;
+            // Otherwise a post without a category still has a valid URL (/posts/{slug}).
         }
     }
 

@@ -172,6 +172,14 @@ class AppController extends Controller
         try {
             $apps = $this->app->make(AppService::class);
             $r = $apps->applyStagedUpgrade($slug, $token);
+            if (!empty($r['error'])) {
+                // The new files are in place, but the app's own upgrade did
+                // not complete (1.2.73): say so, never "upgraded".
+                $this->flash('error', "'{$r['slug']}' v{$r['to']} is installed, but its upgrade did not complete: {$r['error']} "
+                    . ($r['was_active'] ? 'It was switched off so it cannot run against old data. ' : '')
+                    . 'Fix the cause, then activate it to try again.');
+                return $this->redirect('/admin/apps');
+            }
             $note = $r['was_active'] ? ' Migrations ran and the app was reactivated.' : '';
             $this->flash('success', "Upgraded '{$r['slug']}' from v{$r['from']} to v{$r['to']}.{$note}");
         } catch (\Throwable $e) {

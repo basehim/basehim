@@ -11,6 +11,42 @@ namespace App\Services;
  */
 class ImageProcessor
 {
+    /** Never decoded above this, whatever the settings say (~400 MB in GD). */
+    public const HARD_MAX_PIXELS = 100_000_000;
+
+    /**
+     * Whether GD can decode an image of $pixels pixels here (1.2.73, BH-027).
+     *
+     * A small file can describe a huge image: a 250 KB PNG of 16,000 × 16,000
+     * pixels decodes to about 1 GB. Above HARD_MAX_PIXELS never; and where
+     * GD's memory counts against memory_limit (PHP's bundled GD), only when
+     * it fits in what is left, so a large photo is stored without
+     * thumbnails instead of ending the request with a fatal error.
+     */
+    public static function safeToDecode(int $pixels): bool
+    {
+        if ($pixels <= 0) return false;
+        if ($pixels > self::HARD_MAX_PIXELS) return false;
+        if (!(defined('GD_BUNDLED') && GD_BUNDLED)) return true;
+        $limit = self::bytes((string) ini_get('memory_limit'));
+        if ($limit <= 0) return true;
+        // Source and a resized copy, with headroom for the rest of the request.
+        return memory_get_usage(true) + $pixels * 5 + 16 * 1024 * 1024 < $limit;
+    }
+
+    private static function bytes(string $v): int
+    {
+        $v = trim($v);
+        if ($v === '' || $v === '-1') return -1;
+        $n = (int) $v;
+        return match (strtolower(substr($v, -1))) {
+            'g' => $n * 1024 ** 3,
+            'm' => $n * 1024 ** 2,
+            'k' => $n * 1024,
+            default => $n,
+        };
+    }
+
     /** Raster MIME types we can resize with GD. */
     public const SUPPORTED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
@@ -46,6 +82,10 @@ class ImageProcessor
         if (!$this->supports($srcMime)) return null;
         if ($w < 1 || $h < 1) return null;
         if (!is_file($srcAbs)) return null;
+        // Never decode an image the server cannot hold (1.2.73, BH-027): GD
+        // expands it to about 4 bytes a pixel, whatever the file size.
+        $info = @getimagesize($srcAbs);
+        if (!$info || !self::safeToDecode((int) $info[0] * (int) $info[1])) return null;
 
         $src = $this->load($srcAbs, $srcMime);
         if (!$src) return null;

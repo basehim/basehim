@@ -154,6 +154,9 @@ class MediaService
             'convert_webp' => $bool('convert_webp', false),
             'organize_uploads' => $bool('organize_uploads', true),
             'max_upload_mb'    => max(1, $int('max_upload_mb', 64)),
+            // Largest image accepted, in megapixels (1.2.73). 50 covers phone
+            // and most camera photos; never above ImageProcessor's hard cap.
+            'max_image_megapixels' => max(1.0, min(ImageProcessor::HARD_MAX_PIXELS / 1_000_000, (float) ($g['max_image_megapixels'] ?? 50))),
             'allowed_types'    => isset($g['allowed_types']) ? (string) $g['allowed_types'] : null,
         ];
     }
@@ -334,6 +337,25 @@ class MediaService
         }
 
         $ms = $this->mediaSettings();
+
+        // Pixel limit, checked on the uploaded file before it is placed
+        // (1.2.73, BH-027). A file's size says nothing about its dimensions:
+        // a 250 KB PNG can be 16,000 × 16,000 pixels, about 1 GB once GD
+        // decodes it for thumbnails, which ended the request on hosts where
+        // that counts against memory_limit and left the file behind.
+        if (str_starts_with($mime, 'image/') && $mime !== 'image/svg+xml') {
+            $dim = @getimagesize($file['tmp_name']);
+            if ($dim) {
+                $px = (int) $dim[0] * (int) $dim[1];
+                $max = (int) round($ms['max_image_megapixels'] * 1_000_000);
+                if ($px > $max) {
+                    throw new MediaRejected(sprintf(
+                        'This image is %d × %d pixels (%.1f megapixels); the limit is %s megapixels. Resize it and upload it again.',
+                        (int) $dim[0], (int) $dim[1], $px / 1_000_000, rtrim(rtrim(number_format($ms['max_image_megapixels'], 1), '0'), '.')
+                    ));
+                }
+            }
+        }
 
         // Build storage path: /YYYY/MM/{name}.{ext} (or flat if organising is off)
         if (!empty($ms['organize_uploads'])) {

@@ -52,6 +52,9 @@ class AppService
     /** Upgrades already announced this request, keyed "slug:from:to". */
     private array $upgradesFired = [];
 
+    /** Whether apps.schema_version exists; null until checked this request. */
+    private ?bool $schemaColumn = null;
+
     /**
      * @param string $appPath content/apps — where apps are installed.
      */
@@ -162,11 +165,11 @@ class AppService
      * in fact worked. Adding a return value is backward compatible: the only
      * core caller discards it.
      *
-     * @return array{scanned:int,installed:string[],upgraded:array<int,array{slug:string,from:string,to:string}>,unchanged:string[]}
+     * @return array{scanned:int,installed:string[],upgraded:array<int,array{slug:string,from:string,to:string}>,failed:array<int,array{slug:string,from:string,to:string,error:string}>,unchanged:string[]}
      */
     public function sync(): array
     {
-        $summary = ['scanned' => 0, 'installed' => [], 'upgraded' => [], 'unchanged' => []];
+        $summary = ['scanned' => 0, 'installed' => [], 'upgraded' => [], 'failed' => [], 'unchanged' => []];
 
         $available = $this->scan();
         $summary['scanned'] = count($available);
@@ -184,15 +187,28 @@ class AppService
                     'icon'        => $this->manifestIcon($manifest),
                     'permissions' => $this->manifestPermissions($manifest),
                     'status'      => 'inactive',
-                ]);
-                $this->fireLifecycle($slug, 'onInstall');
+                ] + ($this->hasSchemaColumn() ? ['schema_version' => ''] : []));
+                // schema_version stays '' until onInstall() has run (1.2.73,
+                // BH-024): a failure is recorded in the app's report and
+                // onInstall() runs again on activation. It used to be logged
+                // and forgotten.
+                $err = $this->fireLifecycle($slug, 'onInstall');
+                if ($err === null) {
+                    $this->markInstalled($slug, (string) ($manifest['version'] ?? '0.0.1'));
+                } elseif (!$err instanceof \App\Services\AppHealth\AppNotLoaded) {
+                    $this->guard()?->failed($slug, (string) ($manifest['version'] ?? ''), 'lifecycle:onInstall', $err);
+                }
                 $summary['installed'][] = $slug;
             } else {
                 $oldVersion = (string) ($row['version'] ?? '');
                 $newVersion = (string) ($manifest['version'] ?? $oldVersion);
+                $tracked = $this->hasSchemaColumn();
 
                 // Update manifest-derived fields in case the file changed.
-                $this->db->update('apps', [
+                // `version` is the version of the files; `schema_version`,
+                // the version the app's data was migrated to, moves only
+                // once onUpgrade() has succeeded (1.2.73, BH-024).
+                $fields = [
                     'name'        => $manifest['name'] ?? $row['name'],
                     'description' => $manifest['description'] ?? $row['description'],
                     'version'     => $newVersion,
@@ -200,16 +216,34 @@ class AppService
                     'vendor'      => $manifest['vendor'] ?? $row['vendor'],
                     'icon'        => $this->manifestIcon($manifest),
                     'permissions' => $this->manifestPermissions($manifest),
-                ], ['id' => $row['id']]);
+                ];
+                if ($tracked && ($row['schema_version'] ?? null) === null) {
+                    $fields['schema_version'] = $oldVersion;
+                }
+                $this->db->update('apps', $fields, ['id' => $row['id']]);
 
-                // The app's files changed version underneath it. This is the
-                // only moment core knows both numbers, so it is where the app
-                // gets told — otherwise an author has no supported place to
-                // migrate their own tables and ends up version-checking inside
-                // boot() on every single request.
-                if ($oldVersion !== '' && $newVersion !== '' && $oldVersion !== $newVersion) {
-                    $this->fireUpgrade($slug, $oldVersion, $newVersion);
-                    $summary['upgraded'][] = ['slug' => $slug, 'from' => $oldVersion, 'to' => $newVersion];
+                // The app's files changed version underneath it, or an earlier
+                // upgrade has not completed. This is where the app gets told,
+                // so an author has a supported place to migrate their tables.
+                // An app switched off after a failure is upgraded when it is
+                // next activated, after its code has been validated again.
+                $schema = $tracked ? $this->schemaVersionOf(['schema_version' => $row['schema_version'] ?? null, 'version' => $oldVersion]) : $oldVersion;
+                if ($oldVersion !== '' && $newVersion !== '' && $schema !== '' && $schema !== $newVersion) {
+                    if (!$tracked) {
+                        $this->fireUpgrade($slug, $oldVersion, $newVersion);
+                        $summary['upgraded'][] = ['slug' => $slug, 'from' => $oldVersion, 'to' => $newVersion];
+                    } elseif (($row['status'] ?? '') !== 'error') {
+                        $err = $this->runPendingUpgrade($slug);
+                        $entry = ['slug' => $slug, 'from' => $schema, 'to' => $newVersion];
+                        if ($err !== null) {
+                            $entry['error'] = $err;
+                            $summary['failed'][] = $entry;
+                        } else {
+                            $summary['upgraded'][] = $entry;
+                        }
+                    } else {
+                        $summary['unchanged'][] = $slug;
+                    }
                 } else {
                     $summary['unchanged'][] = $slug;
                 }
@@ -272,13 +306,55 @@ class AppService
             }
         }
 
+        // The app's own setup runs BEFORE it is marked active, and a failure
+        // keeps it off (1.2.73, BH-024). Until 1.2.73 the status was written
+        // first and a throwing onActivate() was only logged, so an app whose
+        // tables were never created was reported "activated" and left running.
+        //   1. an onInstall() that failed earlier runs again;
+        //   2. a pending upgrade of its data (schema_version) runs;
+        //   3. onActivate().
+        if ($this->hasSchemaColumn() && ($this->find($slug)['schema_version'] ?? null) === '') {
+            $err = $this->fireLifecycle($slug, 'onInstall');
+            if ($err !== null) return $this->lifecycleRefused($slug, $row, 'onInstall', $err);
+            $this->markInstalled($slug, (string) ($row['version'] ?? ''));
+        }
+        $upgradeError = $this->runPendingUpgrade($slug);
+        if ($upgradeError !== null) {
+            $this->lastRequirementProblems = [$upgradeError . ' The app was not activated; its report has the details.'];
+            return false;
+        }
+        $err = $this->fireLifecycle($slug, 'onActivate');
+        if ($err !== null) return $this->lifecycleRefused($slug, $row, 'onActivate', $err);
+
         $this->db->execute(
             "UPDATE {apps} SET status = 'active', activated_at = NOW() WHERE slug = :slug",
             ['slug' => $slug]
         );
-        $this->fireLifecycle($slug, 'onActivate');
 
         return true;
+    }
+
+    /** onInstall() has run: the app's data is at its files' version. */
+    private function markInstalled(string $slug, string $version): void
+    {
+        if (!$this->hasSchemaColumn()) return;
+        try {
+            $this->db->execute("UPDATE {apps} SET schema_version = :v WHERE slug = :s AND schema_version = ''", ['v' => $version, 's' => $slug]);
+        } catch (\Throwable $e) {
+            $this->logSafe("Could not record {$slug}'s install: " . $e->getMessage());
+        }
+    }
+
+    /** A lifecycle method failed during activation: record it and say why. */
+    private function lifecycleRefused(string $slug, array $row, string $method, \Throwable $e): bool
+    {
+        if (!$e instanceof \App\Services\AppHealth\AppNotLoaded) {
+            $this->guard()?->failed($slug, (string) ($row['version'] ?? ''), 'lifecycle:' . $method, $e);
+        }
+        $this->lastRequirementProblems = [
+            "Its {$method}() failed: " . $this->cleanMessage($e) . ' The app was not activated; its report has the details.',
+        ];
+        return false;
     }
 
     public function deactivate(string $slug): bool
@@ -351,6 +427,13 @@ class AppService
         try {
             \App\Core\Application::getInstance()
                 ->make(\App\Services\AppLogger::class)->purge($slug);
+        } catch (\Throwable) {}
+
+        // Its scheduled tasks go too (1.2.73, BH-023): rows left behind by an
+        // uninstalled app stayed due for ever.
+        try {
+            \App\Core\Application::getInstance()
+                ->make(\App\Services\SchedulerService::class)->forgetApp($slug);
         } catch (\Throwable) {}
 
         // Remove DB row.
@@ -671,20 +754,41 @@ class AppService
         //     run (AppGuard refuses to load it) and the report says why.
         try { $this->validate($slug); } catch (\Throwable) {}
 
-        // 3. Refresh DB row from the new manifest.
-        try { $this->sync(); } catch (\Throwable $e) { $this->logSafe("upgrade sync failed for {$slug}: " . $e->getMessage()); }
+        // 3. Refresh DB row from the new manifest. sync() also runs the app's
+        //    onUpgrade(from, to) and records the new schema version only if it
+        //    succeeded (1.2.73).
+        $upgradeError = null;
+        try {
+            $summary = $this->sync();
+            foreach ($summary['failed'] ?? [] as $f) {
+                if (($f['slug'] ?? '') === $slug) $upgradeError = (string) $f['error'];
+            }
+        } catch (\Throwable $e) {
+            $this->logSafe("upgrade sync failed for {$slug}: " . $e->getMessage());
+            $upgradeError = 'The app list could not be updated: ' . $this->cleanMessage($e);
+        }
+        if ($upgradeError === null && !$this->hasSchemaColumn()) {
+            $e = $this->fireUpgrade($slug, $fromVersion, $toVersion);
+            if ($e !== null) $upgradeError = 'Its onUpgrade() failed: ' . $this->cleanMessage($e);
+        }
 
-        // 4. Fire onUpgrade(from,to); re-run onActivate if it was active so any
-        //    activation-only schema is applied.
-        // Routed through fireUpgrade() so the sync() above and this call cannot
-        // both announce the same upgrade.
-        $this->fireUpgrade($slug, $fromVersion, $toVersion);
-        if ($wasActive) $this->fireLifecycle($slug, 'onActivate');
+        // 4. Re-run onActivate if it was active, so any activation-only schema
+        //    is applied. Not after a failed upgrade: the app is off then.
+        $stillActive = ($this->find($slug)['status'] ?? '') === 'active';
+        if ($upgradeError === null && $wasActive && $stillActive) {
+            $e = $this->fireLifecycle($slug, 'onActivate');
+            if ($e !== null) {
+                $this->guard()?->failed($slug, $toVersion, 'lifecycle:onActivate', $e);
+                $upgradeError = 'Its onActivate() failed: ' . $this->cleanMessage($e);
+            }
+        }
 
-        // 5. Drop the backup now that we've succeeded.
+        // 5. Drop the backup: the new files stay either way. A failed data
+        //    upgrade is retried on activation, which needs the new code.
         if (isset($backupDir) && is_dir($backupDir)) $this->rrmdir($backupDir);
 
-        return ['slug' => $slug, 'from' => $fromVersion, 'to' => $toVersion, 'was_active' => $wasActive];
+        return ['slug' => $slug, 'from' => $fromVersion, 'to' => $toVersion, 'was_active' => $wasActive,
+                'error' => $upgradeError];
     }
 
     /** Discard a staged upgrade (user cancelled). */
@@ -1113,7 +1217,15 @@ class AppService
     /**
      * Fire a lifecycle method on an app without booting it.
      */
-    private function fireLifecycle(string $slug, string $method): void
+    /**
+     * Run one lifecycle method of an app.
+     *
+     * Returns null when it ran (or the app does not define it), else what
+     * went wrong: the exception the app threw, or AppNotLoaded when its code
+     * could not be loaded (1.2.73). Callers that only notify (onDeactivate,
+     * onUninstall) may ignore it; activation and installation must not.
+     */
+    private function fireLifecycle(string $slug, string $method): ?\Throwable
     {
         $guard = $this->guard();
         $outer = $guard?->currentApp() !== null;
@@ -1122,9 +1234,15 @@ class AppService
             // Credit an engine fatal in this app's code to the app (1.2.71).
             if (!$outer) $guard?->begin($slug, 'lifecycle:' . $method);
             $instance = $this->loadAndBoot($app, $slug, callBoot: false);
-            if ($instance && method_exists($instance, $method)) {
+            if ($instance === null) {
+                return new \App\Services\AppHealth\AppNotLoaded(
+                    "The app's code could not be loaded, so {$method}() did not run. Its report says why."
+                );
+            }
+            if (method_exists($instance, $method)) {
                 $instance->{$method}();
             }
+            return null;
         } catch (\Throwable $e) {
             try {
                 Application::getInstance()->make(Logger::class)->warning(
@@ -1132,6 +1250,7 @@ class AppService
                     ['app' => $slug, 'error' => $e->getMessage()]
                 );
             } catch (\Throwable) {}
+            return $e;
         } finally {
             if (!$outer) $guard?->end();
         }
@@ -1227,14 +1346,13 @@ class AppService
      * the apps table unsynced or take down the admin screen the operator needs
      * in order to deactivate the offending app.
      */
-    private function fireUpgrade(string $slug, string $from, string $to): void
+    private function fireUpgrade(string $slug, string $from, string $to): ?\Throwable
     {
-        // upgradeApply() calls sync() and then announces the upgrade itself, so
-        // without this an app upgraded through the marketplace would get
-        // onUpgrade() twice — and a handler that adds a column or seeds a row
-        // is rarely safe to run twice.
+        // Within one request an upgrade is announced once, however many paths
+        // reach here. Across requests, runPendingUpgrade() holds a lock and
+        // re-reads schema_version, so two requests cannot both run it (1.2.73).
         $key = $slug . ':' . $from . ':' . $to;
-        if (isset($this->upgradesFired[$key])) return;
+        if (isset($this->upgradesFired[$key])) return $this->upgradesFired[$key] === true ? null : $this->upgradesFired[$key];
         $this->upgradesFired[$key] = true;
 
         $this->logSafe("App '{$slug}' upgraded: {$from} -> {$to}");
@@ -1254,14 +1372,120 @@ class AppService
             if (!$outer) $guard?->begin($slug, 'lifecycle:onUpgrade', $to);
             try {
                 $instance = $this->instance($app, $slug);
-                if ($instance === null || !method_exists($instance, 'onUpgrade')) return;
+                if ($instance === null) {
+                    // Nothing ran: not a success (1.2.73). The schema version
+                    // stays where it is and the upgrade is tried again.
+                    unset($this->upgradesFired[$key]);
+                    return new \App\Services\AppHealth\AppNotLoaded(
+                        "The app's code could not be loaded, so onUpgrade() did not run. Its report says why."
+                    );
+                }
+                if (!method_exists($instance, 'onUpgrade')) return null;
                 $instance->onUpgrade($from, $to);
             } finally {
                 if (!$outer) $guard?->end();
             }
+            return null;
         } catch (\Throwable $e) {
             $this->logSafe("App '{$slug}' onUpgrade({$from}, {$to}) failed: " . $e->getMessage());
+            $this->upgradesFired[$key] = $e;
+            return $e;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // App schema version (1.2.73, BH-024)
+    // ------------------------------------------------------------------
+
+    /** Whether apps.schema_version exists (migration 015), created on first need. */
+    private function hasSchemaColumn(): bool
+    {
+        if ($this->schemaColumn !== null) return $this->schemaColumn;
+        try {
+            $col = $this->db->selectOne("SHOW COLUMNS FROM {apps} LIKE 'schema_version'");
+            if ($col === null) {
+                // The new files can be live before migration 015 has run (a
+                // patch uploaded by hand). Add the column here rather than
+                // fall back to recording upgrades that never happened.
+                $this->db->execute('ALTER TABLE {apps} ADD COLUMN `schema_version` VARCHAR(30) NULL AFTER `version`');
+                $this->db->execute('UPDATE {apps} SET `schema_version` = `version` WHERE `schema_version` IS NULL');
+            }
+            return $this->schemaColumn = true;
+        } catch (\Throwable $e) {
+            $this->logSafe('apps.schema_version is unavailable: ' . $e->getMessage());
+            return $this->schemaColumn = false;
+        }
+    }
+
+    /**
+     * The version an app's data was last migrated to. NULL (a row from
+     * before 1.2.73) counts as its recorded version; '' means onInstall() has
+     * not completed yet, which activation finishes first.
+     */
+    private function schemaVersionOf(array $row): string
+    {
+        $v = $row['schema_version'] ?? null;
+        return is_string($v) ? $v : (string) ($row['version'] ?? '');
+    }
+
+    /**
+     * Bring an app's data up to the version of its files: onUpgrade(from, to),
+     * then record the new schema version, only if it returned (1.2.73, BH-024).
+     *
+     * Until 1.2.73 the new version was written first and a failed onUpgrade()
+     * was only logged, so it was never run again and the new code ran against
+     * the old tables. Now:
+     *   - schema_version moves only after onUpgrade() succeeds;
+     *   - a failure is recorded in the app's report, and an active app is
+     *     switched off, since its new code expects the new schema. It is tried
+     *     again when the app is next activated or its files change;
+     *   - a per-app database lock stops two requests running it together.
+     *
+     * @return string|null null when the data is current, else what went wrong
+     */
+    public function runPendingUpgrade(string $slug): ?string
+    {
+        if (!$this->hasSchemaColumn()) return null;
+        $row = $this->find($slug);
+        if (!$row) return null;
+        $to = (string) ($row['version'] ?? '');
+        $current = $this->schemaVersionOf($row);
+        if ($to === '' || $current === '' || $current === $to) return null;
+
+        $lock = 'basehim_appup_' . substr(md5((defined('BASEHIM_ROOT') ? BASEHIM_ROOT : '') . '|' . $slug), 0, 24);
+        try {
+            $got = (int) ($this->db->selectOne('SELECT GET_LOCK(:n, 0) AS l', ['n' => $lock])['l'] ?? 0);
+        } catch (\Throwable) {
+            $got = 0;
+        }
+        if ($got !== 1) return 'Another request is upgrading this app. Try again in a moment.';
+
+        try {
+            $row = $this->find($slug) ?? $row;                // re-read inside the lock
+            $from = $this->schemaVersionOf($row);
+            $to = (string) ($row['version'] ?? '');
+            if ($from === '' || $from === $to) return null;
+
+            $e = $this->fireUpgrade($slug, $from, $to);
+            if ($e === null) {
+                $this->db->execute('UPDATE {apps} SET schema_version = :v WHERE slug = :s', ['v' => $to, 's' => $slug]);
+                return null;
+            }
+            if (!$e instanceof \App\Services\AppHealth\AppNotLoaded) {
+                $this->guard()?->failed($slug, $to, 'lifecycle:onUpgrade', $e);
+            }
+            return "Its upgrade from v{$from} to v{$to} did not complete: " . $this->cleanMessage($e);
+        } finally {
+            try { $this->db->selectOne('SELECT RELEASE_LOCK(:n) AS l', ['n' => $lock]); } catch (\Throwable) {}
+        }
+    }
+
+    /** An exception message fit for the Apps screen. */
+    private function cleanMessage(\Throwable $e): string
+    {
+        $guard = $this->guard();
+        $msg = $guard !== null ? $guard->sanitize($e->getMessage()) : $e->getMessage();
+        return mb_substr($msg !== '' ? $msg : get_class($e), 0, 300);
     }
 
     // ------------------------------------------------------------------

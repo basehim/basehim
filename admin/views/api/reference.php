@@ -167,7 +167,7 @@ $endpoints = [
     ],
     'Media Settings & Thumbnails' => [
         ['GET',    '/admin/settings/media',            'Media settings screen — upload limits, allowed types, image quality, and thumbnail sizes (thumbnail/medium/large). Requires manage_settings (full path — not under /api/v1)', true],
-        ['POST',   '/admin/settings/media',            'Save media settings. Body: max_upload_mb, jpeg_quality, allowed_types, organize_uploads, generate_thumbnails, thumb_w/thumb_h/thumb_crop, medium_w/medium_h, large_w/large_h, convert_webp. CSRF (full path)', true],
+        ['POST',   '/admin/settings/media',            'Save media settings. Body: max_upload_mb, jpeg_quality, max_image_megapixels, allowed_types, organize_uploads, generate_thumbnails, thumb_w/thumb_h/thumb_crop, medium_w/medium_h, large_w/large_h, convert_webp. CSRF (full path)', true],
         ['POST',   '/admin/settings/media/regenerate', 'Regenerate thumbnails for every image using the current sizes (old variants removed first). Returns to the page with a counts summary. CSRF (full path)', true],
     ],
     'Comments' => [
@@ -203,11 +203,11 @@ $endpoints = [
         ['GET',    '/widget-areas/{area}',   'Get one area with its ordered widgets. Returns {key, name, description, items:[{id, widget, title, settings, html}], html} — each widget is server-rendered to HTML for headless front ends. 404 if the area is not registered', false],
     ],
     'Users' => [
-        ['GET',    '/users',          'List all users (admin)',                                     true],
+        ['GET',    '/users',          'List users (manage_users)',                                  true],
         ['GET',    '/users/{id}',     'Get a user by ID (admin)',                                  true],
-        ['POST',   '/users',          'Create a user (admin)',                                     true],
-        ['PUT',    '/users/{id}',     'Update a user (admin)',                                     true],
-        ['DELETE', '/users/{id}',     'Delete a user (admin)',                                     true],
+        ['POST',   '/users',          'Create a user (manage_users). role must exist and be at or below your own', true],
+        ['PUT',    '/users/{id}',     'Update a user: yourself (email/password need current_password; not your role or status), or, with manage_users, someone below your level', true],
+        ['DELETE', '/users/{id}',     'Delete a user below your level (manage_users); never the last administrator', true],
         ['GET',    '/users/{id}/avatar', 'A user\'s profile photo. User responses (GET /me, /users, /users/{id}) carry avatar and avatar_url; post responses carry author_avatar_url', true],
         ['POST',   '/users/{id}/avatar', 'Set a user\'s profile photo — yourself, or an administrator. Multipart avatar, or media_id', true],
         ['DELETE', '/users/{id}/avatar', 'Remove a user\'s profile photo — yourself, or an administrator', true],

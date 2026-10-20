@@ -904,7 +904,11 @@ final class McpController
         if (!$post) throw new McpError('Post not found', -32602);
         $this->requireOnPost($post, 'edit');
         $ids = array_values(array_filter(array_map('intval', $args['term_ids']), fn($n) => $n > 0));
-        $posts->update($id, ['term_ids' => $ids]);
+        try {
+            $posts->update($id, ['term_ids' => $ids]);
+        } catch (\InvalidArgumentException $e) {
+            throw new McpError($e->getMessage(), -32602);
+        }
         return $this->json(['ok' => true, 'id' => $id, 'terms' => $posts->terms($id)]);
     }
 

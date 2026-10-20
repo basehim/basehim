@@ -127,7 +127,9 @@ final class ScheduledPublisher
     private function lock()
     {
         if (!defined('BASEHIM_ROOT')) return null;
-        $dir = BASEHIM_ROOT . '/storage/cache';
+        // storage/locks, not storage/cache (1.2.73): clearing the cache
+        // deleted a held lock file, and a second run could then start.
+        $dir = BASEHIM_ROOT . '/storage/locks';
         if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) return null;
         $h = @fopen($dir . '/scheduled-posts.lock', 'c');
         if ($h === false) return null;

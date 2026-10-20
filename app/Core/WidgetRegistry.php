@@ -137,7 +137,16 @@ final class WidgetRegistry
 
         try {
             $fields = $this->normaliseFields($def['fields'] ?? [], $key, $owner);
-            $caps = $this->normaliseCaps($def['capability'] ?? 'read');
+            // An app's widget that declares no capability is for the people
+            // who can use that app (access_app:{slug}: administrators, and
+            // anyone granted the app), not every signed-in account (1.2.73,
+            // BH-001/BH-013). Until 1.2.73 it fell back to 'read', so any
+            // subscriber saw it on the dashboard and could preview it. An app
+            // that means its widget for everyone declares 'capability' => 'read'.
+            $defaultCap = str_starts_with($owner, 'app:')
+                ? \App\Services\AccessControl::appCap(substr($owner, 4))
+                : 'read';
+            $caps = $this->normaliseCaps($def['capability'] ?? $defaultCap);
             $dash = in_array('dashboard', $surfaces, true)
                 ? $this->normaliseDashboard(is_array($def['dashboard'] ?? null) ? $def['dashboard'] : [], $owner, $render !== null)
                 : (is_array($def['dashboard'] ?? null) ? $def['dashboard'] : []);

@@ -43,6 +43,12 @@
                             class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
                         <p class="text-xs text-slate-400 mt-1">Compression for generated JPEG/WebP thumbnails.</p>
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Largest image (megapixels)</label>
+                        <input type="number" min="1" max="100" step="1" name="max_image_megapixels" value="<?= htmlspecialchars((string) (float) ($m['max_image_megapixels'] ?? 50)) ?>"
+                            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+                        <p class="text-xs text-slate-400 mt-1">Width × height. Larger images are refused: a small file can still need a lot of memory to process. 50 suits most phone and camera photos.</p>
+                    </div>
                 </div>
 
                 <div class="mt-5">

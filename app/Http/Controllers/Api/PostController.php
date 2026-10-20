@@ -81,7 +81,13 @@ class PostController extends ApiController
 
         /** @var PostService $posts */
         $posts = $this->app->make(PostService::class);
-        $id = $posts->create($data + ['status' => 'draft'], (int)$user['id'], $user);
+        try {
+            $id = $posts->create($data + ['status' => 'draft'], (int)$user['id'], $user);
+        } catch (\InvalidArgumentException $e) {
+            // Refused before anything was written (1.2.73): retrying a fixed
+            // request cannot leave a duplicate behind.
+            return Response::json(['error' => $e->getMessage()], 422);
+        }
         return Response::json(['data' => $posts->find($id)] + $this->htmlWarnings($posts), 201);
     }
 
@@ -112,7 +118,11 @@ class PostController extends ApiController
         }
         $data = $this->gatePublishing($data);
 
-        $posts->update((int)$id, $data, $user);
+        try {
+            $posts->update((int)$id, $data, $user);
+        } catch (\InvalidArgumentException $e) {
+            return Response::json(['error' => $e->getMessage()], 422);
+        }
         return Response::json(['data' => $posts->find((int)$id)] + $this->htmlWarnings($posts));
     }
 

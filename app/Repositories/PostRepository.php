@@ -540,52 +540,83 @@ class PostRepository
         return array_map(fn($r) => $this->decorate($r), $items);
     }
 
+    /**
+     * Attach exactly $termIds to the post (others are detached).
+     *
+     * 1.2.73 (BH-026): idempotent and safe to run twice at once. A term
+     * already attached by a parallel save is not inserted again (it was a
+     * duplicate-key error, a 500 after the post itself had been saved), and
+     * the counts of the terms touched are recomputed from post_term instead
+     * of being nudged by one, which drifted whenever two saves overlapped.
+     * Callers validate the ids first (PostService::validTermIds()).
+     */
     public function attachTerms(int $postId, array $termIds): void
     {
-        // Find which term IDs are currently attached so we can accurately
-        // adjust the per-term post counts (decrement removed, increment added).
-        $existing = $this->db->select(
+        $existingIds = array_map('intval', array_column($this->db->select(
             'SELECT term_id FROM {post_term} WHERE post_id = :pid',
             ['pid' => $postId]
-        );
-        $existingIds = array_column($existing, 'term_id');
-        $newIds      = array_map('intval', $termIds);
+        ), 'term_id'));
+        $newIds = array_values(array_unique(array_filter(array_map('intval', $termIds), fn($i) => $i > 0)));
 
-        $toRemove = array_diff($existingIds, $newIds);
-        $toAdd    = array_diff($newIds, $existingIds);
+        $toRemove = array_values(array_diff($existingIds, $newIds));
+        $toAdd    = array_values(array_diff($newIds, $existingIds));
 
-        // Remove detached terms.
         if ($toRemove) {
             $placeholders = implode(',', array_fill(0, count($toRemove), '?'));
             $this->db->execute(
                 "DELETE FROM {post_term} WHERE post_id = ? AND term_id IN ({$placeholders})",
-                array_merge([$postId], array_values($toRemove))
+                array_merge([$postId], $toRemove)
             );
-            foreach ($toRemove as $tid) {
+        }
+
+        if ($toAdd) {
+            $order = (int) ($this->db->selectOne(
+                'SELECT COALESCE(MAX(term_order), -1) + 1 AS next FROM {post_term} WHERE post_id = :pid',
+                ['pid' => $postId]
+            )['next'] ?? 0);
+            foreach ($toAdd as $tid) {
                 $this->db->execute(
-                    'UPDATE {terms} SET count = GREATEST(0, count - 1) WHERE id = :id',
-                    ['id' => $tid]
+                    'INSERT INTO {post_term} (post_id, term_id, term_order) VALUES (:p, :t, :o)
+                     ON DUPLICATE KEY UPDATE term_order = term_order',
+                    ['p' => $postId, 't' => $tid, 'o' => $order++]
                 );
             }
         }
 
-        // Add newly attached terms.
-        $order = count($newIds) > 0 ? (int)$this->db->selectOne(
-            'SELECT COALESCE(MAX(term_order), -1) + 1 AS next FROM {post_term} WHERE post_id = :pid',
-            ['pid' => $postId]
-        )['next'] : 0;
+        $this->recountTerms(array_merge($toRemove, $toAdd));
+    }
 
-        foreach ($toAdd as $tid) {
-            $this->db->insert('post_term', [
-                'post_id'    => $postId,
-                'term_id'    => $tid,
-                'term_order' => $order++,
-            ]);
-            $this->db->execute(
-                'UPDATE {terms} SET count = count + 1 WHERE id = :id',
-                ['id' => $tid]
-            );
-        }
+    /** Recompute terms.count from post_term for these term ids. */
+    public function recountTerms(array $termIds): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $termIds), fn($i) => $i > 0)));
+        if (!$ids) return;
+        $in = implode(',', $ids);   // positive integers only
+        $this->db->execute(
+            "UPDATE {terms} t SET t.count = (SELECT COUNT(*) FROM {post_term} pt WHERE pt.term_id = t.id) WHERE t.id IN ({$in})"
+        );
+    }
+
+    /**
+     * The ids among $termIds that are not existing terms.
+     *
+     * @return int[]
+     */
+    public function unknownTermIds(array $termIds): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $termIds)));
+        $bad = array_values(array_filter($ids, fn($i) => $i <= 0));
+        $ids = array_values(array_filter($ids, fn($i) => $i > 0));
+        if (!$ids) return $bad;
+        $in = implode(',', $ids);
+        $found = array_map('intval', array_column($this->db->select("SELECT id FROM {terms} WHERE id IN ({$in})"), 'id'));
+        return array_values(array_merge($bad, array_diff($ids, $found)));
+    }
+
+    /** Run $fn in one database transaction (joins an open one). */
+    public function transaction(\Closure $fn): mixed
+    {
+        return $this->db->transaction(fn() => $fn());
     }
 
     public function getTerms(int $postId): array

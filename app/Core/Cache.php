@@ -10,6 +10,18 @@ namespace App\Core;
  * File-based key/value cache with TTL. The spec calls for Redis;
  * on shared cPanel hosting we use files. The interface is the same
  * so it can be swapped later.
+ *
+ * Tags (1.2.73, BH-025). Every key belongs to one tag, read from the key
+ * itself, and lives in that tag's folder, so flushTag() removes exactly the
+ * keys it names:
+ *
+ *     app.{slug}.anything  → tag "app.{slug}"   (what CacheApi::flush() clears)
+ *     settings.all         → tag "settings"
+ *     posts.recent         → tag "posts"
+ *     plain                → tag "_" (no dot: cleared only by flush())
+ *
+ * Until 1.2.73 flushTag() deleted a folder nothing was ever written to: an
+ * app's cache()->flush() answered true and removed nothing.
  */
 final class Cache
 {
@@ -31,7 +43,8 @@ final class Cache
             return $default;
         }
         $data = @unserialize($raw, ['allowed_classes' => true]);
-        if (!is_array($data) || !isset($data['expires'], $data['value'])) {
+        // array_key_exists, not isset: a cached null is a hit (1.2.73).
+        if (!is_array($data) || !isset($data['expires']) || !array_key_exists('value', $data)) {
             return $default;
         }
         if ($data['expires'] !== 0 && $data['expires'] < time()) {
@@ -49,12 +62,23 @@ final class Cache
             'expires' => $ttl === 0 ? 0 : time() + $ttl,
             'value'   => $value,
         ];
-        return (bool) @file_put_contents($file, serialize($payload), LOCK_EX);
+        // Written to a temporary name and renamed, so a reader never sees a
+        // half-written file.
+        $tmp = $file . '.' . bin2hex(random_bytes(4)) . '.tmp';
+        if (@file_put_contents($tmp, serialize($payload)) === false) {
+            return false;
+        }
+        if (!@rename($tmp, $file)) {
+            @unlink($tmp);
+            return false;
+        }
+        return true;
     }
 
     public function has(string $key): bool
     {
-        return $this->get($key, '__miss__') !== '__miss__';
+        $miss = new \stdClass();
+        return $this->get($key, $miss) !== $miss;
     }
 
     public function delete(string $key): bool
@@ -65,8 +89,9 @@ final class Cache
 
     public function remember(string $key, int $ttl, callable $callback): mixed
     {
-        $hit = $this->get($key, '__miss__');
-        if ($hit !== '__miss__') {
+        $miss = new \stdClass();
+        $hit = $this->get($key, $miss);
+        if ($hit !== $miss) {
             return $hit;
         }
         $value = $callback();
@@ -74,26 +99,55 @@ final class Cache
         return $value;
     }
 
+    /** Remove every entry. */
     public function flush(): bool
     {
-        $this->rrmdir($this->cacheDir);
-        @mkdir($this->cacheDir, 0755, true);
-        return true;
+        $ok = true;
+        foreach (scandir($this->cacheDir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..' || $entry[0] === '.') continue;   // .gitkeep, .htaccess
+            $path = $this->cacheDir . '/' . $entry;
+            if (is_dir($path)) {
+                $this->rrmdir($path);
+                $ok = $ok && !is_dir($path);
+            } elseif (str_ends_with($entry, '.cache') || str_ends_with($entry, '.tmp')) {
+                $ok = @unlink($path) && $ok;
+            }
+        }
+        return $ok;
     }
 
-    public function flushTag(string $tag): void
+    /**
+     * Remove every entry of one tag (see the class comment). Returns false
+     * only when entries were there and could not all be removed.
+     */
+    public function flushTag(string $tag): bool
     {
-        // Simple tag implementation: tagged keys live in a subdirectory
-        $dir = $this->cacheDir . '/tag_' . md5($tag);
-        if (is_dir($dir)) {
-            $this->rrmdir($dir);
-        }
+        $tag = trim($tag);
+        if ($tag === '') return false;
+        $dir = $this->cacheDir . '/' . self::tagDir($tag);
+        if (!is_dir($dir)) return true;
+        $this->rrmdir($dir);
+        return !is_dir($dir);
+    }
+
+    /** The tag a key belongs to. */
+    public static function tagOf(string $key): string
+    {
+        $parts = explode('.', $key);
+        if (count($parts) < 2) return '_';
+        if ($parts[0] === 'app' && count($parts) >= 3) return 'app.' . $parts[1];
+        return $parts[0];
+    }
+
+    private static function tagDir(string $tag): string
+    {
+        return 'tag_' . md5($tag);
     }
 
     private function path(string $key): string
     {
         $hash = md5($key);
-        return $this->cacheDir . '/' . substr($hash, 0, 2) . '/' . $hash . '.cache';
+        return $this->cacheDir . '/' . self::tagDir(self::tagOf($key)) . '/' . substr($hash, 0, 2) . '/' . $hash . '.cache';
     }
 
     private function rrmdir(string $dir): void

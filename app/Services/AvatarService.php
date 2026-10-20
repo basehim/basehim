@@ -266,6 +266,9 @@ class AvatarService
         $info = @getimagesize($path);
         if (!$info || !function_exists('imagecreatetruecolor')) return $file;
         [$w, $h, $type] = [(int) $info[0], (int) $info[1], (int) $info[2]];
+        // Too large to decode safely (1.2.73): left as it is; the media
+        // library's own size check then decides.
+        if (!ImageProcessor::safeToDecode($w * $h)) return $file;
         if ($type === IMAGETYPE_GIF && preg_match_all('/\x00\x21\xF9\x04/', (string) @file_get_contents($path)) > 1) return $file;   // animated
         $src = match ($type) {
             IMAGETYPE_JPEG => @imagecreatefromjpeg($path),
