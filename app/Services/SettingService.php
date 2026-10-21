@@ -10,6 +10,13 @@ class SettingService
 {
     private const CACHE_KEY = 'settings.all';
     private const GEN_KEY = 'settings.generation';
+    /** Rows saved with autoload = 0, cached apart from the snapshot (1.2.76, CR-22). */
+    private const LAZY_KEY = 'settings.lazy';
+    private const LAZY_GEN_KEY = 'settings.lazy_generation';
+
+    /** This request's copies, so the cache files are read once. */
+    private ?array $snapshot = null;
+    private ?array $lazy = null;
 
     public function __construct(
         private Database $db,
@@ -28,37 +35,78 @@ class SettingService
      */
     public function all(): array
     {
-        $gen = $this->generation();
-        $cached = $this->cache->get(self::CACHE_KEY);
+        $out = $this->snapshot();
+        foreach ($this->lazy() as $group => $values) {
+            $out[$group] = ($out[$group] ?? []) + $values;
+        }
+        return $out;
+    }
+
+    /**
+     * The settings every request needs: rows with autoload = 1.
+     *
+     * Since 1.2.76 (CR-22) rows saved with autoload = 0 — an app's bulky
+     * data, a dashboard layout, timestamps — are not part of it. They are
+     * read on first use (lazy()), and writing one no longer throws the
+     * snapshot away.
+     */
+    private function snapshot(): array
+    {
+        if ($this->snapshot !== null) return $this->snapshot;
+        return $this->snapshot = $this->load(self::CACHE_KEY, self::GEN_KEY, 1);
+    }
+
+    /** Rows with autoload = 0, read the first time one is asked for. */
+    private function lazy(): array
+    {
+        if ($this->lazy !== null) return $this->lazy;
+        return $this->lazy = $this->load(self::LAZY_KEY, self::LAZY_GEN_KEY, 0);
+    }
+
+    private function load(string $cacheKey, string $genKey, int $autoload): array
+    {
+        $gen = $this->generation($genKey);
+        $cached = $this->cache->get($cacheKey);
         if (is_array($cached) && isset($cached['__gen'], $cached['data']) && $cached['__gen'] === $gen && is_array($cached['data'])) {
             return $cached['data'];
         }
-
-        $rows = $this->db->select('SELECT * FROM {settings}');
+        $rows = $this->db->select('SELECT * FROM {settings} WHERE autoload = :a', ['a' => $autoload]);
         $out = [];
         foreach ($rows as $r) {
             $value = $r['is_json'] ? json_decode($r['setting_value'], true) : $r['setting_value'];
             $out[$r['setting_group']][$r['setting_key']] = $value;
         }
-        $this->cache->set(self::CACHE_KEY, ['__gen' => $gen, 'data' => $out], 3600);
+        $this->cache->set($cacheKey, ['__gen' => $gen, 'data' => $out], 3600);
         return $out;
     }
 
-    /** The current settings generation: a random token, new after every write. */
-    private function generation(): string
+    /** A generation: a random token, new after every write of its kind. */
+    private function generation(string $key = self::GEN_KEY): string
     {
-        $g = $this->cache->get(self::GEN_KEY);
+        $g = $this->cache->get($key);
         if (is_string($g) && $g !== '') return $g;
         $g = bin2hex(random_bytes(8));
-        $this->cache->set(self::GEN_KEY, $g, 0);
+        $this->cache->set($key, $g, 0);
         return $g;
     }
 
-    /** A write happened: no snapshot built before it may be used again. */
-    private function invalidate(): void
+    /**
+     * A write happened: no copy built before it may be used again. A write
+     * of an autoload = 0 row ($autoload false) leaves the snapshot alone,
+     * unless the row was in it before.
+     */
+    private function invalidate(?bool $autoload = null, ?string $group = null, ?string $key = null): void
     {
-        $this->cache->set(self::GEN_KEY, bin2hex(random_bytes(8)), 0);
-        $this->cache->delete(self::CACHE_KEY);
+        $snapshotToo = $autoload !== false
+            || ($group !== null && $key !== null && array_key_exists($key, $this->snapshot()[$group] ?? []));
+        if ($snapshotToo) {
+            $this->cache->set(self::GEN_KEY, bin2hex(random_bytes(8)), 0);
+            $this->cache->delete(self::CACHE_KEY);
+            $this->snapshot = null;
+        }
+        $this->cache->set(self::LAZY_GEN_KEY, bin2hex(random_bytes(8)), 0);
+        $this->cache->delete(self::LAZY_KEY);
+        $this->lazy = null;
     }
 
     /**
@@ -106,8 +154,10 @@ class SettingService
 
     public function get(string $group, string $key, $default = null)
     {
-        $all = $this->all();
-        return $all[$group][$key] ?? $default;
+        $snap = $this->snapshot();
+        if (isset($snap[$group][$key])) return $snap[$group][$key];
+        if (array_key_exists($key, $snap[$group] ?? [])) return $default;   // stored as null
+        return $this->lazy()[$group][$key] ?? $default;
     }
 
     /**
@@ -129,7 +179,7 @@ class SettingService
             ['g' => $group, 'k' => $key, 'v' => $stored, 'j' => $isJson ? 1 : 0, 'a' => $autoload ? 1 : 0]
         );
 
-        $this->invalidate();
+        $this->invalidate($autoload, $group, $key);
     }
 
     /**
@@ -166,7 +216,7 @@ class SettingService
             );
             return $value;
         });
-        $this->invalidate();
+        $this->invalidate($autoload, $group, $key);
         return $new;
     }
 

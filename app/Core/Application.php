@@ -331,7 +331,11 @@ final class Application
 
         // Repositories
         $this->singleton(\App\Repositories\PostRepository::class, fn($app) =>
-            new \App\Repositories\PostRepository($app->make(Database::class)));
+            new \App\Repositories\PostRepository(
+                $app->make(Database::class),
+                $app->make(Cache::class),
+                fn() => (string) $app->make(\App\Services\SettingService::class)->get('reading', 'search_mode', 'auto'),
+            ));
         $this->singleton(\App\Repositories\UserRepository::class, fn($app) =>
             new \App\Repositories\UserRepository($app->make(Database::class)));
         $this->singleton(\App\Repositories\MediaRepository::class, fn($app) =>
@@ -415,6 +419,15 @@ final class Application
         // Costs one cache-file read when nothing is due; never throws.
         try {
             $this->make(\App\Services\ScheduledPublisher::class)->maybeRun();
+        } catch (\Throwable) {}
+
+        // Core maintenance (1.2.76): page views folded in every minute
+        // (CR-23), old rows and files cleaned up daily (CR-24). Registered
+        // without a query; the task rows are made when a sweep runs.
+        try {
+            $scheduler = $this->make(\App\Services\SchedulerService::class);
+            $scheduler->core('post-views', 60, fn() => $this->make(\App\Services\PostViewCounter::class)->fold());
+            $scheduler->core('cleanup', 86400, fn() => $this->make(\App\Services\RetentionService::class)->run());
         } catch (\Throwable) {}
     }
 

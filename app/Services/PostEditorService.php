@@ -227,7 +227,7 @@ final class PostEditorService
             ['tax' => $tax, 'n' => $name]
         );
         if ($row) return $row;
-        $slug = \App\Core\Helpers::slug($name);
+        $slug = \App\Core\Helpers::slug($name, '-', true);
         if ($slug === 'n-a') return null;
         return $this->db->selectOne(
             'SELECT id, name, slug, count FROM {terms} WHERE taxonomy_id = :tax AND slug = :s LIMIT 1',

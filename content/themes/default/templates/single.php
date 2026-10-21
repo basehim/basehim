@@ -6,7 +6,7 @@
         <?php if (!empty($terms)): ?>
         <div class="flex flex-wrap gap-2 mb-4">
             <?php foreach ($terms as $term): ?>
-                <?php $termUrl = ($term['taxonomy_slug'] === 'category' ? "/category/{$term['slug']}" : "/tag/{$term['slug']}"); ?>
+                <?php $termUrl = ($term['taxonomy_slug'] === 'category' ? '/category/' : '/tag/') . rawurlencode((string) $term['slug']); ?>
                 <a href="<?= htmlspecialchars(link_to($termUrl)) ?>" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 hover:bg-brand-100">
                     <?= htmlspecialchars($term['name']) ?>
                 </a>

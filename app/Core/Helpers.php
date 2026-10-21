@@ -13,9 +13,23 @@ namespace App\Core;
  */
 final class Helpers
 {
-    public static function slug(string $text, string $separator = '-'): string
+    /**
+     * A URL slug: lower-case a–z, 0–9 and the separator.
+     *
+     * With $unicode (1.2.76, CR-18; used for posts, pages and terms), text in
+     * a script that has no Latin transliteration — Urdu, Arabic, Chinese,
+     * Cyrillic, Devanagari… — keeps its own letters ("اردو-میں-خبریں")
+     * instead of becoming "n-a". Latin text, accents included, is unchanged:
+     * "Café déjà vu" is still "cafe-deja-vu". Such slugs are percent-encoded
+     * in links (postUrl()), as browsers expect.
+     */
+    public static function slug(string $text, string $separator = '-', bool $unicode = false): string
     {
         $text = trim($text);
+        if ($unicode && preg_match('/[^\p{Latin}\p{Common}\p{Inherited}]/u', $text)) {
+            $u = self::unicodeSlug($text, $separator);
+            if ($u !== '') return $u;
+        }
         if (function_exists('iconv')) {
             $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
             if ($converted !== false) {
@@ -26,6 +40,20 @@ final class Helpers
         $text = preg_replace('/[^a-z0-9]+/', $separator, $text);
         $text = trim($text, $separator);
         return $text ?: 'n-a';
+    }
+
+    /** Letters, marks and digits of any script, lower-cased, at most 190 bytes. */
+    private static function unicodeSlug(string $text, string $separator): string
+    {
+        if (!preg_match('//u', $text)) return '';
+        if (class_exists(\Normalizer::class)) $text = \Normalizer::normalize($text, \Normalizer::FORM_C) ?: $text;
+        $text = mb_strtolower($text, 'UTF-8');
+        $text = (string) preg_replace('/[^\p{L}\p{M}\p{N}]+/u', $separator, $text);
+        $text = trim($text, $separator);
+        if (strlen($text) > 190) {
+            $text = rtrim(mb_strcut($text, 0, 190, 'UTF-8'), $separator);
+        }
+        return $text;
     }
 
     public static function uuid(): string
@@ -149,7 +177,8 @@ final class Helpers
      */
     public static function postUrl(array $post, string $base = '', string $categorySlug = ''): string
     {
-        $slug      = $post['slug'] ?? '';
+        // Encoded for the URL: a no-op for a–z/0–9 slugs, needed for Unicode ones.
+        $slug      = rawurlencode((string) ($post['slug'] ?? ''));
         $type      = $post['type'] ?? 'post';
         $structure = static::permalinkStructure();
 
@@ -177,7 +206,7 @@ final class Helpers
                 ?: ($post['primary_category_slug'] ?? '')
                 ?: static::lookupPrimaryCategory((int)($post['id'] ?? 0));
             if ($catSlug !== '') {
-                return $base . '/' . $catSlug . '/' . $slug;
+                return $base . '/' . rawurlencode((string) $catSlug) . '/' . $slug;
             }
             // No category attached. Since 1.2.7 every post is given the
             // default category when saved, so this only covers a post not yet

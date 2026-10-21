@@ -20,6 +20,9 @@ test('dates: a page view counts, but does not change the modified date', functio
     ]);
     $page = (new Browser(bh_env()['base_url']))->request('GET', '/posts/' . $slug);
     assert_same(200, $page->status);
+    // Views are buffered since 1.2.76 and added up by the core task.
+    $counter = new \App\Services\PostViewCounter($db, new \App\Services\SettingService($db, new \App\Core\Cache(bh_env()['tmp'] . '/dates-cache')));
+    $counter->fold(time() + 180);
     $row = $db->selectOne('SELECT view_count, updated_at, created_at FROM {posts} WHERE id = :i', ['i' => $id]);
     assert_same(42, (int) $row['view_count'], 'the view was counted');
     assert_same('2020-01-02 03:04:05', $row['updated_at'], 'modified date untouched');

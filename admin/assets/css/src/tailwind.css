@@ -1,0 +1,544 @@
+/*
+ * Basehim admin — Tailwind source (1.2.77). Compiled into
+ * admin/assets/css/tailwind.min.css; see tailwind.config.js for the command.
+ *
+ * Below the Tailwind layers are the shared admin components, written with
+ * @apply so they use the same scale, colours and states as the utilities.
+ * They sit between components and utilities: always included (built at
+ * runtime by JavaScript or by apps, so a scan can't see every one), and a
+ * utility on the same element still wins (class="bh-btn w-full").
+ *
+ * One family of shapes for everything that can be pressed or read at a
+ * glance (docs/ADMIN-UI.md):
+ *   cards and tile buttons   rounded-2xl, slate-200 hairline, shadow-card
+ *   tiles, inputs, buttons   rounded-xl
+ *   icon squares             rounded-xl, a light tint with the tone's icon,
+ *                            or the tone's gradient with a white icon
+ */
+@tailwind base;
+@tailwind components;
+
+/* ═══ Core components ═════════════════════════════════════════════════════ */
+
+/* ── Buttons: .bh-btn + --primary | --secondary | --danger | --ghost,
+      sizes --sm | --lg. A --lg button can lead with an icon square
+      (.bh-btn__icon, tinted with --blue | --green | --violet | --amber)
+      and end with a chevron (.bh-btn__chev). ─────────────────────────────── */
+.bh-btn {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-transparent px-4 py-2 text-sm font-semibold leading-5 no-underline select-none cursor-pointer;
+    @apply transition-[background-color,border-color,color,box-shadow] duration-150 ease-out;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-1;
+}
+.bh-btn svg { @apply h-4 w-4 flex-none; }
+.bh-btn:disabled, .bh-btn[aria-disabled="true"] { @apply cursor-not-allowed opacity-50; }
+.bh-btn--sm { @apply rounded-lg px-3 py-1.5 text-[0.8125rem]; }
+.bh-btn--primary { @apply bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-sm shadow-blue-600/20; }
+.bh-btn--primary:hover:not(:disabled) { @apply from-blue-600 to-blue-700; }
+.bh-btn--secondary { @apply border-slate-200 bg-white text-slate-700 shadow-sm shadow-slate-900/[0.03]; }
+.bh-btn--secondary:hover:not(:disabled) { @apply border-slate-300 bg-slate-50 text-slate-900; }
+.bh-btn--danger { @apply bg-red-600 text-white; }
+.bh-btn--danger:hover:not(:disabled) { @apply bg-red-700; }
+.bh-btn--ghost { @apply bg-transparent text-slate-600; }
+.bh-btn--ghost:hover:not(:disabled) { @apply bg-slate-100 text-slate-900; }
+
+/* Large tile buttons: the dashboard's New post / Upload / Customize. */
+.bh-btn--lg { @apply h-14 gap-3 rounded-2xl py-0 pl-2.5 pr-4 text-base shadow-card; }
+.bh-btn--lg.bh-btn--secondary { @apply border-slate-200/80; }
+.bh-btn--lg.bh-btn--secondary:hover:not(:disabled) { @apply border-slate-300/80 bg-white shadow-card-hover; }
+.bh-btn--lg.bh-btn--primary { @apply shadow-lg shadow-blue-600/25; }
+.bh-btn__icon { @apply grid h-9 w-9 flex-none place-items-center rounded-xl bg-blue-50 text-blue-600; }
+.bh-btn .bh-btn__icon svg { @apply h-5 w-5; }
+.bh-btn__icon--green { @apply bg-emerald-50 text-emerald-600; }
+.bh-btn__icon--violet { @apply bg-violet-50 text-violet-600; }
+.bh-btn__icon--amber { @apply bg-amber-50 text-amber-600; }
+.bh-btn--primary .bh-btn__icon { @apply bg-transparent text-white; }
+.bh-btn__label { @apply min-w-0 flex-1 truncate text-left; }
+.bh-btn .bh-btn__chev { @apply ml-1 h-4 w-4 text-slate-400; }
+.bh-btn--primary .bh-btn__chev { @apply text-white/80; }
+
+/* Busy (bhBusy): a spinner in front, clicks blocked. */
+.bh-btn[aria-busy="true"] { @apply pointer-events-none cursor-progress opacity-85; }
+.bh-btn[aria-busy="true"]::before {
+    content: "";
+    @apply h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent;
+}
+
+/* ── Cards: .bh-card (+ __head, __body, __title, --pad) ────────────────── */
+.bh-card { @apply rounded-2xl border border-slate-200/80 bg-white shadow-card; }
+.bh-card--pad, .bh-card__body { @apply p-5; }
+.bh-card__head { @apply flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4; }
+.bh-card__title { @apply m-0 text-[0.9375rem] font-semibold text-slate-900; }
+
+/* ── Fields ───────────────────────────────────────────────────────────── */
+.bh-label { @apply mb-1.5 block text-sm font-medium text-slate-700; }
+.bh-input, .bh-select, .bh-textarea {
+    @apply block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-snug text-slate-900;
+    @apply transition-[border-color,box-shadow] duration-150 ease-out;
+}
+.bh-input::placeholder, .bh-textarea::placeholder { @apply text-slate-400; }
+.bh-input:focus, .bh-select:focus, .bh-textarea:focus { @apply border-blue-500 outline-none ring-[3px] ring-blue-500/20; }
+.bh-input[aria-invalid="true"], .bh-select[aria-invalid="true"], .bh-textarea[aria-invalid="true"] { @apply border-red-500; }
+.bh-textarea { @apply min-h-[6rem] resize-y; }
+.bh-input--auto, .bh-select--auto { @apply inline-block w-auto; }
+.bh-input--sm, .bh-select--sm { @apply rounded-lg px-2.5 py-1.5 text-xs; }
+.bh-help { @apply mt-1.5 text-xs leading-normal text-slate-500; }
+
+/* ── Badges ───────────────────────────────────────────────────────────── */
+.bh-badge { @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold leading-snug; }
+.bh-badge svg { @apply h-3.5 w-3.5; }
+.bh-badge--gray { @apply bg-slate-100 text-slate-600; }
+.bh-badge--blue { @apply bg-blue-50 text-blue-700; }
+.bh-badge--green { @apply bg-emerald-50 text-emerald-700; }
+.bh-badge--amber { @apply bg-amber-50 text-amber-700; }
+.bh-badge--red { @apply bg-red-50 text-red-700; }
+.bh-badge--violet { @apply bg-violet-50 text-violet-700; }
+.bh-badge--indigo { @apply bg-indigo-50 text-indigo-700; }
+
+/* ── Empty states ─────────────────────────────────────────────────────── */
+.bh-empty { @apply flex flex-col items-center gap-1.5 px-5 py-10 text-center; }
+.bh-empty__icon { @apply mb-1.5 grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-500; }
+.bh-empty__icon svg { @apply h-6 w-6; }
+.bh-empty__title { @apply m-0 text-[0.9375rem] font-semibold text-slate-900; }
+.bh-empty__text { @apply m-0 max-w-lg text-sm leading-normal text-slate-500; }
+.bh-empty__actions { @apply mt-3.5 flex flex-wrap justify-center gap-2; }
+
+/* ═══ Dashboard (1.2.68; restyled 1.2.77) ═════════════════════════════════
+   docs/DASHBOARD-WIDGETS.md. Built by admin/assets/js/dashboard.js.        */
+
+.bh-dash { @apply text-slate-700; --dash-gap: 1.25rem; }
+.bh-dash-sr { @apply sr-only; }
+.bh-dash-ico { @apply inline-flex flex-none; }
+.bh-dash-ico svg { @apply h-4 w-4; }
+
+/* ── Greeting and the three tile buttons ──────────────────────────────── */
+.bh-dash-head { @apply mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-4; }
+.bh-dash-head__title { @apply m-0 text-2xl font-bold leading-tight tracking-tight text-slate-900; }
+.bh-dash-head__sub { @apply mt-1 text-sm text-slate-500; }
+.bh-dash-head__actions { @apply grid w-full auto-cols-fr grid-flow-col gap-3 sm:flex sm:w-auto sm:flex-wrap; }
+.bh-dash-head__actions[hidden] { @apply hidden; }
+.bh-dash-head__actions .bh-btn--lg { @apply sm:min-w-[11.5rem]; }
+/* Phones: three in a row, so the icon squares and chevrons give way to the words. */
+@media (max-width: 639px) {
+    .bh-dash-head { @apply items-stretch; }
+    .bh-dash-head__actions .bh-btn--lg { @apply h-12 min-w-0 justify-center gap-2 px-2 text-sm; }
+    .bh-dash-head__actions .bh-btn__icon { @apply h-auto w-auto bg-transparent; }
+    .bh-dash-head__actions .bh-btn__icon svg { @apply h-4 w-4; }
+    .bh-dash-head__actions .bh-btn__chev { @apply hidden; }
+    .bh-dash-head__actions .bh-btn__label { @apply flex-none; }
+}
+@media (max-width: 359px) {
+    .bh-dash-head__actions .bh-btn__icon { @apply hidden; }
+}
+
+/* ── Customize bar ────────────────────────────────────────────────────── */
+.bh-dash-editbar {
+    @apply sticky top-[4.75rem] z-[9] -mt-2 mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl bg-slate-900 py-3 pl-4 pr-3 text-slate-200;
+    @apply shadow-xl shadow-slate-950/30;
+}
+.bh-dash-editbar[hidden] { @apply hidden; }
+.bh-dash-editbar__text { @apply flex min-w-0 flex-col gap-0.5 text-[0.8125rem] leading-snug; }
+.bh-dash-editbar__text strong { @apply text-sm font-semibold text-white; }
+.bh-dash-editbar__text span { @apply text-slate-400; }
+.bh-dash-editbar__actions { @apply flex flex-wrap items-center gap-1.5; }
+.bh-dash-editbar__sep { @apply mx-1 h-5 w-px bg-slate-700; }
+.bh-dash-editbar .bh-btn--ghost { @apply text-slate-300; }
+.bh-dash-editbar .bh-btn--ghost:hover:not(:disabled) { @apply bg-slate-800 text-white; }
+.bh-dash-editbar .bh-btn--secondary { @apply border-slate-700 bg-slate-800 text-white shadow-none; }
+.bh-dash-editbar .bh-btn--secondary:hover:not(:disabled) { @apply border-slate-600 bg-slate-700 text-white; }
+
+/* ── Grid: 12 columns; a card's size is its span ───────────────────────── */
+.bh-dash-grid {
+    --cols: 12;
+    @apply grid items-stretch gap-[var(--dash-gap)];
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+}
+.bh-dcard { @apply col-span-full; }
+@media (min-width: 640px) {
+    .bh-dash-grid { --cols: 6; }
+    .bh-dcard--small, .bh-dcard--third { @apply col-span-3; }
+    .bh-dcard--half, .bh-dcard--two-thirds, .bh-dcard--full { @apply col-span-6; }
+}
+@media (min-width: 1024px) {
+    .bh-dash-grid { --cols: 12; }
+    .bh-dcard--small { @apply col-span-3; }
+    .bh-dcard--third { @apply col-span-4; }
+    .bh-dcard--half { @apply col-span-6; }
+    .bh-dcard--two-thirds { @apply col-span-8; }
+    .bh-dcard--full { @apply col-span-12; }
+}
+@media (max-width: 639px) {
+    .bh-dash-grid { --cols: 1; }
+    .bh-dcard { @apply col-span-full; }
+}
+/* The column guides: one tinted band per column, in customize mode only. */
+.bh-dash.is-editing .bh-dash-grid {
+    --col: calc((100% - (var(--cols) - 1) * var(--dash-gap)) / var(--cols));
+    background-image: repeating-linear-gradient(to right,
+        rgb(37 99 235 / .055) 0, rgb(37 99 235 / .055) var(--col),
+        transparent var(--col), transparent calc(var(--col) + var(--dash-gap)));
+    @apply min-h-[12rem] rounded-2xl pb-8;
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────── */
+.bh-dcard {
+    @apply relative flex min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white shadow-card;
+    container-type: inline-size;
+}
+.bh-dcard__head { @apply flex items-start gap-3 px-5 pb-4 pt-5; }
+.bh-dcard__icon { @apply grid h-11 w-11 flex-none place-items-center rounded-xl bg-blue-50 text-blue-600; }
+.bh-dcard__icon svg { @apply h-5 w-5; }
+.bh-dcard__icon--green { @apply bg-emerald-50 text-emerald-600; }
+.bh-dcard__icon--amber { @apply bg-amber-50 text-amber-600; }
+.bh-dcard__icon--red { @apply bg-rose-50 text-rose-600; }
+.bh-dcard__icon--violet { @apply bg-violet-50 text-violet-600; }
+.bh-dcard__icon--indigo { @apply bg-indigo-50 text-indigo-600; }
+.bh-dcard__icon--slate { @apply bg-slate-100 text-slate-600; }
+.bh-dcard__titles { @apply min-w-0 flex-1 pt-0.5; }
+.bh-dcard__title { @apply m-0 truncate text-lg font-bold leading-6 tracking-tight text-slate-900; }
+.bh-dcard__sub { @apply m-0 mt-0.5 truncate text-sm text-slate-500; }
+.bh-dcard__tools { @apply flex flex-none items-center gap-2 pt-0.5; }
+/* Header buttons: bordered squares, as the card's own controls. */
+.bh-dcard__tool {
+    @apply grid h-9 w-9 flex-none cursor-pointer place-items-center rounded-xl border border-slate-200 bg-white text-slate-600;
+    @apply transition-colors duration-150 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40;
+}
+.bh-dcard__tool svg { @apply h-[1.125rem] w-[1.125rem]; }
+/* The card's main setting, in the header (a select field marked 'inline'). */
+.bh-dcard__pick { @apply relative flex-none; }
+.bh-dcard__pick select {
+    @apply h-9 max-w-[10rem] cursor-pointer appearance-none truncate rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-sm font-medium text-slate-700;
+    @apply transition-colors duration-150 hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30;
+}
+.bh-dcard__pick .bh-dash-ico { @apply pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500; }
+.bh-dcard__pick[aria-busy="true"] select { @apply text-slate-400; }
+@container (max-width: 26rem) { .bh-dcard__pick { @apply hidden; } }
+@container (max-width: 19rem) { .bh-dcard__sub { @apply hidden; } }
+.bh-dcard__body { @apply min-h-0 flex-1 px-5 pb-5 text-sm; }
+.bh-dcard.is-collapsed .bh-dcard__body { @apply hidden; }
+.bh-dcard.is-refreshing .bh-dcard__refresh svg { @apply animate-spin; }
+/* Footer: a summary strip, then a line of text and a link. */
+.bh-dcard__summary { @apply mt-5 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3; }
+.bh-dcard__summary-icon { @apply grid h-9 w-9 flex-none place-items-center rounded-full bg-emerald-100 text-emerald-600; }
+.bh-dcard__summary-text { @apply m-0 text-sm font-semibold text-slate-900; }
+.bh-dcard__foot { @apply mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-slate-500; }
+.bh-dcard__footlink { @apply font-medium text-blue-600 no-underline hover:underline; }
+
+/* Plain icon buttons (customize strip, dialogs, the overflow menu). */
+.bh-dash-icon-btn {
+    @apply grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-slate-400;
+    @apply transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40;
+}
+.bh-dash-icon-btn:hover:not(:disabled) { @apply bg-slate-100 text-slate-900; }
+.bh-dash-icon-btn:disabled { @apply cursor-default opacity-35; }
+.bh-dmenu__btn { @apply h-9 w-7 text-slate-500; }
+.bh-dmenu__btn svg { @apply h-5 w-5; }
+
+/* ── Overflow menu ────────────────────────────────────────────────────── */
+.bh-dmenu { @apply relative; }
+.bh-dmenu__list { @apply absolute right-0 top-[calc(100%+.375rem)] z-30 min-w-[13rem] rounded-xl border border-slate-200 bg-white p-1.5 shadow-pop; }
+.bh-dmenu__list[hidden] { @apply hidden; }
+.bh-dmenu__item {
+    @apply flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-[0.8125rem] text-slate-700 no-underline;
+}
+.bh-dmenu__item .bh-dash-ico { @apply text-slate-400; }
+.bh-dmenu__item:hover, .bh-dmenu__item:focus-visible { @apply bg-slate-100 text-slate-900 outline-none; }
+.bh-dmenu__item.is-danger { @apply text-red-700; }
+.bh-dmenu__item.is-danger .bh-dash-ico { @apply text-red-500; }
+.bh-dmenu__item.is-danger:hover { @apply bg-red-50; }
+.bh-dmenu__sep { @apply mx-1 my-1.5 h-px bg-slate-100; }
+
+/* ── Tones for small badges (list rows, the catalogue) ────────────────── */
+.bh-dtone { @apply inline-flex flex-none items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold leading-normal; }
+.bh-dtone--slate { @apply bg-slate-100 text-slate-600; }
+.bh-dtone--blue { @apply bg-blue-50 text-blue-700; }
+.bh-dtone--green { @apply bg-emerald-50 text-emerald-700; }
+.bh-dtone--amber { @apply bg-amber-50 text-amber-700; }
+.bh-dtone--red { @apply bg-rose-50 text-rose-700; }
+.bh-dtone--violet { @apply bg-violet-50 text-violet-700; }
+.bh-dtone--indigo { @apply bg-indigo-50 text-indigo-700; }
+.bh-dcat__name .bh-dtone { @apply ml-1.5 align-[1px]; }
+
+/* ── View: stat tiles ─────────────────────────────────────────────────── */
+.bh-dview--stat { @apply grid grid-cols-1 gap-3.5; }
+@container (min-width: 22rem) {
+    .bh-dview--stat { @apply grid-cols-2; }
+    .bh-dstat:last-child:nth-child(odd) { @apply col-span-2; }
+}
+@container (min-width: 54rem) {
+    .bh-dview--stat { @apply grid-cols-4; }
+    .bh-dstat:last-child:nth-child(odd) { @apply col-span-1; }
+    .bh-dstat:last-child:nth-child(4n+1) { @apply col-span-4; }
+    .bh-dstat:last-child:nth-child(4n+2) { @apply col-span-3; }
+    .bh-dstat:last-child:nth-child(4n+3) { @apply col-span-2; }
+}
+.bh-dstat {
+    @apply relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 text-inherit no-underline;
+    @apply transition-[border-color,box-shadow] duration-150;
+    container-type: inline-size;
+}
+a.bh-dstat:hover { @apply shadow-card; }
+a.bh-dstat:focus-visible { @apply outline-none ring-2 ring-blue-500/40; }
+.bh-dstat__top { @apply flex min-w-0 items-center gap-3; }
+.bh-dstat__icon { @apply grid h-10 w-10 flex-none place-items-center rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 text-white shadow-sm; }
+.bh-dstat__icon svg { @apply h-5 w-5; }
+.bh-dstat__label { @apply min-w-0 flex-1 truncate text-[0.9375rem] font-semibold text-slate-900; }
+.bh-dstat__value { @apply mt-3.5 text-[2rem] font-bold leading-none tracking-tight text-slate-900 tabular-nums; }
+.bh-dstat__foot { @apply mt-2 flex min-w-0 items-end justify-between gap-3; }
+.bh-dstat__hint { @apply min-w-0 truncate text-sm text-slate-500; }
+.bh-dstat__spark { @apply flex h-5 flex-none items-end gap-[3px]; }
+.bh-dstat__spark span { @apply w-[5px] rounded-full bg-slate-400; }
+.bh-dstat__spark span:nth-child(1) { @apply h-2.5 opacity-70; }
+.bh-dstat__spark span:nth-child(2) { @apply h-3.5 opacity-85; }
+.bh-dstat__spark span:nth-child(3) { @apply h-5; }
+/* The pill at the top right: a trend, or a count that needs attention. */
+.bh-dstat__pill { @apply inline-flex flex-none items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold leading-none text-slate-600; }
+.bh-dstat__pill svg { @apply h-3.5 w-3.5; }
+.bh-dstat__pill--up { @apply bg-emerald-50 text-emerald-600; }
+.bh-dstat__pill--down { @apply bg-rose-50 text-rose-600; }
+.bh-dstat__pill--amber { @apply bg-amber-100/70 text-orange-600; }
+.bh-dstat__pill--red { @apply bg-rose-50 text-rose-600; }
+.bh-dstat__pill--blue { @apply bg-blue-50 text-blue-600; }
+.bh-dstat__pill--green { @apply bg-emerald-50 text-emerald-600; }
+.bh-dstat__pill--violet { @apply bg-violet-50 text-violet-600; }
+.bh-dstat__go { @apply grid h-8 w-8 flex-none place-items-center rounded-full border border-slate-200 bg-white/80 text-slate-500; }
+a.bh-dstat:hover .bh-dstat__go { @apply border-slate-300 text-slate-900; }
+/* People: avatars, and a quiet illustration on the wide tile. */
+.bh-dstat__people { @apply relative z-[1] flex flex-none items-center; }
+.bh-dstat__avatar { @apply -ml-2 box-content grid h-8 w-8 place-items-center overflow-hidden rounded-full border-2 border-white bg-blue-500 text-xs font-semibold text-white first:ml-0; }
+.bh-dstat__avatar:nth-child(3n+2) { @apply bg-violet-500; }
+.bh-dstat__avatar:nth-child(3n+3) { @apply bg-emerald-500; }
+.bh-dstat__avatar img { @apply h-full w-full object-cover; }
+.bh-dstat__avatar--more { @apply bg-indigo-50 text-[0.6875rem] text-indigo-600; }
+.bh-dstat__art { @apply pointer-events-none absolute -bottom-px right-0 hidden h-[5.5rem] w-40; }
+.bh-dstat--wide .bh-dstat__foot { @apply pr-0; }
+@container (min-width: 30rem) {
+    .bh-dstat--wide .bh-dstat__art { @apply block; }
+    .bh-dstat--wide .bh-dstat__foot { @apply pr-40; }
+}
+/* A narrow tile (phones, small cards): the label moves under the icon, the
+   pill keeps the top right, and the hint may take two lines. */
+/* A narrow card (this queries the card, the tile's container): tighter tiles. */
+@container (max-width: 25rem) {
+    .bh-dstat { @apply p-3.5; }
+    .bh-dview--stat { @apply gap-2.5; }
+}
+@container (max-width: 12.5rem) {
+    .bh-dstat__top { @apply flex-wrap gap-x-2 gap-y-2; }
+    .bh-dstat__label { @apply order-last basis-full; }
+    .bh-dstat__icon { @apply h-9 w-9; }
+    .bh-dstat__pill, .bh-dstat__go { @apply ml-auto; }
+    .bh-dstat__pill { @apply gap-0.5 px-2 text-[0.6875rem]; }
+    .bh-dstat__pill--up svg, .bh-dstat__pill--down svg { @apply hidden; }   /* the sign says it */
+    .bh-dstat__value { @apply mt-2 text-[1.75rem]; }
+    .bh-dstat__hint { @apply line-clamp-2 whitespace-normal; }
+}
+/* Tones: the tile's tint, its icon square, its bars. */
+.bh-dstat--blue { @apply border-blue-100 from-blue-50/80; }
+.bh-dstat--blue .bh-dstat__icon { @apply from-blue-500 to-blue-600 shadow-blue-600/25; }
+.bh-dstat--blue .bh-dstat__spark span { @apply bg-blue-500; }
+a.bh-dstat--blue:hover { @apply border-blue-200; }
+.bh-dstat--violet { @apply border-violet-100 from-violet-50/80; }
+.bh-dstat--violet .bh-dstat__icon { @apply from-violet-500 to-purple-600 shadow-violet-600/25; }
+.bh-dstat--violet .bh-dstat__spark span { @apply bg-violet-400; }
+a.bh-dstat--violet:hover { @apply border-violet-200; }
+.bh-dstat--green { @apply border-emerald-100 from-emerald-50/80; }
+.bh-dstat--green .bh-dstat__icon { @apply from-emerald-500 to-emerald-600 shadow-emerald-600/25; }
+.bh-dstat--green .bh-dstat__spark span { @apply bg-emerald-500; }
+a.bh-dstat--green:hover { @apply border-emerald-200; }
+.bh-dstat--amber { @apply border-amber-100 from-amber-50/80; }
+.bh-dstat--amber .bh-dstat__icon { @apply from-amber-400 to-orange-500 shadow-orange-500/25; }
+.bh-dstat--amber .bh-dstat__spark span { @apply bg-amber-400; }
+.bh-dstat--amber .bh-dstat__hint { @apply text-orange-600; }
+a.bh-dstat--amber:hover { @apply border-amber-200; }
+.bh-dstat--red { @apply border-rose-100 from-rose-50/80; }
+.bh-dstat--red .bh-dstat__icon { @apply from-rose-500 to-rose-600 shadow-rose-600/25; }
+.bh-dstat--red .bh-dstat__spark span { @apply bg-rose-500; }
+.bh-dstat--red .bh-dstat__hint { @apply text-rose-600; }
+a.bh-dstat--red:hover { @apply border-rose-200; }
+.bh-dstat--indigo { @apply border-indigo-100 from-indigo-50/70; }
+.bh-dstat--indigo .bh-dstat__icon { @apply from-violet-500 to-indigo-500 shadow-indigo-500/25; }
+.bh-dstat--indigo .bh-dstat__spark span { @apply bg-indigo-400; }
+a.bh-dstat--indigo:hover { @apply border-indigo-200; }
+.bh-dstat--slate .bh-dstat__spark span { @apply bg-slate-400; }
+a.bh-dstat--slate:hover { @apply border-slate-300; }
+.bh-dstat__trend { @apply text-xs font-semibold; }
+
+/* ── View: list ───────────────────────────────────────────────────────── */
+.bh-dview--list { @apply m-0 list-none p-0; }
+.bh-dlist__row { @apply flex items-center justify-between gap-3 border-t border-slate-100 py-3 first:border-t-0 first:pt-1; }
+.bh-dlist__main { @apply flex min-w-0 flex-col gap-0.5; }
+.bh-dlist__title { @apply truncate font-medium text-slate-900 no-underline; }
+a.bh-dlist__title:hover { @apply text-blue-600; }
+.bh-dlist__meta { @apply truncate text-xs text-slate-500; }
+
+/* ── View: table ──────────────────────────────────────────────────────── */
+.bh-dview--table { @apply -mx-5 overflow-x-auto; }
+.bh-dtable { @apply w-full border-collapse text-[0.8125rem]; }
+.bh-dtable th { @apply whitespace-nowrap border-b border-slate-200 px-5 py-2 text-left font-medium text-slate-500; }
+.bh-dtable td { @apply border-b border-slate-100 px-5 py-2.5 text-slate-700; }
+.bh-dtable tr:last-child td { @apply border-b-0; }
+.bh-dtable .is-right { @apply text-right tabular-nums; }
+.bh-dtable .is-center { @apply text-center; }
+.bh-dtable__link { @apply font-medium text-slate-900 no-underline hover:text-blue-600; }
+
+/* ── View: chart ──────────────────────────────────────────────────────── */
+.bh-dview--chart { @apply pt-1; }
+.bh-dchart { @apply flex h-52 gap-3 pt-7; }
+.bh-dchart__axis { @apply relative w-7 flex-none text-right text-xs text-slate-400 tabular-nums; }
+.bh-dchart__tick { @apply absolute right-0 translate-y-1/2 leading-none; }
+.bh-dchart__area { @apply relative flex flex-1 items-end gap-[5%] border-b border-l border-slate-200; }
+.bh-dchart__grid { @apply pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-200; }
+.bh-dchart__col { @apply relative z-[1] flex h-full min-w-0 flex-1 items-end justify-center gap-0.5; }
+/* A bar is 60% of its column (several series share that and shrink). */
+.bh-dchart__bar { @apply relative min-h-0 min-w-0 max-w-[3.5rem] flex-initial basis-3/5 rounded-t-lg bg-gradient-to-b from-blue-400 to-blue-600; }
+.bh-dchart__val { @apply absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap text-sm font-bold text-slate-900 tabular-nums; }
+.bh-dchart__s1 { @apply from-teal-400 to-teal-600; }
+.bh-dchart__s2 { @apply from-amber-300 to-amber-500; }
+.bh-dchart__svg { @apply absolute inset-0 h-full w-full overflow-visible; }
+.bh-dchart__line { @apply fill-none stroke-blue-500 stroke-2; stroke-linejoin: round; stroke-linecap: round; }
+.bh-dchart__line.bh-dchart__s1 { @apply stroke-teal-500; }
+.bh-dchart__line.bh-dchart__s2 { @apply stroke-amber-500; }
+.bh-dchart__labels { @apply ml-10 mt-2.5 flex gap-[5%] text-sm text-slate-500; }
+.bh-dchart__labels span { @apply min-w-0 flex-1 overflow-hidden whitespace-nowrap text-center; }
+.bh-dchart__labels span.is-thin { @apply invisible; }
+/* Fresh data: bars grow from the axis one after another (the delay is set
+   per bar), their values rise in after; a line draws itself left to right. */
+.bh-dchart.is-animated .bh-dchart__bar { @apply origin-bottom animate-bh-grow; }
+.bh-dchart.is-animated .bh-dchart__val { @apply animate-bh-rise; }
+.bh-dchart.is-animated .bh-dchart__line { stroke-dasharray: 1; @apply animate-bh-draw; }
+.bh-dchart__legend { @apply mt-3 flex flex-wrap gap-3 text-xs text-slate-500; }
+.bh-dchart__key { @apply inline-flex items-center gap-1.5; }
+.bh-dchart__swatch { @apply h-2.5 w-2.5 rounded-sm bg-gradient-to-b from-blue-400 to-blue-600; }
+
+/* ── View: feed ───────────────────────────────────────────────────────── */
+.bh-dview--feed { @apply relative m-0 list-none py-0 pl-3.5 pr-0; }
+.bh-dview--feed::before { content: ""; @apply absolute bottom-2 left-[.2rem] top-2 w-px bg-slate-200; }
+.bh-dfeed__row { @apply relative pb-3.5 pl-2 last:pb-0; }
+.bh-dfeed__row::before { content: ""; @apply absolute -left-3.5 top-1.5 h-2 w-2 rounded-full border-2 border-slate-300 bg-white; }
+.bh-dfeed__row--amber::before { @apply border-amber-500; }
+.bh-dfeed__row--red::before { @apply border-rose-500; }
+.bh-dfeed__row--green::before { @apply border-emerald-500; }
+.bh-dfeed__row--blue::before { @apply border-blue-500; }
+.bh-dfeed__row--violet::before { @apply border-violet-500; }
+.bh-dfeed__row--indigo::before { @apply border-indigo-500; }
+.bh-dfeed__line { @apply m-0 leading-snug text-slate-700 [overflow-wrap:anywhere]; }
+.bh-dfeed__line strong { @apply font-semibold text-slate-900; }
+.bh-dfeed__text { @apply text-inherit no-underline; }
+a.bh-dfeed__text:hover { @apply text-blue-600; }
+.bh-dfeed__quote { @apply mb-0 mt-1 line-clamp-2 text-[0.8125rem] text-slate-500; }
+.bh-dfeed__time { @apply mt-0.5 block text-xs text-slate-400; }
+
+/* ── View: status ─────────────────────────────────────────────────────── */
+.bh-dstatus__summary { @apply mb-2 mt-0 font-medium text-slate-900; }
+.bh-dstatus { @apply m-0 list-none p-0; }
+.bh-dstatus__row { @apply flex items-start gap-2.5 border-t border-slate-100 py-2 first:border-t-0; }
+.bh-dstatus__row > .bh-dash-ico { @apply mt-0.5; }
+.bh-dstatus__row.is-ok > .bh-dash-ico { @apply text-emerald-500; }
+.bh-dstatus__row.is-warn > .bh-dash-ico { @apply text-amber-500; }
+.bh-dstatus__row.is-error > .bh-dash-ico { @apply text-rose-500; }
+.bh-dstatus__row.is-unknown > .bh-dash-ico { @apply text-slate-400; }
+.bh-dstatus__text { @apply flex min-w-0 flex-1 flex-wrap justify-between gap-x-3; }
+.bh-dstatus__label { @apply text-slate-900 no-underline; }
+a.bh-dstatus__label:hover { @apply text-blue-600; }
+.bh-dstatus__detail { @apply text-[0.8125rem] text-slate-500; }
+
+/* ── View: html ───────────────────────────────────────────────────────── */
+.bh-dview--html { @apply [overflow-wrap:anywhere]; }
+.bh-dview--html img { @apply h-auto max-w-full; }
+
+/* ── States: loading, empty, error, unavailable ───────────────────────── */
+.bh-dskel { @apply grid gap-2.5 pb-1 pt-2; }
+.bh-dskel__row { @apply block h-3 animate-bh-shimmer rounded-full bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 bg-[length:200%_100%]; }
+.bh-dstate { @apply flex flex-col items-center gap-1 px-2 pb-4 pt-5 text-center; }
+.bh-dstate > .bh-dash-ico { @apply mb-1 grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-500; }
+.bh-dstate > .bh-dash-ico svg { @apply h-5 w-5; }
+.bh-dstate__title { @apply m-0 font-semibold text-slate-900; }
+.bh-dstate__text { @apply m-0 max-w-[22rem] text-[0.8125rem] leading-normal text-slate-500; }
+.bh-dstate .bh-btn { @apply mt-2; }
+.bh-dstate--error > .bh-dash-ico { @apply bg-rose-50 text-rose-600; }
+.bh-dstate--info > .bh-dash-ico { @apply bg-blue-50 text-blue-600; }
+
+/* ── Customize mode on the cards ──────────────────────────────────────── */
+.bh-dash.is-editing .bh-dcard { @apply border-dashed border-slate-300 shadow-none; }
+.bh-dash.is-editing .bh-dcard__body {
+    @apply pointer-events-none max-h-44 overflow-hidden opacity-60;
+    -webkit-mask-image: linear-gradient(#000 70%, transparent);
+    mask-image: linear-gradient(#000 70%, transparent);
+}
+.bh-dcard__handle { @apply -ml-1 cursor-grab touch-none text-slate-500 active:cursor-grabbing; }
+.bh-dcard__remove:hover:not(:disabled) { @apply bg-rose-50 text-rose-600; }
+.bh-dcard__edit { @apply flex items-center justify-between gap-2 rounded-b-2xl border-t border-dashed border-slate-300 bg-slate-50 py-2 pl-5 pr-2; }
+.bh-dcard__moves { @apply flex gap-0.5; }
+.bh-dcard__onesize { @apply text-xs text-slate-400; }
+.bh-dcard__sizes { @apply inline-flex rounded-lg bg-slate-200 p-0.5; }
+.bh-dcard__size { @apply h-7 min-w-[2rem] cursor-pointer rounded-md border-0 bg-transparent px-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900; }
+.bh-dcard__size.is-on { @apply bg-white text-slate-900 shadow-sm; }
+.bh-dcard.is-dragging { @apply pointer-events-none fixed z-[60] -rotate-[.6deg] border-solid border-blue-600 opacity-95 shadow-2xl shadow-slate-900/30; }
+.bh-dcard--placeholder { @apply rounded-2xl border-2 border-dashed border-blue-600/45 bg-blue-600/5 shadow-none; }
+.bh-dcard.is-new { @apply animate-bh-new; }
+.bh-dash-drop-hint { @apply col-span-full self-center px-4 py-12 text-center; }
+.bh-dash-drop-hint__title { @apply m-0 font-semibold text-slate-900; }
+.bh-dash-drop-hint__text { @apply mb-0 mt-1 text-sm text-slate-500; }
+/* Phones: one column, so sizes don't apply; the customize bar docks to the
+   bottom of the screen, within thumb reach. */
+@media (max-width: 639px) {
+    .bh-dcard__sizes, .bh-dcard__onesize { @apply invisible; }
+    .bh-dash-editbar {
+        @apply fixed inset-x-0 bottom-0 top-auto z-50 m-0 rounded-b-none rounded-t-2xl px-3 pt-2.5;
+        padding-bottom: calc(.625rem + env(safe-area-inset-bottom, 0px));
+    }
+    .bh-dash-editbar__text, .bh-dash-editbar__sep { @apply hidden; }
+    .bh-dash-editbar__actions { @apply grid w-full grid-cols-2 gap-1.5; }
+    .bh-dash-editbar__actions .bh-btn { @apply w-full; }
+    .bh-dash-editbar [data-bh-dash-sitedefault] { @apply col-span-full; }
+    .bh-dash.is-editing { @apply pb-36; }
+    .bh-dash-icon-btn { @apply h-9 w-9; }
+}
+.bh-dash-blank { @apply rounded-2xl border border-dashed border-slate-300 bg-white; }
+.bh-dash-blank[hidden] { @apply hidden; }
+.bh-dash-noscript { @apply p-4 text-slate-500; }
+
+/* ── Add widgets drawer ───────────────────────────────────────────────── */
+.bh-dash-noscroll { @apply overflow-hidden; }
+.bh-dash-drawer { @apply fixed inset-0 z-[65]; }
+.bh-dash-drawer[hidden] { @apply hidden; }
+.bh-dash-drawer__scrim { @apply absolute inset-0 animate-bh-fade bg-slate-900/30; }
+.bh-dash-drawer__panel { @apply absolute bottom-0 right-0 top-0 flex w-full max-w-[26rem] animate-bh-slide flex-col bg-white shadow-2xl shadow-slate-950/40; }
+.bh-dash-drawer__head { @apply flex items-center justify-between gap-4 pb-2 pl-5 pr-4 pt-4; }
+.bh-dash-drawer__title { @apply m-0 text-base font-bold text-slate-900; }
+.bh-dash-drawer__search { @apply border-b border-slate-100 px-5 pb-3 pt-1; }
+.bh-dash-drawer__body { @apply flex-1 overflow-y-auto overscroll-contain px-5 pb-6 pt-2; }
+.bh-dcat { @apply pt-3; }
+.bh-dcat__title { @apply mb-1 mt-0 text-[0.8125rem] font-semibold text-slate-500; }
+.bh-dcat__list { @apply m-0 list-none p-0; }
+.bh-dcat__item { @apply flex items-start gap-3 border-t border-slate-100 py-3 first:border-t-0; }
+.bh-dcat__icon { @apply grid h-10 w-10 flex-none place-items-center rounded-xl bg-blue-50 text-blue-600; }
+.bh-dcat__icon svg { @apply h-5 w-5; }
+.bh-dcat__text { @apply min-w-0 flex-1; }
+.bh-dcat__name { @apply m-0 text-sm font-semibold text-slate-900; }
+.bh-dcat__desc { @apply mb-0 mt-0.5 text-[0.8125rem] leading-snug text-slate-600; }
+.bh-dcat__facts { @apply mb-0 mt-1 text-xs text-slate-400; }
+.bh-dcat__item .bh-btn { @apply mt-0.5 flex-none; }
+
+/* ── Settings dialog ──────────────────────────────────────────────────── */
+.bh-dash-dialog { @apply w-[min(28rem,calc(100vw-2rem))] rounded-2xl border-0 p-0 text-slate-900 shadow-2xl shadow-slate-950/40; }
+.bh-dash-dialog::backdrop { @apply bg-slate-900/40 backdrop-blur-sm; }
+.bh-dash-dialog__head { @apply flex items-center justify-between gap-4 pb-1 pl-5 pr-4 pt-4; }
+.bh-dash-dialog__title { @apply m-0 text-base font-bold; }
+.bh-dash-dialog__body { @apply grid gap-4 px-5 pb-5 pt-3; }
+.bh-dash-dialog__foot { @apply flex justify-end gap-2 rounded-b-2xl border-t border-slate-100 bg-slate-50 px-5 py-3; }
+.bh-dfield__check { @apply flex cursor-pointer items-center gap-2 text-sm text-slate-700; }
+.bh-dfield__check input { @apply h-4 w-4 accent-blue-600; }
+.bh-dfield__error { @apply mb-0 mt-1.5 text-xs text-red-700; }
+.bh-dfield__error[hidden] { @apply hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+    .bh-dskel__row, .bh-dcard.is-refreshing .bh-dcard__refresh svg, .bh-dcard.is-new,
+    .bh-dash-drawer__panel, .bh-dash-drawer__scrim,
+    .bh-dchart.is-animated .bh-dchart__bar, .bh-dchart.is-animated .bh-dchart__val,
+    .bh-dchart.is-animated .bh-dchart__line { @apply animate-none; }
+    .bh-dcard.is-dragging { @apply rotate-0; }
+}
+
+@tailwind utilities;

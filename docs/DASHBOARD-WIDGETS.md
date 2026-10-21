@@ -65,7 +65,7 @@ Collapse and Remove. You never touch a core file or write card markup.
 | Engine | `App\Services\Dashboard\DashboardService` | Who may see what, each user's layout, running providers and actions in isolation. |
 | Storage | `App\Services\Dashboard\UserMetaLayoutStore` | `users.meta` → `dashboard` per user; `settings` → `dashboard.default_layout` for the site. |
 | Transport | `routes/ajax.php`, `DashboardActions` | Seven `widgets.dashboard_*` actions on the AJAX gateway. |
-| Presentation | `admin/assets/js/dashboard.js`, `dashboard.css` | Draws cards and views, customize mode, drag and drop. |
+| Presentation | `admin/assets/js/dashboard.js`; styles in `admin/assets/css/src/tailwind.css` (compiled into `tailwind.min.css`, 1.2.77) | Draws cards and views, customize mode, drag and drop. |
 
 The engine contains no knowledge of posts, comments or any app. Core's own six
 cards live in `App\Services\Dashboard\CoreDashboardWidgets` and are registered
@@ -121,7 +121,7 @@ don't exist on the next request and never run.
 ```php
 [
     'title'       => 'Orders today',            // required
-    'description' => 'Shown in Add widgets.',
+    'description' => 'Shown under the title, and in Add widgets.',  // one short line
     'icon'        => 'shopping-cart',          // heroicon name (app/Core/icons.php)
     'surfaces'    => ['dashboard'],            // or with 'editor', 'frontend'
     'capability'  => 'edit_posts',             // string or list (all required); default access_app:{your slug} (1.2.73)
@@ -138,7 +138,8 @@ don't exist on the next request and never run.
         'multiple'    => false,                // may be added more than once
         'refresh'     => 0,                    // auto-refresh seconds (0 = off, min 60)
         'cache'       => 0,                    // seconds, or ['ttl' => 300, 'scope' => 'user'|'role'|'global']
-        'collapsible' => true,
+        'tone'        => 'blue',               // the icon square's colour (1.2.77): blue|green|amber|red|violet|indigo|slate
+        'collapsible' => true,                 // ⋮ → Collapse
         'removable'   => true,
         'refreshable' => true,
         'actions'     => [ … ],                // see Actions
@@ -177,18 +178,38 @@ Links (`href`, `url`) must be a site path (`/admin/…`) or `http(s)://`. Anythi
 else — `javascript:`, `data:`, `//host` — is dropped. Use `$ctx->url('/admin/x')`
 to get the install's base path right.
 
-Every view also accepts `summary` (a line under the content) and
+Every view also accepts `summary` (a strip under the content, with
+`summary_icon`, any icon name) and
 `footer => ['text' => '…', 'link' => ['label' => '…', 'url' => '…']]`.
 
-**stat** — key numbers.
+**The card (1.2.77).** Its header shows your `icon` in a square of the
+widget's `tone`, the `title`, and the `description` as a one-line subtitle;
+then Refresh, the inline setting (below) and ⋮ (your actions, Collapse,
+Settings, Remove). Icons are any name from core's set (`app/Core/icons.php`):
+names your data uses arrive with it, so you don't register them; a name core
+doesn't have is dropped.
+
+**stat** — key numbers, as tiles: an icon square, the label, a pill at the
+top right, the number (counted up when it loads), the hint, and small bars in
+the tile's colour.
 
 ```php
 ['items' => [
     ['label' => 'Orders', 'value' => 128, 'hint' => '12 waiting', 'href' => '/admin/shop',
-     'tone' => 'blue',                                        // slate|blue|green|amber|red|violet
-     'trend' => ['direction' => 'up', 'text' => '8% on last week', 'good' => true]],
+     'tone' => 'blue',                                  // slate|blue|green|amber|red|violet|indigo
+     'icon' => 'shopping-cart',                         // 1.2.77; default chart-bar
+     'trend' => ['direction' => 'up', 'text' => '+8%', 'good' => true]],   // the pill
+    ['label' => 'Refunds', 'value' => 3, 'tone' => 'amber', 'icon' => 'receipt-refund',
+     'badge' => ['text' => '3', 'tone' => 'amber', 'icon' => 'clock']],   // a count that needs attention, instead of a trend
+    ['label' => 'Customers', 'value' => 840, 'tone' => 'indigo', 'icon' => 'user-group',
+     'wide' => true,                                    // spans the row, with a quiet illustration
+     'people' => ['items' => [['name' => 'Ayesha Khan', 'url' => '/uploads/a.jpg'], ['name' => 'Bilal']], 'more' => 838]],
 ]]
 ```
+
+Tiles sit two to a row, four on a full-width card; the last one fills a row it
+would leave half empty. Keep the trend text short (`+12%`): narrow tiles drop
+its arrow and the sign carries the direction.
 
 **list** — rows with a title, meta line and badge.
 
@@ -207,8 +228,10 @@ Every view also accepts `summary` (a line under the content) and
  'rows'    => [['name' => 'Mug', 'qty' => 31, '_href' => '/admin/shop/products/7']]]
 ```
 
-**chart** — bar or line, up to three series. Drawn with plain HTML/SVG; the
-values are also read out to screen readers.
+**chart** — bar or line, up to three series. Drawn with plain HTML/SVG on an
+axis of round numbers with dashed guides; bars grow in one after another and
+lines draw themselves when data arrives (not for people who ask for reduced
+motion). The values are also read out to screen readers.
 
 ```php
 ['type' => 'bar', 'labels' => ['Mon', 'Tue', 'Wed'], 'unit' => 'orders',
@@ -281,9 +304,14 @@ A widget with no fields has no Settings item.
 ],
 ```
 
+A `select` field marked `'inline' => true` is also shown in the card's header
+(1.2.77), like Publishing activity's period: changing it there saves it and
+reloads the card. Use it for the one choice people change often. It is hidden
+on narrow cards, where Settings still has it.
+
 Types: `text` (200 chars), `textarea` (2000), `number` (`min`, `max`, `step`),
 `select` (`options` as `value => label`, a list, or a callable returning
-either), `checkbox`, `url` (http(s) or a site path), `color` (`#rgb`/`#rrggbb`).
+either; numeric values such as `'6' => 'Last 6 months'` work since 1.2.77), `checkbox`, `url` (http(s) or a site path), `color` (`#rgb`/`#rrggbb`).
 Unknown keys are dropped. A bad value from the form is an error shown under its
 field; a stored value that no longer fits (you changed the schema) quietly
 falls back to the default. Settings are capped at 4 KB per card.

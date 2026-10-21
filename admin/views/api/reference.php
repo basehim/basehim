@@ -42,7 +42,7 @@ $endpoints = [
         ['DELETE', '/me/avatar',     'Remove your profile photo (the file stays in the media library)', true],
     ],
     'Posts' => [
-        ['GET',    '/posts',          'List published posts (paginated). Supports ?page, ?per_page (max 100), ?q (search), ?author_id', false],
+        ['GET',    '/posts',          'List published posts, newest first. Supports ?page, ?per_page (max 100), ?q (search), ?author_id. For deep or complete reads use ?after=<meta.next_cursor>: the next page by cursor, without a total, as fast at page 10,000 as at page 1', false],
         ['GET',    '/posts/{slug}',   'Get a single post by slug',                                 false],
         ['POST',   '/posts',          'Create a new post',                                         true],
         ['PUT',    '/posts/{id}',     'Replace a post',                                            true],
@@ -236,7 +236,7 @@ $endpoints = [
         ['POST',   '/cache/flush',    'Clear the application cache and reset OPcache. Body: {tag} to clear a single namespace instead of everything. There is deliberately no read/write-by-key endpoint — that would be a cross-app read primitive. Requires manage_settings', true],
     ],
     'Utility' => [
-        ['GET',    '/search',         'Full-text search across posts and pages. ?q=term',          false],
+        ['GET',    '/search',         'Search published posts. ?q=term: every word of three letters or more must appear (word prefixes match). Limited per visitor (Settings → Reading; 429 + Retry-After when over)', false],
     ],
 ];
 

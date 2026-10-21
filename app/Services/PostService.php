@@ -139,11 +139,11 @@ class PostService
 
         $type = $data['type'] ?? 'post';
         $title = trim($data['title'] ?? 'Untitled');
-        $slug = !empty($data['slug']) ? Helpers::slug($data['slug']) : Helpers::slug($title);
+        $slug = !empty($data['slug']) ? Helpers::slug($data['slug'], '-', true) : Helpers::slug($title, '-', true);
 
         // Held from choosing the slug until the row exists, so two saves at
         // once cannot both take the same free slug.
-        $locked = $this->repo->lockSlugs();
+        $locked = $this->slugLock();
         try {
         $slug = $this->resolveSlug($slug, $type);
 
@@ -226,8 +226,8 @@ class PostService
         }
         $locked = false;
         if (isset($data['slug'])) {
-            $slug = Helpers::slug($data['slug']);
-            $locked = $this->repo->lockSlugs();
+            $slug = Helpers::slug($data['slug'], '-', true);
+            $locked = $this->slugLock();
             $payload['slug'] = $this->resolveSlug($slug, $existing['type'], $id);
         }
         if (isset($data['status']) || array_key_exists('published_at', $data)) {
@@ -464,9 +464,10 @@ class PostService
         ], $page, $perPage);
     }
 
+    /** Count a view: buffered, direct or not at all (Settings → Reading; PostViewCounter, 1.2.76). */
     public function incrementViewCount(int $id): void
     {
-        $this->repo->incrementViewCount($id);
+        \App\Core\Application::getInstance()->make(PostViewCounter::class)->record($id);
     }
 
     /** Types that live at the site root and therefore share one slug namespace. */
@@ -504,18 +505,42 @@ class PostService
 
     private function resolveSlug(string $base, string $type, ?int $excludeId = null): string
     {
-        // Leave room for a "-N" suffix inside the 200-character column.
-        $base = rtrim(substr($base !== '' ? $base : 'untitled', 0, 190), '-') ?: 'untitled';
+        // Leave room for a "-N" suffix inside the 200-character column; cut on
+        // a character boundary, since slugs may be Unicode (1.2.76).
+        $base = $base !== '' ? $base : 'untitled';
+        if (strlen($base) > 190) $base = mb_strcut($base, 0, 190, 'UTF-8');
+        $base = rtrim($base, '-') ?: 'untitled';
         $global   = in_array($type, self::ROOT_TYPES, true);
         $types    = $global ? self::ROOT_TYPES : [$type];
         $reserved = $global ? Helpers::reservedSlugs() : [];
 
-        $slug = $base;
-        $i = 2;
-        while (in_array($slug, $reserved, true) || $this->repo->slugTaken($slug, $types, $excludeId)) {
-            $slug = $base . '-' . $i++;
+        // One query for the base and all its numbered variants (CR-18): it
+        // used to be one query per number tried, so the thousandth "Blue
+        // T-Shirt" took a thousand queries while holding the slug lock.
+        $taken = $this->repo->slugsLike($base, $types, $excludeId);
+        if (!isset($taken[$base]) && !in_array($base, $reserved, true)) return $base;
+        $max = 1;
+        $pattern = '/^' . preg_quote($base, '/') . '-(\d{1,9})$/u';
+        foreach ($taken as $slug => $_) {
+            if (preg_match($pattern, (string) $slug, $m)) $max = max($max, (int) $m[1]);
         }
-        return $slug;
+        $n = $max + 1;
+        while (in_array($base . '-' . $n, $reserved, true) || isset($taken[$base . '-' . $n])) $n++;
+        return $base . '-' . $n;
+    }
+
+    /**
+     * Take the slug lock, or refuse the save (CR-18). Before 1.2.76 a save
+     * that waited 5 s went ahead without it, racing the save that held it.
+     * A database without GET_LOCK (null) carries on, as before.
+     */
+    private function slugLock(): bool
+    {
+        $got = $this->repo->lockSlugs();
+        if ($got === false) {
+            throw new \RuntimeException('The site is busy saving other content. Please try again in a moment.');
+        }
+        return $got === true;
     }
 
     /**

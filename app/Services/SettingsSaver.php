@@ -62,6 +62,7 @@ final class SettingsSaver
             'authorization' => $this->authorization($in, $user),
             'permalinks'    => $this->permalinks($in),
             'ai'            => $this->ai($in),
+            'reading'       => $this->reading($in),
             default         => isset(self::TABS[$tab]) ? $this->generic($tab, $in) : self::result(false, 'error', 'Unknown settings screen.'),
         };
     }
@@ -79,6 +80,25 @@ final class SettingsSaver
             $this->settings->set($tab, (string) $key, $val);
         }
         return self::result(true, 'success', self::label($tab) . ' settings saved.');
+    }
+
+    /** Reading: the search and view-count options (1.2.76) are checked first. */
+    private function reading(array $in): array
+    {
+        if (isset($in['search_mode']) && !in_array((string) $in['search_mode'], ['auto', 'like'], true)) {
+            return self::result(false, 'error', 'Choose a search method from the list.');
+        }
+        if (isset($in['search_rate_limit'])) {
+            $n = filter_var($in['search_rate_limit'], FILTER_VALIDATE_INT);
+            if ($n === false || $n < 0 || $n > 1000) {
+                return self::result(false, 'error', 'Searches per minute must be a whole number from 0 (no limit) to 1000.');
+            }
+            $in['search_rate_limit'] = (string) $n;
+        }
+        if (isset($in['view_counting']) && !in_array((string) $in['view_counting'], ['buffered', 'direct', 'off'], true)) {
+            return self::result(false, 'error', 'Choose how page views are counted from the list.');
+        }
+        return $this->generic('reading', $in);
     }
 
     private function general(array $in, ?array $user = null): array

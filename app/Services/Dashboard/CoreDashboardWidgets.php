@@ -29,7 +29,7 @@ final class CoreDashboardWidgets
     {
         $reg->register('core.dashboard.at-a-glance', [
             'title'       => 'At a glance',
-            'description' => 'How much content, media, comments and people the site has — only what you can manage.',
+            'description' => 'Quick overview of your site activity',
             'icon'        => 'chart-bar',
             'source'      => 'core',
             'surfaces'    => ['dashboard'],
@@ -49,7 +49,7 @@ final class CoreDashboardWidgets
 
         $reg->register('core.dashboard.recent-posts', [
             'title'       => 'Recent posts',
-            'description' => 'The newest posts you can edit, with their status.',
+            'description' => 'The newest posts you can edit',
             'icon'        => 'newspaper',
             'source'      => 'core',
             'surfaces'    => ['dashboard'],
@@ -78,7 +78,7 @@ final class CoreDashboardWidgets
 
         $reg->register('core.dashboard.recent-comments', [
             'title'       => 'Recent comments',
-            'description' => 'The newest comments, with the ones waiting for you marked.',
+            'description' => 'New comments, and the ones waiting for you',
             'icon'        => 'chat-bubble-left-right',
             'source'      => 'core',
             'surfaces'    => ['dashboard'],
@@ -92,6 +92,7 @@ final class CoreDashboardWidgets
             'dashboard'   => [
                 'view'     => 'feed',
                 'priority' => 30,
+                'tone'     => 'amber',
                 'sizes'    => ['third', 'half', 'full'],
                 'size'     => 'third',
                 'refresh'  => 300,
@@ -105,14 +106,15 @@ final class CoreDashboardWidgets
 
         $reg->register('core.dashboard.publishing-activity', [
             'title'       => 'Publishing activity',
-            'description' => 'Posts published each month.',
+            'description' => 'Total posts published over time',
             'icon'        => 'calendar',
             'source'      => 'core',
             'surfaces'    => ['dashboard'],
             'capability'  => 'edit_posts',
             'fields'      => [
-                ['key' => 'months', 'label' => 'Period', 'type' => 'select', 'default' => '6', 'options' => [
-                    '6' => 'Last 6 months', '12' => 'Last 12 months',
+                // 'inline': the period picker sits in the card's header (1.2.77).
+                ['key' => 'months', 'label' => 'Period', 'type' => 'select', 'default' => '6', 'inline' => true, 'options' => [
+                    '6' => 'Last 6 months', 'year' => 'This year', '12' => 'Last 12 months',
                 ]],
             ],
             'dashboard'   => [
@@ -128,7 +130,7 @@ final class CoreDashboardWidgets
 
         $reg->register('core.dashboard.site-health', [
             'title'       => 'Site health',
-            'description' => 'PHP, database, storage and update checks from the System page.',
+            'description' => 'Checks from the System page',
             'icon'        => 'heart',
             'source'      => 'core',
             'surfaces'    => ['dashboard'],
@@ -136,6 +138,7 @@ final class CoreDashboardWidgets
             'dashboard'   => [
                 'view'     => 'status',
                 'priority' => 50,
+                'tone'     => 'green',
                 'sizes'    => ['third', 'half'],
                 'size'     => 'third',
                 'cache'    => ['ttl' => 300, 'scope' => 'global'],
@@ -148,7 +151,7 @@ final class CoreDashboardWidgets
 
         $reg->register('core.dashboard.my-activity', [
             'title'       => 'Your recent activity',
-            'description' => 'Your own sign-ins and changes, newest first.',
+            'description' => 'Your sign-ins and changes, newest first',
             'icon'        => 'clock',
             'source'      => 'core',
             'surfaces'    => ['dashboard'],
@@ -159,6 +162,7 @@ final class CoreDashboardWidgets
             'dashboard'   => [
                 'view'     => 'feed',
                 'priority' => 60,
+                'tone'     => 'violet',
                 'sizes'    => ['third', 'half', 'full'],
                 'size'     => 'third',
                 'data'     => [self::class, 'myActivity'],
@@ -179,28 +183,34 @@ final class CoreDashboardWidgets
         $db = self::db();
         $items = [];
         $uid = $ctx->userId();
+        // Growth over the last 30 days, for the trend pills.
+        $since = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
 
         if ($ctx->can('edit_posts')) {
             $all = $ctx->can('edit_others_posts');
-            $c = self::statusCounts($db, 'post', $all ? null : $uid);
+            $c = self::statusCounts($db, 'post', $all ? null : $uid, $since);
             $items[] = [
                 'label' => $all ? 'Posts' : 'Your posts',
                 'value' => $c['total'],
                 'hint'  => sprintf('%d published · %s', $c['published'] ?? 0, self::plural($c['draft'] ?? 0, 'draft')),
                 'href'  => $ctx->url('/admin/posts'),
                 'tone'  => 'blue',
+                'icon'  => 'document-text',
+                'trend' => self::growth($c['total'], $c['recent']),
             ];
         }
         if ($ctx->can('edit_pages')) {
             $all = $ctx->can('edit_others_pages');
-            $c = self::statusCounts($db, 'page', $all ? null : $uid);
+            $c = self::statusCounts($db, 'page', $all ? null : $uid, $since);
             $items[] = ['label' => $all ? 'Pages' : 'Your pages', 'value' => $c['total'],
-                        'hint' => sprintf('%d published', $c['published'] ?? 0), 'href' => $ctx->url('/admin/pages'), 'tone' => 'violet'];
+                        'hint' => sprintf('%d published', $c['published'] ?? 0), 'href' => $ctx->url('/admin/pages'),
+                        'tone' => 'violet', 'icon' => 'document', 'trend' => self::growth($c['total'], $c['recent'])];
         }
         if ($ctx->can('upload_media')) {
-            $row = $db->selectOne('SELECT COUNT(*) AS c, COALESCE(SUM(file_size), 0) AS s FROM {media}') ?? [];
+            $row = $db->selectOne('SELECT COUNT(*) AS c, COALESCE(SUM(file_size), 0) AS s, SUM(created_at >= :since) AS r FROM {media}', ['since' => $since]) ?? [];
             $items[] = ['label' => 'Media', 'value' => (int) ($row['c'] ?? 0),
-                        'hint' => self::bytes((int) ($row['s'] ?? 0)) . ' in the library', 'href' => $ctx->url('/admin/media'), 'tone' => 'slate'];
+                        'hint' => self::bytes((int) ($row['s'] ?? 0)) . ' in the library', 'href' => $ctx->url('/admin/media'),
+                        'tone' => 'green', 'icon' => 'photo', 'trend' => self::growth((int) ($row['c'] ?? 0), (int) ($row['r'] ?? 0))];
         }
         if ($ctx->can('moderate_comments')) {
             $rows = $db->select("SELECT status, COUNT(*) AS c FROM {comments} WHERE status IN ('approved','pending') GROUP BY status");
@@ -208,14 +218,40 @@ final class CoreDashboardWidgets
             $pending = (int) ($by['pending'] ?? 0);
             $items[] = ['label' => 'Comments', 'value' => (int) ($by['approved'] ?? 0) + $pending,
                         'hint' => $pending > 0 ? "{$pending} waiting for review" : 'All reviewed',
-                        'href' => $ctx->url('/admin/comments'), 'tone' => $pending > 0 ? 'amber' : 'green'];
+                        'href' => $ctx->url('/admin/comments'), 'tone' => 'amber', 'icon' => 'chat-bubble-oval-left',
+                        'badge' => $pending > 0 ? ['text' => (string) $pending, 'tone' => 'amber', 'icon' => 'clock'] : null];
         }
         if ($ctx->can('manage_users')) {
-            $row = $db->selectOne("SELECT COUNT(*) AS c FROM {users} WHERE status = 'active'") ?? [];
-            $items[] = ['label' => 'People', 'value' => (int) ($row['c'] ?? 0), 'hint' => 'Active accounts',
-                        'href' => $ctx->url('/admin/users'), 'tone' => 'slate'];
+            $row = $db->selectOne("SELECT COUNT(*) AS c FROM {users} WHERE status = 'active' AND deleted_at IS NULL") ?? [];
+            $total = (int) ($row['c'] ?? 0);
+            $faces = $db->select(
+                "SELECT u.display_name, u.username, m.url AS avatar_url, m.sizes AS avatar_sizes
+                   FROM {users} u LEFT JOIN {media} m ON m.id = u.avatar_media_id
+                  WHERE u.status = 'active' AND u.deleted_at IS NULL
+                  ORDER BY u.last_login_at IS NULL, u.last_login_at DESC, u.id DESC LIMIT 3"
+            );
+            $people = array_map(fn($u) => [
+                'name' => (string) (($u['display_name'] ?? '') !== '' ? $u['display_name'] : $u['username']),
+                'url'  => !empty($u['avatar_url']) ? \App\Services\AvatarService::pick((string) $u['avatar_url'], $u['avatar_sizes'] ?? null, 64) : null,
+            ], $faces);
+            $items[] = ['label' => 'People', 'value' => $total, 'hint' => 'Active accounts',
+                        'href' => $ctx->url('/admin/users'), 'tone' => 'indigo', 'icon' => 'user-group', 'wide' => true,
+                        'people' => ['items' => $people, 'more' => max(0, $total - count($people))]];
         }
         return ['items' => $items];
+    }
+
+    /**
+     * A trend pill: how much the count grew in the last 30 days, against what
+     * there was before them. None when nothing is new, or nothing came before.
+     */
+    private static function growth(int $total, int $recent): ?array
+    {
+        $before = $total - $recent;
+        if ($recent <= 0 || $before <= 0) return null;
+        $pct = (int) round($recent / $before * 100);
+        if ($pct < 1) return null;
+        return ['direction' => 'up', 'text' => '+' . ($pct > 999 ? '999' : $pct) . '%', 'good' => true];
     }
 
     public static function recentPosts(WidgetContext $ctx): array
@@ -275,8 +311,9 @@ final class CoreDashboardWidgets
 
     public static function publishingActivity(WidgetContext $ctx): array
     {
-        $months = (int) $ctx->setting('months', '6') === 12 ? 12 : 6;
+        $period = (string) $ctx->setting('months', '6');
         $start = new \DateTimeImmutable('first day of this month 00:00', new \DateTimeZone('UTC'));
+        $months = $period === 'year' ? (int) $start->format('n') : ($period === '12' ? 12 : 6);
         $start = $start->modify('-' . ($months - 1) . ' months');
         $params = ['from' => $start->format('Y-m-d H:i:s')];
         $own = '';
@@ -310,6 +347,7 @@ final class CoreDashboardWidgets
             'series'  => [['name' => 'Posts published', 'values' => array_values($buckets)]],
             'summary' => ($total === 1 ? '1 post published' : "{$total} posts published")
                 . ' since ' . $start->format('F Y'),
+            'summary_icon' => 'document-text',
         ];
     }
 
@@ -382,19 +420,20 @@ final class CoreDashboardWidgets
         return ucfirst(str_replace('_', ' ', $parts[1] ?? $parts[0])) . (isset($parts[1]) ? ' (' . $parts[0] . ')' : '');
     }
 
-    /** @return array<string,int> status => count, plus 'total' */
-    private static function statusCounts(Database $db, string $type, ?int $authorId): array
+    /** @return array<string,int> status => count, plus 'total' and 'recent' (created since $since) */
+    private static function statusCounts(Database $db, string $type, ?int $authorId, ?string $since = null): array
     {
-        $sql = 'SELECT status, COUNT(*) AS c FROM {posts} WHERE type = :t AND deleted_at IS NULL';
-        $params = ['t' => $type];
+        $sql = 'SELECT status, COUNT(*) AS c, SUM(created_at >= :since) AS r FROM {posts} WHERE type = :t AND deleted_at IS NULL';
+        $params = ['t' => $type, 'since' => $since ?? '9999-12-31 00:00:00'];
         if ($authorId !== null) {
             $sql .= ' AND author_id = :a';
             $params['a'] = $authorId;
         }
-        $out = ['total' => 0];
+        $out = ['total' => 0, 'recent' => 0];
         foreach ($db->select($sql . ' GROUP BY status', $params) as $r) {
             $out[(string) $r['status']] = (int) $r['c'];
             $out['total'] += (int) $r['c'];
+            $out['recent'] += (int) $r['r'];
         }
         return $out;
     }

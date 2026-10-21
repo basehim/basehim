@@ -36,7 +36,7 @@ final class DashboardService
     public const MAX_BATCH = 30;
     private const ID_PATTERN = '/^[a-z][a-z0-9-]{2,40}$/';
     private const MAX_SETTINGS_BYTES = 4000;
-    private const TONES = ['slate', 'blue', 'green', 'amber', 'red', 'violet'];
+    private const TONES = WidgetRegistry::TONES;
 
     /** @var callable(string):string */
     private $ownerLabel;
@@ -99,6 +99,7 @@ final class DashboardService
                 'title'       => $w['title'],
                 'description' => $w['description'],
                 'icon'        => $w['icon'],
+                'tone'        => $d['tone'] ?? 'blue',
                 'owner'       => $w['source'],
                 'owner_label' => ($this->ownerLabel)($w['source']),
                 'sizes'       => $d['sizes'],
@@ -466,6 +467,9 @@ final class DashboardService
             'ok'         => true,
             'view'       => $view,
             'data'       => $payload,
+            // The SVG of every icon the data names, from core's own icon set,
+            // so a widget can use any of them (1.2.77).
+            'icons'      => $this->iconsFor($payload),
             'empty'      => $this->isEmpty($view, $payload),
             'fetched_at' => gmdate('c'),
             'took_ms'    => (int) round((microtime(true) - $started) * 1000),
@@ -566,7 +570,13 @@ final class DashboardService
                 if (isset($f[$n]) && is_numeric($f[$n])) $c[$n] = $f[$n] + 0;
             }
             if (isset($f['help']) && is_string($f['help'])) $c['help'] = $f['help'];
-            if ($c['type'] === 'select') $c['options'] = WidgetRegistry::fieldOptions($f);
+            if ($c['type'] === 'select') {
+                $c['options'] = WidgetRegistry::fieldOptions($f);
+                // The options' order: JSON objects lose it for keys like '6' and '12'.
+                $c['order'] = array_map('strval', array_keys($c['options']));
+                // Shown in the card's header as well as in Settings (1.2.77).
+                if (!empty($f['inline'])) $c['inline'] = true;
+            }
             $out[] = $c;
         }
         return $out;
@@ -644,6 +654,7 @@ final class DashboardService
             ];
         }
         if (isset($raw['summary'])) $common['summary'] = $this->str($raw['summary'], 300);
+        if (isset($raw['summary_icon']) && ($ic = $this->iconName($raw['summary_icon'])) !== null) $common['summary_icon'] = $ic;
 
         $p = match ($view) {
             'stat' => ['items' => $this->mapList($raw['items'] ?? [], 8, fn($i) => [
@@ -652,11 +663,27 @@ final class DashboardService
                 'hint'  => $this->str($i['hint'] ?? '', 120),
                 'href'  => $this->href($i['href'] ?? null),
                 'tone'  => $this->tone($i['tone'] ?? null),
+                'icon'  => $this->iconName($i['icon'] ?? null),
                 'trend' => is_array($i['trend'] ?? null) ? [
                     'direction' => in_array($i['trend']['direction'] ?? '', ['up', 'down', 'flat'], true) ? $i['trend']['direction'] : 'flat',
                     'text'      => $this->str($i['trend']['text'] ?? '', 40),
                     'good'      => (bool) ($i['trend']['good'] ?? (($i['trend']['direction'] ?? '') === 'up')),
                 ] : null,
+                // A count that needs attention, in place of a trend (1.2.77).
+                'badge' => is_array($i['badge'] ?? null) && ($i['badge']['text'] ?? '') !== '' ? [
+                    'text' => $this->str($i['badge']['text'], 40),
+                    'tone' => $this->tone($i['badge']['tone'] ?? null),
+                    'icon' => $this->iconName($i['badge']['icon'] ?? null),
+                ] : null,
+                // Faces of who is counted (1.2.77): up to 5, plus how many more.
+                'people' => is_array($i['people'] ?? null) ? [
+                    'items' => $this->mapList($i['people']['items'] ?? [], 5, fn($p) => [
+                        'name' => $this->str($p['name'] ?? '', 80),
+                        'url'  => $this->href($p['url'] ?? null),
+                    ]),
+                    'more'  => max(0, (int) ($i['people']['more'] ?? 0)),
+                ] : null,
+                'wide'  => !empty($i['wide']),
             ])],
             'list' => ['items' => $this->mapList($raw['items'] ?? [], 50, fn($i) => [
                 'title'  => $this->str($i['title'] ?? '', 200),
@@ -760,6 +787,31 @@ final class DashboardService
         if (!is_array($v)) return null;
         $href = $this->href($v['url'] ?? $v['href'] ?? null);
         return $href === null ? null : ['label' => $this->str($v['label'] ?? 'Open', 60), 'url' => $href];
+    }
+
+    /** An icon name from core's set, or null. */
+    private function iconName(mixed $v): ?string
+    {
+        return is_string($v) && preg_match('/^[a-z0-9-]{1,40}$/', $v) && \App\Core\Icon::has($v) ? $v : null;
+    }
+
+    /** @return array<string,string> name => SVG for the icons a payload uses */
+    private function iconsFor(array $payload): array
+    {
+        $names = [];
+        $walk = function (mixed $v) use (&$walk, &$names): void {
+            if (!is_array($v)) return;
+            foreach ($v as $k => $x) {
+                if (($k === 'icon' || $k === 'summary_icon') && is_string($x)) $names[$x] = true;
+                elseif (is_array($x)) $walk($x);
+            }
+        };
+        $walk($payload);
+        $out = [];
+        foreach (array_keys($names) as $n) {
+            if ($this->iconName($n) !== null) $out[$n] = \App\Core\Icon::svg($n, 'w-4 h-4');
+        }
+        return $out;
     }
 
     private function tone(mixed $v): ?string

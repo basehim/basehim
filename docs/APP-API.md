@@ -115,6 +115,15 @@ crontab and a page visit, or two servers). A run killed by a time limit leaves
 its lease behind; when it expires the task runs again and the lost run is
 logged. Make handlers safe to run again after an interruption.
 
+Core has tasks of its own (1.2.76), listed on Admin → System under `core`:
+`post-views` adds buffered page views to `posts.view_count` every minute, and
+`cleanup` removes expired sign-in tokens, old activity logs, notifications,
+log files and idle session files once a day (retention in days:
+`retention.activity_days` 180, `retention.notification_days` 90,
+`retention.log_days` 30; 0 keeps them). So `view_count` can be a minute
+behind; Settings → Reading → Page views switches back to counting on every
+view, or off.
+
 A task that keeps failing **backs off**: after *n* failures in a row its next
 run is `interval × 2ⁿ⁻¹` away, up to a day (or its own interval, if longer).
 One success resets it. Admin → System lists failing tasks with their last
@@ -160,6 +169,13 @@ arbitrary code execution, so a task whose app isn't booted is skipped, not fired
   handled once per id with `$this->api()->idempotency()->once($scope, $id, $fn)`.
   See PUBLIC-ROUTES.md for verifying webhook signatures with
   `App\Core\Http\Webhook`.
+- **Settings saved with `autoload = false`** are not loaded on every
+  request: use it for anything large or written often — a cache of remote
+  data, a sync cursor, a counter —
+  `$this->api()->settings()->set('app:' . $this->slug(), 'feed_cache', $data, false)`
+  (`$this->setSetting()` always autoloads). They are
+  read the first time they are asked for, and writing one does not clear the
+  cached settings of every request (1.2.76).
 - **`users()` strips password hashes** from every return value.
 - **`all()` is capped** (500 by default) so a large table can't exhaust memory
   on shared hosting. Raise it deliberately or use `paginate()`.

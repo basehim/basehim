@@ -4,6 +4,16 @@ Basehim's admin layout (1.2.28+) provides a small set of components so core
 screens and apps look and behave the same. Use them instead of hand-written
 Tailwind class strings.
 
+Since 1.2.77 they are Tailwind components: written with `@apply` in
+`admin/assets/css/src/tailwind.css` and compiled into
+`admin/assets/css/tailwind.min.css`, which every admin layout loads. They share
+one family of shapes: cards and large buttons `rounded-2xl` with a slate-200
+hairline and the `shadow-card` elevation; buttons, inputs and tiles
+`rounded-xl`; icon squares `rounded-xl` in a light tint of their colour. Sites
+never build anything. After changing a view or the source, rebuild with
+`npm run build:css` (Tailwind 3.4, see `tailwind.config.js`); a class made up
+at runtime must appear whole in a scanned file or the source.
+
 ## Buttons
 
 ```html
@@ -14,8 +24,20 @@ Tailwind class strings.
 ```
 
 Variants: `--primary` (one per screen, the main action), `--secondary`,
-`--danger` (destructive), `--ghost` (low emphasis). Size: `--sm`.
-Icons from `icon()` sit inside and are sized for you.
+`--danger` (destructive), `--ghost` (low emphasis). Sizes: `--sm`, and `--lg`
+for a screen's few large actions (the dashboard's New post, Upload,
+Customize), which lead with an icon square and end with a chevron:
+
+```html
+<a href="…" class="bh-btn bh-btn--secondary bh-btn--lg">
+  <span class="bh-btn__icon bh-btn__icon--green" aria-hidden="true"><?= icon('arrow-up-tray', 'w-5 h-5') ?></span>
+  <span class="bh-btn__label">Upload</span><?= icon('chevron-right', 'bh-btn__chev') ?>
+</a>
+```
+
+Icon square tints: default blue, `--green`, `--violet`, `--amber`; on a
+primary button it is white on the button's blue. Icons from `icon()` sit
+inside and are sized for you.
 
 While a request runs: `bhBusy(button, true, 'Saving…')`, then
 `bhBusy(button, false)` — shows a spinner, blocks clicks, restores the label.
@@ -50,7 +72,7 @@ field is linked automatically, but explicit is better).
 ## Badges
 
 `<span class="bh-badge bh-badge--green">Published</span>` —
-`--gray`, `--blue`, `--green`, `--amber`, `--red`.
+`--gray`, `--blue`, `--green`, `--amber`, `--red`, `--violet`, `--indigo` (the last two since 1.2.77).
 
 ## Empty states
 
@@ -134,56 +156,6 @@ Basehim.ajax.request('media.update', { id: 42, alt_text: input.value })
 
 `err.message` is written for people and safe to show. Actions are registered
 in PHP; see APP-AJAX.md.
-
-## Media picker (JavaScript)
-
-Every admin screen has one picker: `BasehimMedia.openPicker()`. It reads the
-library from the server one page at a time (40 files per page). **Load more**
-fetches the next page and adds it to the grid. Search, type and date filters
-start the list over. Use the picker; do not build your own.
-
-```js
-BasehimMedia.openPicker({
-    types: 'image/*',              // or ['image', 'svg'], 'video', 'audio', 'document'; '' = everything
-    multiple: false,               // true: click to add or remove; the button says "Select (3)"
-    selected: currentId,           // an id or a list of ids, already selected when the picker opens
-    title: 'Choose a hero image',
-    confirmLabel: 'Use image',
-    onSelect: function (item) {},          // once for each chosen file
-    onSelectMany: function (items) {},     // multiple: all at once (optional)
-    onCancel: function () {}
-});
-```
-
-- **`item`:** the media row as `media.list` returns it: `id`, `url`, `mime_type`, `sizes`,
-  `alt_text`, `caption`, `title`, `width`, `height`, `file_size` and so on. `url` is the
-  original file. For a preview, use `sizes.medium.url` or `sizes.thumbnail.url`.
-- **`types`:** only narrows the list. What a person may see is decided by the server
-  (`upload_media`).
-- **Uploads:** a file uploaded in the picker appears first and is selected.
-- **Alt text and caption:** edited in the picker's side panel. They save as you type.
-
-Without any JavaScript, mark up a field and it works:
-
-```html
-<div data-bh-media data-bh-media-types="image" data-bh-media-title="Choose a logo">
-  <input type="hidden" name="logo" data-bh-media-value value="/uploads/logo.png">
-  <input type="hidden" name="logo_id" data-bh-media-id value="12">   <!-- optional -->
-  <div data-bh-media-preview></div>
-  <button type="button" data-bh-media-pick>Choose</button>
-  <button type="button" data-bh-media-clear>Remove</button>
-</div>
-```
-
-When the field changes it fires `bh:media` with `{ media, value }`. A theme's
-customizer `image` option can set `'types' => 'image/*'`, which is the default.
-
-The picker uses these AJAX actions, which a screen can also call directly:
-
-- **`media.list`:** `page`, `per_page` (up to 100), `q`, `type`, `types`,
-  `month` (`YYYY-MM`), `sort`. The response has `meta.has_more`. Page 1 also
-  carries the type counts, and the month list when you send `months=1`.
-- **`media.get`:** one item, with `can.edit` and `can.delete`.
 
 ## Also automatic
 

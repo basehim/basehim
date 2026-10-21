@@ -53,6 +53,12 @@ docs/**            linguist-documentation
 /tests          export-ignore basehim-sync
 /.gitattributes export-ignore basehim-sync
 
+# Build sources for the admin CSS (1.2.77): kept on GitHub, synced with each
+# release, not in the download (the compiled tailwind.min.css is).
+/tailwind.config.js     export-ignore basehim-sync
+/package.json           export-ignore basehim-sync
+/admin/assets/css/src   export-ignore basehim-sync
+
 # Repository tooling: not in the download, never touched by a sync.
 /.github        export-ignore
 /.gitignore     export-ignore
@@ -65,3 +71,4 @@ docs/**            linguist-documentation
 /CHANGELOG-*.md      export-ignore
 /RELEASE-NOTES-*.md  export-ignore
 /app/Http/Controllers/Web/CategoryPostController.php export-ignore
+/admin/assets/css/dashboard.css export-ignore

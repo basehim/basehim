@@ -363,72 +363,9 @@ try {
     .bh-sidebar { transition: width .2s ease, transform .32s cubic-bezier(.4, 0, .2, 1); }
     @media (max-width: 1023px) { .bh-sidebar { will-change: transform; } }
 
-    /* =====================================================================
-       Admin UI components (1.2.28) — for core screens and apps alike.
-       See docs/ADMIN-UI.md. Buttons: .bh-btn + --primary|--secondary|--danger|--ghost
-       (+ --sm). Cards: .bh-card (+ __head, __body, --pad). Fields: .bh-label,
-       .bh-input / .bh-select / .bh-textarea, .bh-help. Badges: .bh-badge +
-       --gray|--blue|--green|--amber|--red. Empty states: .bh-empty.
-       ===================================================================== */
-    .bh-btn {
-        display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
-        padding: .5rem 1rem; border: 1px solid transparent; border-radius: .5rem;
-        font: inherit; font-size: .875rem; font-weight: 600; line-height: 1.25; white-space: nowrap;
-        text-decoration: none; cursor: pointer; user-select: none;
-        transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
-    }
-    .bh-btn svg { width: 1rem; height: 1rem; flex: none; }
-    .bh-btn:disabled, .bh-btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
-    .bh-btn--sm { padding: .375rem .75rem; font-size: .8125rem; }
-    .bh-btn--primary { background: #2563eb; color: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, .06); }
-    .bh-btn--primary:hover:not(:disabled) { background: #1d4ed8; }
-    .bh-btn--secondary { background: #fff; color: #334155; border-color: #cbd5e1; }
-    .bh-btn--secondary:hover:not(:disabled) { background: #f8fafc; border-color: #94a3b8; color: #0f172a; }
-    .bh-btn--danger { background: #dc2626; color: #fff; }
-    .bh-btn--danger:hover:not(:disabled) { background: #b91c1c; }
-    .bh-btn--ghost { background: transparent; color: #475569; }
-    .bh-btn--ghost:hover:not(:disabled) { background: #f1f5f9; color: #0f172a; }
-    /* Busy (bhBusy): a spinner in front, clicks blocked. */
-    .bh-btn[aria-busy="true"] { cursor: progress; pointer-events: none; opacity: .85; }
-    .bh-btn[aria-busy="true"]::before {
-        content: ""; width: .875rem; height: .875rem; border-radius: 50%; flex: none;
-        border: 2px solid currentColor; border-right-color: transparent; animation: bh-spin .7s linear infinite;
-    }
-    @keyframes bh-spin { to { transform: rotate(360deg); } }
-
-    .bh-card { background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem; }
-    .bh-card--pad, .bh-card__body { padding: 1.25rem; }
-    .bh-card__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid #f1f5f9; }
-    .bh-card__title { font-size: .9375rem; font-weight: 600; color: #0f172a; margin: 0; }
-
-    .bh-label { display: block; font-size: .875rem; font-weight: 500; color: #334155; margin-bottom: .375rem; }
-    .bh-input, .bh-select, .bh-textarea {
-        display: block; width: 100%; padding: .5rem .75rem; border: 1px solid #cbd5e1; border-radius: .5rem;
-        background: #fff; color: #0f172a; font: inherit; font-size: .875rem; line-height: 1.4;
-        transition: border-color .15s ease, box-shadow .15s ease;
-    }
-    .bh-input::placeholder, .bh-textarea::placeholder { color: #94a3b8; }
-    .bh-input:focus, .bh-select:focus, .bh-textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, .2); }
-    .bh-input[aria-invalid="true"], .bh-select[aria-invalid="true"], .bh-textarea[aria-invalid="true"] { border-color: #ef4444; }
-    .bh-textarea { min-height: 6rem; resize: vertical; }
-    /* Natural width (filters in a row) and a compact size (toolbars). */
-    .bh-input--auto, .bh-select--auto { display: inline-block; width: auto; }
-    .bh-input--sm, .bh-select--sm { padding: .375rem .625rem; font-size: .75rem; }
-    .bh-help { font-size: .75rem; color: #64748b; margin-top: .375rem; line-height: 1.45; }
-
-    .bh-badge { display: inline-flex; align-items: center; gap: .3rem; padding: .125rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; line-height: 1.4; white-space: nowrap; }
-    .bh-badge--gray  { background: #f1f5f9; color: #475569; }
-    .bh-badge--blue  { background: #eff6ff; color: #1d4ed8; }
-    .bh-badge--green { background: #ecfdf5; color: #047857; }
-    .bh-badge--amber { background: #fffbeb; color: #b45309; }
-    .bh-badge--red   { background: #fef2f2; color: #b91c1c; }
-
-    .bh-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: .35rem; padding: 2.5rem 1.25rem; }
-    .bh-empty__icon { width: 3rem; height: 3rem; border-radius: 50%; display: grid; place-items: center; background: #f1f5f9; color: #64748b; margin-bottom: .4rem; }
-    .bh-empty__icon svg { width: 1.5rem; height: 1.5rem; }
-    .bh-empty__title { font-size: .9375rem; font-weight: 600; color: #0f172a; margin: 0; }
-    .bh-empty__text { font-size: .875rem; color: #64748b; margin: 0; max-width: 32rem; line-height: 1.5; }
-    .bh-empty__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; margin-top: .85rem; }
+    /* Admin UI components (.bh-btn, .bh-card, .bh-label/.bh-input, .bh-badge,
+       .bh-empty) are Tailwind components since 1.2.77: admin/assets/css/src/tailwind.css,
+       compiled into tailwind.min.css. See docs/ADMIN-UI.md. */
 
     /* Toasts (bhToast) */
     .bh-toasts { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 70; display: grid; gap: .5rem; justify-items: end; pointer-events: none; }

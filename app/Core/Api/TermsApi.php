@@ -92,10 +92,10 @@ class TermsApi extends Resource
         return $this->findBySlug($taxonomySlug, $slug);
     }
 
+    /** The slug TaxonomyService would give this name (1.2.76: the same rules, Unicode included). */
     private function slugify(string $text): string
     {
-        $text = strtolower(trim($text));
-        $text = preg_replace('/[^a-z0-9]+/', '-', $text) ?? '';
-        return trim($text, '-') ?: 'term';
+        $slug = \App\Core\Helpers::slug($text, '-', true);
+        return $slug === 'n-a' ? 'term' : $slug;
     }
 }

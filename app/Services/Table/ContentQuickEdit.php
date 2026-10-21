@@ -132,17 +132,17 @@ abstract class ContentQuickEdit implements QuickEditor
             } else {
                 // Empty: made from the title, as for a new post.
                 $source = $raw !== '' ? $raw : (string) ($data['title'] ?? $post['title']);
-                $slug = Helpers::slug($source);
+                $slug = Helpers::slug($source, '-', true);
                 $unusable = $slug === '' || $slug === 'n-a';
                 if ($unusable && $raw !== '') {
-                    $errors['slug'][] = 'Use letters a–z, numbers and hyphens in the slug.';
+                    $errors['slug'][] = 'Use letters, numbers and hyphens in the slug.';
                     $slug = null;
                 } elseif ($unusable) {
                     $slug = Helpers::slug('untitled');    // a title with no Latin letters, as PostService does
                 }
             }
             if ($raw !== null && $slug !== null) {
-                if (strlen($slug) > 190) $slug = rtrim(substr($slug, 0, 190), '-');
+                if (strlen($slug) > 190) $slug = rtrim(mb_strcut($slug, 0, 190, 'UTF-8'), '-');
                 // Posts and pages share one address space (PostService::resolveSlug).
                 $root = in_array($type, ['post', 'page'], true);
                 $types = $root ? ['post', 'page'] : [$type];

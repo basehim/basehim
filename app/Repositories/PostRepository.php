@@ -3,11 +3,29 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Core\Cache;
 use App\Core\Database;
 
 class PostRepository
 {
-    public function __construct(private Database $db) {}
+    /** Public list totals are cached this long (1.2.76, CR-17); any save starts a new generation. */
+    public const COUNT_TTL = 300;
+    private const GEN_KEY = 'posts.list_generation';
+    private const FT_FAILED_KEY = 'posts.fulltext_unavailable';
+
+    /** Set once a FULLTEXT query has failed in this process (no index, an engine without it). */
+    private static bool $fulltextFailed = false;
+
+    /**
+     * @param \Closure|null $searchMode returns the reading.search_mode setting:
+     *        'auto' (FULLTEXT where possible) or 'like' (substring match, the
+     *        behaviour before 1.2.76)
+     */
+    public function __construct(
+        private Database $db,
+        private ?Cache $cache = null,
+        private ?\Closure $searchMode = null,
+    ) {}
 
     /**
      * Decorate a row: normalize featured_url for the install location, and
@@ -167,16 +185,45 @@ class PostRepository
     /**
      * Serialise slug allocation across requests, so two saves at the same
      * moment cannot both claim the same free slug — a post and a page share
-     * one namespace, which no database index covers. Returns false if the
-     * lock could not be taken; the caller proceeds regardless, and the
-     * (type, slug) unique index still prevents a same-type duplicate.
+     * one namespace, which no database index covers. Since 1.2.76 a save
+     * that cannot get the lock is refused (PostService::slugLock()).
      */
-    public function lockSlugs(): bool
+    public function lockSlugs(): ?bool
     {
+        // true = taken; false = another save held it for 10 s; null = this
+        // database has no named locks (the caller carries on, as before).
         try {
-            $r = $this->db->selectOne('SELECT GET_LOCK(:n, 5) AS l', ['n' => $this->slugLockName()]);
+            $r = $this->db->selectOne('SELECT GET_LOCK(:n, 10) AS l', ['n' => $this->slugLockName()]);
             return (int) ($r['l'] ?? 0) === 1;
-        } catch (\Throwable) { return false; }
+        } catch (\Throwable) { return null; }
+    }
+
+    /**
+     * $base and every "$base-…" slug held by rows of these types (trashed
+     * ones included), as a set: slug => true. One indexed range read.
+     *
+     * @param string[] $types
+     * @return array<string,true>
+     */
+    public function slugsLike(string $base, array $types, ?int $excludeId = null): array
+    {
+        if ($types === []) return [];
+        $params = ['b' => $base, 'b2' => $base, 'pat' => self::escapeLike($base) . '-%'];
+        $in = [];
+        foreach (array_values($types) as $i => $t) { $in[] = ':t' . $i; $params['t' . $i] = $t; }
+        // is_base: equal under the column's collation (case, and for some
+        // scripts more), which is what the unique index compares.
+        $sql = 'SELECT slug, (slug = :b2) AS is_base FROM {posts} WHERE type IN (' . implode(',', $in) . ') AND (slug = :b OR slug LIKE :pat)';
+        if ($excludeId !== null) {
+            $sql .= ' AND id <> :exclude';
+            $params['exclude'] = $excludeId;
+        }
+        $out = [];
+        foreach ($this->db->select($sql, $params) as $r) {
+            $out[(string) $r['slug']] = true;
+            if ((int) $r['is_base'] === 1) $out[$base] = true;
+        }
+        return $out;
     }
 
     public function unlockSlugs(): void
@@ -304,53 +351,242 @@ class PostRepository
                 $where[] = "p.id IN (SELECT pt.post_id FROM {post_term} pt WHERE pt.term_id IN ($in))";
             }
         }
-        if ($search !== null && $search !== '') {
-            $where[] = '(p.title LIKE :search1 OR p.content LIKE :search2 OR p.excerpt LIKE :search3)';
-            $like = '%' . $search . '%';
-            $params['search1'] = $like;
-            $params['search2'] = $like;
-            $params['search3'] = $like;
-        }
+        $published = $status === 'published' && empty($filters['trashed']);
+        $sortKey = (string) ($filters['sort'] ?? 'newest');
 
-        $whereSql = implode(' AND ', $where);
-
+        // Published content always has published_at (PostService sets it;
+        // migration 018 filled any gaps), so its lists sort on
+        // (published_at, id), which idx_list serves without a filesort.
+        // Drafts and mixed lists keep the creation-date fallback (CR-17).
+        $date = $published ? 'p.published_at' : 'COALESCE(p.published_at, p.created_at)';
         // Whitelisted sort orders (never interpolate user input directly).
         $sortMap = [
-            'newest'    => 'COALESCE(p.published_at, p.created_at) DESC',
-            'oldest'    => 'COALESCE(p.published_at, p.created_at) ASC',
-            'title_az'  => 'p.title ASC',
-            'title_za'  => 'p.title DESC',
-            'views_desc' => 'p.view_count DESC',
-            'views_asc'  => 'p.view_count ASC',
+            'newest'     => "{$date} DESC, p.id DESC",
+            'oldest'     => "{$date} ASC, p.id ASC",
+            'title_az'   => 'p.title ASC, p.id ASC',
+            'title_za'   => 'p.title DESC, p.id DESC',
+            'views_desc' => 'p.view_count DESC, p.id DESC',
+            'views_asc'  => 'p.view_count ASC, p.id ASC',
         ];
-        $orderBy = $sortMap[$filters['sort'] ?? 'newest'] ?? $sortMap['newest'];
+        if (!isset($sortMap[$sortKey])) $sortKey = 'newest';
+        $orderBy = $sortMap[$sortKey];
 
-        $countRow = $this->db->selectOne("SELECT COUNT(*) AS c FROM {posts} p WHERE {$whereSql}", $params);
-        $total = (int)($countRow['c'] ?? 0);
+        // Keyset pagination (?after= on the API): only for the newest-first
+        // order of published content, the one with a matching index.
+        $cursor = $published && $sortKey === 'newest' ? self::decodeCursor($filters['after'] ?? null) : null;
 
-        $offset = max(0, ($page - 1) * $perPage);
-        $sql = "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes, u.username AS author_username,
+        $run = function (bool $fulltext) use ($where, $params, $search, $orderBy, $page, $perPage, $published, $cursor, $sortKey): array {
+            if ($search !== null && $search !== '') {
+                $where[] = $this->searchClause((string) $search, 'p', $params, $fulltext);
+            }
+            $whereSql = implode(' AND ', $where);
+            $select = "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes, u.username AS author_username,
                        m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
                 FROM {posts} p
                 LEFT JOIN {users} u ON u.id = p.author_id
                LEFT JOIN {media} av ON av.id = u.avatar_media_id
-                LEFT JOIN {media} m ON m.id = p.featured_media_id
+                LEFT JOIN {media} m ON m.id = p.featured_media_id";
+
+            if ($cursor !== null) {
+                $params['cur_at'] = $cursor[0];
+                $params['cur_at2'] = $cursor[0];
+                $params['cur_id'] = $cursor[1];
+                $items = $this->db->select(
+                    "{$select}
+                     WHERE {$whereSql} AND (p.published_at < :cur_at OR (p.published_at = :cur_at2 AND p.id < :cur_id))
+                     ORDER BY {$orderBy}
+                     LIMIT " . ($perPage + 1),
+                    $params
+                );
+                $more = count($items) > $perPage;
+                $items = array_slice($items, 0, $perPage);
+                return [
+                    'data' => array_map(fn($r) => $this->decorate($r), $items),
+                    'meta' => [
+                        'per_page' => $perPage,
+                        'next_cursor' => $more && $items ? self::encodeCursor(end($items)) : null,
+                    ],
+                ];
+            }
+
+            $total = $this->count("SELECT COUNT(*) AS c FROM {posts} p WHERE {$whereSql}", $params, $published);
+            $offset = max(0, ($page - 1) * $perPage);
+            $items = $this->db->select("{$select}
                 WHERE {$whereSql}
                 ORDER BY {$orderBy}
-                LIMIT {$perPage} OFFSET {$offset}";
+                LIMIT {$perPage} OFFSET {$offset}", $params);
+            $items = array_map(fn($r) => $this->decorate($r), $items);
 
-        $items = $this->db->select($sql, $params);
-        $items = array_map(fn($r) => $this->decorate($r), $items);
-
-        return [
-            'data' => $items,
-            'meta' => [
+            $meta = [
                 'page' => $page,
                 'per_page' => $perPage,
                 'total' => $total,
                 'last_page' => max(1, (int)ceil($total / $perPage)),
-            ],
-        ];
+            ];
+            if ($published && $sortKey === 'newest') {
+                $last = $items ? end($items) : null;
+                $meta['next_cursor'] = $last && $page * $perPage < $total ? self::encodeCursor($last) : null;
+            }
+            return ['data' => $items, 'meta' => $meta];
+        };
+
+        return $this->withSearchFallback($search, $run);
+    }
+
+    // ------------------------------------------------------------------
+    // Search (1.2.76, CR-16)
+    // ------------------------------------------------------------------
+
+    /**
+     * The WHERE condition for a search, with its parameters added to $params.
+     *
+     * With FULLTEXT: every word of three or more characters must appear
+     * (as a word or a word prefix) in the title, content or excerpt, through
+     * idx_ft_content. A query with no such word (one or two letters, or a
+     * script written without spaces) matches the title only, as a substring.
+     * Without FULLTEXT ('like' mode, or after a failure): the old substring
+     * match on all three columns. LIKE wildcards are escaped either way.
+     */
+    public function searchClause(string $q, string $alias, array &$params, bool $fulltext): string
+    {
+        $q = trim($q);
+        $like = '%' . self::escapeLike($q) . '%';
+        $words = $fulltext ? self::fulltextWords($q) : [];
+        if ($words !== []) {
+            $params['ft_q'] = implode(' ', array_map(fn($w) => '+' . $w . '*', $words));
+            return "MATCH({$alias}.title, {$alias}.content, {$alias}.excerpt) AGAINST(:ft_q IN BOOLEAN MODE)";
+        }
+        if ($fulltext) {
+            $params['s_title'] = $like;
+            return "{$alias}.title LIKE :s_title";
+        }
+        $params['s_1'] = $like;
+        $params['s_2'] = $like;
+        $params['s_3'] = $like;
+        return "({$alias}.title LIKE :s_1 OR {$alias}.content LIKE :s_2 OR {$alias}.excerpt LIKE :s_3)";
+    }
+
+    /** Escape %, _ and the escape character itself for a LIKE pattern. */
+    public static function escapeLike(string $s): string
+    {
+        return addcslashes($s, '\\%_');
+    }
+
+    /**
+     * The words of a query that FULLTEXT can use: letters and digits only (the
+     * boolean-mode operators are dropped), three characters or more, at most
+     * eight. Shorter words are below InnoDB's minimum token size.
+     *
+     * @return string[]
+     */
+    public static function fulltextWords(string $q): array
+    {
+        $parts = preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $words = array_values(array_unique(array_filter($parts, fn($w) => mb_strlen($w) >= 3)));
+        return array_slice($words, 0, 8);
+    }
+
+    private function useFulltext(): bool
+    {
+        if (self::$fulltextFailed) return false;
+        try {
+            if ($this->cache?->get(self::FT_FAILED_KEY)) {
+                self::$fulltextFailed = true;
+                return false;
+            }
+        } catch (\Throwable) {}
+        $mode = 'auto';
+        try { $mode = $this->searchMode ? (string) ($this->searchMode)() : 'auto'; } catch (\Throwable) {}
+        return $mode !== 'like';
+    }
+
+    /**
+     * Run a query builder with FULLTEXT when that is on, and again with LIKE
+     * if the database refuses it (no FULLTEXT index on this install, or an
+     * engine without FULLTEXT). The failure is remembered for this request.
+     */
+    private function withSearchFallback(?string $search, \Closure $run): array
+    {
+        $searching = $search !== null && trim((string) $search) !== '';
+        if (!$searching || !$this->useFulltext()) return $run(false);
+        try {
+            return $run(true);
+        } catch (\PDOException $e) {
+            if ($this->db->inTransaction()) throw $e;
+            try {
+                $result = $run(false);
+            } catch (\PDOException) {
+                throw $e;   // not a FULLTEXT problem: the plain search fails too
+            }
+            // FULLTEXT is what failed. Remembered for an hour, so every
+            // search does not fail first.
+            self::$fulltextFailed = true;
+            try { $this->cache?->set(self::FT_FAILED_KEY, 1, 3600); } catch (\Throwable) {}
+            error_log('Basehim: FULLTEXT search unavailable, using LIKE: ' . $e->getMessage());
+            return $result;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Counts and cursors (1.2.76, CR-17)
+    // ------------------------------------------------------------------
+
+    /**
+     * COUNT(*) for a list. Lists of published content are counted at most
+     * once per COUNT_TTL for the same query, and again after any save.
+     */
+    private function count(string $sql, array $params, bool $cacheable): int
+    {
+        $query = fn(): int => (int) ($this->db->selectOne($sql, $params)['c'] ?? 0);
+        if (!$cacheable || $this->cache === null) return $query();
+        try {
+            $key = 'posts.count.' . $this->generation() . '.' . md5($sql . "\n" . json_encode($params));
+            $hit = $this->cache->get($key);
+            if (is_int($hit)) return $hit;
+            $n = $query();
+            $this->cache->set($key, $n, self::COUNT_TTL);
+            return $n;
+        } catch (\PDOException $e) {
+            throw $e;
+        } catch (\Throwable) {
+            return $query();
+        }
+    }
+
+    /** Changes whenever content is saved; for caches built from published content (sitemaps). */
+    public function listGeneration(): string
+    {
+        try { return $this->generation(); } catch (\Throwable) { return '0'; }
+    }
+
+    private function generation(): string
+    {
+        $g = $this->cache?->get(self::GEN_KEY);
+        if (is_string($g) && $g !== '') return $g;
+        $g = bin2hex(random_bytes(4));
+        $this->cache?->set(self::GEN_KEY, $g, 86400);
+        return $g;
+    }
+
+    /** Forget cached list totals: called by every write that can change a list. */
+    public function listsChanged(): void
+    {
+        try { $this->cache?->set(self::GEN_KEY, bin2hex(random_bytes(4)), 86400); } catch (\Throwable) {}
+    }
+
+    /** An opaque cursor for keyset pagination: the last row's published_at and id. */
+    public static function encodeCursor(array $row): string
+    {
+        return rtrim(strtr(base64_encode((string) ($row['published_at'] ?? '') . '|' . (int) ($row['id'] ?? 0)), '+/', '-_'), '=');
+    }
+
+    /** @return array{0:string,1:int}|null */
+    public static function decodeCursor(mixed $cursor): ?array
+    {
+        if (!is_string($cursor) || $cursor === '' || strlen($cursor) > 64) return null;
+        $raw = base64_decode(strtr($cursor, '-_', '+/'), true);
+        if (!is_string($raw) || !preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\|(\d{1,19})$/', $raw, $m)) return null;
+        return [$m[1], (int) $m[2]];
     }
 
     public function publishedFeed(int $page = 1, int $perPage = 10, ?string $type = 'post'): array
@@ -363,12 +599,16 @@ class PostRepository
 
     public function create(array $data): int
     {
-        return (int)$this->db->insert('posts', $data);
+        $id = (int)$this->db->insert('posts', $data);
+        $this->listsChanged();
+        return $id;
     }
 
     public function update(int $id, array $data): int
     {
-        return $this->db->update('posts', $data, ['id' => $id]);
+        $n = $this->db->update('posts', $data, ['id' => $id]);
+        $this->listsChanged();
+        return $n;
     }
 
     // ------------------------------------------------------------------
@@ -414,22 +654,28 @@ class PostRepository
      */
     public function claimScheduled(int $id, string $nowUtc): bool
     {
-        return $this->db->execute(
+        $won = $this->db->execute(
             "UPDATE {posts} SET status = 'published'
               WHERE id = :id AND status = 'scheduled' AND deleted_at IS NULL
                 AND published_at IS NOT NULL AND published_at <= :now",
             ['id' => $id, 'now' => $nowUtc]
         ) === 1;
+        if ($won) $this->listsChanged();
+        return $won;
     }
 
     public function softDelete(int $id): int
     {
-        return $this->db->update('posts', ['deleted_at' => date('Y-m-d H:i:s')], ['id' => $id]);
+        $n = $this->db->update('posts', ['deleted_at' => date('Y-m-d H:i:s')], ['id' => $id]);
+        $this->listsChanged();
+        return $n;
     }
 
     public function restore(int $id): int
     {
-        return $this->db->update('posts', ['deleted_at' => null], ['id' => $id]);
+        $n = $this->db->update('posts', ['deleted_at' => null], ['id' => $id]);
+        $this->listsChanged();
+        return $n;
     }
 
     /** Find a row by id regardless of soft-delete state (for restore/purge). */
@@ -441,7 +687,9 @@ class PostRepository
     public function forceDelete(int $id): int
     {
         $this->releaseTermCounts('p.id = :id', ['id' => $id]);
-        return $this->db->delete('posts', ['id' => $id]);
+        $n = $this->db->delete('posts', ['id' => $id]);
+        $this->listsChanged();
+        return $n;
     }
 
     /**
@@ -492,10 +740,12 @@ class PostRepository
     public function emptyTrash(string $type = 'post'): int
     {
         $this->releaseTermCounts('p.type = :type AND p.deleted_at IS NOT NULL', ['type' => $type]);
-        return $this->db->execute(
+        $n = $this->db->execute(
             'DELETE FROM {posts} WHERE type = :type AND deleted_at IS NOT NULL',
             ['type' => $type]
         );
+        $this->listsChanged();
+        return $n;
     }
 
     public function incrementViewCount(int $id): void
@@ -584,6 +834,7 @@ class PostRepository
         }
 
         $this->recountTerms(array_merge($toRemove, $toAdd));
+        if ($toRemove || $toAdd) $this->listsChanged();
     }
 
     /** Recompute terms.count from post_term for these term ids. */
@@ -635,13 +886,13 @@ class PostRepository
     public function byTermId(int $termId, int $page = 1, int $perPage = 10): array
     {
         $offset = max(0, ($page - 1) * $perPage);
-        $countRow = $this->db->selectOne(
+        $total = $this->count(
             "SELECT COUNT(*) AS c FROM {post_term} pt
              JOIN {posts} p ON p.id = pt.post_id
              WHERE pt.term_id = :tid AND p.status = 'published' AND p.deleted_at IS NULL",
-            ['tid' => $termId]
+            ['tid' => $termId],
+            true
         );
-        $total = (int)($countRow['c'] ?? 0);
 
         $items = $this->db->select(
             "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes,
@@ -652,7 +903,7 @@ class PostRepository
                LEFT JOIN {media} av ON av.id = u.avatar_media_id
              LEFT JOIN {media} m ON m.id = p.featured_media_id
              WHERE pt.term_id = :tid AND p.status = 'published' AND p.deleted_at IS NULL
-             ORDER BY COALESCE(p.published_at, p.created_at) DESC
+             ORDER BY p.published_at DESC, p.id DESC
              LIMIT {$perPage} OFFSET {$offset}",
             ['tid' => $termId]
         );
@@ -667,15 +918,19 @@ class PostRepository
 
     public function search(string $term, int $limit = 20): array
     {
-        $like = '%' . $term . '%';
-        return $this->db->select(
-            "SELECT id, uuid, type, title, slug, excerpt, published_at
-             FROM {posts}
-             WHERE status = 'published' AND deleted_at IS NULL
-               AND (title LIKE :q1 OR content LIKE :q2 OR excerpt LIKE :q3)
-             ORDER BY published_at DESC
-             LIMIT " . (int)$limit,
-            ['q1' => $like, 'q2' => $like, 'q3' => $like]
-        );
+        if (trim($term) === '') return [];
+        $limit = max(1, min(200, $limit));
+        return $this->withSearchFallback($term, function (bool $fulltext) use ($term, $limit): array {
+            $params = [];
+            $cond = $this->searchClause($term, 'p', $params, $fulltext);
+            return $this->db->select(
+                "SELECT p.id, p.uuid, p.type, p.title, p.slug, p.excerpt, p.published_at
+                 FROM {posts} p
+                 WHERE p.status = 'published' AND p.deleted_at IS NULL AND {$cond}
+                 ORDER BY p.published_at DESC, p.id DESC
+                 LIMIT {$limit}",
+                $params
+            );
+        });
     }
 }

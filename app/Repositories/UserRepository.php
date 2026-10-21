@@ -120,7 +120,7 @@ class UserRepository
             $where[] = '(username LIKE :search1 OR email LIKE :search2 OR display_name LIKE :search3)';
             // One placeholder per use: native prepared statements reject a repeated
             // name (SQLSTATE HY093), which made every user search fail.
-            $like = '%' . $filters['search'] . '%';
+            $like = '%' . addcslashes((string) $filters['search'], '\\%_') . '%';
             $params['search1'] = $like; $params['search2'] = $like; $params['search3'] = $like;
         }
 

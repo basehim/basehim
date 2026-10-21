@@ -760,6 +760,10 @@ Check the log; the reason is there.
   left over.
 - Post a comment signed out and signed in. Signed in, the form should not ask
   for a name or email.
+- Create a post and a category with a non-Latin title (since 1.2.76 their
+  slugs keep their own letters: `اردو-میں-خبریں`). Links built with
+  `bh_post_url()` and the term URLs core passes in are already encoded; a link
+  you build yourself needs `rawurlencode($slug)`.
 
 ## Packaging
 

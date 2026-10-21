@@ -41,6 +41,8 @@ final class WidgetRegistry
     private const KEY_PATTERN = '/^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*){0,3}$/';
     /** Field types the dashboard's settings form draws; any other is shown as text. */
     public const FIELD_TYPES = ['text', 'textarea', 'number', 'select', 'checkbox', 'url', 'color'];
+    /** Colours a card and its tiles can take (1.2.77 adds indigo). */
+    public const TONES = ['slate', 'blue', 'green', 'amber', 'red', 'violet', 'indigo'];
 
     /** @var array<string, array> */
     private array $widgets = [];
@@ -347,6 +349,8 @@ final class WidgetRegistry
      *               refreshable needs data or render)
      *   actions     [['id','label','url'?|'handler'?,'icon'?,'capability'?,'confirm'?], ...]
      *   empty       ['title','text','action'=>['label','url']]
+     *   tone        'blue' (default) | 'green' | 'amber' | 'red' | 'violet' | 'indigo' | 'slate' — the
+     *               colour of the card's icon square (1.2.77)
      *   aliases     old keys this widget answers to (for renames)
      */
     private function normaliseDashboard(array $d, string $owner, bool $hasRender): array
@@ -441,6 +445,8 @@ final class WidgetRegistry
                 'text'   => (string) ($empty['text'] ?? ''),
                 'action' => $emptyAction,
             ],
+            // The colour of the card's icon square (1.2.77).
+            'tone'        => in_array($d['tone'] ?? null, self::TONES, true) ? $d['tone'] : 'blue',
             'aliases'     => (array) ($d['aliases'] ?? []),
             // Kept for widgets written against the pre-1.2.68 docs.
             'width'       => $size,
@@ -496,9 +502,14 @@ final class WidgetRegistry
             try { $raw = $raw(); } catch (\Throwable) { $raw = []; }
         }
         $opts = [];
-        foreach ((array) $raw as $k => $v) {
+        $raw = (array) $raw;
+        // Only a true list (['a', 'b']) uses each value as its own label. Before
+        // 1.2.77 any integer key did, so ['6' => 'Last 6 months'] (PHP makes
+        // '6' an integer) offered the label as the value.
+        $list = array_is_list($raw);
+        foreach ($raw as $k => $v) {
             if (is_array($v)) $opts[(string) ($v['value'] ?? '')] = (string) ($v['label'] ?? $v['value'] ?? '');
-            elseif (is_int($k)) $opts[(string) $v] = (string) $v;
+            elseif ($list) $opts[(string) $v] = (string) $v;
             elseif (is_scalar($v)) $opts[(string) $k] = (string) $v;
         }
         return $opts;

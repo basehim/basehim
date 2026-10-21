@@ -42,7 +42,7 @@ class CommentService
             // off (app/Core/Database.php), where a reused named placeholder
             // throws HY093 — the same idiom the Post/User/Media repositories use.
             $where[] = '(c.content LIKE :search1 OR c.author_name LIKE :search2 OR c.author_email LIKE :search3)';
-            $like = '%' . $filters['search'] . '%';
+            $like = '%' . addcslashes((string) $filters['search'], '\\%_') . '%';
             $params['search1'] = $like;
             $params['search2'] = $like;
             $params['search3'] = $like;

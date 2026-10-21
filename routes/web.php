@@ -31,6 +31,7 @@ $router->post('/comments', ['App\\Http\\Controllers\\Web\\CommentController', 's
 
 // Sitemap & RSS feed
 $router->get('/sitemap.xml', ['App\\Http\\Controllers\\Web\\SitemapController', 'index']);
+$router->get('/sitemap-{name}.xml', ['App\\Http\\Controllers\\Web\\SitemapController', 'part']);
 $router->get('/feed', ['App\\Http\\Controllers\\Web\\FeedController', 'rss']);
 
 // AI agents and crawlers (Settings → AI Agents)

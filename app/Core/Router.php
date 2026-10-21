@@ -569,16 +569,16 @@ final class Router
                 continue;
             }
 
-            // Public app routes get their parameters decoded and checked: a
-            // parameter may not smuggle in a slash or a NUL byte.
-            if (($route['area'] ?? '') === 'site') {
-                $decoded = self::decodeParams($route['pattern'], $params);
-                if ($decoded === null) {
-                    $this->emit($this->errorResponse($request, 400, 'Bad Request', 'A part of the address is not valid.'));
-                    return;
-                }
-                $params = $decoded;
+            // Parameters are decoded and checked: a parameter may not smuggle
+            // in a slash or a NUL byte. Public app routes since 1.2.72; core's
+            // routes too since 1.2.76, so a Unicode slug (/اردو-خبریں, sent as
+            // %D8%A7…) reaches its handler as the slug that is stored.
+            $decoded = self::decodeParams($route['pattern'], $params);
+            if ($decoded === null) {
+                $this->emit($this->errorResponse($request, 400, 'Bad Request', 'A part of the address is not valid.'));
+                return;
             }
+            $params = $decoded;
 
             $this->current = $route;
             try {

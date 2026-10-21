@@ -11,7 +11,6 @@
  * pre-1.2.68 widget's own render output, in its own hidden holder.
  */
 $__v = urlencode((string) (@filemtime(BASEHIM_ROOT . '/admin/assets/js/dashboard.js') ?: BASEHIM_VERSION));
-$__cv = urlencode((string) (@filemtime(BASEHIM_ROOT . '/admin/assets/css/dashboard.css') ?: BASEHIM_VERSION));
 $__name = (string) ($currentUser['display_name'] ?? '') ?: (string) ($currentUser['username'] ?? 'there');
 
 // Every icon the cards can use, rendered once by the PHP icon set (the JS set
@@ -26,7 +25,8 @@ foreach ($catalog as $__w) {
 foreach (['arrow-path', 'chevron-down', 'ellipsis-vertical', 'cog-6-tooth', 'eye-slash', 'x-mark', 'plus',
           'bars-2', 'arrow-up', 'arrow-down', 'check', 'exclamation-triangle', 'information-circle', 'no-symbol',
           'x-circle', 'check-circle', 'question-mark-circle', 'arrow-uturn-left', 'magnifying-glass', 'arrow-top-right-on-square',
-          'squares-plus', 'arrow-right'] as $__i) {
+          'squares-plus', 'arrow-right', 'chevron-up', 'chevron-right', 'chart-bar', 'arrow-up-right', 'arrow-down-right',
+          'minus', 'clock', 'document-text'] as $__i) {
     $__icons[$__i] = icon($__i, 'w-4 h-4');
 }
 
@@ -40,8 +40,7 @@ $__boot = [
     'legacy'         => array_keys($legacyHtml),
 ];
 ?>
-<link rel="stylesheet" href="<?= $base ?>/admin/assets/css/dashboard.css?v=<?= $__cv ?>">
-
+<?php // Styles: Tailwind components in admin/assets/css/src/tailwind.css (compiled into tailwind.min.css). ?>
 <div class="bh-dash" data-bh-dash>
     <header class="bh-dash-head">
         <div class="bh-dash-head__text">
@@ -50,13 +49,20 @@ $__boot = [
         </div>
         <div class="bh-dash-head__actions" data-bh-dash-view-actions>
             <?php if ($canWrite): ?>
-                <a href="<?= $base ?>/admin/posts/create" class="bh-btn bh-btn--secondary bh-btn--sm"><?= icon('pencil-square', 'w-4 h-4') ?> New post</a>
+                <a href="<?= $base ?>/admin/posts/create" class="bh-btn bh-btn--secondary bh-btn--lg">
+                    <span class="bh-btn__icon" aria-hidden="true"><?= icon('pencil-square', 'w-5 h-5') ?></span>
+                    <span class="bh-btn__label">New post</span><?= icon('chevron-right', 'bh-btn__chev') ?>
+                </a>
             <?php endif; ?>
             <?php if ($canUpload): ?>
-                <a href="<?= $base ?>/admin/media" class="bh-btn bh-btn--secondary bh-btn--sm"><?= icon('arrow-up-tray', 'w-4 h-4') ?> Upload</a>
+                <a href="<?= $base ?>/admin/media" class="bh-btn bh-btn--secondary bh-btn--lg">
+                    <span class="bh-btn__icon bh-btn__icon--green" aria-hidden="true"><?= icon('arrow-up-tray', 'w-5 h-5') ?></span>
+                    <span class="bh-btn__label">Upload</span><?= icon('chevron-right', 'bh-btn__chev') ?>
+                </a>
             <?php endif; ?>
-            <button type="button" class="bh-btn bh-btn--primary bh-btn--sm" data-bh-dash-customize>
-                <?= icon('adjustments-horizontal', 'w-4 h-4') ?> Customize
+            <button type="button" class="bh-btn bh-btn--primary bh-btn--lg" data-bh-dash-customize>
+                <span class="bh-btn__icon" aria-hidden="true"><?= icon('adjustments-horizontal', 'w-5 h-5') ?></span>
+                <span class="bh-btn__label">Customize</span><?= icon('chevron-right', 'bh-btn__chev') ?>
             </button>
         </div>
     </header>

@@ -62,6 +62,9 @@ class SchedulerService
     /** Set once the shutdown hook is installed. */
     private bool $sweepArmed = false;
 
+    /** @var array<string, array{0:int,1:callable}> core tasks, registered when a sweep runs */
+    private array $coreTasks = [];
+
     /** Whether scheduled_tasks has the lease columns (migration 016); null until checked. */
     private ?bool $leases = null;
 
@@ -115,6 +118,29 @@ class SchedulerService
             // A missing table (migration not yet run) must not break boot().
             $this->quietLog('Scheduler register failed: ' . $e->getMessage());
             return false;
+        }
+    }
+
+    /**
+     * A core maintenance task (1.2.76): view counts, retention cleanup.
+     *
+     * Unlike register(), nothing is read or written now. The task row is
+     * created when a sweep actually runs, so core's tasks cost ordinary
+     * requests nothing; they are listed on Admin → System under "core" and
+     * get the same leases, backoff and failure reports as app tasks.
+     */
+    public function core(string $key, int $intervalSeconds, callable $handler): void
+    {
+        $key = $this->sanitizeKey($key);
+        if ($key === '') return;
+        $this->coreTasks[$key] = [$intervalSeconds, $handler];
+        $this->armSweep();
+    }
+
+    private function registerCoreTasks(): void
+    {
+        foreach ($this->coreTasks as $key => [$interval, $handler]) {
+            if (!isset($this->handlers['core'][$key])) $this->register('core', $key, $interval, $handler);
         }
     }
 
@@ -211,6 +237,7 @@ class SchedulerService
         }
 
         try {
+            $this->registerCoreTasks();
             $now = date('Y-m-d H:i:s');
             // Only tasks whose handler is registered this request (1.2.73,
             // BH-023). Rows of an app that is switched off, quarantined or
@@ -255,7 +282,7 @@ class SchedulerService
                 $outcome['ok'] ? $result['ran']++ : $result['failed']++;
             }
 
-            $this->settings->set('scheduler', 'last_sweep', date('Y-m-d H:i:s'));
+            $this->recordSweep();
         } catch (\Throwable $e) {
             $this->quietLog('Scheduler runDue failed: ' . $e->getMessage());
         } finally {
@@ -308,6 +335,7 @@ class SchedulerService
     public function runTask(string $slug, string $key, bool $force = false): array
     {
         $key = $this->sanitizeKey($key);
+        if ($slug === 'core') $this->registerCoreTasks();
         $task = $this->find($slug, $key);
         if ($task === null) {
             return ['ok' => false, 'task' => $key, 'error' => 'No such task.'];
@@ -478,7 +506,7 @@ class SchedulerService
     private function throttlePassed(): bool
     {
         try {
-            $last = (string) $this->settings->get('scheduler', 'last_sweep', '');
+            $last = $this->lastSweep();
             if ($last === '') return true;
             return (time() - (int) strtotime($last)) >= self::SWEEP_INTERVAL;
         } catch (\Throwable) {
@@ -547,13 +575,42 @@ class SchedulerService
         return $expected !== '' && hash_equals($expected, $candidate);
     }
 
+    /**
+     * When the last sweep finished. Kept in storage/locks/scheduler-last-sweep
+     * since 1.2.76 (CR-22): as a setting, writing it once a minute threw away
+     * the whole settings cache every minute. The setting is still read once,
+     * for the first sweep after updating.
+     */
     public function lastSweep(): string
     {
+        $file = self::sweepFile();
+        $v = is_file($file) ? trim((string) @file_get_contents($file)) : '';
+        if ($v !== '') return $v;
         try {
             return (string) $this->settings->get('scheduler', 'last_sweep', '');
         } catch (\Throwable) {
             return '';
         }
+    }
+
+    private function recordSweep(): void
+    {
+        $file = self::sweepFile();
+        $dir = dirname($file);
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        $first = !is_file($file);
+        $tmp = $file . '.' . bin2hex(random_bytes(4));
+        if (@file_put_contents($tmp, date('Y-m-d H:i:s')) !== false && @rename($tmp, $file)) {
+            // The old setting is no longer read once the file exists.
+            if ($first) { try { $this->settings->delete('scheduler', 'last_sweep'); } catch (\Throwable) {} }
+            return;
+        }
+        @unlink($tmp);
+    }
+
+    private static function sweepFile(): string
+    {
+        return BASEHIM_ROOT . '/storage/locks/scheduler-last-sweep';
     }
 
     private function sanitizeKey(string $key): string

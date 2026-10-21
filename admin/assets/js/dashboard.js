@@ -1,5 +1,7 @@
 /*
- * Basehim dashboard (1.2.68) — see docs/DASHBOARD-WIDGETS.md.
+ * Basehim dashboard (1.2.68; cards restyled and animated in 1.2.77) — see
+ * docs/DASHBOARD-WIDGETS.md. Its styles are Tailwind components in
+ * admin/assets/css/src/tailwind.css, compiled into tailwind.min.css.
  *
  * Builds the cards from window.BH_DASHBOARD (the user's layout and the Add
  * Widgets catalogue), loads every card's data in one batched request through
@@ -63,6 +65,37 @@
         span.innerHTML = ICONS[name] || ICONS['question-mark-circle'] || '';
         return span;
     }
+    // Icons a widget's data names arrive with the data, as the server's SVG.
+    function mergeIcons(map) {
+        if (!map || typeof map !== 'object') return;
+        Object.keys(map).forEach(function (k) {
+            if (/^[a-z0-9-]{1,40}$/.test(k) && typeof map[k] === 'string' && map[k].indexOf('<svg') === 0) ICONS[k] = map[k];
+        });
+    }
+    var REDUCED = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+    var lastValues = {};   // card id → { tile label → number shown }, so a refresh counts from there
+
+    /**
+     * Count a number up to its value (1.2.77): about a second, easing out,
+     * in the user's number format. Shown at once when motion is reduced.
+     */
+    function countUp(node, to, from) {
+        if (typeof to !== 'number' || !isFinite(to) || REDUCED.matches || from === to) { node.textContent = fmtNumber(to); return; }
+        from = typeof from === 'number' && isFinite(from) ? from : 0;
+        var decimals = Math.min(2, (String(to).split('.')[1] || '').length);
+        var start = null, dur = 900;
+        node.textContent = fmtNumber(from);
+        function frame(t) {
+            if (start === null) start = t;
+            var p = Math.min(1, (t - start) / dur);
+            var eased = 1 - Math.pow(1 - p, 3);
+            var v = from + (to - from) * eased;
+            node.textContent = p < 1 ? fmtNumber(Number(v.toFixed(decimals))) : fmtNumber(to);
+            if (p < 1 && node.isConnected) window.requestAnimationFrame(frame);
+        }
+        window.requestAnimationFrame(frame);
+    }
+
     function iconButton(name, label, cls) {
         var b = el('button', 'bh-dash-icon-btn' + (cls ? ' ' + cls : ''));
         b.type = 'button';
@@ -171,6 +204,8 @@
         card.setAttribute('aria-labelledby', 'bh-dcard-t-' + item.id);
         if (item.collapsed && !state.editing) card.classList.add('is-collapsed');
 
+        // Header (1.2.77): the widget's icon in a tinted square, its title and
+        // one-line description, then its own controls.
         var head = el('header', 'bh-dcard__head');
         if (state.editing) {
             var handle = iconButton('bars-2', 'Move ' + w.title + ' (drag, or use the arrow keys)', 'bh-dcard__handle');
@@ -178,11 +213,16 @@
             handle.addEventListener('keydown', function (e) { keyMove(e, item.id); });
             head.appendChild(handle);
         } else {
-            head.appendChild(icon(w.icon));
+            var badgeIcon = icon(w.icon);
+            badgeIcon.className = 'bh-dcard__icon bh-dcard__icon--' + (w.tone || 'blue');
+            head.appendChild(badgeIcon);
         }
+        var titles = el('div', 'bh-dcard__titles');
         var title = el('h2', 'bh-dcard__title', w.title);
         title.id = 'bh-dcard-t-' + item.id;
-        head.appendChild(title);
+        titles.appendChild(title);
+        if (w.description) titles.appendChild(el('p', 'bh-dcard__sub', w.description));
+        head.appendChild(titles);
 
         var tools = el('div', 'bh-dcard__tools');
         var strip = null;
@@ -209,16 +249,13 @@
             strip.appendChild(moves);
         } else {
             if (w.refreshable) {
-                var rf = iconButton('arrow-path', 'Refresh ' + w.title, 'bh-dcard__refresh');
+                var rf = iconButton('arrow-path', 'Refresh ' + w.title, 'bh-dcard__tool bh-dcard__refresh');
+                rf.className = 'bh-dcard__tool bh-dcard__refresh';
                 rf.addEventListener('click', function () { refresh(item.id, true); });
                 tools.appendChild(rf);
             }
-            if (w.collapsible) {
-                var cl = iconButton('chevron-down', (item.collapsed ? 'Expand ' : 'Collapse ') + w.title, 'bh-dcard__collapse');
-                cl.setAttribute('aria-expanded', item.collapsed ? 'false' : 'true');
-                cl.addEventListener('click', function () { toggleCollapse(item.id); });
-                tools.appendChild(cl);
-            }
+            var pick = inlinePicker(item, w);
+            if (pick) tools.appendChild(pick);
             var menu = buildMenu(item, w);
             if (menu) tools.appendChild(menu);
         }
@@ -235,6 +272,48 @@
         }
         if (strip) card.appendChild(strip);
         return card;
+    }
+
+    /**
+     * A select field the widget marked 'inline', in the header (the period of
+     * Publishing activity). Changing it saves the card's settings and reloads
+     * it, as the Settings dialog does; the field is in that dialog too.
+     */
+    function inlinePicker(item, w) {
+        var f = null;
+        (w.fields || []).forEach(function (x) { if (!f && x.inline && x.type === 'select') f = x; });
+        if (!f || !f.options) return null;
+        var wrap = el('label', 'bh-dcard__pick');
+        var sel = el('select');
+        sel.setAttribute('aria-label', f.label + ' for ' + w.title);
+        var current = item.settings && item.settings[f.key] !== undefined ? String(item.settings[f.key]) : null;
+        (f.order || Object.keys(f.options)).forEach(function (k, i) {
+            var o = el('option', '', f.options[k]);
+            o.value = k;
+            if (current === k || (current === null && i === 0)) o.selected = true;
+            sel.appendChild(o);
+        });
+        wrap.appendChild(sel);
+        wrap.appendChild(icon('chevron-down'));
+        sel.addEventListener('change', function () {
+            var values = {};
+            Object.keys(item.settings || {}).forEach(function (k) { values[k] = item.settings[k]; });
+            var before = values[f.key];
+            values[f.key] = sel.value;
+            wrap.setAttribute('aria-busy', 'true');
+            ajax.request('widgets.dashboard_update', { id: item.id, settings: JSON.stringify(values) })
+                .then(function (res) {
+                    item.settings = (res.item && res.item.settings) || values;
+                    state.customized = true;
+                    refresh(item.id, false);
+                })
+                .catch(function (err) {
+                    sel.value = before === undefined ? sel.options[0].value : String(before);
+                    toast(err.message || 'That change was not saved.', 'error');
+                })
+                .then(function () { wrap.removeAttribute('aria-busy'); });
+        });
+        return wrap;
     }
 
     function sizePicker(item, w) {
@@ -275,6 +354,7 @@
     function buildMenu(item, w) {
         var entries = [];
         (w.actions || []).forEach(function (a) { entries.push({ kind: 'action', a: a }); });
+        if (w.collapsible) entries.push({ kind: 'collapse' });
         if (w.settings) entries.push({ kind: 'settings' });
         if (w.removable) entries.push({ kind: 'remove' });
         if (!entries.length) return null;
@@ -305,11 +385,19 @@
                 sepAdded = true;
                 node = el('button', 'bh-dmenu__item' + (e.kind === 'remove' ? ' is-danger' : ''));
                 node.type = 'button';
-                node.appendChild(icon(e.kind === 'settings' ? 'cog-6-tooth' : 'eye-slash'));
-                node.appendChild(el('span', '', e.kind === 'settings' ? 'Settings' : 'Remove from dashboard'));
+                var names = {
+                    collapse: [item.collapsed ? 'chevron-down' : 'chevron-up', item.collapsed ? 'Expand' : 'Collapse'],
+                    settings: ['cog-6-tooth', 'Settings'],
+                    remove: ['eye-slash', 'Remove from dashboard']
+                };
+                node.appendChild(icon(names[e.kind][0]));
+                node.appendChild(el('span', '', names[e.kind][1]));
+                if (e.kind === 'collapse') node.setAttribute('aria-expanded', item.collapsed ? 'false' : 'true');
                 node.addEventListener('click', function () {
                     closeMenus();
-                    if (e.kind === 'settings') openSettings(item.id); else removeNow(item.id);
+                    if (e.kind === 'settings') openSettings(item.id);
+                    else if (e.kind === 'collapse') toggleCollapse(item.id);
+                    else removeNow(item.id);
                 });
             }
             node.setAttribute('role', 'menuitem');
@@ -399,7 +487,9 @@
             return;
         }
         try {
-            body.appendChild(VIEWS[res.view] ? VIEWS[res.view](res.data || {}, res) : stateBlock('exclamation-triangle', 'Unknown view', res.view, 'error'));
+            var animate = !!res.fresh && !REDUCED.matches;
+            res.fresh = false;
+            body.appendChild(VIEWS[res.view] ? VIEWS[res.view](res.data || {}, res, { animate: animate, id: item.id }) : stateBlock('exclamation-triangle', 'Unknown view', res.view, 'error'));
             if (res.data && (res.data.footer || res.data.summary) && res.view !== 'status') body.appendChild(footer(res.data));
         } catch (ex) {
             body.textContent = '';
@@ -428,12 +518,24 @@
         return s;
     }
 
+    // The summary as a strip with its icon; footer text and link under it.
     function footer(d) {
-        var f = el('div', 'bh-dcard__foot');
-        if (d.summary) f.appendChild(el('span', '', d.summary));
-        if (d.footer && d.footer.text) f.appendChild(el('span', '', d.footer.text));
-        if (d.footer && d.footer.link) f.appendChild(link(d.footer.link.url, 'bh-dcard__footlink', d.footer.link.label));
-        return f;
+        var box = document.createDocumentFragment();
+        if (d.summary) {
+            var strip = el('div', 'bh-dcard__summary');
+            var ic = icon(d.summary_icon && ICONS[d.summary_icon] ? d.summary_icon : 'information-circle');
+            ic.className = 'bh-dcard__summary-icon';
+            strip.appendChild(ic);
+            strip.appendChild(el('p', 'bh-dcard__summary-text', d.summary));
+            box.appendChild(strip);
+        }
+        if (d.footer && (d.footer.text || d.footer.link)) {
+            var f = el('div', 'bh-dcard__foot');
+            if (d.footer.text) f.appendChild(el('span', '', d.footer.text));
+            if (d.footer.link) f.appendChild(link(d.footer.link.url, 'bh-dcard__footlink', d.footer.link.label));
+            box.appendChild(f);
+        }
+        return box;
     }
 
     /**
@@ -463,21 +565,137 @@
         return el('span', 'bh-dtone bh-dtone--' + (b.tone || 'slate'), b.text);
     }
 
+    function statPill(it) {
+        var p = null;
+        if (it.trend && it.trend.text) {
+            var dir = it.trend.direction;
+            var good = it.trend.good;
+            p = el('span', 'bh-dstat__pill ' + (dir === 'flat' ? '' : (good ? 'bh-dstat__pill--up' : 'bh-dstat__pill--down')));
+            var big = parseFloat(String(it.trend.text).replace(/[^0-9.]/g, '')) >= 10;
+            var name = dir === 'up' ? (big ? 'arrow-up' : 'arrow-up-right') : dir === 'down' ? (big ? 'arrow-down' : 'arrow-down-right') : 'minus';
+            p.appendChild(icon(name));
+            p.appendChild(document.createTextNode(it.trend.text));
+            p.title = (dir === 'up' ? 'Up ' : dir === 'down' ? 'Down ' : '') + it.trend.text + ' in the last 30 days';
+        } else if (it.badge && it.badge.text) {
+            p = el('span', 'bh-dstat__pill bh-dstat__pill--' + (it.badge.tone || 'slate'));
+            if (it.badge.icon && ICONS[it.badge.icon]) p.appendChild(icon(it.badge.icon));
+            p.appendChild(document.createTextNode(it.badge.text));
+        }
+        return p;
+    }
+
+    function initials(name) {
+        var parts = String(name || '?').trim().split(/\s+/);
+        return (parts[0] || '?').charAt(0).toUpperCase();
+    }
+
+    function peopleStack(p) {
+        var box = el('span', 'bh-dstat__people');
+        p.items.forEach(function (u) {
+            var a = el('span', 'bh-dstat__avatar');
+            a.title = u.name;
+            var src = safeHref(u.url);
+            if (src) {
+                var img = el('img');
+                img.src = src;
+                img.alt = '';
+                img.loading = 'lazy';
+                a.appendChild(img);
+            } else {
+                a.textContent = initials(u.name);
+            }
+            box.appendChild(a);
+        });
+        if (p.more > 0) {
+            var more = el('span', 'bh-dstat__avatar bh-dstat__avatar--more', '+' + (p.more > 99 ? '99' : p.more));
+            more.title = p.more + ' more';
+            box.appendChild(more);
+        }
+        box.setAttribute('aria-label', p.items.map(function (u) { return u.name; }).join(', ') + (p.more > 0 ? ' and ' + p.more + ' more' : ''));
+        return box;
+    }
+
+    // A quiet group of figures for the wide People tile; decoration only.
+    function peopleArt() {
+        var NS = 'http://www.w3.org/2000/svg';
+        var svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 160 88');
+        svg.setAttribute('class', 'bh-dstat__art');
+        svg.setAttribute('aria-hidden', 'true');
+        [
+            ['circle', { cx: 40, cy: 52, r: 9 }, 'fill-indigo-100'],
+            ['path', { d: 'M14 88c0-15 12-26 26-26s26 11 26 26z' }, 'fill-indigo-100'],
+            ['circle', { cx: 128, cy: 48, r: 11 }, 'fill-indigo-100'],
+            ['path', { d: 'M100 88c0-17 12-29 28-29s28 12 28 29z' }, 'fill-indigo-100'],
+            ['circle', { cx: 86, cy: 30, r: 15 }, 'fill-indigo-300/80'],
+            ['path', { d: 'M48 88c0-22 17-38 38-38s38 16 38 38z' }, 'fill-indigo-300/70']
+        ].forEach(function (s) {
+            var n = document.createElementNS(NS, s[0]);
+            Object.keys(s[1]).forEach(function (k) { n.setAttribute(k, s[1][k]); });
+            n.setAttribute('class', s[2]);
+            svg.appendChild(n);
+        });
+        return svg;
+    }
+
+    // Round axis steps: 1, 2, 2.5, 5 × 10^n, about four of them.
+    function niceScale(max) {
+        if (max <= 0) return { top: 1, step: 1 };
+        var raw = max / 3;
+        var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+        var step = [1, 2, 2.5, 5, 10].map(function (m) { return m * mag; }).filter(function (x) { return x >= raw; })[0];
+        if (max >= 4 && step < 1) step = 1;
+        if (step < 1 && Math.round(max) === max) step = 1;
+        return { top: Math.ceil(max / step) * step, step: step };
+    }
+
     var VIEWS = {
-        stat: function (d) {
+        stat: function (d, res, opt) {
+            opt = opt || {};
             var wrap = el('div', 'bh-dview bh-dview--stat');
+            var prev = lastValues[opt.id] || {};
+            var seen = {};
             (d.items || []).forEach(function (it) {
+                var tone = it.tone || 'slate';
                 var tile = it.href ? link(it.href, 'bh-dstat', '') : el('div', 'bh-dstat');
-                tile.classList.add('bh-dstat--' + (it.tone || 'slate'));
-                tile.appendChild(el('span', 'bh-dstat__label', it.label));
-                tile.appendChild(el('span', 'bh-dstat__value', fmtNumber(it.value)));
-                if (it.trend && it.trend.text) {
-                    var tr = el('span', 'bh-dstat__trend ' + (it.trend.good ? 'is-good' : 'is-bad'), (it.trend.direction === 'up' ? '↑ ' : it.trend.direction === 'down' ? '↓ ' : '') + it.trend.text);
-                    tile.appendChild(tr);
+                tile.classList.add('bh-dstat--' + tone);
+                if (it.wide) tile.classList.add('bh-dstat--wide');
+
+                // Icon, label, and a trend, a count that needs attention, or a way in.
+                var top = el('div', 'bh-dstat__top');
+                var ic = icon(it.icon && ICONS[it.icon] ? it.icon : 'chart-bar');
+                ic.className = 'bh-dstat__icon';
+                top.appendChild(ic);
+                top.appendChild(el('span', 'bh-dstat__label', it.label));
+                var pill = statPill(it);
+                if (pill) top.appendChild(pill);
+                else if (it.wide && it.href) {
+                    var go = icon('chevron-right');
+                    go.className = 'bh-dstat__go';
+                    top.appendChild(go);
                 }
-                if (it.hint) tile.appendChild(el('span', 'bh-dstat__hint', it.hint));
+                tile.appendChild(top);
+
+                var value = el('span', 'bh-dstat__value');
+                var key = String(it.label);
+                if (opt.animate) countUp(value, it.value, prev[key]); else value.textContent = fmtNumber(it.value);
+                if (typeof it.value === 'number') seen[key] = it.value;
+                tile.appendChild(value);
+
+                var foot = el('div', 'bh-dstat__foot');
+                foot.appendChild(it.hint ? el('span', 'bh-dstat__hint', it.hint) : el('span'));
+                if (it.people && it.people.items && it.people.items.length) foot.appendChild(peopleStack(it.people));
+                else {
+                    var spark = el('span', 'bh-dstat__spark');
+                    spark.setAttribute('aria-hidden', 'true');
+                    for (var i = 0; i < 3; i++) spark.appendChild(el('span'));
+                    foot.appendChild(spark);
+                }
+                tile.appendChild(foot);
+                if (it.wide) tile.appendChild(peopleArt());
                 wrap.appendChild(tile);
             });
+            if (opt.id) lastValues[opt.id] = seen;
             return wrap;
         },
         list: function (d) {
@@ -525,25 +743,38 @@
             scroll.appendChild(t);
             return scroll;
         },
-        chart: function (d) {
+        chart: function (d, res, opt) {
+            opt = opt || {};
             var wrap = el('div', 'bh-dview bh-dview--chart');
             var series = d.series || [];
             var labels = d.labels || [];
             var max = 0;
             series.forEach(function (s) { s.values.forEach(function (v) { if (v > max) max = v; }); });
-            max = max || 1;
+            var scale = niceScale(max);
+            var top = scale.top;
             var unit = d.unit ? ' ' + d.unit : '';
             var desc = series.map(function (s) {
                 return s.name + ': ' + s.values.map(function (v, i) { return labels[i] + ' ' + fmtNumber(v) + unit; }).join(', ');
             }).join('. ');
-            var plot = el('div', 'bh-dchart bh-dchart--' + d.type);
+            var plot = el('div', 'bh-dchart bh-dchart--' + d.type + (opt.animate ? ' is-animated' : ''));
             plot.setAttribute('role', 'img');
             plot.setAttribute('aria-label', desc);
             var axis = el('div', 'bh-dchart__axis');
-            axis.appendChild(el('span', '', fmtNumber(max)));
-            axis.appendChild(el('span', '', '0'));
-            plot.appendChild(axis);
+            axis.setAttribute('aria-hidden', 'true');
             var area = el('div', 'bh-dchart__area');
+            // Ticks and dashed guides at round numbers (the base line is the area's border).
+            for (var t = 0; t <= top + 1e-9; t += scale.step) {
+                var pct = (t / top * 100).toFixed(3) + '%';
+                var tick = el('span', 'bh-dchart__tick', fmtNumber(Math.round(t * 100) / 100));
+                tick.style.bottom = pct;
+                axis.appendChild(tick);
+                if (t > 0) {
+                    var g = el('span', 'bh-dchart__grid');
+                    g.style.bottom = pct;
+                    area.appendChild(g);
+                }
+            }
+            plot.appendChild(axis);
             if (d.type === 'line') {
                 var svgNS = 'http://www.w3.org/2000/svg';
                 var svg = document.createElementNS(svgNS, 'svg');
@@ -552,11 +783,13 @@
                 svg.setAttribute('class', 'bh-dchart__svg');
                 series.forEach(function (s, si) {
                     var n = Math.max(1, s.values.length - 1);
-                    var pts = s.values.map(function (v, i) { return (i / n * 100).toFixed(2) + ',' + (100 - v / max * 96).toFixed(2); }).join(' ');
+                    var pts = s.values.map(function (v, i) { return (i / n * 100).toFixed(2) + ',' + (100 - v / top * 100).toFixed(2); }).join(' ');
                     var pl = document.createElementNS(svgNS, 'polyline');
                     pl.setAttribute('points', pts);
                     pl.setAttribute('class', 'bh-dchart__line bh-dchart__s' + si);
                     pl.setAttribute('vector-effect', 'non-scaling-stroke');
+                    pl.setAttribute('pathLength', '1');
+                    if (opt.animate) pl.style.animationDelay = (si * 150) + 'ms';
                     svg.appendChild(pl);
                 });
                 area.appendChild(svg);
@@ -566,9 +799,15 @@
                     series.forEach(function (s, si) {
                         var v = s.values[i] || 0;
                         var bar = el('span', 'bh-dchart__bar bh-dchart__s' + si);
-                        bar.style.height = (v / max * 100) + '%';
+                        bar.style.height = (v / top * 100) + '%';
                         bar.title = lab + ': ' + fmtNumber(v) + unit;
-                        if (v > 0) bar.appendChild(el('span', 'bh-dchart__val', fmtNumber(v)));
+                        if (v > 0) {
+                            var val = el('span', 'bh-dchart__val', fmtNumber(v));
+                            bar.appendChild(val);
+                            if (opt.animate) val.style.animationDelay = (i * 70 + 450) + 'ms';
+                        }
+                        // One after another, left to right.
+                        if (opt.animate) bar.style.animationDelay = (i * 70) + 'ms';
                         col.appendChild(bar);
                     });
                     area.appendChild(col);
@@ -577,6 +816,7 @@
             plot.appendChild(area);
             wrap.appendChild(plot);
             var xl = el('div', 'bh-dchart__labels');
+            xl.setAttribute('aria-hidden', 'true');
             labels.forEach(function (lab, i) {
                 var span = el('span', '', lab);
                 // Thin the labels when there are many, keeping first and last.
@@ -693,6 +933,8 @@
                     return Promise.all(chunk.map(function (id) {
                         var r = results[id] || { ok: false, state: 'error', message: 'No answer for this widget.' };
                         if (r.ok && r.mode === 'endpoint') return loadEndpoint(id, r);
+                        mergeIcons(r.icons);
+                        if (r.ok) r.fresh = true;   // animate once, when it is first shown
                         data[id] = r;
                         return null;
                     }));
@@ -722,7 +964,7 @@
                 var view = payload.view;
                 if (!VIEWS[view]) throw new Error('The widget returned no view the dashboard knows.');
                 var items = payload.items || payload.rows || payload.series || null;
-                data[id] = { ok: true, view: view, data: payload, fromEndpoint: true,
+                data[id] = { ok: true, view: view, data: payload, fromEndpoint: true, fresh: true,
                              empty: payload.empty === true || (Array.isArray(items) && items.length === 0) };
             })
             .catch(function (err) {
@@ -854,7 +1096,7 @@
                 wrap.appendChild(label);
                 if (f.type === 'select') {
                     input = el('select', 'bh-select');
-                    Object.keys(f.options || {}).forEach(function (k) {
+                    (f.order || Object.keys(f.options || {})).forEach(function (k) {
                         var o = el('option', '', f.options[k]);
                         o.value = k;
                         if (String(value) === k) o.selected = true;

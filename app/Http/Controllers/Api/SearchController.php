@@ -11,8 +11,13 @@ class SearchController extends ApiController
 {
     public function index(Request $request): Response
     {
-        $query = trim((string)$request->query('q', ''));
+        $q = $request->query('q', '');
+        $query = is_scalar($q) ? trim((string) $q) : '';
         if ($query === '') return Response::json(['data' => [], 'meta' => ['total' => 0]]);
+        if (($wait = \App\Services\SearchThrottle::check($request, $this->app)) !== null) {
+            return Response::json(['error' => 'Too many searches. Try again in a minute.'], 429)
+                ->header('Retry-After', (string) $wait);
+        }
 
         $page = $this->pageNumber($request);
         $per = $this->perPage($request, 10);

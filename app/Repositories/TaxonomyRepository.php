@@ -72,7 +72,7 @@ class TaxonomyRepository
 
         $q = trim($q);
         if ($q !== '') {
-            $like = '%' . $q . '%';
+            $like = '%' . addcslashes((string) $q, '\\%_') . '%';
             if ($idList !== []) {
                 // Always keep the selected terms in the list, even if they
                 // don't match the search text.

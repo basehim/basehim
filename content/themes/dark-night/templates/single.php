@@ -5,7 +5,7 @@
         <?php if (!empty($terms)): ?>
         <div class="dn-terms">
             <?php foreach ($terms as $term): ?>
-                <?php $termUrl = ($term['taxonomy_slug'] === 'category' ? "/category/{$term['slug']}" : "/tag/{$term['slug']}"); ?>
+                <?php $termUrl = ($term['taxonomy_slug'] === 'category' ? '/category/' : '/tag/') . rawurlencode((string) $term['slug']); ?>
                 <a href="<?= htmlspecialchars(link_to($termUrl)) ?>" class="dn-term"><?= htmlspecialchars($term['name']) ?></a>
             <?php endforeach; ?>
         </div>

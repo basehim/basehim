@@ -54,8 +54,8 @@ class TaxonomyService
         $name = trim($data['name'] ?? '');
         if ($name === '') return null;
 
-        $slug = !empty($data['slug']) ? Helpers::slug($data['slug']) : Helpers::slug($name);
-        if ($slug === '') $slug = Helpers::slug($name);
+        $slug = !empty($data['slug']) ? Helpers::slug($data['slug'], '-', true) : Helpers::slug($name, '-', true);
+        if ($slug === '') $slug = Helpers::slug($name, '-', true);
         // ensure unique within taxonomy
         $slug = $this->uniqueTermSlug((int)$tax['id'], $slug);
 
@@ -87,8 +87,8 @@ class TaxonomyService
         // (taxonomy_id, slug) unique key when saving.
         if (isset($data['slug']) || isset($data['name'])) {
             $desired = !empty($data['slug'])
-                ? Helpers::slug((string)$data['slug'])
-                : Helpers::slug((string)($data['name'] ?? $existing['name']));
+                ? Helpers::slug((string)$data['slug'], '-', true)
+                : Helpers::slug((string)($data['name'] ?? $existing['name']), '-', true);
             if ($desired === '') $desired = (string)$existing['slug'];
             $payload['slug'] = $this->uniqueTermSlug($taxonomyId, $desired, $id);
         }

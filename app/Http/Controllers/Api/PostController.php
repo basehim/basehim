@@ -31,6 +31,16 @@ class PostController extends ApiController
         $author = $request->query('author_id');
         if (is_string($author) && ctype_digit($author)) $filters['author_id'] = (int) $author;
 
+        // Keyset pagination (1.2.76, CR-17): ?after=<meta.next_cursor> reads the
+        // next page without counting or skipping rows, however deep it is.
+        $after = $request->query('after');
+        if ($after !== null && $after !== '') {
+            if (\App\Repositories\PostRepository::decodeCursor($after) === null) {
+                return Response::json(['error' => 'Invalid cursor: pass meta.next_cursor from the previous page.'], 400);
+            }
+            $filters['after'] = $after;
+        }
+
         return Response::json($posts->paginate($filters, $page, $perPage));
     }
 

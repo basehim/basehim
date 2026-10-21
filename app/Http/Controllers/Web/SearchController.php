@@ -29,6 +29,10 @@ class SearchController extends Controller
         $posts = $this->app->make(PostService::class);
 
         $result = ['data' => [], 'meta' => ['total' => 0, 'page' => 1, 'last_page' => 1, 'per_page' => $perPage]];
+        if ($query !== '' && ($wait = \App\Services\SearchThrottle::check($request, $this->app)) !== null) {
+            return \App\Core\Http\SitePage::error(429, 'Too Many Requests', 'You have searched a lot in a short time. Please wait a minute and try again.')
+                ->header('Retry-After', (string) $wait);
+        }
         if ($query !== '') {
             $result = $posts->search($query, $page, $perPage);
         }
