@@ -133,10 +133,22 @@ test('cards: the page uses the compiled components; no separate dashboard styles
     assert_contains('bh-btn bh-btn--primary bh-btn--lg', $html);
     assert_false(is_file(BASEHIM_ROOT . '/admin/assets/css/dashboard.css'));
     $css = (string) file_get_contents(BASEHIM_ROOT . '/admin/assets/css/tailwind.min.css');
-    foreach (['.bh-btn{', '.bh-btn--lg{', '.bh-card{', '.bh-badge{', '.bh-dcard{', '.bh-dstat--indigo{', '.bh-dchart.is-animated .bh-dchart__bar{', '@keyframes bh-grow', 'container-type:inline-size'] as $needle) {
+    foreach (['.bh-btn{', '.bh-btn--lg{', '.bh-card{', '.bh-badge{', '.bh-dcard{', '.bh-btn--icon{', 'bh-dstat--indigo', '.bh-dchart.is-animated .bh-dchart__bar{', '@keyframes bh-grow', 'container-type:inline-size', 'grid-auto-flow:column'] as $needle) {
         assert_contains($needle, $css);
     }
     assert_not_contains('@apply', $css, 'compiled, not source');
     $layout = (string) file_get_contents(BASEHIM_ROOT . '/admin/views/layouts/app.php');
     assert_not_contains('.bh-btn {', $layout, 'components live in the compiled CSS, not the layout');
+});
+
+test('cards: the greeting says morning, afternoon or evening in the person\'s own timezone, else the site\'s', function () {
+    $g = fn(array $u, string $utc) => \App\Http\Controllers\Admin\DashboardController::greeting($u, new \DateTimeImmutable($utc, new \DateTimeZone('UTC')));
+    assert_same(['hello' => 'Good morning', 'date' => 'Wednesday, 21 October'], $g(['timezone' => 'Asia/Karachi'], '2026-10-21 04:00'));
+    assert_same('Good afternoon', $g(['timezone' => 'Asia/Karachi'], '2026-10-21 12:00')['hello']);   // 17:00 there
+    assert_same('Good evening', $g(['timezone' => 'Asia/Karachi'], '2026-10-21 14:00')['hello']);     // 19:00
+    assert_same('Good evening', $g(['timezone' => 'Asia/Karachi'], '2026-10-21 21:30')['hello']);     // 02:30
+    assert_same('Good afternoon', $g(['timezone' => 'America/New_York'], '2026-10-21 18:00')['hello']); // 14:00
+    $html = bh_browser('admin')->request('GET', '/admin/dashboard')->body;
+    assert_contains('bh-dash-head__date', $html);
+    assert_contains('what&rsquo;s happening on', $html);
 });

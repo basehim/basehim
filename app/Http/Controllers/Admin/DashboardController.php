@@ -55,6 +55,7 @@ class DashboardController extends Controller
             'title'         => 'Dashboard',
             'currentUser'   => $user,
             'siteName'      => $settings->get('general', 'site_title', 'Basehim'),
+            'greeting'      => self::greeting($user),
             'layout'        => ['items' => $resolved['items'], 'customized' => $resolved['customized']],
             'catalog'       => $catalog,
             'legacyHtml'    => $legacy,
@@ -63,5 +64,24 @@ class DashboardController extends Controller
             'canWrite'      => CheckCapability::userCan($user, 'edit_posts'),
             'canUpload'     => CheckCapability::userCan($user, 'upload_media'),
         ]);
+    }
+
+    /**
+     * The greeting at the top (1.2.80): "Good morning" until noon, "Good
+     * afternoon" until six, then "Good evening", by the person's own timezone
+     * when their profile has one, else the site's; and today's date there.
+     *
+     * @return array{hello:string,date:string}
+     */
+    public static function greeting(array $user, ?\DateTimeImmutable $now = null): array
+    {
+        $tz = (string) ($user['timezone'] ?? '');
+        $zone = \App\Core\Time::isValidTimezone($tz) && $tz !== 'UTC' ? new \DateTimeZone($tz) : \App\Core\Time::zone();
+        $at = ($now ?? new \DateTimeImmutable('now'))->setTimezone($zone);
+        $h = (int) $at->format('G');
+        return [
+            'hello' => $h < 5 ? 'Good evening' : ($h < 12 ? 'Good morning' : ($h < 18 ? 'Good afternoon' : 'Good evening')),
+            'date'  => $at->format('l, j F'),
+        ];
     }
 }

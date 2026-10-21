@@ -1,6 +1,6 @@
 /*
- * Basehim admin — Tailwind source (1.2.77). Compiled into
- * admin/assets/css/tailwind.min.css; see tailwind.config.js for the command.
+ * Basehim admin — Tailwind source (1.2.77; one accent colour since 1.2.80).
+ * Compiled into admin/assets/css/tailwind.min.css; see tailwind.config.js.
  *
  * Below the Tailwind layers are the shared admin components, written with
  * @apply so they use the same scale, colours and states as the utilities.
@@ -8,52 +8,55 @@
  * runtime by JavaScript or by apps, so a scan can't see every one), and a
  * utility on the same element still wins (class="bh-btn w-full").
  *
- * One family of shapes for everything that can be pressed or read at a
- * glance (docs/ADMIN-UI.md):
- *   cards and tile buttons   rounded-2xl, slate-200 hairline, shadow-card
- *   tiles, inputs, buttons   rounded-xl
- *   icon squares             rounded-xl, a light tint with the tone's icon,
- *                            or the tone's gradient with a white icon
+ * The system (docs/ADMIN-UI.md):
+ *   colour    one accent (accent-*, tailwind.config.js) and slate neutrals;
+ *             red only for errors and destructive actions
+ *   cards     rounded-2xl, slate-200 hairline, shadow-card; a header with a
+ *             divider; 16 px inside on phones, 20 px from 640 px
+ *   controls  buttons and fields share one height scale: 32 (sm), 36, 40 (lg)
+ *   text      what a card says wraps; nothing important is cut with "…"
  */
 @tailwind base;
 @tailwind components;
 
 /* ═══ Core components ═════════════════════════════════════════════════════ */
 
-/* ── Buttons: .bh-btn + --primary | --secondary | --danger | --ghost,
-      sizes --sm | --lg. A --lg button can lead with an icon square
-      (.bh-btn__icon, tinted with --blue | --green | --violet | --amber)
-      and end with a chevron (.bh-btn__chev). ─────────────────────────────── */
+/* ── Buttons: .bh-btn + --primary | --secondary | --danger | --ghost;
+      sizes --sm (32 px) | default (36 px) | --lg (40 px); --icon makes it
+      square, for a button with only an icon (and an aria-label). A --lg
+      button can lead with an icon square (.bh-btn__icon) and end with a
+      chevron (.bh-btn__chev). ─────────────────────────────────────────────── */
 .bh-btn {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-transparent px-4 py-2 text-sm font-semibold leading-5 no-underline select-none cursor-pointer;
+    @apply inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-transparent px-3.5 text-sm font-semibold leading-5 no-underline select-none cursor-pointer;
     @apply transition-[background-color,border-color,color,box-shadow] duration-150 ease-out;
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-1;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:ring-offset-1;
 }
 .bh-btn svg { @apply h-4 w-4 flex-none; }
 .bh-btn:disabled, .bh-btn[aria-disabled="true"] { @apply cursor-not-allowed opacity-50; }
-.bh-btn--sm { @apply rounded-lg px-3 py-1.5 text-[0.8125rem]; }
-.bh-btn--primary { @apply bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-sm shadow-blue-600/20; }
-.bh-btn--primary:hover:not(:disabled) { @apply from-blue-600 to-blue-700; }
-.bh-btn--secondary { @apply border-slate-200 bg-white text-slate-700 shadow-sm shadow-slate-900/[0.03]; }
+.bh-btn--sm { @apply h-8 rounded-lg px-3 text-[0.8125rem]; }
+.bh-btn--lg { @apply h-10 px-4; }
+.bh-btn--icon { @apply w-9 px-0; }
+.bh-btn--icon.bh-btn--sm { @apply w-8; }
+.bh-btn--icon.bh-btn--lg { @apply w-10; }
+.bh-btn--primary { @apply bg-accent-600 text-white shadow-sm shadow-accent-900/10; }
+.bh-btn--primary:hover:not(:disabled) { @apply bg-accent-700; }
+.bh-btn--secondary { @apply border-slate-200 bg-white text-slate-700 shadow-sm shadow-slate-900/[0.04]; }
 .bh-btn--secondary:hover:not(:disabled) { @apply border-slate-300 bg-slate-50 text-slate-900; }
 .bh-btn--danger { @apply bg-red-600 text-white; }
 .bh-btn--danger:hover:not(:disabled) { @apply bg-red-700; }
 .bh-btn--ghost { @apply bg-transparent text-slate-600; }
 .bh-btn--ghost:hover:not(:disabled) { @apply bg-slate-100 text-slate-900; }
 
-/* Large tile buttons: the dashboard's New post / Upload / Customize. */
-.bh-btn--lg { @apply h-14 gap-3 rounded-2xl py-0 pl-2.5 pr-4 text-base shadow-card; }
-.bh-btn--lg.bh-btn--secondary { @apply border-slate-200/80; }
-.bh-btn--lg.bh-btn--secondary:hover:not(:disabled) { @apply border-slate-300/80 bg-white shadow-card-hover; }
-.bh-btn--lg.bh-btn--primary { @apply shadow-lg shadow-blue-600/25; }
-.bh-btn__icon { @apply grid h-9 w-9 flex-none place-items-center rounded-xl bg-blue-50 text-blue-600; }
-.bh-btn .bh-btn__icon svg { @apply h-5 w-5; }
-.bh-btn__icon--green { @apply bg-emerald-50 text-emerald-600; }
-.bh-btn__icon--violet { @apply bg-violet-50 text-violet-600; }
-.bh-btn__icon--amber { @apply bg-amber-50 text-amber-600; }
-.bh-btn--primary .bh-btn__icon { @apply bg-transparent text-white; }
-.bh-btn__label { @apply min-w-0 flex-1 truncate text-left; }
-.bh-btn .bh-btn__chev { @apply ml-1 h-4 w-4 text-slate-400; }
+/* A large button with an icon square: the dashboard's New post / Upload /
+   Customize. The square is the accent's lightest shade on a white button,
+   and disappears into a primary one. (--green, --violet and --amber are
+   kept as names for older markup and look the same.) */
+.bh-btn--lg:has(> .bh-btn__icon) { @apply pl-1.5 pr-3; }
+.bh-btn__icon { @apply grid h-7 w-7 flex-none place-items-center rounded-lg bg-accent-50 text-accent-600; }
+.bh-btn .bh-btn__icon svg { @apply h-4 w-4; }
+.bh-btn--primary .bh-btn__icon { @apply bg-white/15 text-white; }
+.bh-btn__label { @apply text-left; }
+.bh-btn .bh-btn__chev { @apply -mr-0.5 ml-auto h-3.5 w-3.5 text-slate-400; }
 .bh-btn--primary .bh-btn__chev { @apply text-white/80; }
 
 /* Busy (bhBusy): a spinner in front, clicks blocked. */
@@ -63,11 +66,13 @@
     @apply h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent;
 }
 
-/* ── Cards: .bh-card (+ __head, __body, __title, --pad) ────────────────── */
+/* ── Cards: .bh-card (+ __head, __title, __sub, __body, --pad). A dashboard
+      card is the same card (.bh-dcard adds its icon and tools). ──────────── */
 .bh-card { @apply rounded-2xl border border-slate-200/80 bg-white shadow-card; }
-.bh-card--pad, .bh-card__body { @apply p-5; }
-.bh-card__head { @apply flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4; }
-.bh-card__title { @apply m-0 text-[0.9375rem] font-semibold text-slate-900; }
+.bh-card--pad, .bh-card__body { @apply p-4 sm:p-5; }
+.bh-card__head { @apply flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5; }
+.bh-card__title { @apply m-0 text-[0.9375rem] font-semibold leading-5 text-slate-900; }
+.bh-card__sub { @apply m-0 mt-0.5 text-xs leading-4 text-slate-500; }
 
 /* ── Fields ───────────────────────────────────────────────────────────── */
 .bh-label { @apply mb-1.5 block text-sm font-medium text-slate-700; }
@@ -76,11 +81,12 @@
     @apply transition-[border-color,box-shadow] duration-150 ease-out;
 }
 .bh-input::placeholder, .bh-textarea::placeholder { @apply text-slate-400; }
-.bh-input:focus, .bh-select:focus, .bh-textarea:focus { @apply border-blue-500 outline-none ring-[3px] ring-blue-500/20; }
+.bh-input:focus, .bh-select:focus, .bh-textarea:focus { @apply border-accent-500 outline-none ring-[3px] ring-accent-500/20; }
 .bh-input[aria-invalid="true"], .bh-select[aria-invalid="true"], .bh-textarea[aria-invalid="true"] { @apply border-red-500; }
 .bh-textarea { @apply min-h-[6rem] resize-y; }
 .bh-input--auto, .bh-select--auto { @apply inline-block w-auto; }
-.bh-input--sm, .bh-select--sm { @apply rounded-lg px-2.5 py-1.5 text-xs; }
+/* Small fields match small buttons (32 px). */
+.bh-input--sm, .bh-select--sm { @apply h-8 rounded-lg px-2.5 py-0 text-[0.8125rem]; }
 .bh-help { @apply mt-1.5 text-xs leading-normal text-slate-500; }
 
 /* ── Badges ───────────────────────────────────────────────────────────── */
@@ -110,24 +116,30 @@
 .bh-dash-ico { @apply inline-flex flex-none; }
 .bh-dash-ico svg { @apply h-4 w-4; }
 
-/* ── Greeting and the three tile buttons ──────────────────────────────── */
-.bh-dash-head { @apply mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-4; }
-.bh-dash-head__title { @apply m-0 text-2xl font-bold leading-tight tracking-tight text-slate-900; }
-.bh-dash-head__sub { @apply mt-1 text-sm text-slate-500; }
-.bh-dash-head__actions { @apply grid w-full auto-cols-fr grid-flow-col gap-3 sm:flex sm:w-auto sm:flex-wrap; }
-.bh-dash-head__actions[hidden] { @apply hidden; }
-.bh-dash-head__actions .bh-btn--lg { @apply sm:min-w-[11.5rem]; }
-/* Phones: three in a row, so the icon squares and chevrons give way to the words. */
-@media (max-width: 639px) {
-    .bh-dash-head { @apply items-stretch; }
-    .bh-dash-head__actions .bh-btn--lg { @apply h-12 min-w-0 justify-center gap-2 px-2 text-sm; }
-    .bh-dash-head__actions .bh-btn__icon { @apply h-auto w-auto bg-transparent; }
-    .bh-dash-head__actions .bh-btn__icon svg { @apply h-4 w-4; }
-    .bh-dash-head__actions .bh-btn__chev { @apply hidden; }
-    .bh-dash-head__actions .bh-btn__label { @apply flex-none; }
+/* ── Greeting (1.2.80): a light panel with the person's picture, the
+      date, a time-of-day hello and the page's main buttons. ────────────── */
+.bh-dash-head {
+    @apply relative mb-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5;
+    @apply bg-gradient-to-r from-accent-50/80 via-white to-white;
 }
-@media (max-width: 359px) {
-    .bh-dash-head__actions .bh-btn__icon { @apply hidden; }
+/* A soft glow behind the picture. */
+.bh-dash-head::before {
+    content: "";
+    @apply pointer-events-none absolute -left-10 -top-16 h-44 w-44 rounded-full bg-accent-100/70 blur-3xl;
+}
+.bh-dash-head__hello { @apply relative flex min-w-0 flex-1 items-center gap-3.5 sm:gap-4; }
+.bh-dash-head__avatar { @apply flex-none rounded-full ring-4 ring-white shadow-sm; }
+.bh-dash-head__avatar > * { @apply rounded-full; }
+.bh-dash-head__text { @apply min-w-0; }
+.bh-dash-head__date { @apply m-0 text-xs font-medium text-accent-700; }
+.bh-dash-head__title { @apply m-0 mt-0.5 text-xl font-semibold leading-tight text-slate-900 [overflow-wrap:anywhere]; }
+.bh-dash-head__sub { @apply m-0 mt-1 text-sm text-slate-500; }
+.bh-dash-head__actions { @apply relative flex flex-wrap gap-2; }
+.bh-dash-head__actions[hidden] { @apply hidden; }
+/* Phones: the buttons share one row under the greeting. */
+@media (max-width: 639px) {
+    .bh-dash-head__actions { @apply grid w-full auto-cols-fr grid-flow-col; }
+    .bh-dash-head__actions .bh-btn--lg { @apply min-w-0 gap-1.5 px-2 text-[0.8125rem]; }
 }
 
 /* ── Customize bar ────────────────────────────────────────────────────── */
@@ -179,60 +191,53 @@
     @apply min-h-[12rem] rounded-2xl pb-8;
 }
 
-/* ── Card ─────────────────────────────────────────────────────────────── */
+/* ── Card: the core .bh-card (rounded-2xl, hairline, shadow-card) with the
+      core header: icon, title and description, then the tools. The title
+      and description wrap rather than being cut; the tools stay top right. */
 .bh-dcard {
     @apply relative flex min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white shadow-card;
     container-type: inline-size;
 }
-.bh-dcard__head { @apply flex items-start gap-3 px-5 pb-4 pt-5; }
-.bh-dcard__icon { @apply grid h-11 w-11 flex-none place-items-center rounded-xl bg-blue-50 text-blue-600; }
-.bh-dcard__icon svg { @apply h-5 w-5; }
-.bh-dcard__icon--green { @apply bg-emerald-50 text-emerald-600; }
-.bh-dcard__icon--amber { @apply bg-amber-50 text-amber-600; }
-.bh-dcard__icon--red { @apply bg-rose-50 text-rose-600; }
-.bh-dcard__icon--violet { @apply bg-violet-50 text-violet-600; }
-.bh-dcard__icon--indigo { @apply bg-indigo-50 text-indigo-600; }
+.bh-dcard__head { @apply flex items-start gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5; }
+.bh-dcard.is-collapsed .bh-dcard__head { @apply border-b-0; }
+.bh-dcard__icon { @apply grid h-9 w-9 flex-none place-items-center rounded-xl bg-accent-50 text-accent-600; }
+.bh-dcard__icon svg { @apply h-[1.125rem] w-[1.125rem]; }
+/* Older tone names all show the accent; red stays for a card about a fault. */
+.bh-dcard__icon--red { @apply bg-red-50 text-red-600; }
 .bh-dcard__icon--slate { @apply bg-slate-100 text-slate-600; }
-.bh-dcard__titles { @apply min-w-0 flex-1 pt-0.5; }
-.bh-dcard__title { @apply m-0 truncate text-lg font-bold leading-6 tracking-tight text-slate-900; }
-.bh-dcard__sub { @apply m-0 mt-0.5 truncate text-sm text-slate-500; }
-.bh-dcard__tools { @apply flex flex-none items-center gap-2 pt-0.5; }
-/* Header buttons: bordered squares, as the card's own controls. */
-.bh-dcard__tool {
-    @apply grid h-9 w-9 flex-none cursor-pointer place-items-center rounded-xl border border-slate-200 bg-white text-slate-600;
-    @apply transition-colors duration-150 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900;
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40;
-}
-.bh-dcard__tool svg { @apply h-[1.125rem] w-[1.125rem]; }
-/* The card's main setting, in the header (a select field marked 'inline'). */
+.bh-dcard__titles { @apply min-w-0 flex-1 self-center; }
+.bh-dcard__title { @apply m-0 text-[0.9375rem] font-semibold leading-5 text-slate-900 [overflow-wrap:anywhere]; }
+.bh-dcard__sub { @apply m-0 mt-0.5 text-xs leading-4 text-slate-500 [overflow-wrap:anywhere]; }
+.bh-dcard__tools { @apply flex flex-none items-center gap-1.5; }
+.bh-dcard__tool svg, .bh-dcard__tools .bh-btn svg { @apply h-4 w-4; }
+/* The card's main setting, in the header: the core small select with a
+   chevron of its own. */
 .bh-dcard__pick { @apply relative flex-none; }
-.bh-dcard__pick select {
-    @apply h-9 max-w-[10rem] cursor-pointer appearance-none truncate rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-sm font-medium text-slate-700;
-    @apply transition-colors duration-150 hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30;
-}
-.bh-dcard__pick .bh-dash-ico { @apply pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500; }
-.bh-dcard__pick[aria-busy="true"] select { @apply text-slate-400; }
-@container (max-width: 26rem) { .bh-dcard__pick { @apply hidden; } }
-@container (max-width: 19rem) { .bh-dcard__sub { @apply hidden; } }
-.bh-dcard__body { @apply min-h-0 flex-1 px-5 pb-5 text-sm; }
+.bh-dcard__pick .bh-select { @apply w-auto max-w-[10rem] cursor-pointer appearance-none pr-7 font-medium text-slate-700; }
+.bh-dcard__pick .bh-dash-ico { @apply pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500; }
+.bh-dcard__pick .bh-dash-ico svg { @apply h-3.5 w-3.5; }
+.bh-dcard__pick[aria-busy="true"] .bh-select { @apply text-slate-400; }
+/* The header keeps room for the title: the picker shows on cards wider than
+   a third of a laptop screen (Settings has it everywhere). */
+@container (max-width: 25.5rem) { .bh-dcard__pick { @apply hidden; } }
+.bh-dcard__body { @apply min-h-0 flex-1 p-4 text-sm sm:p-5; }
 .bh-dcard.is-collapsed .bh-dcard__body { @apply hidden; }
 .bh-dcard.is-refreshing .bh-dcard__refresh svg { @apply animate-spin; }
 /* Footer: a summary strip, then a line of text and a link. */
-.bh-dcard__summary { @apply mt-5 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3; }
-.bh-dcard__summary-icon { @apply grid h-9 w-9 flex-none place-items-center rounded-full bg-emerald-100 text-emerald-600; }
-.bh-dcard__summary-text { @apply m-0 text-sm font-semibold text-slate-900; }
+.bh-dcard__summary { @apply mt-4 flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5; }
+.bh-dcard__summary-icon { @apply grid h-7 w-7 flex-none place-items-center rounded-full bg-accent-100 text-accent-600; }
+.bh-dcard__summary-text { @apply m-0 text-[0.8125rem] font-semibold text-slate-900; }
 .bh-dcard__foot { @apply mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-slate-500; }
-.bh-dcard__footlink { @apply font-medium text-blue-600 no-underline hover:underline; }
+.bh-dcard__footlink { @apply font-medium text-accent-600 no-underline hover:underline; }
 
-/* Plain icon buttons (customize strip, dialogs, the overflow menu). */
+/* Plain icon buttons (customize strip, dialogs). New markup uses
+   .bh-btn--ghost.bh-btn--icon; this is that, kept for older markup. */
 .bh-dash-icon-btn {
-    @apply grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-slate-400;
-    @apply transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40;
+    @apply grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-slate-500;
+    @apply transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40;
 }
 .bh-dash-icon-btn:hover:not(:disabled) { @apply bg-slate-100 text-slate-900; }
 .bh-dash-icon-btn:disabled { @apply cursor-default opacity-35; }
-.bh-dmenu__btn { @apply h-9 w-7 text-slate-500; }
-.bh-dmenu__btn svg { @apply h-5 w-5; }
 
 /* ── Overflow menu ────────────────────────────────────────────────────── */
 .bh-dmenu { @apply relative; }
@@ -248,159 +253,128 @@
 .bh-dmenu__item.is-danger:hover { @apply bg-red-50; }
 .bh-dmenu__sep { @apply mx-1 my-1.5 h-px bg-slate-100; }
 
-/* ── Tones for small badges (list rows, the catalogue) ────────────────── */
+/* ── Tones for small badges (list rows, the catalogue): the accent, a
+      neutral, an outlined accent for "needs a look", and red for faults. */
 .bh-dtone { @apply inline-flex flex-none items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold leading-normal; }
 .bh-dtone--slate { @apply bg-slate-100 text-slate-600; }
-.bh-dtone--blue { @apply bg-blue-50 text-blue-700; }
-.bh-dtone--green { @apply bg-emerald-50 text-emerald-700; }
-.bh-dtone--amber { @apply bg-amber-50 text-amber-700; }
-.bh-dtone--red { @apply bg-rose-50 text-rose-700; }
-.bh-dtone--violet { @apply bg-violet-50 text-violet-700; }
-.bh-dtone--indigo { @apply bg-indigo-50 text-indigo-700; }
+.bh-dtone--blue, .bh-dtone--green, .bh-dtone--violet, .bh-dtone--indigo { @apply bg-accent-50 text-accent-700; }
+.bh-dtone--amber { @apply bg-white text-accent-700 ring-1 ring-inset ring-accent-300; }
+.bh-dtone--red { @apply bg-red-50 text-red-700; }
 .bh-dcat__name .bh-dtone { @apply ml-1.5 align-[1px]; }
 
 /* ── View: stat tiles ─────────────────────────────────────────────────── */
-.bh-dview--stat { @apply grid grid-cols-1 gap-3.5; }
-@container (min-width: 22rem) {
+.bh-dview--stat { @apply grid grid-cols-1 gap-2.5 sm:gap-3; }
+@container (min-width: 18rem) {
     .bh-dview--stat { @apply grid-cols-2; }
-    .bh-dstat:last-child:nth-child(odd) { @apply col-span-2; }
+    .bh-dstat:last-child:nth-child(odd), .bh-dstat--wide { @apply col-span-2; }
 }
-@container (min-width: 54rem) {
-    .bh-dview--stat { @apply grid-cols-4; }
-    .bh-dstat:last-child:nth-child(odd) { @apply col-span-1; }
-    .bh-dstat:last-child:nth-child(4n+1) { @apply col-span-4; }
-    .bh-dstat:last-child:nth-child(4n+2) { @apply col-span-3; }
-    .bh-dstat:last-child:nth-child(4n+3) { @apply col-span-2; }
+/* A wide card: every tile in one row, the same size (People included). With
+   more than six tiles that gets too tight, so they wrap four to a row. */
+@container (min-width: 46rem) {
+    .bh-dview--stat { grid-template-columns: none; @apply auto-cols-fr grid-flow-col; }
+    .bh-dstat:last-child:nth-child(odd), .bh-dstat--wide { @apply col-auto; }
+    .bh-dview--stat:has(> :nth-child(7)) { grid-template-columns: repeat(4, minmax(0, 1fr)); @apply grid-flow-row; }
 }
+/* Every tile looks the same: a quiet slate panel, an accent icon square, the
+   number, and one line of context. Colour is kept for what needs a look. */
 .bh-dstat {
-    @apply relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 text-inherit no-underline;
-    @apply transition-[border-color,box-shadow] duration-150;
+    @apply relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-inherit no-underline sm:p-3.5;
+    @apply transition-[border-color,background-color,box-shadow] duration-150;
     container-type: inline-size;
 }
-a.bh-dstat:hover { @apply shadow-card; }
-a.bh-dstat:focus-visible { @apply outline-none ring-2 ring-blue-500/40; }
-.bh-dstat__top { @apply flex min-w-0 items-center gap-3; }
-.bh-dstat__icon { @apply grid h-10 w-10 flex-none place-items-center rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 text-white shadow-sm; }
-.bh-dstat__icon svg { @apply h-5 w-5; }
-.bh-dstat__label { @apply min-w-0 flex-1 truncate text-[0.9375rem] font-semibold text-slate-900; }
-.bh-dstat__value { @apply mt-3.5 text-[2rem] font-bold leading-none tracking-tight text-slate-900 tabular-nums; }
-.bh-dstat__foot { @apply mt-2 flex min-w-0 items-end justify-between gap-3; }
-.bh-dstat__hint { @apply min-w-0 truncate text-sm text-slate-500; }
-.bh-dstat__spark { @apply flex h-5 flex-none items-end gap-[3px]; }
-.bh-dstat__spark span { @apply w-[5px] rounded-full bg-slate-400; }
-.bh-dstat__spark span:nth-child(1) { @apply h-2.5 opacity-70; }
-.bh-dstat__spark span:nth-child(2) { @apply h-3.5 opacity-85; }
-.bh-dstat__spark span:nth-child(3) { @apply h-5; }
-/* The pill at the top right: a trend, or a count that needs attention. */
-.bh-dstat__pill { @apply inline-flex flex-none items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold leading-none text-slate-600; }
-.bh-dstat__pill svg { @apply h-3.5 w-3.5; }
-.bh-dstat__pill--up { @apply bg-emerald-50 text-emerald-600; }
-.bh-dstat__pill--down { @apply bg-rose-50 text-rose-600; }
-.bh-dstat__pill--amber { @apply bg-amber-100/70 text-orange-600; }
-.bh-dstat__pill--red { @apply bg-rose-50 text-rose-600; }
-.bh-dstat__pill--blue { @apply bg-blue-50 text-blue-600; }
-.bh-dstat__pill--green { @apply bg-emerald-50 text-emerald-600; }
-.bh-dstat__pill--violet { @apply bg-violet-50 text-violet-600; }
-.bh-dstat__go { @apply grid h-8 w-8 flex-none place-items-center rounded-full border border-slate-200 bg-white/80 text-slate-500; }
-a.bh-dstat:hover .bh-dstat__go { @apply border-slate-300 text-slate-900; }
-/* People: avatars, and a quiet illustration on the wide tile. */
+a.bh-dstat:hover { @apply border-accent-200 bg-white shadow-card; }
+a.bh-dstat:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
+.bh-dstat__top { @apply flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1; }
+.bh-dstat__top > .bh-dstat__pill, .bh-dstat__top > .bh-dstat__go, .bh-dstat__top > .bh-dstat__people { @apply ml-auto; }
+.bh-dstat__icon { @apply grid h-7 w-7 flex-none place-items-center rounded-lg bg-accent-600 text-white; }
+.bh-dstat__icon svg { @apply h-4 w-4; }
+/* Wraps between words only; a word never splits, the pill moves aside. */
+.bh-dstat__label { @apply flex-1 self-center text-[0.8125rem] font-semibold leading-4 text-slate-900 [overflow-wrap:break-word]; }
+@container (max-width: 10rem) { .bh-dstat__top { @apply gap-x-1.5; } .bh-dstat__label { @apply text-xs; } }
+.bh-dstat__value { @apply mt-2.5 text-2xl font-bold leading-none tracking-tight text-slate-900 tabular-nums; }
+.bh-dstat__foot { @apply mt-1.5 flex min-w-0 items-end justify-between gap-2; }
+.bh-dstat__hint { @apply min-w-0 text-xs leading-4 text-slate-500 [overflow-wrap:anywhere]; }
+.bh-dstat__spark { @apply flex h-4 flex-none items-end gap-[2px]; }
+.bh-dstat__spark span { @apply w-1 rounded-full; }
+.bh-dstat__spark span:nth-child(1) { @apply h-2 bg-accent-200; }
+.bh-dstat__spark span:nth-child(2) { @apply h-3 bg-accent-300; }
+.bh-dstat__spark span:nth-child(3) { @apply h-4 bg-accent-500; }
+/* The pill at the top right: a trend (accent up, neutral down), or a count
+   that needs attention (solid accent). */
+.bh-dstat__pill { @apply inline-flex flex-none items-center gap-0.5 whitespace-nowrap rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[0.6875rem] font-semibold leading-4 text-slate-600; }
+.bh-dstat__pill svg { @apply h-3 w-3; }
+.bh-dstat__pill--up, .bh-dstat__pill--blue, .bh-dstat__pill--green, .bh-dstat__pill--violet { @apply bg-accent-50 text-accent-700; }
+.bh-dstat__pill--down { @apply bg-slate-200/70 text-slate-600; }
+.bh-dstat__pill--amber { @apply bg-accent-600 text-white; }
+.bh-dstat__pill--red { @apply bg-red-600 text-white; }
+.bh-dstat__go { @apply grid h-6 w-6 flex-none place-items-center rounded-full border border-slate-200 bg-white text-slate-500; }
+.bh-dstat__go svg { @apply h-3.5 w-3.5; }
+a.bh-dstat:hover .bh-dstat__go { @apply border-accent-200 text-accent-600; }
+/* People: avatars in the accent's shades, and a quiet illustration on the
+   wide tile. */
 .bh-dstat__people { @apply relative z-[1] flex flex-none items-center; }
-.bh-dstat__avatar { @apply -ml-2 box-content grid h-8 w-8 place-items-center overflow-hidden rounded-full border-2 border-white bg-blue-500 text-xs font-semibold text-white first:ml-0; }
-.bh-dstat__avatar:nth-child(3n+2) { @apply bg-violet-500; }
-.bh-dstat__avatar:nth-child(3n+3) { @apply bg-emerald-500; }
+.bh-dstat__avatar { @apply -ml-1.5 box-content grid h-6 w-6 place-items-center overflow-hidden rounded-full border-2 border-white bg-accent-600 text-[0.6875rem] font-semibold text-white first:ml-0; }
+.bh-dstat__avatar:nth-child(3n+2) { @apply bg-accent-500; }
+.bh-dstat__avatar:nth-child(3n+3) { @apply bg-accent-400; }
 .bh-dstat__avatar img { @apply h-full w-full object-cover; }
-.bh-dstat__avatar--more { @apply bg-indigo-50 text-[0.6875rem] text-indigo-600; }
-.bh-dstat__art { @apply pointer-events-none absolute -bottom-px right-0 hidden h-[5.5rem] w-40; }
-.bh-dstat--wide .bh-dstat__foot { @apply pr-0; }
-@container (min-width: 30rem) {
+.bh-dstat__avatar--more { @apply bg-accent-50 text-[0.625rem] text-accent-700; }
+.bh-dstat__art { @apply pointer-events-none absolute -bottom-px right-0 hidden h-16 w-28; }
+@container (min-width: 16rem) {
     .bh-dstat--wide .bh-dstat__art { @apply block; }
-    .bh-dstat--wide .bh-dstat__foot { @apply pr-40; }
+    .bh-dstat--wide .bh-dstat__foot { @apply pr-28; }
 }
-/* A narrow tile (phones, small cards): the label moves under the icon, the
-   pill keeps the top right, and the hint may take two lines. */
-/* A narrow card (this queries the card, the tile's container): tighter tiles. */
-@container (max-width: 25rem) {
-    .bh-dstat { @apply p-3.5; }
-    .bh-dview--stat { @apply gap-2.5; }
+/* A narrow tile: the pill drops its arrow (the sign says it). */
+@container (max-width: 9.5rem) {
+    .bh-dstat__pill svg { @apply hidden; }
 }
-@container (max-width: 12.5rem) {
-    .bh-dstat__top { @apply flex-wrap gap-x-2 gap-y-2; }
-    .bh-dstat__label { @apply order-last basis-full; }
-    .bh-dstat__icon { @apply h-9 w-9; }
-    .bh-dstat__pill, .bh-dstat__go { @apply ml-auto; }
-    .bh-dstat__pill { @apply gap-0.5 px-2 text-[0.6875rem]; }
-    .bh-dstat__pill--up svg, .bh-dstat__pill--down svg { @apply hidden; }   /* the sign says it */
-    .bh-dstat__value { @apply mt-2 text-[1.75rem]; }
-    .bh-dstat__hint { @apply line-clamp-2 whitespace-normal; }
-}
-/* Tones: the tile's tint, its icon square, its bars. */
-.bh-dstat--blue { @apply border-blue-100 from-blue-50/80; }
-.bh-dstat--blue .bh-dstat__icon { @apply from-blue-500 to-blue-600 shadow-blue-600/25; }
-.bh-dstat--blue .bh-dstat__spark span { @apply bg-blue-500; }
-a.bh-dstat--blue:hover { @apply border-blue-200; }
-.bh-dstat--violet { @apply border-violet-100 from-violet-50/80; }
-.bh-dstat--violet .bh-dstat__icon { @apply from-violet-500 to-purple-600 shadow-violet-600/25; }
-.bh-dstat--violet .bh-dstat__spark span { @apply bg-violet-400; }
-a.bh-dstat--violet:hover { @apply border-violet-200; }
-.bh-dstat--green { @apply border-emerald-100 from-emerald-50/80; }
-.bh-dstat--green .bh-dstat__icon { @apply from-emerald-500 to-emerald-600 shadow-emerald-600/25; }
-.bh-dstat--green .bh-dstat__spark span { @apply bg-emerald-500; }
-a.bh-dstat--green:hover { @apply border-emerald-200; }
-.bh-dstat--amber { @apply border-amber-100 from-amber-50/80; }
-.bh-dstat--amber .bh-dstat__icon { @apply from-amber-400 to-orange-500 shadow-orange-500/25; }
-.bh-dstat--amber .bh-dstat__spark span { @apply bg-amber-400; }
-.bh-dstat--amber .bh-dstat__hint { @apply text-orange-600; }
-a.bh-dstat--amber:hover { @apply border-amber-200; }
-.bh-dstat--red { @apply border-rose-100 from-rose-50/80; }
-.bh-dstat--red .bh-dstat__icon { @apply from-rose-500 to-rose-600 shadow-rose-600/25; }
-.bh-dstat--red .bh-dstat__spark span { @apply bg-rose-500; }
-.bh-dstat--red .bh-dstat__hint { @apply text-rose-600; }
-a.bh-dstat--red:hover { @apply border-rose-200; }
-.bh-dstat--indigo { @apply border-indigo-100 from-indigo-50/70; }
-.bh-dstat--indigo .bh-dstat__icon { @apply from-violet-500 to-indigo-500 shadow-indigo-500/25; }
-.bh-dstat--indigo .bh-dstat__spark span { @apply bg-indigo-400; }
-a.bh-dstat--indigo:hover { @apply border-indigo-200; }
-.bh-dstat--slate .bh-dstat__spark span { @apply bg-slate-400; }
-a.bh-dstat--slate:hover { @apply border-slate-300; }
+/* Tones. The colour names apps already use (blue, green, violet, indigo,
+   amber) all mean "the accent" now; amber still marks its hint, and red is
+   kept for a tile that reports a fault. */
+.bh-dstat--blue, .bh-dstat--green, .bh-dstat--violet, .bh-dstat--indigo, .bh-dstat--slate { @apply border-slate-200; }
+.bh-dstat--amber .bh-dstat__hint { @apply font-medium text-accent-700; }
+.bh-dstat--red { @apply border-red-200 bg-red-50/50; }
+.bh-dstat--red .bh-dstat__icon { @apply bg-red-600; }
+.bh-dstat--red .bh-dstat__spark span { @apply bg-red-400; }
+.bh-dstat--red .bh-dstat__hint { @apply text-red-700; }
 .bh-dstat__trend { @apply text-xs font-semibold; }
 
 /* ── View: list ───────────────────────────────────────────────────────── */
 .bh-dview--list { @apply m-0 list-none p-0; }
-.bh-dlist__row { @apply flex items-center justify-between gap-3 border-t border-slate-100 py-3 first:border-t-0 first:pt-1; }
+.bh-dlist__row { @apply flex items-start justify-between gap-3 border-t border-slate-100 py-3 first:border-t-0 first:pt-1; }
 .bh-dlist__main { @apply flex min-w-0 flex-col gap-0.5; }
-.bh-dlist__title { @apply truncate font-medium text-slate-900 no-underline; }
-a.bh-dlist__title:hover { @apply text-blue-600; }
-.bh-dlist__meta { @apply truncate text-xs text-slate-500; }
+.bh-dlist__title { @apply font-medium [overflow-wrap:anywhere] text-slate-900 no-underline; }
+a.bh-dlist__title:hover { @apply text-accent-600; }
+.bh-dlist__meta { @apply text-xs [overflow-wrap:anywhere] text-slate-500; }
 
 /* ── View: table ──────────────────────────────────────────────────────── */
-.bh-dview--table { @apply -mx-5 overflow-x-auto; }
+.bh-dview--table { @apply -mx-4 overflow-x-auto sm:-mx-5; }
 .bh-dtable { @apply w-full border-collapse text-[0.8125rem]; }
-.bh-dtable th { @apply whitespace-nowrap border-b border-slate-200 px-5 py-2 text-left font-medium text-slate-500; }
-.bh-dtable td { @apply border-b border-slate-100 px-5 py-2.5 text-slate-700; }
+.bh-dtable th { @apply whitespace-nowrap border-b border-slate-200 px-4 py-2 text-left font-medium text-slate-500 sm:px-5; }
+.bh-dtable td { @apply border-b border-slate-100 px-4 py-2.5 text-slate-700 sm:px-5; }
 .bh-dtable tr:last-child td { @apply border-b-0; }
 .bh-dtable .is-right { @apply text-right tabular-nums; }
 .bh-dtable .is-center { @apply text-center; }
-.bh-dtable__link { @apply font-medium text-slate-900 no-underline hover:text-blue-600; }
+.bh-dtable__link { @apply font-medium text-slate-900 no-underline hover:text-accent-600; }
 
 /* ── View: chart ──────────────────────────────────────────────────────── */
 .bh-dview--chart { @apply pt-1; }
-.bh-dchart { @apply flex h-52 gap-3 pt-7; }
-.bh-dchart__axis { @apply relative w-7 flex-none text-right text-xs text-slate-400 tabular-nums; }
+.bh-dchart { @apply flex h-44 gap-2.5 pt-6; }
+.bh-dchart__axis { @apply relative w-6 flex-none text-right text-[0.6875rem] text-slate-400 tabular-nums; }
 .bh-dchart__tick { @apply absolute right-0 translate-y-1/2 leading-none; }
 .bh-dchart__area { @apply relative flex flex-1 items-end gap-[5%] border-b border-l border-slate-200; }
 .bh-dchart__grid { @apply pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-200; }
 .bh-dchart__col { @apply relative z-[1] flex h-full min-w-0 flex-1 items-end justify-center gap-0.5; }
 /* A bar is 60% of its column (several series share that and shrink). */
-.bh-dchart__bar { @apply relative min-h-0 min-w-0 max-w-[3.5rem] flex-initial basis-3/5 rounded-t-lg bg-gradient-to-b from-blue-400 to-blue-600; }
-.bh-dchart__val { @apply absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap text-sm font-bold text-slate-900 tabular-nums; }
-.bh-dchart__s1 { @apply from-teal-400 to-teal-600; }
-.bh-dchart__s2 { @apply from-amber-300 to-amber-500; }
+.bh-dchart__bar { @apply relative min-h-0 min-w-0 max-w-[3rem] flex-initial basis-3/5 rounded-t-md bg-gradient-to-b from-accent-400 to-accent-600; }
+.bh-dchart__val { @apply absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap text-xs font-semibold text-slate-900 tabular-nums; }
+.bh-dchart__s1 { @apply from-accent-200 to-accent-300; }
+.bh-dchart__s2 { @apply from-slate-300 to-slate-400; }
 .bh-dchart__svg { @apply absolute inset-0 h-full w-full overflow-visible; }
-.bh-dchart__line { @apply fill-none stroke-blue-500 stroke-2; stroke-linejoin: round; stroke-linecap: round; }
-.bh-dchart__line.bh-dchart__s1 { @apply stroke-teal-500; }
-.bh-dchart__line.bh-dchart__s2 { @apply stroke-amber-500; }
-.bh-dchart__labels { @apply ml-10 mt-2.5 flex gap-[5%] text-sm text-slate-500; }
-.bh-dchart__labels span { @apply min-w-0 flex-1 overflow-hidden whitespace-nowrap text-center; }
+.bh-dchart__line { @apply fill-none stroke-accent-600 stroke-2; stroke-linejoin: round; stroke-linecap: round; }
+.bh-dchart__line.bh-dchart__s1 { @apply stroke-accent-300; }
+.bh-dchart__line.bh-dchart__s2 { @apply stroke-slate-400; }
+.bh-dchart__labels { @apply ml-[2.125rem] mt-2 flex gap-[5%] text-xs text-slate-500; }
+.bh-dchart__labels span { @apply flex min-w-0 flex-1 justify-center overflow-visible whitespace-nowrap; }
 .bh-dchart__labels span.is-thin { @apply invisible; }
 /* Fresh data: bars grow from the axis one after another (the delay is set
    per bar), their values rise in after; a line draws itself left to right. */
@@ -409,24 +383,24 @@ a.bh-dlist__title:hover { @apply text-blue-600; }
 .bh-dchart.is-animated .bh-dchart__line { stroke-dasharray: 1; @apply animate-bh-draw; }
 .bh-dchart__legend { @apply mt-3 flex flex-wrap gap-3 text-xs text-slate-500; }
 .bh-dchart__key { @apply inline-flex items-center gap-1.5; }
-.bh-dchart__swatch { @apply h-2.5 w-2.5 rounded-sm bg-gradient-to-b from-blue-400 to-blue-600; }
+.bh-dchart__swatch { @apply h-2.5 w-2.5 rounded-sm bg-gradient-to-b from-accent-400 to-accent-600; }
 
 /* ── View: feed ───────────────────────────────────────────────────────── */
 .bh-dview--feed { @apply relative m-0 list-none py-0 pl-3.5 pr-0; }
 .bh-dview--feed::before { content: ""; @apply absolute bottom-2 left-[.2rem] top-2 w-px bg-slate-200; }
 .bh-dfeed__row { @apply relative pb-3.5 pl-2 last:pb-0; }
 .bh-dfeed__row::before { content: ""; @apply absolute -left-3.5 top-1.5 h-2 w-2 rounded-full border-2 border-slate-300 bg-white; }
-.bh-dfeed__row--amber::before { @apply border-amber-500; }
-.bh-dfeed__row--red::before { @apply border-rose-500; }
-.bh-dfeed__row--green::before { @apply border-emerald-500; }
-.bh-dfeed__row--blue::before { @apply border-blue-500; }
-.bh-dfeed__row--violet::before { @apply border-violet-500; }
-.bh-dfeed__row--indigo::before { @apply border-indigo-500; }
+/* One accent: an outlined dot for activity, a filled one for "needs a
+   look", red for a fault. */
+.bh-dfeed__row--green::before, .bh-dfeed__row--blue::before,
+.bh-dfeed__row--violet::before, .bh-dfeed__row--indigo::before { @apply border-accent-500; }
+.bh-dfeed__row--amber::before { @apply border-accent-600 bg-accent-600; }
+.bh-dfeed__row--red::before { @apply border-red-500; }
 .bh-dfeed__line { @apply m-0 leading-snug text-slate-700 [overflow-wrap:anywhere]; }
 .bh-dfeed__line strong { @apply font-semibold text-slate-900; }
 .bh-dfeed__text { @apply text-inherit no-underline; }
-a.bh-dfeed__text:hover { @apply text-blue-600; }
-.bh-dfeed__quote { @apply mb-0 mt-1 line-clamp-2 text-[0.8125rem] text-slate-500; }
+a.bh-dfeed__text:hover { @apply text-accent-600; }
+.bh-dfeed__quote { @apply mb-0 mt-1 text-[0.8125rem] text-slate-500 [overflow-wrap:anywhere]; }
 .bh-dfeed__time { @apply mt-0.5 block text-xs text-slate-400; }
 
 /* ── View: status ─────────────────────────────────────────────────────── */
@@ -434,13 +408,13 @@ a.bh-dfeed__text:hover { @apply text-blue-600; }
 .bh-dstatus { @apply m-0 list-none p-0; }
 .bh-dstatus__row { @apply flex items-start gap-2.5 border-t border-slate-100 py-2 first:border-t-0; }
 .bh-dstatus__row > .bh-dash-ico { @apply mt-0.5; }
-.bh-dstatus__row.is-ok > .bh-dash-ico { @apply text-emerald-500; }
+.bh-dstatus__row.is-ok > .bh-dash-ico { @apply text-accent-600; }
 .bh-dstatus__row.is-warn > .bh-dash-ico { @apply text-amber-500; }
-.bh-dstatus__row.is-error > .bh-dash-ico { @apply text-rose-500; }
+.bh-dstatus__row.is-error > .bh-dash-ico { @apply text-red-600; }
 .bh-dstatus__row.is-unknown > .bh-dash-ico { @apply text-slate-400; }
 .bh-dstatus__text { @apply flex min-w-0 flex-1 flex-wrap justify-between gap-x-3; }
 .bh-dstatus__label { @apply text-slate-900 no-underline; }
-a.bh-dstatus__label:hover { @apply text-blue-600; }
+a.bh-dstatus__label:hover { @apply text-accent-600; }
 .bh-dstatus__detail { @apply text-[0.8125rem] text-slate-500; }
 
 /* ── View: html ───────────────────────────────────────────────────────── */
@@ -456,8 +430,8 @@ a.bh-dstatus__label:hover { @apply text-blue-600; }
 .bh-dstate__title { @apply m-0 font-semibold text-slate-900; }
 .bh-dstate__text { @apply m-0 max-w-[22rem] text-[0.8125rem] leading-normal text-slate-500; }
 .bh-dstate .bh-btn { @apply mt-2; }
-.bh-dstate--error > .bh-dash-ico { @apply bg-rose-50 text-rose-600; }
-.bh-dstate--info > .bh-dash-ico { @apply bg-blue-50 text-blue-600; }
+.bh-dstate--error > .bh-dash-ico { @apply bg-red-50 text-red-600; }
+.bh-dstate--info > .bh-dash-ico { @apply bg-accent-50 text-accent-600; }
 
 /* ── Customize mode on the cards ──────────────────────────────────────── */
 .bh-dash.is-editing .bh-dcard { @apply border-dashed border-slate-300 shadow-none; }
@@ -467,15 +441,15 @@ a.bh-dstatus__label:hover { @apply text-blue-600; }
     mask-image: linear-gradient(#000 70%, transparent);
 }
 .bh-dcard__handle { @apply -ml-1 cursor-grab touch-none text-slate-500 active:cursor-grabbing; }
-.bh-dcard__remove:hover:not(:disabled) { @apply bg-rose-50 text-rose-600; }
+.bh-dcard__remove:hover:not(:disabled) { @apply bg-red-50 text-red-600; }
 .bh-dcard__edit { @apply flex items-center justify-between gap-2 rounded-b-2xl border-t border-dashed border-slate-300 bg-slate-50 py-2 pl-5 pr-2; }
 .bh-dcard__moves { @apply flex gap-0.5; }
 .bh-dcard__onesize { @apply text-xs text-slate-400; }
 .bh-dcard__sizes { @apply inline-flex rounded-lg bg-slate-200 p-0.5; }
 .bh-dcard__size { @apply h-7 min-w-[2rem] cursor-pointer rounded-md border-0 bg-transparent px-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900; }
 .bh-dcard__size.is-on { @apply bg-white text-slate-900 shadow-sm; }
-.bh-dcard.is-dragging { @apply pointer-events-none fixed z-[60] -rotate-[.6deg] border-solid border-blue-600 opacity-95 shadow-2xl shadow-slate-900/30; }
-.bh-dcard--placeholder { @apply rounded-2xl border-2 border-dashed border-blue-600/45 bg-blue-600/5 shadow-none; }
+.bh-dcard.is-dragging { @apply pointer-events-none fixed z-[60] -rotate-[.6deg] border-solid border-accent-600 opacity-95 shadow-2xl shadow-slate-900/30; }
+.bh-dcard--placeholder { @apply rounded-2xl border-2 border-dashed border-accent-600/45 bg-accent-600/5 shadow-none; }
 .bh-dcard.is-new { @apply animate-bh-new; }
 .bh-dash-drop-hint { @apply col-span-full self-center px-4 py-12 text-center; }
 .bh-dash-drop-hint__title { @apply m-0 font-semibold text-slate-900; }
@@ -513,7 +487,7 @@ a.bh-dstatus__label:hover { @apply text-blue-600; }
 .bh-dcat__title { @apply mb-1 mt-0 text-[0.8125rem] font-semibold text-slate-500; }
 .bh-dcat__list { @apply m-0 list-none p-0; }
 .bh-dcat__item { @apply flex items-start gap-3 border-t border-slate-100 py-3 first:border-t-0; }
-.bh-dcat__icon { @apply grid h-10 w-10 flex-none place-items-center rounded-xl bg-blue-50 text-blue-600; }
+.bh-dcat__icon { @apply grid h-10 w-10 flex-none place-items-center rounded-xl bg-accent-50 text-accent-600; }
 .bh-dcat__icon svg { @apply h-5 w-5; }
 .bh-dcat__text { @apply min-w-0 flex-1; }
 .bh-dcat__name { @apply m-0 text-sm font-semibold text-slate-900; }
@@ -529,7 +503,7 @@ a.bh-dstatus__label:hover { @apply text-blue-600; }
 .bh-dash-dialog__body { @apply grid gap-4 px-5 pb-5 pt-3; }
 .bh-dash-dialog__foot { @apply flex justify-end gap-2 rounded-b-2xl border-t border-slate-100 bg-slate-50 px-5 py-3; }
 .bh-dfield__check { @apply flex cursor-pointer items-center gap-2 text-sm text-slate-700; }
-.bh-dfield__check input { @apply h-4 w-4 accent-blue-600; }
+.bh-dfield__check input { @apply h-4 w-4 accent-accent-600; }
 .bh-dfield__error { @apply mb-0 mt-1.5 text-xs text-red-700; }
 .bh-dfield__error[hidden] { @apply hidden; }
 

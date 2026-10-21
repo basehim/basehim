@@ -112,6 +112,9 @@ final class Router
         $this->fallbacks = array_values(array_filter($this->fallbacks, static fn($r) => ($r['owner'] ?? null) !== $slug));
         $this->reservedCache = null;
         $this->table = null;
+        $this->routeKeys = [];
+        $this->nameCount = [];
+        foreach ($this->routes as $r) $this->remember($r);
         return $before - count($this->routes) - count($this->fallbacks);
     }
 
@@ -209,7 +212,7 @@ final class Router
 
         $this->reservedCache = null;
         $this->table = null;
-        $this->routes[] = [
+        $this->routes[] = $route = [
             'methods'    => $methods,
             'pattern'    => $fullPattern,
             'handler'    => $handler,
@@ -219,6 +222,7 @@ final class Router
             'options'    => [],
             'seq'        => ++$this->seq,
         ];
+        $this->remember($route);
         return $this;
     }
 
@@ -252,7 +256,7 @@ final class Router
         if ($this->isRepeat($owner, 'site', $methods, $pattern)) return true;
         $this->reservedCache = null;
         $this->table = null;
-        $this->routes[] = [
+        $this->routes[] = $route = [
             'methods'    => $methods,
             'pattern'    => $pattern,
             'handler'    => $handler,
@@ -262,27 +266,33 @@ final class Router
             'options'    => $options,
             'seq'        => ++$this->seq,
         ];
+        $this->remember($route);
         return true;
     }
 
     /** Whether a route name is taken already (by any app). */
     public function hasName(string $name): bool
     {
-        foreach ($this->routes as $r) {
-            if (($r['options']['name'] ?? null) === $name) return true;
-        }
-        return false;
+        return isset($this->nameCount[$name]);
+    }
+
+    /** Add a stored route to the lookups. */
+    private function remember(array $r): void
+    {
+        $this->routeKeys[self::routeKey((string) ($r['owner'] ?? ''), (string) ($r['area'] ?? ''), $r['methods'], $r['pattern'])] = true;
+        $name = $r['options']['name'] ?? null;
+        if (is_string($name)) $this->nameCount[$name] = ($this->nameCount[$name] ?? 0) + 1;
+    }
+
+    private static function routeKey(string $owner, string $area, array $methods, string $pattern): string
+    {
+        // Methods in their given order, as the comparison this replaces did.
+        return $owner . "\0" . $area . "\0" . $pattern . "\0" . implode(',', $methods);
     }
 
     private function isRepeat(string $owner, string $area, array $methods, string $pattern): bool
     {
-        foreach ($this->routes as $r) {
-            if (($r['owner'] ?? null) === $owner && ($r['area'] ?? '') === $area
-                && $r['pattern'] === $pattern && $r['methods'] === $methods) {
-                return true;
-            }
-        }
-        return false;
+        return isset($this->routeKeys[self::routeKey($owner, $area, $methods, $pattern)]);
     }
 
     private static function hasAdminAuth(array $middleware): bool
@@ -298,6 +308,15 @@ final class Router
 
     /** @var array{routes: array, rejected: array}|null the effective route table, built on first dispatch */
     private ?array $table = null;
+
+    /**
+     * Lookups kept beside $routes (1.2.79), so registering a route is not a
+     * scan of every route registered before it:
+     *   $routeKeys  owner|area|pattern|methods => true  (isRepeat)
+     *   $nameCount  route name => how many routes carry it  (hasName)
+     */
+    private array $routeKeys = [];
+    private array $nameCount = [];
 
     /**
      * Paths only core may serve. A public app route under one of these is
@@ -350,6 +369,39 @@ final class Router
             }
         }
 
+        /*
+         * Indexes (1.2.79), so each app route is checked against core's and
+         * the earlier app routes by lookup, not by comparing it with every one
+         * of them. With ~300 core and ~800 app routes the pairwise version ran
+         * about a million regex calls per request: 0.5–4 s before any page
+         * could start. Same routes, same order, same messages.
+         *
+         *   $shapeOf          pattern => shape, each worked out once
+         *   $coreByShape      method => shape => first core route (index) with it
+         *   $coreParamByFirst literal first segment => core routes with parameters
+         *   $coreParamMixed   core routes with a parameter inside their first
+         *                     segment (/sitemap-{name}.xml): any fixed path may match
+         *   $accByShape       method => shape => first accepted app route with it
+         */
+        $shapeOf = [];
+        $shape = static function (string $p) use (&$shapeOf): string {
+            return $shapeOf[$p] ??= self::shape($p);
+        };
+        $coreByShape = [];
+        $coreParamByFirst = [];
+        $coreParamMixed = [];
+        foreach ($core as $i => $c) {
+            $s = $shape($c['pattern']);
+            foreach ($c['methods'] as $m) $coreByShape[$m][$s] ??= $i;
+            if (str_contains($c['pattern'], '{')) {
+                $cFirst = explode('/', trim($c['pattern'], '/'))[0] ?? '';
+                if (str_contains($cFirst, '{')) $coreParamMixed[] = $i;
+                else $coreParamByFirst[$cFirst][] = $i;
+            }
+        }
+        $coreRegex = [];
+        $accByShape = [];
+
         $accepted = [];
         $replacing = [];
         $rejected = [];
@@ -386,18 +438,36 @@ final class Router
                 }
             }
 
-            // A core route answering the same method and path shape (or, for
-            // a fixed path, any core route that matches it).
-            $hit = null;
-            foreach ($core as $c) {
-                if (!array_intersect(array_diff($r['methods'], ['HEAD']) ?: $r['methods'], $c['methods'])) continue;
-                if (self::shape($c['pattern']) === self::shape($pattern)
-                    || (!str_contains($pattern, '{') && $this->match($c['pattern'], $pattern) !== null)) {
-                    $hit = $c;
-                    break;
+            $methods = array_diff($r['methods'], ['HEAD']) ?: $r['methods'];
+            $s = $shape($pattern);
+
+            // The first core route (in core's order) that shares a method and
+            // has the same shape or, for a fixed path, matches it. A fixed core
+            // path that matches has the same shape, so only core routes with
+            // parameters need their regex: those under the same first segment,
+            // and those with a parameter inside their first segment.
+            $hitIndex = null;
+            foreach ($methods as $m) {
+                $i = $coreByShape[$m][$s] ?? null;
+                if ($i !== null && ($hitIndex === null || $i < $hitIndex)) $hitIndex = $i;
+            }
+            if (!str_contains($pattern, '{')) {
+                $candidates = $coreParamByFirst[$first] ?? [];
+                if ($coreParamMixed) {
+                    $candidates = array_merge($candidates, $coreParamMixed);
+                    sort($candidates);
+                }
+                foreach ($candidates as $i) {
+                    if ($hitIndex !== null && $i >= $hitIndex) break;
+                    if (!array_intersect($methods, $core[$i]['methods'])) continue;
+                    if (preg_match($coreRegex[$i] ??= self::compile($core[$i]['pattern']), $pattern)) {
+                        $hitIndex = $i;
+                        break;
+                    }
                 }
             }
-            if ($hit !== null) {
+            if ($hitIndex !== null) {
+                $hit = $core[$hitIndex];
                 $key = ($r['methods'][0] ?? 'GET') . ' ' . $hit['pattern'];
                 if ($r['area'] === 'site' && !empty($r['options']['replace']) && in_array($key, self::REPLACEABLE, true) && !isset($replacing[$key])) {
                     $replacing[$key] = $r;
@@ -407,20 +477,27 @@ final class Router
                 continue;
             }
 
-            // An earlier app route with the same method and shape.
-            foreach ($accepted as $a) {
-                if (!array_intersect(array_diff($r['methods'], ['HEAD']) ?: $r['methods'], $a['methods'])) continue;
-                if (self::shape($a['pattern']) === self::shape($pattern)) {
-                    $by = $a['owner'] === $r['owner'] ? 'this app, earlier' : "the app '{$a['owner']}'";
-                    $reject($r, 'duplicate', "{$a['pattern']} is already registered by {$by}; the first registration is kept.");
-                    continue 2;
-                }
+            // The earliest accepted app route with a shared method and the same shape.
+            $dup = null;
+            foreach ($methods as $m) {
+                $a = $accByShape[$m][$s] ?? null;
+                if ($a !== null && ($dup === null || $a[0] < $dup[0])) $dup = $a;
             }
+            if ($dup !== null) {
+                $a = $dup[1];
+                $by = $a['owner'] === $r['owner'] ? 'this app, earlier' : "the app '{$a['owner']}'";
+                $reject($r, 'duplicate', "{$a['pattern']} is already registered by {$by}; the first registration is kept.");
+                continue;
+            }
+            $n = count($accepted);
+            foreach ($r['methods'] as $m) $accByShape[$m][$s] ??= [$n, $r];
             $accepted[] = $r;
         }
 
-        usort($accepted, static function (array $a, array $b): int {
-            return self::specificity($b['pattern']) <=> self::specificity($a['pattern']) ?: $a['seq'] <=> $b['seq'];
+        $spec = [];
+        foreach ($accepted as $a) $spec[$a['pattern']] ??= self::specificity($a['pattern']);
+        usort($accepted, static function (array $a, array $b) use ($spec): int {
+            return $spec[$b['pattern']] <=> $spec[$a['pattern']] ?: $a['seq'] <=> $b['seq'];
         });
 
         return $this->table = [
@@ -453,6 +530,33 @@ final class Router
             if (str_ends_with($seg, ':*}')) $wild++; else $params++;
         }
         return [$lit, -$wild, -$params];
+    }
+
+    /**
+     * The regex a route pattern compiles to, shared by match() and table()
+     * and kept for the request (1.2.79: each pattern was compiled again for
+     * every path it was tried against).
+     *
+     *   {param}    one path segment ([^/]+), or what 'where' allows for it
+     *   {param:*}  anything, slashes included (.+) — catch-all paths
+     *   {param?}   an optional segment
+     */
+    private static function compile(string $pattern, array $where = []): string
+    {
+        static $cache = [];
+        $key = $where ? $pattern . "\0" . serialize($where) : $pattern;
+        if (isset($cache[$key])) return $cache[$key];
+        $regex = preg_replace_callback('/\{([a-zA-Z_]\w*)(\?|:\*)?\}/', static function ($m) use ($where) {
+            $name = $m[1];
+            $mod = $m[2] ?? '';
+            // A 'where' constraint (validated by SiteRoutes) narrows one segment.
+            $seg = isset($where[$name]) ? '(?:' . $where[$name] . ')' : '[^/]+';
+            if ($mod === '?') return '(?:/(?P<' . $name . '>' . $seg . '))?';
+            if ($mod === ':*') return '(?P<' . $name . '>.+)';
+            return '(?P<' . $name . '>' . $seg . ')';
+        }, $pattern);
+        // Handle optional segments cleanly.
+        return $cache[$key] = '#^' . str_replace('/(?:', '(?:', (string) $regex) . '$#';
     }
 
     /**
@@ -752,26 +856,8 @@ final class Router
 
     private function match(string $pattern, string $path, array $where = []): ?array
     {
-        // Convert {param} to a named group.
-        // {param}    - matches one path segment ([^/]+)
-        // {param:*}  - matches anything including slashes (.+) — for catch-all paths like uploads
-        // {param?}   - optional segment
-        $regex = preg_replace_callback('/\{([a-zA-Z_]\w*)(\?|:\*)?\}/', function ($m) use ($where) {
-            $name = $m[1];
-            $mod = $m[2] ?? '';
-            // A 'where' constraint (validated by SiteRoutes) narrows one segment.
-            $seg = isset($where[$name]) ? '(?:' . $where[$name] . ')' : '[^/]+';
-            if ($mod === '?') {
-                return '(?:/(?P<' . $name . '>' . $seg . '))?';
-            }
-            if ($mod === ':*') {
-                return '(?P<' . $name . '>.+)';
-            }
-            return '(?P<' . $name . '>' . $seg . ')';
-        }, $pattern);
-
-        // Handle optional segments cleanly
-        $regex = '#^' . str_replace('/(?:', '(?:', $regex) . '$#';
+        // {param} one segment, {param:*} anything (slashes too), {param?} optional.
+        $regex = self::compile($pattern, $where);
 
         if (preg_match($regex, $path, $matches)) {
             $params = [];

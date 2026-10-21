@@ -43,26 +43,27 @@ $__boot = [
 <?php // Styles: Tailwind components in admin/assets/css/src/tailwind.css (compiled into tailwind.min.css). ?>
 <div class="bh-dash" data-bh-dash>
     <header class="bh-dash-head">
-        <div class="bh-dash-head__text">
-            <h1 class="bh-dash-head__title">Welcome back, <?= htmlspecialchars($__name) ?></h1>
-            <p class="bh-dash-head__sub"><?= htmlspecialchars((string) $siteName) ?></p>
+        <div class="bh-dash-head__hello">
+            <span class="bh-dash-head__avatar" aria-hidden="true"><?= function_exists('bh_user_avatar') ? bh_user_avatar($currentUser ?? [], 'w-12 h-12 text-lg') : '' ?></span>
+            <div class="bh-dash-head__text">
+                <p class="bh-dash-head__date"><?= htmlspecialchars($greeting['date']) ?></p>
+                <h1 class="bh-dash-head__title"><?= htmlspecialchars($greeting['hello']) ?>, <?= htmlspecialchars($__name) ?></h1>
+                <p class="bh-dash-head__sub">Here&rsquo;s what&rsquo;s happening on <?= htmlspecialchars((string) $siteName) ?> today.</p>
+            </div>
         </div>
         <div class="bh-dash-head__actions" data-bh-dash-view-actions>
             <?php if ($canWrite): ?>
-                <a href="<?= $base ?>/admin/posts/create" class="bh-btn bh-btn--secondary bh-btn--lg">
-                    <span class="bh-btn__icon" aria-hidden="true"><?= icon('pencil-square', 'w-5 h-5') ?></span>
-                    <span class="bh-btn__label">New post</span><?= icon('chevron-right', 'bh-btn__chev') ?>
+                <a href="<?= $base ?>/admin/posts/create" class="bh-btn bh-btn--primary bh-btn--lg">
+                    <?= icon('pencil-square', 'w-4 h-4') ?><span class="bh-btn__label">New post</span>
                 </a>
             <?php endif; ?>
             <?php if ($canUpload): ?>
                 <a href="<?= $base ?>/admin/media" class="bh-btn bh-btn--secondary bh-btn--lg">
-                    <span class="bh-btn__icon bh-btn__icon--green" aria-hidden="true"><?= icon('arrow-up-tray', 'w-5 h-5') ?></span>
-                    <span class="bh-btn__label">Upload</span><?= icon('chevron-right', 'bh-btn__chev') ?>
+                    <?= icon('arrow-up-tray', 'w-4 h-4') ?><span class="bh-btn__label">Upload</span>
                 </a>
             <?php endif; ?>
-            <button type="button" class="bh-btn bh-btn--primary bh-btn--lg" data-bh-dash-customize>
-                <span class="bh-btn__icon" aria-hidden="true"><?= icon('adjustments-horizontal', 'w-5 h-5') ?></span>
-                <span class="bh-btn__label">Customize</span><?= icon('chevron-right', 'bh-btn__chev') ?>
+            <button type="button" class="bh-btn <?= ($canWrite || $canUpload) ? 'bh-btn--secondary' : 'bh-btn--primary' ?> bh-btn--lg" data-bh-dash-customize>
+                <?= icon('adjustments-horizontal', 'w-4 h-4') ?><span class="bh-btn__label">Customize</span>
             </button>
         </div>
     </header>
@@ -103,7 +104,7 @@ $__boot = [
     <aside class="bh-dash-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="bh-dash-drawer-title">
         <div class="bh-dash-drawer__head">
             <h2 id="bh-dash-drawer-title" class="bh-dash-drawer__title">Add widgets</h2>
-            <button type="button" class="bh-dash-icon-btn" data-bh-dash-drawer-close aria-label="Close"><?= icon('x-mark', 'w-5 h-5') ?></button>
+            <button type="button" class="bh-btn bh-btn--ghost bh-btn--icon" data-bh-dash-drawer-close aria-label="Close"><?= icon('x-mark', 'w-5 h-5') ?></button>
         </div>
         <div class="bh-dash-drawer__search">
             <label class="bh-dash-sr" for="bh-dash-search">Search widgets</label>
@@ -118,7 +119,7 @@ $__boot = [
     <form method="dialog" class="bh-dash-dialog__form" data-bh-dash-settings-form novalidate>
         <div class="bh-dash-dialog__head">
             <h2 id="bh-dash-settings-title" class="bh-dash-dialog__title" data-bh-dash-settings-title>Widget settings</h2>
-            <button type="button" class="bh-dash-icon-btn" data-bh-dash-settings-cancel aria-label="Close"><?= icon('x-mark', 'w-5 h-5') ?></button>
+            <button type="button" class="bh-btn bh-btn--ghost bh-btn--icon" data-bh-dash-settings-cancel aria-label="Close"><?= icon('x-mark', 'w-5 h-5') ?></button>
         </div>
         <div class="bh-dash-dialog__body" data-bh-dash-settings-fields></div>
         <div class="bh-dash-dialog__foot">

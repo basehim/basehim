@@ -9,7 +9,14 @@ Since 1.2.77 they are Tailwind components: written with `@apply` in
 `admin/assets/css/tailwind.min.css`, which every admin layout loads. They share
 one family of shapes: cards and large buttons `rounded-2xl` with a slate-200
 hairline and the `shadow-card` elevation; buttons, inputs and tiles
-`rounded-xl`; icon squares `rounded-xl` in a light tint of their colour. Sites
+`rounded-xl`; icon squares `rounded-xl` in the accent's lightest shade.
+
+**One accent colour (1.2.80).** Components use a single accent, `accent-*` in
+`tailwind.config.js` (blue: 50 `#eff6ff` … 950 `#172554`), and slate neutrals.
+Red is kept for errors and destructive actions, amber only for warning icons.
+Controls share one height scale: 32 px (`--sm`), 36 px, 40 px (`--lg`), small
+fields included. What a card says wraps; titles, labels and details are never
+cut with "…". Sites
 never build anything. After changing a view or the source, rebuild with
 `npm run build:css` (Tailwind 3.4, see `tailwind.config.js`); a class made up
 at runtime must appear whole in a scanned file or the source.
@@ -23,21 +30,19 @@ at runtime must appear whole in a scanned file or the source.
 <button type="button" class="bh-btn bh-btn--ghost bh-btn--sm">More</button>
 ```
 
-Variants: `--primary` (one per screen, the main action), `--secondary`,
-`--danger` (destructive), `--ghost` (low emphasis). Sizes: `--sm`, and `--lg`
-for a screen's few large actions (the dashboard's New post, Upload,
-Customize), which lead with an icon square and end with a chevron:
+Variants: `--primary` (solid accent; one per screen, the main action),
+`--secondary`, `--danger` (destructive), `--ghost` (low emphasis). Sizes:
+`--sm` (32 px), default (36 px), `--lg` (40 px). `--icon` makes a square
+button for an icon alone; give it an `aria-label`:
 
 ```html
-<a href="…" class="bh-btn bh-btn--secondary bh-btn--lg">
-  <span class="bh-btn__icon bh-btn__icon--green" aria-hidden="true"><?= icon('arrow-up-tray', 'w-5 h-5') ?></span>
-  <span class="bh-btn__label">Upload</span><?= icon('chevron-right', 'bh-btn__chev') ?>
-</a>
+<button type="button" class="bh-btn bh-btn--secondary bh-btn--sm bh-btn--icon" aria-label="Refresh"><?= icon('arrow-path', 'w-4 h-4') ?></button>
 ```
 
-Icon square tints: default blue, `--green`, `--violet`, `--amber`; on a
-primary button it is white on the button's blue. Icons from `icon()` sit
-inside and are sized for you.
+A large button may lead with an icon square (`bh-btn__icon`, the accent's
+lightest shade; white on a primary button) and end with `bh-btn__chev`. Before
+1.2.80 the squares came in `--green`, `--violet` and `--amber`; those names
+still work and now look the same as the default.
 
 While a request runs: `bhBusy(button, true, 'Saving…')`, then
 `bhBusy(button, false)` — shows a spinner, blocks clicks, restores the label.

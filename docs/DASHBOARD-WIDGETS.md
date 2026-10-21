@@ -138,7 +138,7 @@ don't exist on the next request and never run.
         'multiple'    => false,                // may be added more than once
         'refresh'     => 0,                    // auto-refresh seconds (0 = off, min 60)
         'cache'       => 0,                    // seconds, or ['ttl' => 300, 'scope' => 'user'|'role'|'global']
-        'tone'        => 'blue',               // the icon square's colour (1.2.77): blue|green|amber|red|violet|indigo|slate
+        'tone'        => 'blue',               // 1.2.77; since 1.2.80 every tone shows the accent except red (a fault) and slate
         'collapsible' => true,                 // ⋮ → Collapse
         'removable'   => true,
         'refreshable' => true,
@@ -182,8 +182,16 @@ Every view also accepts `summary` (a strip under the content, with
 `summary_icon`, any icon name) and
 `footer => ['text' => '…', 'link' => ['label' => '…', 'url' => '…']]`.
 
-**The card (1.2.77).** Its header shows your `icon` in a square of the
-widget's `tone`, the `title`, and the `description` as a one-line subtitle;
+**Colour (1.2.80).** The dashboard uses one accent colour and its shades.
+`tone` values are still accepted everywhere: `blue`, `green`, `violet` and
+`indigo` show the accent; `amber` means "needs a look" (an outlined badge, a
+solid pill, a filled feed dot, the hint in the accent); `red` stays red, for a
+fault; `slate` is neutral. Use `amber` and `red` for what needs attention, not
+to tell items apart.
+
+**The card (1.2.77).** It is the core `.bh-card`. Its header shows your `icon`
+in an accent square, the `title`, and the `description` as a subtitle (both
+wrap rather than being cut);
 then Refresh, the inline setting (below) and ⋮ (your actions, Collapse,
 Settings, Remove). Icons are any name from core's set (`app/Core/icons.php`):
 names your data uses arrive with it, so you don't register them; a name core
@@ -191,7 +199,7 @@ doesn't have is dropped.
 
 **stat** — key numbers, as tiles: an icon square, the label, a pill at the
 top right, the number (counted up when it loads), the hint, and small bars in
-the tile's colour.
+the accent's shades.
 
 ```php
 ['items' => [
@@ -207,9 +215,11 @@ the tile's colour.
 ]]
 ```
 
-Tiles sit two to a row, four on a full-width card; the last one fills a row it
-would leave half empty. Keep the trend text short (`+12%`): narrow tiles drop
-its arrow and the sign carries the direction.
+Tiles sit two to a row on phones and narrow cards (a `wide` tile, or a last
+tile that would leave a row half empty, takes the whole row), and all in one
+row of equal tiles on a wide card (up to six; more wrap four to a row). Keep
+the label and the pill short (`+12%`): on a narrow tile the pill drops its
+icon, and the label gives way first.
 
 **list** — rows with a title, meta line and badge.
 

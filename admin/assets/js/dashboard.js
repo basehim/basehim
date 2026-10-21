@@ -96,8 +96,10 @@
         window.requestAnimationFrame(frame);
     }
 
-    function iconButton(name, label, cls) {
-        var b = el('button', 'bh-dash-icon-btn' + (cls ? ' ' + cls : ''));
+    // Every icon-only button is the core small square button (ghost unless
+    // the caller asks for another variant).
+    function iconButton(name, label, cls, variant) {
+        var b = el('button', 'bh-btn bh-btn--' + (variant || 'ghost') + ' bh-btn--sm bh-btn--icon' + (cls ? ' ' + cls : ''));
         b.type = 'button';
         b.setAttribute('aria-label', label);
         b.title = label;
@@ -249,8 +251,7 @@
             strip.appendChild(moves);
         } else {
             if (w.refreshable) {
-                var rf = iconButton('arrow-path', 'Refresh ' + w.title, 'bh-dcard__tool bh-dcard__refresh');
-                rf.className = 'bh-dcard__tool bh-dcard__refresh';
+                var rf = iconButton('arrow-path', 'Refresh ' + w.title, 'bh-dcard__tool bh-dcard__refresh', 'secondary');
                 rf.addEventListener('click', function () { refresh(item.id, true); });
                 tools.appendChild(rf);
             }
@@ -284,7 +285,7 @@
         (w.fields || []).forEach(function (x) { if (!f && x.inline && x.type === 'select') f = x; });
         if (!f || !f.options) return null;
         var wrap = el('label', 'bh-dcard__pick');
-        var sel = el('select');
+        var sel = el('select', 'bh-select bh-select--sm');
         sel.setAttribute('aria-label', f.label + ' for ' + w.title);
         var current = item.settings && item.settings[f.key] !== undefined ? String(item.settings[f.key]) : null;
         (f.order || Object.keys(f.options)).forEach(function (k, i) {
