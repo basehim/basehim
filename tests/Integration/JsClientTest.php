@@ -45,7 +45,7 @@ declare(strict_types=1);
         'a visitor page with no token fetches one before its first POST',
         'an expired session is reported, not retried forever',
         'GET builds a query string and refuses nested values without a request',
-        'idempotency keys: generated, sent, and a reused key is a duplicate',
+        'idempotency keys: generated, sent, and a reused key gets the first answer',
         'a non-JSON answer is BAD_RESPONSE',
         'an unreachable server is NETWORK_ERROR',
         'a hanging server is TIMEOUT, and a caller abort is ABORTED',

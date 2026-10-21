@@ -175,7 +175,9 @@ abstract class Resource
         ],
         'SettingsApi' => [
             'get' => 'settings.read', 'group' => 'settings.read',
-            'set' => 'settings.write',
+            'set' => 'settings.write', 'update' => 'settings.write',
+            // An app's own group, like getSetting()/setSetting().
+            'updateOwn' => null,
             // publicSettings() is what the front end already exposes to any
             // anonymous visitor, so it is not privileged information.
             'publicSettings' => null,

@@ -97,9 +97,15 @@ class App extends \App\Core\App
             return Response::json(['ok' => false, 'errors' => $errors], 422);
         }
 
-        $notes = (array) $this->getSetting('notes', []);
-        $notes[] = ['name' => $name, 'note' => $note, 'at' => gmdate('c')];
-        $this->setSetting('notes', array_slice($notes, -50));
+        // updateOwn() changes the list under a lock, so two notes posted at
+        // the same moment are both kept. getSetting() then setSetting()
+        // would let one overwrite the other.
+        $entry = ['name' => $name, 'note' => $note, 'at' => gmdate('c')];
+        $this->api()->settings()->updateOwn('notes', function ($notes) use ($entry) {
+            $notes = (array) $notes;
+            $notes[] = $entry;
+            return array_slice($notes, -50);
+        }, []);
 
         if (!$request->wantsJson() && !$request->isJson()) {
             return Response::redirect((string) $this->router()->url('example.index') . '?thanks=1', 303);

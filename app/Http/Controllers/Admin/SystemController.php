@@ -54,11 +54,11 @@ class SystemController extends Controller
      * time, and app tasks run, even when nobody visits. The URL carries the
      * scheduler's secret token; this page needs manage_settings.
      *
-     * @return array{url:string,last_sweep:string,scheduled:int,next_at:?string}
+     * @return array{url:string,last_sweep:string,scheduled:int,next_at:?string,failing:array}
      */
     private function cronInfo(): array
     {
-        $out = ['url' => '', 'last_sweep' => '', 'scheduled' => 0, 'next_at' => null];
+        $out = ['url' => '', 'last_sweep' => '', 'scheduled' => 0, 'next_at' => null, 'failing' => []];
         try {
             /** @var \App\Services\SchedulerService $scheduler */
             $scheduler = $this->app->make(\App\Services\SchedulerService::class);
@@ -72,6 +72,8 @@ class SystemController extends Controller
                                     WHERE status = 'scheduled' AND deleted_at IS NULL");
             $out['scheduled'] = (int) ($row['n'] ?? 0);
             $out['next_at'] = !empty($row['next_at']) ? (string) $row['next_at'] : null;
+            // Tasks failing now, so a lost job is never silent (1.2.75).
+            $out['failing'] = $scheduler->failingTasks();
         } catch (\Throwable) {}
         return $out;
     }

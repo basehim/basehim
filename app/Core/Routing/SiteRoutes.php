@@ -46,11 +46,14 @@ use App\Core\Router;
  *   rate       [n, s]   at most n requests per s seconds per visitor (429)
  *   middleware string[] extra middleware classes, run after the checks above
  *   replace    bool     take over a replaceable core route (GET / or GET /search)
+ *   idempotent bool     POST/PUT/PATCH/DELETE need an Idempotency-Key header (400
+ *                       without); a repeat with the same key gets the first
+ *                       answer back instead of running again (1.2.75)
  */
 final class SiteRoutes
 {
     public const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
-    private const OPTIONS = ['name', 'where', 'auth', 'can', 'csrf', 'rate', 'middleware', 'replace'];
+    private const OPTIONS = ['name', 'where', 'auth', 'can', 'csrf', 'rate', 'middleware', 'replace', 'idempotent'];
     private const UNSAFE = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
     /** @var array<int, array{prefix:string, options:array}> */
@@ -268,6 +271,11 @@ final class SiteRoutes
         }
 
         if (!empty($o['replace'])) $out['replace'] = true;
+        if (array_key_exists('idempotent', $o)) {
+            if (!is_bool($o['idempotent'])) return [$o, "'idempotent' must be true or false."];
+            if ($o['idempotent'] && !$unsafe) return [$o, "'idempotent' applies to POST, PUT, PATCH and DELETE routes."];
+            if ($o['idempotent']) $out['idempotent'] = true;
+        }
         return [$out, null];
     }
 

@@ -31,7 +31,7 @@ final class Cors
             $res = Response::make('', 204)
                 ->header('Access-Control-Allow-Origin', $origin !== '' ? $origin : '*')
                 ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-                ->header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, X-CSRF-Token, Accept, Mcp-Session-Id, Mcp-Protocol-Version')
+                ->header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, X-CSRF-Token, Accept, Idempotency-Key, Mcp-Session-Id, Mcp-Protocol-Version')
                 ->header('Access-Control-Max-Age', '3600')
                 ->header('Vary', 'Origin');
             if ($trusted) $res->header('Access-Control-Allow-Credentials', 'true');

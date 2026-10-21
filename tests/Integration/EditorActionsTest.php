@@ -107,8 +107,12 @@ test('editor: a double click (same idempotency key) creates one post', function 
     $b = bh_browser('author');
     $key = idem();
     $title = 'Once only ' . bin2hex(random_bytes(3));
-    assert_same(200, $b->ajax('posts.save_draft', ['type' => 'post', 'title' => $title], $key)->status);
-    assert_error($b->ajax('posts.save_draft', ['type' => 'post', 'title' => $title], $key), 409, 'DUPLICATE_REQUEST');
+    $first = $b->ajax('posts.save_draft', ['type' => 'post', 'title' => $title], $key);
+    assert_same(200, $first->status);
+    // The second click gets the same answer (the same post id), not a second post (1.2.75).
+    $second = $b->ajax('posts.save_draft', ['type' => 'post', 'title' => $title], $key);
+    assert_same(200, $second->status, $second->body);
+    assert_same($first->json()['data'] ?? null, $second->json()['data'] ?? null);
     // Counted in PHP: Dolt can't run `WHERE title = …` on a column in a
     // FULLTEXT index ("Full-Text index found in filter…", issues.md BH-009).
     $titles = array_column(bh_db()->select('SELECT title FROM {posts} ORDER BY id DESC LIMIT 200'), 'title');

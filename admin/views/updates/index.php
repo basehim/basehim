@@ -619,6 +619,15 @@ $allCount = count($updates) + count($appUpdates);
                 var pct = total ? Math.min(100, (doneCount / total) * 100) : 100;
                 progress(pct, 'Installed v' + d.installed + (d.is_patch ? ' (patch)' : '') +
                               (d.done ? '' : ' · next…'));
+                if (d.migration_error) {
+                    // The files are in, but the database is not (1.2.75).
+                    markRow(d.installed, 'fail');
+                    result('err', ICON_WARN + '<strong>v' + esc(d.installed) + ' is installed, but a database migration failed:</strong> '
+                         + esc(d.migration_error) + ' Nothing further was applied. Fix the cause, then run the pending migrations under '
+                         + '<a class="underline font-medium" href="' + BASE + '/admin/system">System</a>.');
+                    render(d);
+                    return false;
+                }
             }
             if (d.done) {
                 // Basehim is current; the apps come next (see finishAll).

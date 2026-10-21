@@ -128,13 +128,14 @@ const tests = {
         assert(!('X-CSRF-Token' in p.sent[0].headers), 'no token on GET');
     },
 
-    async 'idempotency keys: generated, sent, and a reused key is a duplicate'() {
+    async 'idempotency keys: generated, sent, and a reused key gets the first answer'() {
         const p = page({ config: { url: BASE + '/ajax', csrf: process.env.ADMIN_TOKEN }, cookie: process.env.ADMIN_COOKIE });
         await p.ajax.request('ajax-fixture.once', {}, { idempotencyKey: true });
         assert(/^[0-9a-f]{32}$/.test(p.sent[0].headers['Idempotency-Key']), 'generated key');
         const key = p.ajax.newIdempotencyKey();
-        await p.ajax.request('ajax-fixture.once', {}, { idempotencyKey: key });
-        await expectError(p.ajax.request('ajax-fixture.once', {}, { idempotencyKey: key }), 'DUPLICATE_REQUEST');
+        const first = await p.ajax.request('ajax-fixture.once', {}, { idempotencyKey: key });
+        const again = await p.ajax.request('ajax-fixture.once', {}, { idempotencyKey: key });
+        assert(JSON.stringify(first) === JSON.stringify(again), 'replayed answer (1.2.75)');
     },
 
     async 'a non-JSON answer is BAD_RESPONSE'() {

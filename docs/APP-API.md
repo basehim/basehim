@@ -97,10 +97,6 @@ public function boot(): void
 task. The consequence is honest and worth designing around: **a site with no
 traffic runs nothing.** "Hourly" means "hourly, whenever someone next visits".
 
-Scheduled **posts** do not wait for this sweep: core publishes them before the
-first request after their time is routed, and on every cron URL call (1.2.60).
-The cron URL still makes them punctual on a site with few visitors.
-
 For punctual execution, point a real crontab at the token URL shown in
 `GET /api/v1/schedule` or on Admin → System:
 
@@ -113,6 +109,17 @@ queue behind a slow task), at most 5 tasks per sweep, and `next_run_at` advances
 even when a handler throws — otherwise a permanently failing task would retry on
 every sweep forever. Failures are logged and counted on the task row.
 
+Since 1.2.75 each run also takes a **lease** on its task row (15 minutes), so
+the same task never runs twice at once, even if two runners start together (a
+crontab and a page visit, or two servers). A run killed by a time limit leaves
+its lease behind; when it expires the task runs again and the lost run is
+logged. Make handlers safe to run again after an interruption.
+
+A task that keeps failing **backs off**: after *n* failures in a row its next
+run is `interval × 2ⁿ⁻¹` away, up to a day (or its own interval, if longer).
+One success resets it. Admin → System lists failing tasks with their last
+error.
+
 Handlers are never persisted. Storing a callable name would turn a row edit into
 arbitrary code execution, so a task whose app isn't booted is skipped, not fired.
 
@@ -122,6 +129,37 @@ arbitrary code execution, so a task whose app isn't booted is skipped, not fired
   `$this->getSetting()` / `$this->setSetting()` for your own — those are scoped
   to `app:{slug}` and removed automatically on uninstall. Writes to the `roles`
   and `updates` groups, and to another app's namespace, are refused.
+- **Read, change, write is a race** when two requests do it at once: both
+  read the old value and the second write loses the first. For a value
+  that is updated rather than replaced (a counter, a list), use `update()`,
+  which locks the row while your function runs:
+
+  ```php
+  // Your app's own settings (no permission needed)
+  $n = $this->api()->settings()->updateOwn('orders_today', fn($n) => (int) $n + 1, 0);
+  // A site setting, with the same protections as set()
+  $this->api()->settings()->update('general', 'counter', fn($v) => (int) $v + 1, 0);
+  ```
+
+  The function may run more than once if the database retries the
+  transaction, so keep it pure. Both return the new value.
+- **Several writes that must happen together** go in a transaction:
+
+  ```php
+  $this->api()->transaction(function () use ($order) {
+      $this->db()->insert('shop_orders', $order);
+      $this->api()->settings()->updateOwn('stock', fn($s) => $s - $order['qty'], 0);
+  });
+  ```
+
+  Everything inside is committed together or not at all. If the function
+  throws, it is rolled back and the exception rethrown; a deadlock is retried
+  up to three times, so the function must not send mail or call other servers
+  — do that after. Transactions nest: an inner one joins the outer.
+- **Events that arrive more than once** (webhooks, queue messages) can be
+  handled once per id with `$this->api()->idempotency()->once($scope, $id, $fn)`.
+  See PUBLIC-ROUTES.md for verifying webhook signatures with
+  `App\Core\Http\Webhook`.
 - **`users()` strips password hashes** from every return value.
 - **`all()` is capped** (500 by default) so a large table can't exhaust memory
   on shared hosting. Raise it deliberately or use `paginate()`.

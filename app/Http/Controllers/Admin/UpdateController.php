@@ -161,11 +161,15 @@ class UpdateController extends Controller
         } catch (\Throwable) {}
 
         $payload = $this->pendingPayload($svc);
+        $migError = $res['migration_error'] ?? null;
         return \App\Core\Response::json([
             'ok'        => true,
             'installed' => $res['version'] ?? $next['version'],
             'is_patch'  => (bool) ($res['is_patch'] ?? false),
-            'done'      => ($payload['pending_count'] ?? 0) === 0,
+            // A failed migration stops the chain (1.2.75): the next release's
+            // migrations assume this one's ran.
+            'migration_error' => $migError,
+            'done'      => $migError !== null || ($payload['pending_count'] ?? 0) === 0,
         ] + $payload);
     }
 
@@ -291,6 +295,12 @@ class UpdateController extends Controller
                 'Updated Basehim to v' . ($res['version'] ?? $version));
             $msg = 'Updated to v' . ($res['version'] ?? $version) . '.';
             if (!empty($res['migrations'])) $msg .= ' Migrations applied: ' . implode(', ', $res['migrations']) . '.';
+            if (!empty($res['migration_error'])) {
+                // Never a success message over a failed migration (1.2.75).
+                $this->flash('error', $msg . ' But a database migration failed: ' . $res['migration_error']
+                    . ' The new files are installed. Fix the cause, then run the pending migrations under System → Database.');
+                return $this->redirect('/admin/updates');
+            }
             $msg .= ' If anything looks stale, clear OPcache and hard-refresh.';
             $this->flash('success', $msg);
         } else {

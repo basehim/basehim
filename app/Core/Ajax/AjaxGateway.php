@@ -71,7 +71,7 @@ final class AjaxGateway
         'FORBIDDEN'              => 'You do not have permission to perform this action.',
         'RATE_LIMITED'           => 'Too many requests. Wait a moment and try again.',
         'IDEMPOTENCY_KEY_REQUIRED' => 'This action needs an Idempotency-Key header.',
-        'DUPLICATE_REQUEST'      => 'This request has already been received.',
+        'DUPLICATE_REQUEST'      => 'This request is already being processed, or its key was used for different data.',
         'SERVICE_UNAVAILABLE'    => 'The service is temporarily unavailable. Try again shortly.',
         'INTERNAL_ERROR'         => 'Something went wrong. If it keeps happening, give the request ID to the site administrator.',
     ];
@@ -312,15 +312,27 @@ final class AjaxGateway
                 default              => 'ip:' . $this->ipKey(),
             };
             $scope = 'ajax:' . $action->name . ':' . $owner;
-            $claimed = $limiter->claim($scope, $key, 86400);
-            if ($claimed === null) {
+            // Since 1.2.75 (CR-27) a repeat of a request that completed gets
+            // its first answer again, so a client that lost the response (a
+            // timeout after the save) learns what was created instead of a
+            // bare "duplicate". A repeat while the first is still running, or
+            // the same key with different data, is 409 DUPLICATE_REQUEST.
+            try {
+                $store = $this->app->make(\App\Services\IdempotencyStore::class);
+                $begin = $store->begin($scope, $key, \App\Services\IdempotencyStore::requestHash('POST', $action->name,
+                    json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: ''));
+            } catch (\Throwable $e) {
                 // Without the store there is no way to promise "once".
+                $this->logThrowable($e, $action);
                 return $this->fail(503, 'SERVICE_UNAVAILABLE');
             }
-            if ($claimed === false) {
+            if ($begin['state'] === 'replay') {
+                return $begin['response'];
+            }
+            if ($begin['state'] !== 'new') {
                 return $this->fail(409, 'DUPLICATE_REQUEST');
             }
-            $claim = [$scope, $key];
+            $claim = $begin['k'];
         }
 
         // 14 ---------------------------------------------------------------
@@ -331,7 +343,7 @@ final class AjaxGateway
             $result = ($action->callable($this->app))($ctx);
         } catch (\Throwable $e) {
             // Nothing happened (or not completely): let the client retry.
-            if ($claim !== null) $limiter->release(...$claim);
+            if ($claim !== null) $store->releaseHash($claim);
             if ($e instanceof AjaxException) throw $e;
             $this->logThrowable($e, $action);
             return $this->fail(500, 'INTERNAL_ERROR');
@@ -349,9 +361,12 @@ final class AjaxGateway
 
         if ($result instanceof Response) {
             $this->log('error', 'AJAX handler returned a Response; handlers return data or throw AjaxException', [], $action);
+            if ($claim !== null) $store->releaseHash($claim);
             return $this->fail(500, 'INTERNAL_ERROR');
         }
-        return $this->respond(200, ['success' => true, 'data' => $result]);
+        $response = $this->respond(200, ['success' => true, 'data' => $result]);
+        if ($claim !== null) $store->complete($claim, $response);
+        return $response;
     }
 
     // ------------------------------------------------------------------

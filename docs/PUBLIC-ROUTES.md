@@ -80,6 +80,7 @@ public function boot(): void
 | `can` | Capabilities, comma separated, e.g. `'can' => 'edit_posts'`. Implies `auth`. Missing: **403**. |
 | `csrf` | On POST/PUT/PATCH/DELETE, **on by default**. See below. |
 | `rate` | `[requests, seconds]`, per visitor: `[10, 60]` is ten a minute. Over: **429** with `Retry-After`. |
+| `idempotent` | `true` on a POST/PUT/PATCH/DELETE route: an `Idempotency-Key` header is required, and the handler runs once per key (1.2.75). See *Retries and double submits*. |
 | `middleware` | Extra middleware classes, run after the checks above (the `"Class:arg"` form works). |
 | `replace` | Take over `GET /` or `GET /search` from core (see *Precedence*). |
 
@@ -103,7 +104,53 @@ calling a public JSON endpoint, or a cookie-less script. Validate its input as
 you would any public form, and add `rate`.
 
 `'csrf' => false` is for endpoints other servers call (webhooks): verify
-their signature yourself. It cannot be combined with `auth` or `can`.
+their signature yourself, with `App\Core\Http\Webhook`. It cannot be combined
+with `auth` or `can`.
+
+```php
+use App\Core\Http\Webhook;
+
+$site->post('/shop/webhooks/pay', [$this, 'paid'], ['csrf' => false, 'rate' => [120, 60]]);
+
+public function paid(Request $request): Response
+{
+    $body = Webhook::payload();                                   // the raw bytes that were signed
+    $sig  = Webhook::header($request, 'Pay-Signature');           // "t=…,v1=…"
+    if (!Webhook::verifyTimestamped($body, $sig, (string) $this->getSetting('webhook_secret'))) {
+        return Response::json(['error' => 'bad signature'], 400);
+    }
+    $event = json_decode($body, true);
+    // Providers retry: handle each event once, however often it arrives.
+    $this->api()->idempotency()->once('pay', (string) $event['id'], fn() => $this->markPaid($event));
+    return Response::json(['ok' => true]);
+}
+```
+
+`verifyHmac($body, $signature, $secret)` checks a plain HMAC-SHA256 of the
+body, hex or base64, with or without a `sha256=` prefix (GitHub's
+`X-Hub-Signature-256`, and most others). `verifyTimestamped()` checks the
+`t=…,v1=…` format signed over `{t}.{body}` and refuses a timestamp more than
+five minutes away, so a captured request cannot be replayed later. Both compare
+in constant time. If `once()`'s work throws, the event is released and the
+provider's retry is processed.
+
+### Retries and double submits
+
+A request that creates something — an order, a booking, a payment — can arrive
+twice: a double click, or a client that timed out and tried again although the
+first attempt had worked. Mark such a route `'idempotent' => true` and send an
+`Idempotency-Key` header (16–128 letters, digits, `-`, `_`; a UUID works),
+generated once per intent and reused on every retry:
+
+- the first request with a key runs;
+- a repeat after it finished gets **the same response** (status, body,
+  `Location`), with `Idempotent-Replayed: true`, and the handler does not run;
+- a repeat while the first is still running gets **409** with `Retry-After`;
+- the same key with a different body gets **422**;
+- no key, or a malformed one: **400**.
+
+Keys are kept for 24 hours, per signed-in user, else per session, else per IP.
+A handler that throws or answers 5xx releases its key, so the retry runs.
 
 Routes added with the older helpers, `$this->get()`, `$this->post()` and
 `$this->route()`, keep their old behaviour (no automatic CSRF check), so

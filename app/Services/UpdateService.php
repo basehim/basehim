@@ -702,12 +702,22 @@ class UpdateService
         $this->settings->set('updates', 'available', json_encode($remaining, JSON_UNESCAPED_SLASHES));
         $this->settings->set('updates', 'available_count', count($remaining));
 
+        // A migration that failed is reported, never folded into "ok" (1.2.75,
+        // CR-05). The files are installed and stay (re-running migrations is
+        // safer than reverting code under a changed schema), so ok stays true,
+        // but callers must show migration_error and stop applying further
+        // updates: a later release's migrations assume this one's ran.
+        $migError = $mig['error'] ?? null;
+        if ($migError !== null) {
+            try { $this->logger()?->error('Update to v' . $newVersion . ': a database migration failed: ' . $migError); } catch (\Throwable) {}
+        }
         return [
-            'ok'         => true,
-            'version'    => $newVersion,
-            'is_patch'   => !empty($target['is_patch']),
-            'migrations' => $mig['applied'] ?? [],
-            'remaining'  => count($remaining),
+            'ok'              => true,
+            'version'         => $newVersion,
+            'is_patch'        => !empty($target['is_patch']),
+            'migrations'      => $mig['applied'] ?? [],
+            'migration_error' => $migError,
+            'remaining'       => count($remaining),
         ];
     }
 
@@ -860,5 +870,15 @@ class UpdateService
     private function siteHost(): string
     {
         return (string) ($_SERVER['HTTP_HOST'] ?? 'this site');
+    }
+
+    /** The core logger, when the container can provide it. */
+    private function logger(): ?\App\Core\Logger
+    {
+        try {
+            return \App\Core\Application::getInstance()->make(\App\Core\Logger::class);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

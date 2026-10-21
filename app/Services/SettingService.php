@@ -9,16 +9,30 @@ use App\Core\Cache;
 class SettingService
 {
     private const CACHE_KEY = 'settings.all';
+    private const GEN_KEY = 'settings.generation';
 
     public function __construct(
         private Database $db,
         private Cache $cache
     ) {}
 
+    /**
+     * Every setting, from the cache when it is current.
+     *
+     * The cached snapshot carries the generation it was built under, and is
+     * used only while that is still the current generation (1.2.75, CR-09).
+     * Before, a request that read the table just before another request
+     * saved a setting could write its older snapshot back into the cache
+     * after the save had cleared it, and the old value was served for up to
+     * an hour.
+     */
     public function all(): array
     {
+        $gen = $this->generation();
         $cached = $this->cache->get(self::CACHE_KEY);
-        if (is_array($cached)) return $cached;
+        if (is_array($cached) && isset($cached['__gen'], $cached['data']) && $cached['__gen'] === $gen && is_array($cached['data'])) {
+            return $cached['data'];
+        }
 
         $rows = $this->db->select('SELECT * FROM {settings}');
         $out = [];
@@ -26,8 +40,25 @@ class SettingService
             $value = $r['is_json'] ? json_decode($r['setting_value'], true) : $r['setting_value'];
             $out[$r['setting_group']][$r['setting_key']] = $value;
         }
-        $this->cache->set(self::CACHE_KEY, $out, 3600);
+        $this->cache->set(self::CACHE_KEY, ['__gen' => $gen, 'data' => $out], 3600);
         return $out;
+    }
+
+    /** The current settings generation: a random token, new after every write. */
+    private function generation(): string
+    {
+        $g = $this->cache->get(self::GEN_KEY);
+        if (is_string($g) && $g !== '') return $g;
+        $g = bin2hex(random_bytes(8));
+        $this->cache->set(self::GEN_KEY, $g, 0);
+        return $g;
+    }
+
+    /** A write happened: no snapshot built before it may be used again. */
+    private function invalidate(): void
+    {
+        $this->cache->set(self::GEN_KEY, bin2hex(random_bytes(8)), 0);
+        $this->cache->delete(self::CACHE_KEY);
     }
 
     /**
@@ -79,33 +110,64 @@ class SettingService
         return $all[$group][$key] ?? $default;
     }
 
+    /**
+     * Write one setting.
+     *
+     * One INSERT … ON DUPLICATE KEY UPDATE (1.2.75, CR-09): the old read-then-
+     * insert failed with a duplicate-key error when two requests saved the
+     * same new setting at once.
+     */
     public function set(string $group, string $key, $value, bool $autoload = true): void
     {
         $isJson = is_array($value) || is_object($value);
         $stored = $isJson ? json_encode($value) : (string)$value;
 
-        $existing = $this->db->selectOne(
-            'SELECT id FROM {settings} WHERE setting_group = :g AND setting_key = :k',
-            ['g' => $group, 'k' => $key]
+        $this->db->execute(
+            'INSERT INTO {settings} (setting_group, setting_key, setting_value, is_json, autoload)
+             VALUES (:g, :k, :v, :j, :a)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), is_json = VALUES(is_json), autoload = VALUES(autoload)',
+            ['g' => $group, 'k' => $key, 'v' => $stored, 'j' => $isJson ? 1 : 0, 'a' => $autoload ? 1 : 0]
         );
 
-        if ($existing) {
-            $this->db->update('settings', [
-                'setting_value' => $stored,
-                'is_json' => $isJson ? 1 : 0,
-                'autoload' => $autoload ? 1 : 0,
-            ], ['id' => $existing['id']]);
-        } else {
-            $this->db->insert('settings', [
-                'setting_group' => $group,
-                'setting_key' => $key,
-                'setting_value' => $stored,
-                'is_json' => $isJson ? 1 : 0,
-                'autoload' => $autoload ? 1 : 0,
-            ]);
-        }
+        $this->invalidate();
+    }
 
-        $this->cache->delete(self::CACHE_KEY);
+    /**
+     * Change one setting from its current value, safely when requests overlap
+     * (1.2.75, CR-09):
+     *
+     *     $settings->update('app:shop', 'orders_today', fn($n) => (int) $n + 1, 0);
+     *
+     * The row is locked (SELECT … FOR UPDATE) while $fn runs, so two requests
+     * appending to the same list both keep their item; get() then set() lost
+     * one of them. $fn may run again if the database reports a deadlock, so it
+     * must only compute the new value. Returns the value stored.
+     */
+    public function update(string $group, string $key, callable $fn, mixed $default = null, bool $autoload = true): mixed
+    {
+        $encode = static fn($v): array => [is_array($v) || is_object($v) ? json_encode($v) : (string) $v, is_array($v) || is_object($v) ? 1 : 0];
+        [$dv, $dj] = $encode($default);
+        // The row exists before it is locked, so a first update has a row to lock.
+        $this->db->execute(
+            'INSERT IGNORE INTO {settings} (setting_group, setting_key, setting_value, is_json, autoload) VALUES (:g, :k, :v, :j, :a)',
+            ['g' => $group, 'k' => $key, 'v' => $dv, 'j' => $dj, 'a' => $autoload ? 1 : 0]
+        );
+        $new = $this->db->transaction(function () use ($group, $key, $fn, $encode) {
+            $row = $this->db->selectOne(
+                'SELECT setting_value, is_json FROM {settings} WHERE setting_group = :g AND setting_key = :k FOR UPDATE',
+                ['g' => $group, 'k' => $key]
+            );
+            $current = $row === null ? null : ((int) $row['is_json'] ? json_decode((string) $row['setting_value'], true) : $row['setting_value']);
+            $value = $fn($current);
+            [$v, $j] = $encode($value);
+            $this->db->execute(
+                'UPDATE {settings} SET setting_value = :v, is_json = :j WHERE setting_group = :g AND setting_key = :k',
+                ['v' => $v, 'j' => $j, 'g' => $group, 'k' => $key]
+            );
+            return $value;
+        });
+        $this->invalidate();
+        return $new;
     }
 
     /**
@@ -125,7 +187,7 @@ class SettingService
             'DELETE FROM {settings} WHERE setting_group = :g AND setting_key = :k',
             ['g' => $group, 'k' => $key]
         );
-        $this->cache->delete(self::CACHE_KEY);
+        $this->invalidate();
         return (bool) $affected;
     }
 
@@ -146,14 +208,14 @@ class SettingService
             'DELETE FROM {settings} WHERE setting_group IN (' . implode(', ', $placeholders) . ')',
             $params
         );
-        $this->cache->delete(self::CACHE_KEY);
+        $this->invalidate();
         return (int) $affected;
     }
 
     /** Drop the cached snapshot — for callers that wrote settings by other means. */
     public function flushCache(): void
     {
-        $this->cache->delete(self::CACHE_KEY);
+        $this->invalidate();
     }
 
     public function setMany(string $group, array $values, bool $autoload = true): void

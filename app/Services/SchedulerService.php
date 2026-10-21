@@ -46,11 +46,24 @@ class SchedulerService
     /** A task exceeding this is logged as a slow task. */
     private const SLOW_TASK_SECONDS = 10;
 
+    /**
+     * How long a started run holds its task (1.2.75). A run killed by the
+     * time or memory limit never records its end; once the lease expires the
+     * task is due again, and that is counted as a failed attempt.
+     */
+    public const LEASE_SECONDS = 900;
+
+    /** Longest wait between retries of a failing task. */
+    public const MAX_BACKOFF_SECONDS = 86400;
+
     /** slug => [key => callable] */
     private array $handlers = [];
 
     /** Set once the shutdown hook is installed. */
     private bool $sweepArmed = false;
+
+    /** Whether scheduled_tasks has the lease columns (migration 016); null until checked. */
+    private ?bool $leases = null;
 
     /** @var resource|null */
     private $lockHandle = null;
@@ -208,9 +221,15 @@ class SchedulerService
                 return $result;
             }
             $params['now'] = $now;
+            $leaseFree = '';
+            if ($this->hasLeases()) {
+                // A run still holding its lease is not due again (1.2.75).
+                $leaseFree = ' AND (locked_until IS NULL OR locked_until <= :lnow)';
+                $params['lnow'] = $now;
+            }
             $due = $this->db->select(
                 'SELECT * FROM {scheduled_tasks}
-                  WHERE next_run_at <= :now AND (' . $owned . ')
+                  WHERE next_run_at <= :now' . $leaseFree . ' AND (' . $owned . ')
                ORDER BY next_run_at ASC
                   LIMIT ' . self::MAX_PER_SWEEP,
                 $params
@@ -228,6 +247,10 @@ class SchedulerService
                 }
 
                 $outcome = $this->execute($task, $this->handlers[$slug][$key]);
+                if (!empty($outcome['claimed_elsewhere'])) {
+                    $result['skipped']++;
+                    continue;
+                }
                 $result['tasks'][] = $outcome;
                 $outcome['ok'] ? $result['ran']++ : $result['failed']++;
             }
@@ -295,15 +318,31 @@ class SchedulerService
         if (!$force && strtotime((string) $task['next_run_at']) > time()) {
             return ['ok' => false, 'task' => $key, 'error' => 'Not due yet.'];
         }
-        return $this->execute($task, $this->handlers[$slug][$key]);
+        $out = $this->execute($task, $this->handlers[$slug][$key]);
+        if (!empty($out['claimed_elsewhere'])) {
+            return ['ok' => false, 'task' => $key, 'error' => 'This task is running right now. Try again when it has finished.'];
+        }
+        return $out;
     }
 
     /**
      * Invoke a handler and record the outcome.
      *
-     * next_run_at advances whether the task succeeded or threw. A handler that
-     * fails every time — a dead remote API, say — would otherwise stay due and
-     * be retried on every single sweep forever.
+     * Since 1.2.75 (CR-12) a run first claims its task with one conditional
+     * UPDATE that takes a lease (locked_until) and counts the attempt, so two
+     * runners (two servers, or a cron call during a page's sweep) cannot both
+     * start it. The outcome then decides the next run:
+     *
+     *  - success: next_run_at = now + interval, attempts back to 0;
+     *  - a throw: retried after interval × 2^(failures-1), at most a day,
+     *    never sooner than the interval. A dead remote API is not hammered
+     *    on every sweep, and is never given up on silently;
+     *  - no outcome at all (the run was killed by the time or memory limit):
+     *    the lease expires, the task is due again, and the next claim records
+     *    the lost run as a failure.
+     *
+     * A task does its work at least once, possibly more after a killed run:
+     * handlers must be safe to repeat (check what is already done first).
      */
     private function execute(array $task, callable $handler): array
     {
@@ -311,6 +350,31 @@ class SchedulerService
         $slug = (string) $task['app_slug'];
         $key  = (string) $task['task_key'];
         $interval = max(60, (int) $task['interval_seconds']);
+        $leases = $this->hasLeases();
+
+        if ($leases) {
+            $now = date('Y-m-d H:i:s');
+            try {
+                $claimed = $this->db->execute(
+                    'UPDATE {scheduled_tasks}
+                        SET locked_until = :until, attempts = attempts + 1
+                      WHERE id = :id AND (locked_until IS NULL OR locked_until <= :now)',
+                    ['until' => date('Y-m-d H:i:s', time() + self::LEASE_SECONDS), 'id' => $id, 'now' => $now]
+                ) === 1;
+            } catch (\Throwable $e) {
+                $this->quietLog('Scheduler could not claim a task: ' . $e->getMessage());
+                $claimed = false;
+            }
+            if (!$claimed) {
+                return ['ok' => false, 'app' => $slug, 'task' => $key, 'duration' => 0.0,
+                        'message' => 'Already running elsewhere.', 'claimed_elsewhere' => true];
+            }
+            // The previous claim never recorded an end: that run was killed.
+            if (!empty($task['locked_until'])) {
+                $this->quietLog("[app:{$slug}] scheduled task '{$key}' did not finish last time "
+                    . '(stopped by the time or memory limit?); running it again.', 'error');
+            }
+        }
 
         $started = microtime(true);
         $ok = true;
@@ -320,7 +384,7 @@ class SchedulerService
             $handler();
         } catch (\Throwable $e) {
             $ok = false;
-            $message = $e->getMessage();
+            $message = $e->getMessage() !== '' ? $e->getMessage() : get_class($e);
             $this->quietLog("[app:{$slug}] scheduled task '{$key}' failed: {$message}", 'error');
         }
 
@@ -332,20 +396,20 @@ class SchedulerService
             );
         }
 
+        $failures = $ok ? 0 : max(1, (int) ($task['attempts'] ?? 0) + 1);
+        $delay = $ok ? $interval : self::backoff($interval, $failures);
+
         try {
+            $sets = 'last_run_at = :now, next_run_at = :next, last_status = :status, last_output = :output,
+                     last_duration = :duration, runs = runs + 1, failures = failures + :failed';
+            if ($leases) {
+                $sets .= ', locked_until = NULL' . ($ok ? ', attempts = 0' : '');
+            }
             $this->db->execute(
-                'UPDATE {scheduled_tasks}
-                    SET last_run_at = :now,
-                        next_run_at = :next,
-                        last_status = :status,
-                        last_output = :output,
-                        last_duration = :duration,
-                        runs = runs + 1,
-                        failures = failures + :failed
-                  WHERE id = :id',
+                "UPDATE {scheduled_tasks} SET {$sets} WHERE id = :id",
                 [
                     'now'      => date('Y-m-d H:i:s'),
-                    'next'     => date('Y-m-d H:i:s', time() + $interval),
+                    'next'     => date('Y-m-d H:i:s', time() + $delay),
                     'status'   => $ok ? 'ok' : 'error',
                     'output'   => mb_substr($message, 0, 500),
                     'duration' => $elapsed,
@@ -363,7 +427,47 @@ class SchedulerService
             'task'     => $key,
             'duration' => $elapsed,
             'message'  => $ok ? 'ok' : $message,
+            'retry_in' => $ok ? null : $delay,
         ];
+    }
+
+    /** Seconds before retrying a task that has failed $failures times in a row. */
+    public static function backoff(int $interval, int $failures): int
+    {
+        $interval = max(60, $interval);
+        $exp = min(20, max(0, $failures - 1));
+        return (int) min(max($interval, self::MAX_BACKOFF_SECONDS), $interval * (2 ** $exp));
+    }
+
+    /** Whether migration 016's lease columns exist (checked once per request). */
+    private function hasLeases(): bool
+    {
+        if ($this->leases !== null) return $this->leases;
+        try {
+            $this->leases = $this->db->selectOne("SHOW COLUMNS FROM {scheduled_tasks} LIKE 'locked_until'") !== null;
+        } catch (\Throwable) {
+            $this->leases = false;
+        }
+        return $this->leases;
+    }
+
+    /**
+     * Tasks that are failing now: their last run threw, or a run did not
+     * finish. For the System page (1.2.75).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function failingTasks(): array
+    {
+        try {
+            $leases = $this->hasLeases();
+            $sql = "SELECT * FROM {scheduled_tasks} WHERE last_status = 'error'"
+                 . ($leases ? " OR (locked_until IS NOT NULL AND locked_until <= :now)" : '')
+                 . ' ORDER BY next_run_at LIMIT 50';
+            return $this->db->select($sql, $leases ? ['now' => date('Y-m-d H:i:s')] : []);
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     // ------------------------------------------------------------------

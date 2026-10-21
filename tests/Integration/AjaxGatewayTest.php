@@ -521,13 +521,18 @@ test('e2e: X-Forwarded-For from an untrusted client does not reset an IP limit',
     assert_error($res, 429, 'RATE_LIMITED');
 });
 
-test('e2e: idempotent actions need a key, run once per key, and free the key on failure', function () {
+test('e2e: idempotent actions need a key, run once per key (a repeat gets the first answer), and free the key on failure', function () {
     [$admin] = people();
     assert_error($admin->ajax('ajax-fixture.once'), 400, 'IDEMPOTENCY_KEY_REQUIRED');
     assert_error($admin->ajax('ajax-fixture.once', [], ['Idempotency-Key' => 'short']), 400, 'IDEMPOTENCY_KEY_REQUIRED');
     $key = bin2hex(random_bytes(16));
-    assert_same(200, $admin->ajax('ajax-fixture.once', [], ['Idempotency-Key' => $key])->status);
-    assert_error($admin->ajax('ajax-fixture.once', [], ['Idempotency-Key' => $key]), 409, 'DUPLICATE_REQUEST');
+    $first = $admin->ajax('ajax-fixture.once', [], ['Idempotency-Key' => $key]);
+    assert_same(200, $first->status);
+    // A repeat gets the first answer back (1.2.75), and the handler does not run again.
+    $again = $admin->ajax('ajax-fixture.once', [], ['Idempotency-Key' => $key]);
+    assert_same(200, $again->status);
+    assert_same('true', $again->header('idempotent-replayed'));
+    assert_same($first->json()['data'] ?? null, $again->json()['data'] ?? null);
     // Keys are per user: someone else may use the same one.
     assert_same(200, bh_browser('author')->ajax('ajax-fixture.once', [], ['Idempotency-Key' => $key])->status);
     // A failed attempt releases its key, so a retry is not reported as a duplicate.

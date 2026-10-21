@@ -88,7 +88,7 @@ about the request, so a user who reports an error can be matched to the log.
 | 403 | `FORBIDDEN` | The user lacks the action's capability (or the handler said so) |
 | 404 | `ACTION_NOT_FOUND` | No such action, or its app is not active |
 | 405 | `METHOD_NOT_ALLOWED` | Wrong method; the `Allow` header lists the right ones |
-| 409 | `DUPLICATE_REQUEST` | An idempotency key that was already used |
+| 409 | `DUPLICATE_REQUEST` | The first request with this idempotency key is still running, or the key was used for a different request |
 | 413 | `PAYLOAD_TOO_LARGE` | Body over the limit |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | A POST that is not `application/json` (UTF-8) |
 | 422 | `VALIDATION_FAILED` | Input does not match the schema |
@@ -349,14 +349,25 @@ files — a tight limit of their own.
 ## Idempotency
 
 With `'idempotent' => true`, an action requires an `Idempotency-Key` header
-(16–128 letters, digits, `-`, `_`). The first request with a key runs; a repeat
-within 24 hours gets `409 DUPLICATE_REQUEST` and the handler does not run.
-Keys are per user (or per visitor session). If the handler fails, its key is
-released so the client can retry with the same key.
+(16–128 letters, digits, `-`, `_`). The first request with a key runs. A repeat
+within 24 hours does not run the handler again (since 1.2.75):
+
+- if the first request finished, the repeat gets **the same answer** — status
+  and body — with the header `Idempotent-Replayed: true`. A client that lost
+  the first answer to a timeout learns what happened instead of being told
+  "duplicate";
+- if the first request is still running, `409 DUPLICATE_REQUEST`, with
+  `Retry-After`;
+- if the key was used for a different action or input, `409 DUPLICATE_REQUEST`.
+
+Keys are per user (or per visitor session). Only a successful answer is
+stored: if the handler throws (an `AjaxException` included), its key is
+released so the client can retry with the same key. Requests refused before
+the handler runs (validation, permissions) never claim the key.
 
 The JS client generates a key with `{ idempotencyKey: true }`, or takes one you
-keep across retries. The original response is not stored: a duplicate is told
-that it is a duplicate, not given the first answer again.
+keep across retries: generate it once per user intent (one click of *Pay*), not
+once per attempt.
 
 ## Public actions
 

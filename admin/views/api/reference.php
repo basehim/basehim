@@ -405,6 +405,22 @@ $methodColors = [
             </div>
         </div>
 
+        <!-- Idempotency keys (1.2.75) -->
+        <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+            <h3 class="text-sm font-semibold text-slate-800">Safe retries — <code class="text-xs">Idempotency-Key</code></h3>
+            <p class="text-xs text-slate-500">Any POST, PUT, PATCH or DELETE may carry an <code>Idempotency-Key</code> header (16–128 letters, digits, <code>-</code> or <code>_</code>; a UUID works). Generate one per intended action and send the same key on every retry. For 24 hours, per account:</p>
+            <ul class="text-xs text-slate-600 list-disc pl-5 space-y-1">
+                <li>a repeat of a finished request gets <strong>the first response again</strong> — same status and body — with <code>Idempotent-Replayed: true</code>, and nothing is created twice;</li>
+                <li>a repeat while the first is still running: <code>409</code> with <code>Retry-After</code>;</li>
+                <li>the same key with a different method, path or body: <code>422</code>; a malformed key: <code>400</code>;</li>
+                <li>a request that failed with a server error (5xx) keeps nothing, so its retry runs.</li>
+            </ul>
+            <pre class="bh-code bg-slate-900 text-slate-200 rounded-lg p-3 text-xs overflow-x-auto">curl -X POST <?= htmlspecialchars(rtrim((string) ($baseUrl ?? ''), '/')) ?>/api/v1/posts \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 9b2f6c1e-4d7a-4f1b-a0c3-5e8d2b7f1a64" \
+  -d '{"title":"Hello"}'</pre>
+        </div>
+
         <!-- Block editor extensibility -->
         <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
             <h3 class="text-sm font-semibold text-slate-800"><?= icon('square-3-stack-3d', 'w-4 h-4 text-blue-500 mr-2') ?>Block Editor — App APIs</h3>

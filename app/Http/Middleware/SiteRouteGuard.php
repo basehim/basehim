@@ -26,6 +26,8 @@ use Closure;
  *  4. auth/can  — the signed-in account (session), as auth.user for the
  *                 handler: 401 (JSON) or the sign-in page (HTML); 403 when a
  *                 capability is missing.
+ *  5. idempotent — an Idempotency-Key is required, and a repeat gets the first
+ *                 answer (Idempotency middleware, 1.2.75).
  *
  * After the handler: X-Content-Type-Options: nosniff, and a Referrer-Policy
  * unless the app set its own. Nothing here weakens a core check: the admin
@@ -106,7 +108,12 @@ final class SiteRouteGuard
             }
         }
 
-        $response = $next($request);
+        // 5. Idempotency-Key, when the route asks for it (1.2.75).
+        if ($unsafe && !empty($this->options['idempotent'])) {
+            $response = (new Idempotency('1'))->handle($request, $next);
+        } else {
+            $response = $next($request);
+        }
         if ($response instanceof Response) {
             $h = array_change_key_case($response->getHeaders(), CASE_LOWER);
             if (!isset($h['x-content-type-options'])) $response->header('X-Content-Type-Options', 'nosniff');

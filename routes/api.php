@@ -43,7 +43,7 @@ $router->group(['prefix' => '/api/v1', 'middleware' => ['App\\Http\\Middleware\\
     $router->get('/schedule/run', ['App\\Http\\Controllers\\Api\\ScheduleController', 'run']);
 
     // ---- Authenticated routes ----
-    $router->group(['middleware' => ['App\\Http\\Middleware\\Authenticate:api']], function ($router) {
+    $router->group(['middleware' => ['App\\Http\\Middleware\\Authenticate:api', 'App\\Http\\Middleware\\Idempotency']], function ($router) {
 
         $router->get('/me', ['App\\Http\\Controllers\\Api\\AuthController', 'me']);
         $router->patch('/me', ['App\\Http\\Controllers\\Api\\AuthController', 'updateProfile']);

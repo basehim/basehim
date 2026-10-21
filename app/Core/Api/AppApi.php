@@ -117,4 +117,40 @@ class AppApi
     {
         return $this->resources['http'] ??= new HttpApi($this->app, $this->slug);
     }
+
+    /**
+     * Run $fn in one database transaction (1.2.75, CR-08): every write made
+     * inside it, through this API or the app's own tables, is kept together
+     * or not at all.
+     *
+     *     $orderId = $this->api()->transaction(function () use ($cart) {
+     *         $id = $this->api()->content('order')->create([...]);
+     *         if (!$id) throw new \RuntimeException('Could not create the order.');
+     *         // ... decrement stock, record the payment intent ...
+     *         return $id;
+     *     });
+     *
+     * Throw to roll back. The API's own methods do not throw (they log and
+     * return false or null), so check their results and throw yourself.
+     * A deadlock or serialization failure runs $fn again, up to 3 times, so
+     * do only database work inside it: send mail or call other servers after
+     * it returns. A call inside another transaction joins it. Needs no
+     * permission: it only groups writes the app may already make.
+     */
+    public function transaction(callable $fn): mixed
+    {
+        return $this->app->make(\App\Core\Database::class)->transaction(fn() => $fn());
+    }
+
+    /**
+     * Idempotency for an app's own endpoints and webhooks (1.2.75, CR-27/28).
+     * See App\Services\IdempotencyStore; once() runs work at most once per
+     * key, which is what a payment provider's retried webhook needs:
+     *
+     *     $this->api()->idempotency()->once('stripe', $event['id'], fn() => $this->markPaid($event));
+     */
+    public function idempotency(): \App\Services\IdempotencyStore
+    {
+        return $this->app->make(\App\Services\IdempotencyStore::class);
+    }
 }

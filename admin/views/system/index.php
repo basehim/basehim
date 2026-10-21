@@ -251,6 +251,21 @@ $dot = ['pass' => 'bg-emerald-400', 'warn' => 'bg-amber-400', 'fail' => 'bg-red-
             <div><dt class="text-xs text-slate-400">Next goes live</dt><dd class="text-slate-800 font-medium"><?= $cron['next_at'] ? htmlspecialchars(\App\Core\Time::format($cron['next_at'])) : '—' ?></dd></div>
             <div><dt class="text-xs text-slate-400">Last task sweep</dt><dd class="text-slate-800 font-medium"><?= $cron['last_sweep'] !== '' ? htmlspecialchars(\App\Core\Time::ago($cron['last_sweep'])) : 'Never' ?></dd></div>
         </dl>
+        <?php $failing = $cron['failing'] ?? []; if ($failing): ?>
+        <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3" id="cron-failing">
+            <div class="text-sm font-semibold text-red-800 flex items-center gap-1.5"><?= icon('exclamation-triangle', 'w-4 h-4') ?> <?= count($failing) ?> scheduled task<?= count($failing) === 1 ? ' is' : 's are' ?> failing</div>
+            <p class="text-xs text-red-700 mt-1">Each is retried automatically, waiting longer after every failure (up to a day). The app's log has the details.</p>
+            <ul class="mt-2 space-y-1.5">
+                <?php foreach ($failing as $t): $stuck = empty($t['last_status']) || ($t['last_status'] ?? '') !== 'error'; ?>
+                <li class="text-xs text-red-800 break-words">
+                    <code class="font-mono"><?= htmlspecialchars((string) $t['app_slug']) ?> / <?= htmlspecialchars((string) $t['task_key']) ?></code>
+                    — <?= $stuck ? 'did not finish (stopped by the time or memory limit?)' : htmlspecialchars(mb_substr((string) ($t['last_output'] ?? ''), 0, 200)) ?>
+                    <span class="text-red-600/80">· <?= (int) ($t['attempts'] ?? 0) ?> attempt<?= (int) ($t['attempts'] ?? 0) === 1 ? '' : 's' ?> · next try <?= htmlspecialchars(\App\Core\Time::format((string) $t['next_run_at'])) ?></span>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <?php endif; ?>
     </div>
 
     <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4 text-sm text-amber-700">

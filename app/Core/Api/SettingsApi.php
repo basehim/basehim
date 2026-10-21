@@ -62,6 +62,46 @@ class SettingsApi extends Resource
         return $ok;
     }
 
+    /**
+     * Change a site setting from its current value, safely when requests
+     * overlap (1.2.75). Same groups as set(). See SettingService::update().
+     * Returns the value stored, or null when refused or failed.
+     */
+    public function update(string $group, string $key, callable $fn, mixed $default = null): mixed
+    {
+        if (in_array($group, self::PROTECTED_GROUPS, true) || str_starts_with($group, 'app:')) {
+            $this->log("Refused update of setting group '{$group}'", [], 'warning');
+            return null;
+        }
+        $out = $this->attempt(fn() => ['v' => $this->service()->update($group, $key, $fn, $default)], null, 'update');
+        if (is_array($out)) {
+            $this->log("Updated site setting {$group}.{$key}");
+            return $out['v'];
+        }
+        return null;
+    }
+
+    /**
+     * Change one of this app's own settings (the ones getSetting() and
+     * setSetting() read and write) from its current value, safely when
+     * requests overlap (1.2.75, CR-09):
+     *
+     *     $this->api()->settings()->updateOwn('notes', function ($notes) use ($note) {
+     *         $notes = (array) $notes;
+     *         $notes[] = $note;
+     *         return array_slice($notes, -50);
+     *     }, []);
+     *
+     * getSetting() then setSetting() lets two requests that run together each
+     * save their own copy, and one change is lost. $fn may run more than once
+     * (after a deadlock), so it must only compute the new value.
+     */
+    public function updateOwn(string $key, callable $fn, mixed $default = null): mixed
+    {
+        $out = $this->attempt(fn() => ['v' => $this->service()->update('app:' . $this->slug, $key, $fn, $default)], null, 'updateOwn');
+        return is_array($out) ? $out['v'] : null;
+    }
+
     /** Write several keys in one group. */
     public function setMany(string $group, array $values, bool $autoload = true): bool
     {

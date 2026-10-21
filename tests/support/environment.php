@@ -125,11 +125,12 @@ function bh_test_setup(array &$env)
  *  - ADD COLUMN IF NOT EXISTS (MariaDB syntax) — the column is checked first.
  *
  * Statements are split with MigrationService::statements(), as the real
- * runner does, and applied migrations are recorded the same way.
+ * runner does, and applied migrations are recorded the same way ($record =
+ * false runs them again without recording, for the run-twice test).
  *
  * @return string[] applied migration keys
  */
-function bh_migrate_compat(array $db): array
+function bh_migrate_compat(array $db, bool $record = true): array
 {
     $connect = function () use ($db): PDO {
         return new PDO("mysql:host={$db['host']};port={$db['port']};dbname={$db['name']};charset=utf8mb4", $db['user'], $db['pass'], [
@@ -178,7 +179,9 @@ function bh_migrate_compat(array $db): array
             }
         }
         $key = \App\Services\MigrationService::key($file);
-        $pdo->prepare($px('INSERT INTO {migrations} (migration, applied_at) VALUES (?, ?)'))->execute([$key, gmdate('Y-m-d H:i:s')]);
+        if ($record) {
+            $pdo->prepare($px('INSERT INTO {migrations} (migration, applied_at) VALUES (?, ?)'))->execute([$key, gmdate('Y-m-d H:i:s')]);
+        }
         $applied[] = $key;
     }
     return $applied;
