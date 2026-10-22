@@ -122,6 +122,18 @@ panel, larger tap targets, and Save docked at the bottom.
 without a page load (`settings.section`, `admin/assets/js/settings-nav.js`),
 sliding in as in a phone's own Settings app.
 
+## Marketplace (1.2.84)
+
+`/admin/marketplace` is built from the components on this page and the
+`.bh-mk-*` classes in `admin/assets/css/src/tailwind.css`: the dashboard's
+header panel, a toolbar card (Apps / Themes, search, sort), category chips,
+a featured card and a grid of cards — four a row on large screens, three on
+tablets, two on phones (themes one). It has no stylesheet of its own and no
+colours outside the accent and slate. `admin/assets/js/marketplace.js` talks
+to the `apps.market_*` / `themes.market_*` gateway actions through
+`Basehim.ajax`, and busy buttons use `bhBusy()`. The details window
+(`partials/item-modal.php`, `.bh-im*`) is styled from the same sheet.
+
 ## Badges
 
 `<span class="bh-badge bh-badge--green">Published</span>` —

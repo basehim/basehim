@@ -487,3 +487,82 @@ $ajax->register('widgets.dashboard_default', [
     'input'       => ['clear' => 'bool'],
     'description' => 'Make the current dashboard the site default for people who have not customised theirs, or clear it.',
 ]);
+
+// ---------------------------------------------------------------------------
+// 1.2.84 — the Marketplace (admin/assets/js/marketplace.js). Browse, the
+// category list, install and activate, for apps and for themes, each gated
+// like the screen it stands in for. They replace the page's former JSON
+// routes (/admin/{apps,themes}/marketplace/*.json, /admin/apps/{slug}/
+// consent.json …), which remain for older callers.
+// ---------------------------------------------------------------------------
+use App\Http\Controllers\Ajax\MarketplaceActions;
+
+$marketQuery = [
+    'q'        => 'string|max:100',
+    'category' => 'string|max:80',
+    'tag'      => 'string|max:80',
+    'sort'     => ['type' => 'string', 'in' => ['', 'featured', 'popular', 'newest', 'name']],
+    'page'     => 'int|min:1|max:500',
+];
+$marketSlug = ['slug' => ['type' => 'string', 'required' => true, 'regex' => '/^[a-z0-9][a-z0-9_-]{0,79}$/']];
+
+foreach ([
+    'apps'   => ['cap' => 'manage_apps',   'area' => '/admin/apps',   'noun' => 'app'],
+    'themes' => ['cap' => 'manage_themes', 'area' => '/admin/themes', 'noun' => 'theme'],
+] as $ns => $m) {
+    $ajax->register("{$ns}.market_browse", [
+        'handler'     => [MarketplaceActions::class, "{$ns}Browse"],
+        'methods'     => ['GET'],
+        'capability'  => $m['cap'],
+        'area'        => $m['area'],
+        'rate_limit'  => ['max' => 120, 'per' => 60],
+        'input'       => $marketQuery,
+        'description' => "Browse the marketplace's {$m['noun']}s: search, category, tag, sort and page.",
+    ]);
+    $ajax->register("{$ns}.market_facets", [
+        'handler'     => [MarketplaceActions::class, "{$ns}Facets"],
+        'methods'     => ['GET'],
+        'capability'  => $m['cap'],
+        'area'        => $m['area'],
+        'rate_limit'  => ['max' => 60, 'per' => 60],
+        'description' => "The marketplace's {$m['noun']} categories, with counts.",
+    ]);
+    $ajax->register("{$ns}.market_install", [
+        'handler'     => [MarketplaceActions::class, "{$ns}Install"],
+        'capability'  => $m['cap'],
+        'area'        => $m['area'],
+        'rate_limit'  => ['max' => 20, 'per' => 60],
+        'input'       => $marketSlug,
+        'description' => "Download a {$m['noun']} from the marketplace (checksum-verified) and install or update it.",
+    ]);
+}
+
+$ajax->register('apps.market_consent', [
+    'handler'     => [MarketplaceActions::class, 'appsConsent'],
+    'methods'     => ['GET'],
+    'capability'  => 'manage_apps',
+    'area'        => '/admin/apps',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => $marketSlug,
+    'description' => 'The permissions an installed app asks for, before it is turned on.',
+]);
+$ajax->register('apps.market_activate', [
+    'handler'     => [MarketplaceActions::class, 'appsActivate'],
+    'capability'  => 'manage_apps',
+    'area'        => '/admin/apps',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => $marketSlug + [
+        'consent'     => 'bool',
+        'permissions' => ['type' => 'array', 'max' => 50, 'items' => 'string|max:64'],
+    ],
+    'description' => 'Turn on an installed app, recording its permissions first when consent is given.',
+]);
+$ajax->register('themes.market_activate', [
+    'handler'     => [MarketplaceActions::class, 'themesActivate'],
+    'capability'  => 'manage_themes',
+    'area'        => '/admin/themes',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => $marketSlug,
+    'description' => 'Make an installed theme the one the site uses.',
+]);
+unset($marketQuery, $marketSlug, $ns, $m);

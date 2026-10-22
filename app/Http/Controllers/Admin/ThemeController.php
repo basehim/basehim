@@ -124,14 +124,8 @@ class ThemeController extends Controller
     // Marketplace (browse + install themes from CloudHim)
     // ==================================================================
 
-    /** GET /admin/themes/marketplace — the storefront page. */
-    public function marketplace(Request $request): Response
-    {
-        return $this->view('themes.marketplace', [
-            'title'       => 'Theme Marketplace',
-            'currentUser' => $this->user(),
-        ]);
-    }
+    // The storefront pages these used to render redirect to /admin/marketplace
+    // (routes/admin.php); their views were removed in 1.2.84.
 
     /** GET /admin/themes/marketplace/browse.json?q&category&tag&sort&page */
     public function marketplaceBrowse(Request $request): Response

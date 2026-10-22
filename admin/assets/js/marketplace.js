@@ -1,52 +1,42 @@
 /**
- * Marketplace (admin) — browse, install, then activate in place.
+ * Marketplace (admin): browse, install, then activate in place.
  *
- * Loaded only on /admin/marketplace (see partials/marketplace.php). All
- * configuration comes from #mk-root's data- attributes; icons come from
- * window.BasehimIcon (icons.js). No markup, styles or config are inlined in
- * the view.
+ * Loaded only on /admin/marketplace (partials/marketplace.php). It talks to
+ * the AJAX gateway through Basehim.ajax (1.2.84):
+ *
+ *   apps.market_browse / themes.market_browse      GET   the grid
+ *   apps.market_facets / themes.market_facets      GET   category chips
+ *   apps.market_install / themes.market_install    POST  download + install
+ *   apps.market_consent                            GET   what an app asks for
+ *   apps.market_activate / themes.market_activate  POST  turn it on
+ *
+ * Errors arrive as Basehim.ajax.AjaxError (a code and a message safe to
+ * show), so an expired session or a missing capability is reported as what
+ * it is rather than as a "network error". The markup uses the core
+ * components only (.bh-mk-*, .bh-btn, .bh-badge, .bh-empty); busy buttons
+ * use bhBusy(), the one shared spinner.
  *
  * Flow: Install downloads and installs the package; the button then becomes
- * Activate. Activating a theme turns it on directly. Activating an app that
- * declares permissions opens a consent modal first — the operator allows them
- * (clearly told the app needs them to work) and the app is activated with the
- * granted set.
+ * Activate. A theme is applied directly. An app that declares permissions
+ * shows the consent step in its details window first, and is activated with
+ * the permissions the operator leaves switched on.
  */
 (function () {
     'use strict';
 
     var root = document.getElementById('mk-root');
-    if (!root) return;
+    if (!root || !window.Basehim || !Basehim.ajax) return;
 
     var BASE = root.getAttribute('data-base') || '';
-    var CSRF = root.getAttribute('data-csrf') || '';
-    var KIND = root.getAttribute('data-tab') === 'themes' ? 'themes' : 'apps';
-    var IS_APPS = KIND === 'apps';
-    var EP = BASE + '/admin/' + KIND + '/marketplace';
+    var IS_APPS = root.getAttribute('data-tab') !== 'themes';
+    var NS = IS_APPS ? 'apps' : 'themes';
     var NOUN = IS_APPS ? 'app' : 'theme';
 
     var state = { q: '', category: '', tag: '', sort: 'featured', page: 1 };
-    var items = {}, busy = {}, busyAct = {}, seq = 0;
+    var items = {}, busy = {}, seq = 0, consentSlug = null;
     var $ = function (id) { return document.getElementById(id); };
 
-    function ic(name, cls) { return window.BasehimIcon ? window.BasehimIcon(name, cls || '') : ''; }
-    var I = {
-        piece: ic('puzzle-piece', 'w-6 h-6'),
-        photo: ic('photo', 'w-6 h-6'),
-        dl:    ic('arrow-down-tray', 'w-4 h-4'),
-        up:    ic('arrow-up', 'w-4 h-4'),
-        power: ic('bolt', 'w-4 h-4'),
-        check: ic('check', 'w-4 h-4'),
-        spin:  ic('arrow-path', 'w-4 h-4 animate-spin'),
-        users: ic('users', 'w-4 h-4'),
-        disk:  ic('circle-stack', 'w-4 h-4'),
-        star:  ic('star', 'w-3.5 h-3.5'),
-        x:     ic('x-mark', 'w-3.5 h-3.5'),
-        shield: ic('shield-check', 'w-4 h-4'),
-        ok:    ic('check-circle', 'w-4 h-4 mr-1 inline-block align-text-bottom'),
-        warn:  ic('exclamation-triangle', 'w-4 h-4 mr-1 inline-block align-text-bottom')
-    };
-
+    function ic(name, cls) { return window.BasehimIcon ? BasehimIcon(name, cls || 'w-4 h-4') : ''; }
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function bytes(n) { n = +n || 0; return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n + ' B'; }
     function count(n) {
@@ -56,22 +46,13 @@
         return String(n);
     }
     function installs(n) { n = +n || 0; return count(n) + (n === 1 ? ' install' : ' installs'); }
-    function day(s) {
-        if (!s) return '';
-        return window.BasehimTime ? esc(BasehimTime.date(s)) : esc(String(s).slice(0, 10));
+    function day(s) { return !s ? '' : window.BasehimTime ? esc(BasehimTime.date(s)) : esc(String(s).slice(0, 10)); }
+    function toast(msg, type) { if (window.bhToast) bhToast(msg, type); }
+
+    function call(name, data, method) {
+        return Basehim.ajax.request(NS + '.market_' + name, data || {}, { method: method || 'POST', timeout: name === 'install' ? 150000 : 30000 });
     }
-    function get(url) { return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }); }
-    function post(url, data) {
-        var fd = new FormData();
-        fd.append('_csrf', CSRF);
-        Object.keys(data || {}).forEach(function (k) {
-            var v = data[k];
-            if (Array.isArray(v)) v.forEach(function (x) { fd.append(k, x); });
-            else if (v != null) fd.append(k, v);
-        });
-        return fetch(url, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-            .then(function (r) { return r.json(); });
-    }
+
     function cmpVer(a, b) {
         var x = String(a || '').split(/[.+-]/), y = String(b || '').split(/[.+-]/);
         for (var i = 0; i < Math.max(x.length, y.length); i++) {
@@ -86,30 +67,31 @@
     }
 
     /* ---------- who made it ---------- */
+    function party(name, url) { return name ? { name: String(name), url: url || null } : null; }
     function parties(t) {
         var m = t.meta || {};
-        var dev = m.developer || t.developer || (t.author ? { name: t.author, url: null } : null);
-        if (dev && typeof dev === 'string') dev = { name: dev, url: null };
+        var dev = m.developer || t.developer || null;
+        if (dev && typeof dev === 'string') dev = party(dev, t.developer_url);
+        if (!dev && t.author) dev = party(t.author);
         var co = m.company || t.company || null;
-        if (co && typeof co === 'string') co = { name: co, url: null };
+        if (co && typeof co === 'string') co = party(co, t.company_url);
         if (co && dev && co.name === dev.name) co = null;
         return { dev: dev, co: co };
     }
+    function link(x) {
+        return x.url ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener nofollow">' + esc(x.name) + '</a>' : esc(x.name);
+    }
     function who(t, links) {
         var p = parties(t), bits = [];
-        var fmt = function (x) {
-            return links && x.url ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener nofollow" class="mk-link">' + esc(x.name) + '</a>' : esc(x.name);
-        };
-        if (p.dev) bits.push(fmt(p.dev));
-        if (p.co) bits.push(fmt(p.co));
+        if (p.dev) bits.push(links ? link(p.dev) : esc(p.dev.name));
+        if (p.co) bits.push(links ? link(p.co) : esc(p.co.name));
         return bits.join(', ');
     }
 
     /* ---------- artwork: an app's icon, a theme's screenshot ---------- */
-    function fallback() { return '<div class="mk-fallback">' + (IS_APPS ? I.piece : I.photo) + '</div>'; }
-    function artSrc(t) { return IS_APPS ? t.icon_url : t.screenshot_url; }
+    function fallback() { return '<span class="bh-mk-fallback">' + ic(IS_APPS ? 'puzzle-piece' : 'photo', '') + '</span>'; }
     function art(t, alt) {
-        var src = artSrc(t);
+        var src = IS_APPS ? t.icon_url : t.screenshot_url;
         return src ? '<img src="' + esc(src) + '" alt="' + esc(alt || '') + '" data-mk-art loading="lazy">' : fallback();
     }
     document.addEventListener('error', function (e) {
@@ -117,135 +99,198 @@
         if (img && img.tagName === 'IMG' && img.hasAttribute('data-mk-art')) img.outerHTML = fallback();
     }, true);
 
-    /* ---------- the install / activate / update button ---------- */
+    /* ---------- the install / update / activate control ---------- */
     function action(t, big) {
-        var b = 'mk-btn' + (big ? ' mk-btn--big' : '');
-        if (busy[t.slug]) return '<button type="button" disabled class="' + b + ' mk-btn--done">' + I.spin + 'Installing…</button>';
-        if (busyAct[t.slug]) return '<button type="button" disabled class="' + b + ' mk-btn--done">' + I.spin + 'Activating…</button>';
+        var sz = big ? '' : ' bh-btn--sm';
+        var b = busy[t.slug];
+        if (b) return '<button type="button" class="bh-btn bh-btn--secondary' + sz + '" data-mk-busy="' + esc(b) + '" disabled>' + esc(b) + '</button>';
         var st = status(t);
-        if (st === 'update') return '<button type="button" data-slug="' + esc(t.slug) + '" class="' + b + ' mk-btn--up mk-install">' + I.up + (big ? 'Update to v' + esc(t.version) : 'Update') + '</button>';
-        if (st === 'new') return '<button type="button" data-slug="' + esc(t.slug) + '" class="' + b + ' mk-btn--go mk-install">' + (big ? I.dl : '') + 'Install' + '</button>';
-        // Installed and current. Active → done; otherwise the next step is Activate.
-        if (t.active) {
-            return '<button type="button" disabled class="' + b + ' mk-btn--done">' + I.check + (IS_APPS ? 'Active' : 'In use') + '</button>';
+        if (st === 'update') {
+            return '<button type="button" class="bh-btn bh-btn--primary' + sz + ' mk-install" data-slug="' + esc(t.slug) + '">'
+                 + ic('arrow-up') + (big ? 'Update to v' + esc(t.version) : 'Update') + '</button>';
         }
-        return '<button type="button" data-slug="' + esc(t.slug) + '" class="' + b + ' mk-btn--act mk-activate">' + (big ? I.power : '') + 'Activate</button>';
+        if (st === 'new') {
+            return '<button type="button" class="bh-btn ' + (big ? 'bh-btn--primary' : 'bh-btn--secondary') + sz + ' mk-install" data-slug="' + esc(t.slug) + '">'
+                 + ic('arrow-down-tray') + 'Install</button>';
+        }
+        if (t.active) {
+            return '<span class="bh-badge bh-badge--green">' + ic('check-circle', '') + (IS_APPS ? 'Active' : 'In use') + '</span>';
+        }
+        return '<button type="button" class="bh-btn bh-btn--primary' + sz + ' mk-activate" data-slug="' + esc(t.slug) + '">'
+             + ic('bolt') + (IS_APPS ? 'Activate' : 'Use theme') + '</button>';
+    }
+    /** What sits opposite the button: the version, or what is installed. */
+    function note(t) {
+        var st = status(t);
+        if (st === 'update') return '<span class="bh-badge bh-badge--amber">v' + esc(t.installed_version) + ' installed</span>';
+        if (st === 'current' && !t.active) return '<span class="bh-badge bh-badge--gray">Installed</span>';
+        return '<span class="bh-mk-card__note">v' + esc(t.version) + '</span>';
+    }
+    /** Busy buttons get the shared spinner once they are in the page. */
+    function paintBusy(scope) {
+        if (!window.bhBusy) return;
+        (scope || document).querySelectorAll('[data-mk-busy]').forEach(function (b) {
+            if (!b._bhLoader) bhBusy(b, true, b.getAttribute('data-mk-busy'));
+        });
+    }
+
+    function metaBits(t) {
+        var m = '<span title="Installs">' + ic('users', '') + installs(t.installs) + '</span>';
+        if (+t.size_bytes > 0) m += '<span title="Download size">' + ic('circle-stack', '') + bytes(t.size_bytes) + '</span>';
+        return m;
     }
 
     /* ---------- grid card ---------- */
     function card(t) {
         var p = parties(t);
-        var sub = [p.dev ? esc(p.dev.name) : '', t.category ? esc(t.category) : ''].filter(Boolean).join(' · ');
-        var meta = '<span title="Installs">' + I.users + installs(t.installs) + '</span>';
-        if (+t.size_bytes > 0) meta += '<span title="Download size">' + I.disk + bytes(t.size_bytes) + '</span>';
-        var st = status(t), note = '';
-        if (st === 'update') note = '<span class="mk-state text-amber-600">v' + esc(t.installed_version) + ' installed</span>';
-        else if (st === 'current' && !t.active) note = '<span class="mk-state text-slate-500">Not active</span>';
-        var open = '<button type="button" class="mk-open" aria-haspopup="dialog" aria-label="' + esc(t.name) + ' details">';
-        var body = IS_APPS
-            ? '<span class="mk-art">' + art(t) + '</span>'
-            + '<span class="mk-info">'
-            +   (t.featured == 1 ? '<span class="mk-kicker">' + I.star + 'Featured</span>' : '')
-            +   '<span class="mk-name">' + esc(t.name) + '</span>'
-            +   (sub ? '<span class="mk-who">' + sub + '</span>' : '')
-            +   '<span class="mk-meta">' + meta + '</span>'
-            +   (t.description ? '<span class="mk-desc">' + esc(t.description) + '</span>' : '')
-            + '</span>'
-            : '<span class="mk-art">' + (t.featured == 1 ? '<span class="mk-flag">' + I.star + 'Featured</span>' : '') + art(t) + '</span>'
-            + '<span class="mk-info">'
-            +   '<span class="mk-name">' + esc(t.name) + '</span>'
-            +   (sub ? '<span class="mk-who">' + sub + '</span>' : '')
-            +   '<span class="mk-meta">' + meta + '</span>'
-            + '</span>';
-        return '<article class="mk-card' + (IS_APPS ? ' mk-card--app' : '') + '" data-slug="' + esc(t.slug) + '">'
-             + open + body + '</button>'
-             + '<div class="mk-foot"><span class="mk-act">' + action(t) + '</span>' + (note || '<span class="mk-ver">v' + esc(t.version) + '</span>') + '</div>'
+        var sub = [p.dev ? esc(p.dev.name) : '', t.category ? esc(t.category) : ''].filter(Boolean).join(', ');
+        var flag = t.featured == 1 ? '<span class="bh-badge bh-badge--amber' + (IS_APPS ? '' : ' bh-mk-flag') + '">' + ic('star', '') + 'Featured</span>' : '';
+        var info = '<span class="bh-mk-info">'
+                 + (IS_APPS && flag ? '<span class="bh-mk-info__flag">' + flag + '</span>' : '')
+                 + '<span class="bh-mk-name">' + esc(t.name) + '</span>'
+                 + (sub ? '<span class="bh-mk-who">' + sub + '</span>' : '')
+                 + '<span class="bh-mk-meta">' + metaBits(t) + '</span>'
+                 + '</span>';
+        // Apps: the icon beside the name, the description across the card.
+        // Themes: the screenshot on top.
+        return '<article class="bh-mk-card" data-slug="' + esc(t.slug) + '">'
+             + '<button type="button" class="bh-mk-card__open mk-open" aria-haspopup="dialog" aria-label="' + esc(t.name) + ' details">'
+             +   (IS_APPS
+                    ? '<span class="bh-mk-card__top"><span class="bh-mk-art">' + art(t) + '</span>' + info + '</span>'
+                      + (t.description ? '<span class="bh-mk-desc">' + esc(t.description) + '</span>' : '')
+                    : '<span class="bh-mk-art">' + flag + art(t) + '</span>' + info)
+             + '</button>'
+             + '<div class="bh-mk-card__foot"><span class="mk-act">' + action(t) + '</span>' + note(t) + '</div>'
              + '</article>';
     }
 
-    /* ---------- featured spotlight ---------- */
-    function hero(t) {
-        var meta = '<span>' + installs(t.installs) + '</span><span>v' + esc(t.version) + '</span>' + (t.category ? '<span>' + esc(t.category) + '</span>' : '');
+    /* ---------- featured: the first page, before any filter ---------- */
+    function feature(t) {
         var w = who(t, false);
-        return '<article class="mk-hero' + (IS_APPS ? '' : ' mk-hero--theme') + '" data-slug="' + esc(t.slug) + '">'
-             + '<div class="mk-hero__art">' + art(t, t.name) + '</div>'
-             + '<div class="mk-hero__body">'
-             +   '<span class="mk-hero__kicker">' + I.star + 'Featured ' + NOUN + '</span>'
-             +   '<div class="mk-hero__name">' + esc(t.name) + '</div>'
-             +   (w ? '<div class="mk-hero__who">by ' + w + '</div>' : '')
-             +   (t.description ? '<p class="mk-hero__desc">' + esc(t.description) + '</p>' : '<div class="h-3"></div>')
-             +   '<div class="mk-hero__row"><span class="mk-act">' + action(t) + '</span>'
-             +     '<button type="button" class="mk-btn mk-btn--ghost mk-open">Details</button>'
-             +     '<span class="mk-hero__meta">' + meta + '</span></div>'
+        var meta = '<span>' + ic('users', '') + installs(t.installs) + '</span><span>v' + esc(t.version) + '</span>'
+                 + (t.category ? '<span>' + esc(t.category) + '</span>' : '');
+        return '<article class="bh-mk-feature' + (IS_APPS ? '' : ' bh-mk-feature--theme') + '" data-slug="' + esc(t.slug) + '">'
+             + '<div class="bh-mk-feature__art">'
+             +   '<div class="bh-mk-feature__glow" aria-hidden="true">' + art(t) + '</div>'
+             +   '<div class="bh-mk-feature__img">' + art(t, t.name) + '</div>'
+             + '</div>'
+             + '<div class="bh-mk-feature__body">'
+             +   '<span class="bh-badge bh-badge--amber">' + ic('star', '') + 'Featured ' + NOUN + '</span>'
+             +   '<h3 class="bh-mk-feature__name">' + esc(t.name) + '</h3>'
+             +   (w ? '<p class="bh-mk-feature__who">by ' + w + '</p>' : '')
+             +   (t.description ? '<p class="bh-mk-feature__desc">' + esc(t.description) + '</p>' : '')
+             +   '<div class="bh-mk-feature__row"><span class="mk-act">' + action(t, true) + '</span>'
+             +     '<button type="button" class="bh-btn bh-btn--secondary mk-open">Details</button>'
+             +     '<span class="bh-mk-feature__meta">' + meta + '</span></div>'
              + '</div></article>';
     }
     function renderSpot(list) {
         var spot = $('mk-spot');
         var plain = state.page === 1 && !state.q && !state.category && !state.tag && state.sort === 'featured';
         var picks = plain ? list.filter(function (t) { return t.featured == 1; }).slice(0, 2) : [];
-        if (!picks.length) { spot.className = 'hidden'; spot.innerHTML = ''; return; }
-        spot.className = 'mk-spot' + (picks.length > 1 ? ' mk-spot--2' : '');
-        spot.innerHTML = picks.map(hero).join('');
+        spot.hidden = !picks.length;
+        spot.className = 'bh-mk-spot' + (picks.length > 1 ? ' bh-mk-spot--2' : '');
+        spot.innerHTML = picks.map(feature).join('');
     }
 
-    /* ---------- grid ---------- */
+    /* ---------- loading, empty and failed states ---------- */
     function ghosts() {
         var g = '';
-        for (var i = 0; i < 6; i++) g += IS_APPS
-            ? '<div class="mk-ghost mk-ghost--app animate-pulse"><div class="mk-ghost__art"></div><div class="mk-ghost__text"><div class="mk-ghost__line"></div><div class="mk-ghost__line"></div><div class="mk-ghost__line"></div></div></div>'
-            : '<div class="mk-ghost animate-pulse"><div class="mk-ghost__art"></div><div class="mk-ghost__line"></div><div class="mk-ghost__line"></div></div>';
+        for (var i = 0; i < 6; i++) {
+            g += '<div class="bh-mk-card bh-mk-ghost" aria-hidden="true"><div class="bh-mk-card__open">'
+               + (IS_APPS ? '<span class="bh-mk-card__top">' : '')
+               + '<span class="bh-mk-art"></span>'
+               + '<span class="bh-mk-info">'
+               +   '<span class="bh-dskel__bone w-3/5"></span>'
+               +   '<span class="bh-dskel__bone h-2.5 w-2/5"></span>'
+               +   '<span class="bh-dskel__bone h-2.5 w-1/2"></span>'
+               + '</span>'
+               + (IS_APPS ? '</span><span class="bh-mk-desc"><span class="bh-dskel__bone h-2.5 w-11/12"></span><span class="bh-dskel__bone h-2.5 w-3/4"></span></span>' : '')
+               + '</div>'
+               + '<div class="bh-mk-card__foot"><span class="bh-dskel__bone h-8 w-24 rounded-lg"></span></div></div>';
+        }
         return g;
     }
+    function stateCard(o) {
+        return '<div class="bh-mk-state' + (o.error ? ' is-error' : '') + '"><div class="bh-empty">'
+             + '<span class="bh-empty__icon">' + ic(o.icon, '') + '</span>'
+             + '<p class="bh-empty__title">' + esc(o.title) + '</p>'
+             + '<p class="bh-empty__text">' + o.text + '</p>'
+             + (o.actions ? '<div class="bh-empty__actions">' + o.actions + '</div>' : '')
+             + '</div></div>';
+    }
+    function showFailure(err) {
+        var offline = err && err.code === 'NOT_CONNECTED';
+        $('mk-grid').innerHTML = stateCard({
+            error: !offline,
+            icon: offline ? 'signal-slash' : 'exclamation-triangle',
+            title: offline ? 'Not connected to the marketplace yet' : 'The marketplace couldn\'t be loaded',
+            text: offline
+                ? 'Your site connects to the Basehim marketplace on its own. Check for updates to connect now, then try again.'
+                : esc((err && err.message) || 'Try again in a moment.'),
+            actions: '<button type="button" class="bh-btn bh-btn--primary" data-mk-retry>' + ic('arrow-path') + 'Try again</button>'
+                   + (offline ? '<a class="bh-btn bh-btn--secondary" href="' + esc(BASE) + '/admin/updates">Open Updates</a>' : '')
+        });
+        $('mk-spot').hidden = true;
+        $('mk-count').hidden = true;
+        $('mk-pager').hidden = true;
+    }
+
+    /* ---------- the grid ---------- */
     function render(d) {
-        var list = d[IS_APPS ? 'apps' : 'themes'] || d.plugins || [];
+        var list = d.items || [];
         items = {};
         list.forEach(function (t) { items[t.slug] = t; });
         renderSpot(list);
         var meta = d.meta || {}, total = meta.total != null ? +meta.total : list.length;
-        $('mk-count').textContent = total ? total + ' ' + NOUN + (total === 1 ? '' : 's') : '';
+        $('mk-count').hidden = !total;
+        $('mk-count').textContent = total + ' ' + NOUN + (total === 1 ? '' : 's');
         $('mk-heading').textContent = state.q ? 'Results for “' + state.q + '”'
             : state.category ? state.category
             : state.tag ? 'Tagged “' + state.tag + '”'
             : (IS_APPS ? 'All apps' : 'All themes');
-        $('mk-grid').innerHTML = list.length ? list.map(card).join('')
-            : '<div class="mk-empty">' + (IS_APPS ? I.piece : I.photo).replace('w-6 h-6', 'w-8 h-8 mb-2 mx-auto block opacity-50') + 'No ' + NOUN + 's match. Try another search or category.</div>';
+        var filtered = state.q || state.category || state.tag;
+        $('mk-grid').innerHTML = list.length ? list.map(card).join('') : stateCard(filtered ? {
+            icon: 'magnifying-glass',
+            title: 'No ' + NOUN + 's match',
+            text: 'Try another word or category, or clear the filters to see every ' + NOUN + '.',
+            actions: '<button type="button" class="bh-btn bh-btn--secondary" data-mk-clear>Clear filters</button>'
+        } : {
+            icon: IS_APPS ? 'puzzle-piece' : 'swatch',
+            title: 'No ' + NOUN + 's yet',
+            text: 'The marketplace has no ' + NOUN + 's to offer right now. New ones appear here as soon as they are published.'
+        });
+        paintBusy(root);
         renderPager(meta);
-    }
-
-    function showStatus(html, kind) {
-        var s = $('mk-status');
-        s.className = 'mb-4 rounded-xl border p-4 text-sm ' +
-            (kind === 'error' ? 'bg-red-50 border-red-200 text-red-700' :
-             kind === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
-             'bg-amber-50 border-amber-200 text-amber-800');
-        s.innerHTML = html;
     }
 
     function load() {
         var my = ++seq;
-        var qs = 'q=' + encodeURIComponent(state.q) + '&category=' + encodeURIComponent(state.category)
-               + '&tag=' + encodeURIComponent(state.tag) + '&sort=' + encodeURIComponent(state.sort) + '&page=' + state.page;
+        $('mk-grid').setAttribute('aria-busy', 'true');
         $('mk-grid').innerHTML = ghosts();
-        $('mk-status').className = 'hidden';
         renderFilter();
-        get(EP + '/browse.json?' + qs).then(function (d) {
+        call('browse', {
+            q: state.q, category: state.category, tag: state.tag, sort: state.sort, page: state.page
+        }, 'GET').then(function (d) {
             if (my !== seq) return;
-            if (!d || !d.ok) {
-                if (d && d.error === 'not_connected') {
-                    showStatus('The Basehim marketplace isn\'t reachable from this site yet. It connects automatically — open <a href="' + BASE + '/admin/updates" class="underline font-medium">Updates</a> to retry, then come back.', 'error');
-                } else {
-                    showStatus(I.warn + esc((d && d.error) || 'Could not load the marketplace.'), 'error');
-                }
-                $('mk-grid').innerHTML = ''; $('mk-spot').className = 'hidden'; $('mk-count').textContent = '';
-                $('mk-pager').classList.add('hidden');
-                return;
-            }
-            render(d);
-        }).catch(function () {
+            render(d || {});
+        }).catch(function (err) {
             if (my !== seq) return;
-            showStatus(I.warn + 'Network error loading the marketplace. Check the connection and reload the page.', 'error');
-            $('mk-grid').innerHTML = '';
+            showFailure(err);
+        }).then(function () {
+            if (my === seq) $('mk-grid').setAttribute('aria-busy', 'false');
         });
+    }
+
+    function renderPager(meta) {
+        var pager = $('mk-pager');
+        if (!meta.last_page || meta.last_page <= 1) { pager.hidden = true; return; }
+        pager.hidden = false;
+        var html = '';
+        if (meta.page > 1) html += '<button type="button" class="bh-btn bh-btn--secondary bh-btn--sm" data-pg="' + (meta.page - 1) + '">' + ic('arrow-left') + 'Previous</button>';
+        html += '<span>Page ' + meta.page + ' of ' + meta.last_page + '</span>';
+        if (meta.page < meta.last_page) html += '<button type="button" class="bh-btn bh-btn--secondary bh-btn--sm" data-pg="' + (meta.page + 1) + '">Next' + ic('arrow-right') + '</button>';
+        pager.innerHTML = html;
     }
 
     /* ---------- search, sort, categories, tag filter ---------- */
@@ -258,289 +303,240 @@
 
     function setCategory(name) {
         state.category = name; state.page = 1;
-        $('mk-cats').querySelectorAll('.mk-chip').forEach(function (c) { c.classList.toggle('is-on', c.dataset.cat === name); });
+        $('mk-cats').querySelectorAll('.bh-mk-chip').forEach(function (c) {
+            var on = c.dataset.cat === name;
+            c.classList.toggle('is-on', on);
+            c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
         load();
     }
-    $('mk-cats').addEventListener('click', function (e) {
-        var c = e.target.closest('.mk-chip'); if (c) setCategory(c.dataset.cat);
-    });
     function setTag(tag) { state.tag = tag; state.page = 1; load(); }
     function renderFilter() {
         var f = $('mk-filter');
-        if (!state.tag) { f.className = 'hidden'; f.innerHTML = ''; return; }
-        f.className = 'mk-filter';
-        f.innerHTML = 'Tag <button type="button" data-clear-tag aria-label="Remove tag filter">' + esc(state.tag) + I.x + '</button>';
+        f.hidden = !state.tag;
+        if (state.tag) $('mk-filters').hidden = false;
+        f.innerHTML = state.tag
+            ? 'Tag <button type="button" class="bh-mk-chip is-on" data-clear-tag aria-label="Remove the tag filter ' + esc(state.tag) + '">' + esc(state.tag) + ic('x-mark', 'w-3.5 h-3.5') + '</button>'
+            : '';
     }
-    $('mk-filter').addEventListener('click', function (e) { if (e.target.closest('[data-clear-tag]')) setTag(''); });
 
-    get(EP + '/facets.json').then(function (d) {
-        if (!d || !d.ok) return;
+    call('facets', {}, 'GET').then(function (d) {
         var cats = $('mk-cats');
-        (d.categories || []).forEach(function (c) {
+        ((d && d.categories) || []).forEach(function (c) {
             var b = document.createElement('button');
-            b.type = 'button'; b.className = 'mk-chip'; b.dataset.cat = c.name;
-            b.innerHTML = esc(c.name) + ' <span class="mk-chip__n">' + (+c.count || 0) + '</span>';
+            b.type = 'button'; b.className = 'bh-mk-chip'; b.dataset.cat = c.name;
+            b.setAttribute('aria-pressed', 'false');
+            b.innerHTML = esc(c.name) + '<span class="bh-mk-chip__n">' + (+c.count || 0) + '</span>';
             cats.appendChild(b);
         });
-    }).catch(function () {});
+        // Only "All" would be a row with nothing to choose.
+        if ((d && d.categories || []).length) $('mk-filters').hidden = false;
+    }).catch(function () { /* the grid reports the problem */ });
 
     /* ---------- details window ---------- */
     function perms(t) {
         var p = t.permissions;
         if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = null; } }
-        return Array.isArray(p) ? p : null;
+        return Array.isArray(p) ? p : (p == null ? [] : null);
     }
     function open(slug) {
         var t = items[slug]; if (!t) return;
         var p = parties(t), st = status(t);
-        var badge = t.featured == 1 ? '<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold whitespace-nowrap">Featured</span>' : '';
         var chips = '';
-        if (st === 'update') chips += '<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">v' + esc(t.installed_version) + ' installed · update available</span>';
-        else if (st === 'current') chips += '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">' + (t.active ? (IS_APPS ? 'Installed and active' : 'Installed and in use') : 'Installed · not active') + '</span>';
+        if (t.featured == 1) chips += '<span class="bh-badge bh-badge--amber">' + ic('star', '') + 'Featured</span>';
+        if (st === 'update') chips += '<span class="bh-badge bh-badge--amber">v' + esc(t.installed_version) + ' installed, update available</span>';
+        else if (st === 'current') chips += t.active
+            ? '<span class="bh-badge bh-badge--green">' + ic('check-circle', '') + (IS_APPS ? 'Installed and active' : 'Installed and in use') + '</span>'
+            : '<span class="bh-badge bh-badge--gray">Installed, not active</span>';
 
-        var stats = [
-            ['Installs', count(t.installs)],
-            ['Version', esc(t.version)],
-            ['Size', +t.size_bytes > 0 ? bytes(t.size_bytes) : '—'],
-            ['Category', t.category ? esc(t.category) : '—']
-        ];
         var facts = [];
         if (IS_APPS) {
             var pm = perms(t);
-            facts.push(['Permissions', pm === null ? '' : (pm.length ? pm.map(function (x) { return '<span class="mk-perm">' + esc(x) + '</span>'; }).join('') : 'None requested')]);
+            facts.push(['Permissions', pm === null ? '' : (pm.length ? '<span class="bh-im-tags">' + pm.map(function (x) { return '<span class="bh-im-perm">' + esc(x) + '</span>'; }).join('') + '</span>' : 'None requested')]);
         }
-        facts.push(['Tags', (t.tag_list || []).map(function (x) { return '<button type="button" class="mk-tagbtn" data-mk-tag="' + esc(x) + '" title="Show ' + NOUN + 's tagged ' + esc(x) + '">' + esc(x) + '</button>'; }).join('')]);
+        var tags = t.tag_list || (typeof t.tags === 'string' ? t.tags.split(',') : []);
+        if (tags.length) facts.push(['Tags', '<span class="bh-im-tags">' + tags.map(function (x) {
+            x = String(x).trim();
+            return '<button type="button" class="bh-im-tag" data-mk-tag="' + esc(x) + '" title="Show ' + NOUN + 's tagged ' + esc(x) + '">' + esc(x) + '</button>';
+        }).join('') + '</span>']);
         facts.push(['Added', day(t.created_at)]);
-        if (p.dev) facts.push([IS_APPS ? 'Developer' : 'Author', p.dev.url ? '<a href="' + esc(p.dev.url) + '" target="_blank" rel="noopener nofollow" class="mk-link">' + esc(p.dev.name) + '</a>' : esc(p.dev.name)]);
-        if (p.co) facts.push(['Company', p.co.url ? '<a href="' + esc(p.co.url) + '" target="_blank" rel="noopener nofollow" class="mk-link">' + esc(p.co.name) + '</a>' : esc(p.co.name)]);
+        if (p.dev) facts.push([IS_APPS ? 'Developer' : 'Author', link(p.dev)]);
+        if (p.co) facts.push(['Company', link(p.co)]);
 
         bhItemModal.open({
             key: slug,
             name: t.name,
-            iconHtml: IS_APPS ? '<div class="mk-modal-art">' + art(t) + '</div>' : '',
+            iconHtml: IS_APPS ? '<span class="bh-mk-art">' + art(t) + '</span>' : '',
             mediaHtml: !IS_APPS && t.screenshot_url ? '<img src="' + esc(t.screenshot_url) + '" alt="' + esc(t.name) + ' screenshot">' : '',
-            badgeHtml: badge,
             whoHtml: who(t, true) ? 'by ' + who(t, true) : '',
             chipsHtml: chips,
-            stats: stats,
+            stats: [
+                ['Installs', count(t.installs)],
+                ['Version', esc(t.version)],
+                ['Size', +t.size_bytes > 0 ? bytes(t.size_bytes) : '—'],
+                ['Category', t.category ? esc(t.category) : '—']
+            ],
             description: t.description || '',
-            facts: facts
+            facts: facts,
+            onClose: function () { consentSlug = null; }
         });
-        // Leaving any prior consent view: restore the detail sections the
-        // consent step hides, so reopening the modal shows the facts again.
+        // A consent step shown earlier hid these; a fresh details view shows them.
         var factsEl = $('bh-im-facts'); if (factsEl) factsEl.classList.remove('hidden');
         consentSlug = null;
         sync(slug);
     }
     function sync(slug) {
-        if (!window.bhItemModal || bhItemModal.current() !== slug) return;
-        bhItemModal.action(action(items[slug], true));
+        if (!window.bhItemModal || bhItemModal.current() !== slug || consentSlug === slug) return;
+        paintBusy(bhItemModal.action(action(items[slug], true)));
     }
     function refresh(slug) {
-        var t = items[slug];
-        document.querySelectorAll('[data-slug="' + slug + '"].mk-card').forEach(function (el) { el.outerHTML = card(t); });
-        document.querySelectorAll('[data-slug="' + slug + '"].mk-hero .mk-act').forEach(function (el) { el.innerHTML = action(t); });
+        var t = items[slug]; if (!t) return;
+        document.querySelectorAll('.bh-mk-card[data-slug="' + slug + '"]').forEach(function (el) { el.outerHTML = card(t); });
+        document.querySelectorAll('.bh-mk-feature[data-slug="' + slug + '"] .mk-act').forEach(function (el) { el.innerHTML = action(t, true); });
+        paintBusy(root);
         sync(slug);
+    }
+    function setBusy(slug, label) {
+        if (label) busy[slug] = label; else delete busy[slug];
+        refresh(slug);
+    }
+    function modalState(slug, html, kind) {
+        if (window.bhItemModal && bhItemModal.current() === slug) bhItemModal.state(html, kind);
     }
 
     /* ---------- install ---------- */
     function install(slug) {
         var t = items[slug]; if (!t || busy[slug]) return;
-        busy[slug] = true; refresh(slug);
-        if (window.bhItemModal && bhItemModal.current() === slug) bhItemModal.state('');
-        post(EP + '/install', { slug: slug })
-            .then(function (d) {
-                busy[slug] = false;
-                if (d && d.ok) {
-                    var wasUpdate = t.installed;
-                    t.installed = true; t.installed_version = t.version;
-                    refresh(slug);
-                    var msg = '“' + esc(t.name) + '” ' + (wasUpdate ? 'updated to v' + esc(t.version) : 'installed') + '.';
-                    if (!t.active) msg += ' Click <strong>Activate</strong> to turn it on.';
-                    showStatus(I.ok + msg, 'ok');
-                    if (window.bhItemModal && bhItemModal.current() === slug) bhItemModal.state(I.ok + msg, 'ok');
-                } else {
-                    refresh(slug);
-                    var err = esc((d && d.error) || 'Install failed.');
-                    showStatus(I.warn + err, 'error');
-                    if (window.bhItemModal && bhItemModal.current() === slug) bhItemModal.state(err, 'error');
-                }
-            })
-            .catch(function () {
-                busy[slug] = false; refresh(slug);
-                showStatus(I.warn + 'Network error during install.', 'error');
-            });
-    }
-
-    /* ---------- activate (themes directly; apps via consent when needed) ---------- */
-    function activate(slug) {
-        var t = items[slug]; if (!t || busy[slug] || busyAct[slug]) return;
-        if (!IS_APPS) { doActivate(slug); return; }
-        // Apps: find out whether permission consent is required first.
-        busyAct[slug] = true; refresh(slug);
-        get(BASE + '/admin/apps/' + encodeURIComponent(slug) + '/consent.json').then(function (d) {
-            busyAct[slug] = false;
-            if (!d || !d.ok) { refresh(slug); showStatus(I.warn + esc((d && d.error) || 'Could not read permissions.'), 'error'); return; }
-            if (d.needs_consent && d.permissions && d.permissions.length) {
-                refresh(slug);
-                renderConsent(slug, d);
-            } else {
-                doActivate(slug);   // no permissions, or already approved
-            }
-        }).catch(function () { busyAct[slug] = false; refresh(slug); showStatus(I.warn + 'Network error reading permissions.', 'error'); });
-    }
-
-    function doActivate(slug, extra) {
-        var t = items[slug]; if (!t) return;
-        busyAct[slug] = true; refresh(slug);
-        var url = IS_APPS
-            ? BASE + '/admin/apps/' + encodeURIComponent(slug) + (extra ? '/consent' : '/activate')
-            : BASE + '/admin/themes/' + encodeURIComponent(slug) + '/activate';
-        post(url, extra || {}).then(function (d) {
-            busyAct[slug] = false;
-            if (d && d.ok && d.active) {
-                onActivated(slug, d);
-            } else if (d && d.needs_consent) {
-                // Edge: consent became required between the check and the call.
-                refresh(slug);
-                get(BASE + '/admin/apps/' + encodeURIComponent(slug) + '/consent.json').then(function (c) {
-                    if (c && c.ok && c.permissions && c.permissions.length) renderConsent(slug, c);
-                });
-            } else {
-                refresh(slug);
-                showStatus(I.warn + esc((d && d.error) || 'Could not activate.'), 'error');
-            }
-        }).catch(function () { busyAct[slug] = false; refresh(slug); showStatus(I.warn + 'Network error during activation.', 'error'); });
-    }
-
-    function onActivated(slug, d) {
-        var t = items[slug];
-        // One active theme at a time: reflect the switch on the others.
-        if (!IS_APPS) Object.keys(items).forEach(function (k) { if (k !== slug && items[k].active) { items[k].active = false; refresh(k); } });
-        t.active = true; refresh(slug);
-        var note = (d && d.withheld_count) ? ' (' + d.withheld_count + ' permission' + (d.withheld_count === 1 ? '' : 's') + ' withheld)' : '';
-        showStatus(I.ok + '“' + esc(t.name) + '” is now ' + (IS_APPS ? 'active' : 'in use') + '.' + esc(note), 'ok');
-        if (window.bhToast) bhToast('“' + t.name + '” ' + (IS_APPS ? 'activated' : 'applied'), 'success');
-    }
-
-    /* ---------- consent, rendered inside the details modal (#bh-im) ----------
-       The old build opened a second .bh-modal overlay, which stacked under the
-       open details dialog. Instead, the permission step now loads into the
-       already-open details modal: the header and footer are the modal's own,
-       and only its body is swapped for the permission list. */
-    var consentSlug = null;
-
-    function riskClass(r) { return 'mk-risk mk-risk--' + (['low', 'medium', 'high'].indexOf(r) >= 0 ? r : 'unknown'); }
-
-    /** Detail body sections the consent view hides while it is shown. */
-    function hideDetailSections(hide) {
-        ['bh-im-chips', 'bh-im-stats', 'bh-im-desc', 'bh-im-facts', 'bh-im-extra'].forEach(function (id) {
-            var el = $(id); if (!el) return;
-            // bh-im-extra is where consent lives, so it stays visible.
-            if (id === 'bh-im-extra') return;
-            el.classList.toggle('hidden', !!hide);
+        var wasUpdate = !!t.installed;
+        setBusy(slug, wasUpdate ? 'Updating…' : 'Installing…');
+        modalState(slug, '');
+        call('install', { slug: slug }).then(function () {
+            t.installed = true; t.installed_version = t.version;
+            setBusy(slug, null);
+            var msg = '“' + t.name + '” ' + (wasUpdate ? 'updated to v' + t.version : 'installed') + '.';
+            toast(msg + (t.active ? '' : ' Activate it to turn it on.'), 'success');
+            modalState(slug, ic('check-circle', '') + esc(msg), 'ok');
+        }).catch(function (err) {
+            setBusy(slug, null);
+            toast(err.message, 'error');
+            modalState(slug, ic('exclamation-triangle', '') + esc(err.message), 'error');
         });
     }
 
+    /* ---------- activate (themes directly; apps through consent if asked) ---------- */
+    function activate(slug) {
+        var t = items[slug]; if (!t || busy[slug]) return;
+        if (!IS_APPS) { doActivate(slug, null).catch(function () {}); return; }
+        setBusy(slug, 'Checking…');
+        call('consent', { slug: slug }, 'GET').then(function (d) {
+            setBusy(slug, null);
+            if (d.needs_consent && d.permissions && d.permissions.length) renderConsent(slug, d);
+            else doActivate(slug, null).catch(function () { /* reported in a toast */ });
+        }).catch(function (err) { setBusy(slug, null); toast(err.message, 'error'); });
+    }
+
+    function doActivate(slug, granted) {
+        var t = items[slug]; if (!t) return;
+        var data = { slug: slug };
+        if (granted) { data.consent = true; data.permissions = granted; }
+        if (!granted) setBusy(slug, IS_APPS ? 'Activating…' : 'Applying…');
+        return call('activate', data).then(function (d) {
+            setBusy(slug, null);
+            if (d && d.needs_consent) {
+                // Approval became necessary between the check and the call.
+                return call('consent', { slug: slug }, 'GET').then(function (c) { renderConsent(slug, c); });
+            }
+            if (!IS_APPS) Object.keys(items).forEach(function (k) { if (k !== slug && items[k].active) { items[k].active = false; refresh(k); } });
+            t.active = true;
+            if (consentSlug === slug) { consentSlug = null; bhItemModal.close(); }
+            refresh(slug);
+            var withheld = d && d.withheld_count ? ' ' + d.withheld_count + ' permission' + (d.withheld_count === 1 ? '' : 's') + ' withheld.' : '';
+            toast('“' + t.name + '” is ' + (IS_APPS ? 'active.' : 'now your theme.') + withheld, 'success');
+        }).catch(function (err) {
+            setBusy(slug, null);
+            if (consentSlug === slug) modalState(slug, ic('exclamation-triangle', '') + esc(err.message), 'error');
+            else toast(err.message, 'error');
+            throw err;
+        });
+    }
+
+    /* ---------- consent, inside the app's details window ---------- */
+    function riskBadge(r) {
+        var tone = { low: 'green', medium: 'amber', high: 'red' }[r] || 'gray';
+        var word = { low: 'Low risk', medium: 'Medium risk', high: 'High risk' }[r] || 'Info';
+        return '<span class="bh-badge bh-badge--' + tone + '">' + word + '</span>';
+    }
     function renderConsent(slug, d) {
         if (!window.bhItemModal) return;
-        // The permission step belongs in this app's details modal — open it if
-        // the operator activated straight from a grid card.
         if (bhItemModal.current() !== slug) open(slug);
         consentSlug = slug;
-
         var t = items[slug] || { name: (d && d.name) || slug };
-        var perms = (d && d.permissions) || [];
-        var rows = perms.map(function (pp) {
-            return '<li><label class="mk-perm-row">'
-                 + '<input type="checkbox" name="perm" value="' + esc(pp.key) + '" checked>'
-                 + '<span class="mk-perm-row__main">'
-                 +   '<span class="mk-perm-row__top"><span class="mk-perm-row__label">' + esc(pp.label || pp.key) + '</span>'
-                 +     '<span class="' + riskClass(pp.risk) + '">' + esc(pp.risk || 'info') + '</span></span>'
-                 +   '<span class="mk-perm-row__desc">' + esc(pp.description || '') + '</span>'
-                 + '</span></label></li>';
+        var rows = ((d && d.permissions) || []).map(function (pp, i) {
+            var id = 'mk-perm-' + i;
+            return '<li><label class="bh-mk-perm" for="' + id + '">'
+                 + '<span class="bh-mk-perm__main"><span class="bh-mk-perm__top"><span class="bh-mk-perm__label">' + esc(pp.label || pp.key) + '</span>' + riskBadge(pp.risk) + '</span>'
+                 + '<span class="bh-mk-perm__desc">' + esc(pp.description || '') + '</span></span>'
+                 + '<span class="bh-switch"><input type="checkbox" role="switch" class="bh-switch__input" id="' + id + '" name="perm" value="' + esc(pp.key) + '" checked>'
+                 + '<span class="bh-switch__track" aria-hidden="true"></span></span>'
+                 + '</label></li>';
         }).join('');
         var unknown = (d && d.unknown) || [];
-        var unknownHtml = unknown.length
-            ? '<p class="mk-consent__unknown">' + I.warn + 'These requested items aren’t recognised and grant nothing: ' + unknown.map(esc).join(', ') + '.</p>'
-            : '';
-
-        hideDetailSections(true);
+        ['bh-im-chips', 'bh-im-stats', 'bh-im-desc', 'bh-im-facts'].forEach(function (id) { var el = $(id); if (el) el.classList.add('hidden'); });
         $('bh-im-extra').innerHTML =
-            '<div class="mk-consent">'
-          +   '<p class="mk-consent__lead">“' + esc(t.name || slug) + '” needs the permissions below to work properly. Allow them to finish turning it on — withhold any you’re not comfortable with, or change them later under Apps.</p>'
-          +   '<div class="mk-consent__note">' + I.shield + '<span>Only grant apps you trust. Each permission is one the app explicitly asked for.</span></div>'
-          +   (rows ? '<ul class="mk-perms">' + rows + '</ul>' : '<p class="mk-consent__none">This app asks for no special permissions.</p>')
-          +   unknownHtml
-          + '</div>';
-
+            '<p class="bh-mk-consent__lead">“' + esc(t.name) + '” asks for the permissions below. Leave on the ones you’re happy to grant; you can change them later under Apps.</p>'
+          + '<div class="bh-note">' + ic('shield-check', '') + '<span>Only grant apps you trust. Each permission is one the app asked for, and an app with fewer may not work fully.</span></div>'
+          + '<ul class="bh-mk-perms">' + rows + '</ul>'
+          + (unknown.length ? '<div class="bh-note bh-note--warn mt-3">' + ic('exclamation-triangle', '') + '<span>Not recognised, so they grant nothing: ' + unknown.map(esc).join(', ') + '.</span></div>' : '');
         bhItemModal.state('');
         bhItemModal.action(
-            '<button type="button" class="mk-btn mk-btn--big mk-btn--line" data-consent-none>Activate without extras</button>'
-          + '<button type="button" class="mk-btn mk-btn--big mk-btn--act" data-consent-allow>' + I.check + 'Allow &amp; activate</button>'
+            '<button type="button" class="bh-btn bh-btn--secondary" data-consent-none>Activate without them</button>'
+          + '<button type="button" class="bh-btn bh-btn--primary" data-consent-allow>' + ic('check') + 'Allow and activate</button>'
         );
         var allow = document.querySelector('#bh-im-action [data-consent-allow]');
         if (allow) allow.focus();
     }
-
-    function submitConsent(granted) {
+    function submitConsent(btn, granted) {
         var slug = consentSlug; if (!slug) return;
         var btns = document.querySelectorAll('#bh-im-action button');
-        Array.prototype.forEach.call(btns, function (b) { b.setAttribute('disabled', 'disabled'); });
-        bhItemModal.state(I.spin + ' Activating…', 'info');
-        var fields = { activate: '1' };
-        fields['permissions[]'] = granted;   // array → repeated fields
-        post(BASE + '/admin/apps/' + encodeURIComponent(slug) + '/consent', fields).then(function (d) {
-            if (d && d.ok && d.active) { consentSlug = null; bhItemModal.close(); onActivated(slug, d); }
-            else {
-                Array.prototype.forEach.call(btns, function (b) { b.removeAttribute('disabled'); });
-                bhItemModal.state(I.warn + esc((d && d.error) || 'Could not activate.'), 'error');
-            }
-        }).catch(function () {
-            Array.prototype.forEach.call(btns, function (b) { b.removeAttribute('disabled'); });
-            bhItemModal.state(I.warn + 'Network error during activation.', 'error');
+        Array.prototype.forEach.call(btns, function (b) { b.disabled = true; });
+        if (window.bhBusy) bhBusy(btn, true, 'Activating…');
+        bhItemModal.state('');
+        doActivate(slug, granted).catch(function () {
+            if (window.bhBusy) bhBusy(btn, false);
+            Array.prototype.forEach.call(btns, function (b) { b.disabled = false; });
         });
     }
 
-    /* ---------- clicks: install / activate / open details / tags ---------- */
+    /* ---------- clicks ---------- */
     function onClick(e) {
-        var inst = e.target.closest('.mk-install[data-slug]');
-        if (inst) { install(inst.dataset.slug); return; }
-        var act = e.target.closest('.mk-activate[data-slug]');
-        if (act) { activate(act.dataset.slug); return; }
-        var o = e.target.closest('.mk-open');
-        if (o) { var host = o.closest('[data-slug]'); if (host) open(host.getAttribute('data-slug')); }
+        var el;
+        if ((el = e.target.closest('.mk-install[data-slug]'))) { install(el.dataset.slug); return true; }
+        if ((el = e.target.closest('.mk-activate[data-slug]'))) { activate(el.dataset.slug); return true; }
+        return false;
     }
-    root.addEventListener('click', onClick);
+    root.addEventListener('click', function (e) {
+        if (onClick(e)) return;
+        var el;
+        if ((el = e.target.closest('.mk-open'))) { var host = el.closest('[data-slug]'); if (host) open(host.getAttribute('data-slug')); return; }
+        if ((el = e.target.closest('.bh-mk-chip[data-cat]'))) { setCategory(el.dataset.cat); return; }
+        if (e.target.closest('[data-clear-tag]')) { setTag(''); return; }
+        if (e.target.closest('[data-mk-retry]')) { load(); return; }
+        if (e.target.closest('[data-mk-clear]')) {
+            state.q = ''; state.tag = ''; $('mk-q').value = ''; setCategory(''); return;
+        }
+        if ((el = e.target.closest('[data-pg]'))) { state.page = +el.dataset.pg; load(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    });
     var modalHost = $('bh-im');
     if (modalHost) modalHost.addEventListener('click', function (e) {
-        if (e.target.closest('.mk-install[data-slug]') || e.target.closest('.mk-activate[data-slug]')) { onClick(e); return; }
-        if (e.target.closest('[data-consent-none]')) { submitConsent([]); return; }
-        if (e.target.closest('[data-consent-allow]')) {
-            var checked = Array.prototype.map.call(
-                modalHost.querySelectorAll('input[name="perm"]:checked'),
-                function (c) { return c.value; });
-            submitConsent(checked);
+        if (onClick(e)) return;
+        var el;
+        if ((el = e.target.closest('[data-consent-none]'))) { submitConsent(el, []); return; }
+        if ((el = e.target.closest('[data-consent-allow]'))) {
+            submitConsent(el, Array.prototype.map.call(modalHost.querySelectorAll('input[name="perm"]:checked'), function (c) { return c.value; }));
             return;
         }
-        var tag = e.target.closest('[data-mk-tag]');
-        if (tag) { bhItemModal.close(); setTag(tag.getAttribute('data-mk-tag')); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        if ((el = e.target.closest('[data-mk-tag]'))) { bhItemModal.close(); setTag(el.getAttribute('data-mk-tag')); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     });
-
-    function renderPager(meta) {
-        var pager = $('mk-pager');
-        if (!meta.last_page || meta.last_page <= 1) { pager.classList.add('hidden'); pager.classList.remove('flex'); return; }
-        pager.classList.remove('hidden'); pager.classList.add('flex');
-        var b = 'mk-pg inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-full text-sm bg-white hover:bg-slate-50';
-        var html = '';
-        if (meta.page > 1) html += '<button type="button" data-pg="' + (meta.page - 1) + '" class="' + b + '">' + ic('arrow-left', 'w-4 h-4') + 'Previous</button>';
-        html += '<span class="text-sm text-slate-500">Page ' + meta.page + ' of ' + meta.last_page + '</span>';
-        if (meta.page < meta.last_page) html += '<button type="button" data-pg="' + (meta.page + 1) + '" class="' + b + '">Next' + ic('arrow-right', 'w-4 h-4') + '</button>';
-        pager.innerHTML = html;
-        pager.querySelectorAll('.mk-pg').forEach(function (x) {
-            x.addEventListener('click', function () { state.page = +x.dataset.pg; load(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
-        });
-    }
 
     load();
 })();

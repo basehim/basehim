@@ -549,14 +549,8 @@ class AppController extends Controller
     // Marketplace (browse + install apps from CloudHim)
     // ==================================================================
 
-    /** GET /admin/apps/marketplace */
-    public function marketplace(Request $request): Response
-    {
-        return $this->view('apps.marketplace', [
-            'title'       => 'App Marketplace',
-            'currentUser' => $this->user(),
-        ]);
-    }
+    // The storefront pages these used to render redirect to /admin/marketplace
+    // (routes/admin.php); their views were removed in 1.2.84.
 
     /** GET /admin/apps/marketplace/browse.json */
     public function marketplaceBrowse(Request $request): Response

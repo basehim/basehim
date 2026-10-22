@@ -1,62 +1,58 @@
 <?php
 /**
- * The marketplace — one page with an Apps tab and a Themes tab.
+ * The marketplace: one page with an Apps tab and a Themes tab.
  *
- * Rendered by MarketplaceController at /admin/marketplace; $tab (from ?tab=)
- * says which one is open. The tabs are ordinary links, so the sidebar, the
- * address bar and the Back button all agree on where you are.
+ * MarketplaceController renders it at /admin/marketplace, and $tab (from
+ * ?tab=) says which tab is open. The tabs are ordinary links, so the sidebar,
+ * the address bar and the Back button all agree on where you are.
  *
- * Presentation lives in external files, not inline here:
- *   admin/assets/css/marketplace.css   the .mk-* styles + consent modal
- *   admin/assets/js/marketplace.js     browse / install / activate / consent
- * This partial only renders the shell and hands the script its configuration
- * through data- attributes on #mk-root. Icons in JS-built markup come from
- * window.BasehimIcon (icons.js, loaded in the admin <head>).
- *
- * Layout, top to bottom: tabs, search and sort, category chips, a featured
- * spotlight (first page, no filters), then the grid. App cards put a 120px
- * icon on the left and the details on the right; theme cards show the
- * screenshot on top. Clicking a card opens the details window
- * (partials/item-modal); installing then activating happens in place.
+ * 1.2.84: built from the core components in admin/assets/css/src/tailwind.css
+ * (.bh-mk-*, .bh-btn, .bh-badge, .bh-input, .bh-dskel, .bh-empty), with the
+ * same header panel and cards as the dashboard. There is no stylesheet of
+ * its own any more, and no colours outside the theme's accent and slate.
+ * admin/assets/js/marketplace.js talks to the AJAX gateway (apps.market_* and
+ * themes.market_*) through Basehim.ajax. Icons in markup the script builds
+ * come from window.BasehimIcon.
  */
-$tab  = ($tab ?? 'apps') === 'themes' ? 'themes' : 'apps';
-$base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
-$csrf = \App\Core\Application::getInstance()->make(\App\Core\Session::class)->csrfToken();
-$ver  = defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1';
-$isApps = $tab === 'apps';
+$tab       = ($tab ?? 'apps') === 'themes' ? 'themes' : 'apps';
+$canThemes = (bool) ($canThemes ?? true);
+$base      = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
+$ver       = defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1';
+$isApps    = $tab === 'apps';
+$noun      = $isApps ? 'apps' : 'themes';
 ?>
+<div class="bh-mk" id="mk-root" data-tab="<?= htmlspecialchars($tab) ?>" data-base="<?= htmlspecialchars($base) ?>">
 
-<link rel="stylesheet" href="<?= $base ?>/admin/assets/css/marketplace.css?v=<?= urlencode((string) $ver) ?>">
-
-<div class="mk-page" id="mk-root"
-     data-base="<?= htmlspecialchars($base) ?>"
-     data-csrf="<?= htmlspecialchars($csrf) ?>"
-     data-tab="<?= htmlspecialchars($tab) ?>">
-    <div class="mk-top">
-        <div class="min-w-0">
-            <h2 class="text-xl font-semibold text-slate-900">Marketplace</h2>
-            <p class="text-sm text-slate-500">Apps and themes for your site. Every download is checksum-verified before it installs.</p>
+    <header class="bh-mk-head">
+        <div class="bh-mk-head__text">
+            <span class="bh-mk-head__icon" aria-hidden="true"><?= icon('building-storefront', 'w-5 h-5') ?></span>
+            <div class="min-w-0">
+                <h2 class="bh-mk-head__title">Marketplace</h2>
+                <p class="bh-mk-head__sub">Apps and themes for your site. Every download is checksum-verified before it installs.</p>
+            </div>
         </div>
-        <a href="<?= $base ?>/admin/<?= $tab ?>" class="inline-flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 bg-white">
-            <?= icon('arrow-left', 'w-4 h-4') ?> <?= $isApps ? 'Installed apps' : 'Installed themes' ?>
+        <a href="<?= $base ?>/admin/<?= $isApps ? 'apps' : 'themes' ?>" class="bh-btn bh-btn--secondary bh-mk-head__back">
+            <?= icon($isApps ? 'puzzle-piece' : 'swatch', 'w-4 h-4') ?> <span>Installed <?= $noun ?></span>
         </a>
-    </div>
+    </header>
 
-    <nav class="mk-tabs" aria-label="Marketplace">
-        <a href="<?= $base ?>/admin/marketplace" class="mk-tab<?= $isApps ? ' is-on' : '' ?>"<?= $isApps ? ' aria-current="page"' : '' ?>>
-            <?= icon('puzzle-piece', 'w-4 h-4') ?> Apps
-        </a>
-        <a href="<?= $base ?>/admin/marketplace?tab=themes" class="mk-tab<?= !$isApps ? ' is-on' : '' ?>"<?= !$isApps ? ' aria-current="page"' : '' ?>>
-            <?= icon('swatch', 'w-4 h-4') ?> Themes
-        </a>
-    </nav>
-
-    <div class="mk-bar">
-        <label class="mk-search">
-            <span class="mk-search__icon"><?= icon('magnifying-glass', 'w-4 h-4') ?></span>
-            <input id="mk-q" type="search" placeholder="<?= $isApps ? 'Search apps by name, developer or tag' : 'Search themes by name, author or tag' ?>" aria-label="Search">
+    <div class="bh-mk-bar">
+        <?php if ($canThemes): ?>
+        <nav class="bh-mk-tabs" aria-label="Marketplace">
+            <a href="<?= $base ?>/admin/marketplace" class="bh-mk-tab<?= $isApps ? ' is-on' : '' ?>"<?= $isApps ? ' aria-current="page"' : '' ?>>
+                <?= icon('puzzle-piece', 'w-4 h-4') ?> Apps
+            </a>
+            <a href="<?= $base ?>/admin/marketplace?tab=themes" class="bh-mk-tab<?= !$isApps ? ' is-on' : '' ?>"<?= !$isApps ? ' aria-current="page"' : '' ?>>
+                <?= icon('swatch', 'w-4 h-4') ?> Themes
+            </a>
+        </nav>
+        <?php endif; ?>
+        <label class="bh-mk-search">
+            <span class="bh-mk-search__icon"><?= icon('magnifying-glass', 'w-4 h-4') ?></span>
+            <input id="mk-q" type="search" class="bh-input" autocomplete="off"
+                   placeholder="<?= $isApps ? 'Search apps' : 'Search themes' ?>" aria-label="Search <?= $noun ?>">
         </label>
-        <select id="mk-sort" class="mk-select" aria-label="Sort">
+        <select id="mk-sort" class="bh-select bh-mk-sort" aria-label="Sort">
             <option value="featured">Featured</option>
             <option value="popular">Most installed</option>
             <option value="newest">Newest</option>
@@ -64,21 +60,21 @@ $isApps = $tab === 'apps';
         </select>
     </div>
 
-    <div id="mk-cats" class="mk-chips" role="toolbar" aria-label="Categories">
-        <button type="button" class="mk-chip is-on" data-cat="">All</button>
+    <div id="mk-filters" class="bh-mk-filters" hidden>
+        <div id="mk-cats" class="bh-mk-chips" role="toolbar" aria-label="Categories">
+            <button type="button" class="bh-mk-chip is-on" data-cat="" aria-pressed="true">All</button>
+        </div>
+        <div id="mk-filter" class="bh-mk-tagfilter" hidden></div>
     </div>
-    <div id="mk-filter" class="hidden"></div>
 
-    <div id="mk-status" class="hidden mb-4"></div>
+    <section id="mk-spot" class="bh-mk-spot" aria-label="Featured" hidden></section>
 
-    <section id="mk-spot" class="hidden" aria-label="Featured"></section>
-
-    <div class="mk-head">
-        <h3 id="mk-heading" class="text-base font-semibold text-slate-900"><?= $isApps ? 'All apps' : 'All themes' ?></h3>
-        <span id="mk-count" class="text-sm text-slate-500"></span>
+    <div class="bh-mk-section">
+        <h3 id="mk-heading" class="bh-mk-section__title"><?= $isApps ? 'All apps' : 'All themes' ?></h3>
+        <span id="mk-count" class="bh-badge bh-badge--gray" hidden></span>
     </div>
-    <div id="mk-grid" class="mk-grid<?= $isApps ? '' : ' mk-grid--themes' ?>" aria-live="polite"></div>
-    <nav id="mk-pager" class="hidden items-center justify-center gap-3 mt-8"></nav>
+    <div id="mk-grid" class="bh-mk-grid<?= $isApps ? '' : ' bh-mk-grid--themes' ?>" aria-live="polite" aria-busy="true"></div>
+    <nav id="mk-pager" class="bh-mk-pager" aria-label="Pages" hidden></nav>
 </div>
 
 <?php $this->include('partials.item-modal'); ?>

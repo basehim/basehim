@@ -707,6 +707,233 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
     .bh-set--home { @apply pb-4; }
 }
 
+/* ═══ Marketplace (1.2.84) ════════════════════════════════════════════════
+   /admin/marketplace: admin/views/partials/marketplace.php and
+   admin/assets/js/marketplace.js. Until 1.2.84 it had a stylesheet of its
+   own (marketplace.css, a teal accent and 68 fixed colours); it now uses the
+   dashboard's header panel and cards and the core buttons, badges, fields,
+   skeleton and empty state, so a theme's accent reaches it like every
+   other screen. Layout only below — no colours outside accent and slate. */
+
+.bh-mk { @apply text-slate-700; }
+.bh-mk [hidden], .bh-im [hidden] { display: none !important; }
+
+/* Header: the dashboard greeting's panel, with the page's icon. */
+.bh-mk-head {
+    @apply relative mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5;
+    @apply bg-gradient-to-r from-accent-50/80 via-white to-white;
+}
+.bh-mk-head::before {
+    content: "";
+    @apply pointer-events-none absolute -left-10 -top-16 h-44 w-44 rounded-full bg-accent-100/70 blur-3xl;
+}
+.bh-mk-head__text { @apply relative flex min-w-0 flex-1 items-center gap-3.5 sm:gap-4; }
+.bh-mk-head__icon { @apply grid h-12 w-12 flex-none place-items-center rounded-2xl bg-accent-600 text-white shadow-sm shadow-accent-900/20 ring-4 ring-white; }
+.bh-mk-head__title { @apply m-0 text-xl font-semibold leading-tight text-slate-900; }
+.bh-mk-head__sub { @apply m-0 mt-1 text-sm text-slate-500; }
+.bh-mk-head__back { @apply relative; }
+
+/* Toolbar: tabs, search and sort in one row on a card. */
+.bh-mk-bar { @apply mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-card; }
+.bh-mk-tabs { @apply inline-flex flex-none rounded-xl bg-slate-100 p-1; }
+.bh-mk-tab { @apply inline-flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-sm font-medium text-slate-600 transition-colors duration-150; }
+.bh-mk-tab:hover { @apply text-slate-900; }
+.bh-mk-tab.is-on { @apply bg-white text-slate-900 shadow-sm shadow-slate-900/10; }
+.bh-mk-tab.is-on svg { @apply text-accent-600; }
+.bh-mk-tab:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
+.bh-mk-search { @apply relative min-w-0 flex-1 basis-60; }
+.bh-mk-search__icon { @apply pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400; }
+.bh-mk-search .bh-input { @apply border-transparent bg-slate-50 pl-9; }
+.bh-mk-search .bh-input:hover { @apply border-slate-200; }
+.bh-mk-search .bh-input:focus { @apply border-accent-500 bg-white; }
+.bh-mk-sort { @apply w-auto flex-none cursor-pointer border-transparent bg-slate-50 pr-8 font-medium text-slate-700; }
+.bh-mk-sort:hover { @apply border-slate-200; }
+
+/* Categories: one scrolling row of chips. */
+.bh-mk-filters { @apply mb-5 flex items-center gap-3; }
+.bh-mk-chips { @apply -mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 py-1; scrollbar-width: none; }
+.bh-mk-chips::-webkit-scrollbar { display: none; }
+.bh-mk-chip { @apply inline-flex h-8 flex-none items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 text-[0.8125rem] font-medium text-slate-600 transition-colors duration-150; }
+.bh-mk-chip:hover { @apply border-slate-300 text-slate-900; }
+.bh-mk-chip.is-on { @apply border-accent-200 bg-accent-50 text-accent-700; }
+.bh-mk-chip:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
+.bh-mk-chip__n { @apply rounded-full bg-slate-100 px-1.5 text-[0.6875rem] font-semibold leading-4 text-slate-500; }
+.bh-mk-chip.is-on .bh-mk-chip__n { @apply bg-accent-100 text-accent-700; }
+.bh-mk-tagfilter { @apply flex flex-none items-center gap-2 text-[0.8125rem] text-slate-500; }
+
+/* Featured: a card whose artwork glows in its own colours. */
+.bh-mk-spot { @apply mb-6 grid gap-4; }
+@media (min-width: 1180px) { .bh-mk-spot--2 { @apply grid-cols-2; } }
+.bh-mk-feature { @apply relative flex items-center gap-5 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card sm:gap-7 sm:p-6; }
+.bh-mk-feature__art { @apply relative h-28 w-28 flex-none sm:h-36 sm:w-36; }
+.bh-mk-feature__glow { @apply pointer-events-none absolute inset-0 scale-125 opacity-50 blur-2xl saturate-150; }
+.bh-mk-feature__glow img, .bh-mk-feature__glow .bh-mk-fallback { @apply h-full w-full rounded-[28%] object-cover; }
+.bh-mk-feature__img { @apply relative h-full w-full overflow-hidden rounded-[26%] bg-slate-100 shadow-lg shadow-slate-900/20 ring-1 ring-slate-900/5; }
+.bh-mk-feature__img img { @apply h-full w-full object-cover; }
+.bh-mk-feature--theme .bh-mk-feature__art { @apply h-32 w-52 sm:h-40 sm:w-64; }
+.bh-mk-feature--theme .bh-mk-feature__img, .bh-mk-feature--theme .bh-mk-feature__glow img { @apply rounded-xl; }
+.bh-mk-feature--theme .bh-mk-feature__img img { @apply object-top; }
+.bh-mk-feature__body { @apply relative min-w-0 flex-1; }
+.bh-mk-feature__name { @apply m-0 mt-2 text-xl font-semibold leading-tight text-slate-900 sm:text-2xl; }
+.bh-mk-feature__who { @apply m-0 mt-1 text-sm text-slate-500; }
+.bh-mk-feature__desc { @apply m-0 mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 line-clamp-2; }
+.bh-mk-feature__row { @apply mt-4 flex flex-wrap items-center gap-2; }
+.bh-mk-feature__meta { @apply ml-1 inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8125rem] text-slate-500; }
+.bh-mk-feature__meta > span { @apply inline-flex items-center gap-1.5; }
+.bh-mk-feature__meta svg { @apply h-4 w-4 text-slate-400; }
+
+/* Section heading over the grid. */
+.bh-mk-section { @apply mb-3 flex items-center gap-2; }
+.bh-mk-section__title { @apply m-0 text-[0.9375rem] font-semibold text-slate-900; }
+
+/* Grid of cards: the dashboard card, with the details button filling it
+   and a footer for the action. */
+/* Two to a row on phones, three on tablets, four on large screens. */
+.bh-mk-grid { @apply grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4; }
+/* Themes: one screenshot a row on phones. */
+.bh-mk-grid--themes { @apply max-sm:grid-cols-1; }
+.bh-mk-card { @apply flex min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white shadow-card transition-[border-color,box-shadow] duration-150; }
+.bh-mk-card:hover { @apply border-slate-300/80 shadow-card-hover; }
+.bh-mk-card__open { @apply flex w-full min-w-0 flex-1 flex-col items-stretch gap-3 rounded-t-2xl p-4 text-left; }
+.bh-mk-card__top { @apply flex min-w-0 items-start gap-3; }
+.bh-mk-card__top .bh-mk-info { @apply flex-1 pt-0.5; }
+.bh-mk-info__flag { @apply mb-1; }
+.bh-mk-card__open:focus-visible { @apply outline-none ring-2 ring-inset ring-accent-500/40; }
+.bh-mk-art { @apply relative block h-14 w-14 flex-none overflow-hidden rounded-[16px] bg-slate-100 ring-1 ring-inset ring-slate-900/5; }
+.bh-mk-art img { @apply block h-full w-full object-cover; }
+.bh-mk-info { @apply flex min-w-0 flex-col; }
+.bh-mk-name { @apply text-[0.9375rem] font-semibold leading-snug text-slate-900 [overflow-wrap:anywhere]; }
+.bh-mk-who { @apply mt-0.5 text-[0.8125rem] text-slate-500; }
+.bh-mk-meta { @apply mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500; }
+.bh-mk-meta > span { @apply inline-flex items-center gap-1 whitespace-nowrap; }
+.bh-mk-meta svg { @apply h-3.5 w-3.5 text-slate-400; }
+.bh-mk-desc { @apply text-[0.8125rem] leading-normal text-slate-600 line-clamp-2; }
+.bh-mk-ghost .bh-mk-desc { @apply block; }
+.bh-mk-card__foot { @apply flex min-h-[3.5rem] items-center justify-between gap-2 border-t border-slate-100 px-4 py-2.5; }
+.bh-mk-card__note { @apply truncate text-xs text-slate-400; }
+.bh-mk-fallback { @apply grid h-full w-full place-items-center bg-gradient-to-br from-accent-50 to-accent-100 text-accent-600; }
+.bh-mk-fallback svg { @apply h-[38%] w-[38%]; }
+/* Theme cards: the screenshot on top. */
+.bh-mk-grid--themes .bh-mk-card__open { @apply gap-0 p-0; }
+.bh-mk-grid--themes .bh-mk-art { @apply aspect-[16/10] h-auto w-full rounded-none rounded-t-2xl border-b border-slate-100 ring-0; }
+.bh-mk-grid--themes .bh-mk-art img { @apply object-top; }
+.bh-mk-grid--themes .bh-mk-info { @apply w-full p-4 pb-3; }
+.bh-mk-flag { @apply absolute left-2.5 top-2.5 z-[1] shadow-sm; }
+
+/* Loading: the shapes of the cards, shimmering like the dashboard's. */
+.bh-mk-ghost { @apply pointer-events-none; }
+.bh-mk-ghost .bh-mk-art { @apply ring-0; }
+.bh-mk-ghost .bh-mk-art, .bh-mk-ghost .bh-dskel__bone { @apply animate-bh-shimmer bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 bg-[length:200%_100%]; }
+.bh-mk-ghost .bh-dskel__bone + .bh-dskel__bone { @apply mt-2.5; }
+
+/* Nothing to show, or the marketplace can't be reached. */
+.bh-mk-state { @apply col-span-full rounded-2xl border border-dashed border-slate-200 bg-white; }
+.bh-mk-state .bh-empty__icon { @apply bg-accent-50 text-accent-600; }
+.bh-mk-state.is-error .bh-empty__icon { @apply bg-red-50 text-red-600; }
+
+.bh-mk-pager { @apply mt-8 flex items-center justify-center gap-3 text-sm text-slate-500; }
+
+/* Phones: a compact toolbar and smaller artwork. */
+@media (max-width: 639px) {
+    .bh-mk-head { @apply mb-3 p-4; }
+    .bh-mk-head__icon { @apply h-10 w-10 rounded-xl; }
+    .bh-mk-head__title { @apply text-lg; }
+    .bh-mk-head__sub { @apply text-[0.8125rem] leading-snug; }
+    .bh-mk-head__back { @apply h-8 w-full rounded-lg text-[0.8125rem]; }
+    .bh-mk-bar { @apply gap-1.5; }
+    .bh-mk-tabs { @apply w-full; }
+    .bh-mk-tab { @apply flex-1 justify-center; }
+    .bh-mk-search { @apply basis-0; }
+    .bh-mk-search .bh-input, .bh-mk-sort { @apply h-10 text-base; }
+    .bh-mk-sort { @apply max-w-[8.5rem]; }
+    .bh-mk-filters { @apply mb-4; }
+    .bh-mk-feature { @apply flex-col items-start gap-4 p-4; }
+    .bh-mk-feature__art { @apply h-20 w-20; }
+    .bh-mk-feature--theme .bh-mk-feature__art { @apply h-40 w-full; }
+    .bh-mk-spot--2 .bh-mk-feature + .bh-mk-feature { @apply hidden; }
+    /* Two narrow cards a row: smaller icon, no size figure, and the
+       button across the card's foot. */
+    .bh-mk-card__open { @apply gap-2.5 p-3; }
+    .bh-mk-art { @apply h-12 w-12 rounded-[14px]; }
+    /* Too narrow for the icon beside the name: it goes on top. */
+    .bh-mk-card__top { @apply flex-col gap-2.5; }
+    .bh-mk-card__top .bh-mk-info { @apply pt-0; }
+    .bh-mk-grid--themes .bh-mk-card__foot { @apply flex-row items-center px-4; }
+    .bh-mk-grid--themes .bh-mk-card__foot .mk-act, .bh-mk-grid--themes .bh-mk-card__foot .bh-btn { @apply w-auto; }
+    .bh-mk-grid--themes .bh-mk-card__note, .bh-mk-grid--themes .bh-mk-card__foot > .bh-badge { @apply inline-flex; }
+    .bh-mk-grid--themes .bh-mk-meta > span + span { @apply inline-flex; }
+    .bh-mk-grid--themes .bh-mk-info { @apply p-4 pb-3; }
+    .bh-mk-name { @apply text-sm; }
+    .bh-mk-who { @apply text-xs; }
+    .bh-mk-meta > span + span { @apply hidden; }
+    .bh-mk-desc { @apply text-xs; }
+    .bh-mk-card__foot { @apply min-h-0 flex-col-reverse items-stretch gap-2 px-3 py-3; }
+    .bh-mk-card__foot .mk-act, .bh-mk-card__foot .bh-btn { @apply flex w-full; }
+    .bh-mk-card__foot .mk-act > .bh-badge { @apply mx-auto; }
+    .bh-mk-card__note { @apply hidden; }
+    .bh-mk-card__foot > .bh-badge { @apply hidden; }
+    .bh-mk-ghost .bh-mk-card__foot .bh-dskel__bone { @apply w-full; }
+}
+
+/* ── Details window (partials/item-modal.php; inline styles until 1.2.84) */
+.bh-im { @apply m-auto flex-col overflow-hidden rounded-2xl border-0 bg-white p-0 text-slate-900 shadow-pop; width: min(42rem, calc(100vw - 2rem)); max-height: min(46rem, calc(100vh - 2rem)); }
+.bh-im[open] { @apply flex; animation: bh-ask-in .16s cubic-bezier(.2, .7, .3, 1); }
+.bh-im::backdrop { @apply bg-slate-900/40 backdrop-blur-[5px]; }
+.bh-im__media { @apply flex-none border-b border-slate-200 bg-slate-100; }
+.bh-im__media img { @apply block max-h-72 w-full object-cover object-top; }
+.bh-im__head { @apply flex items-center gap-4 px-6 pb-4 pt-6; }
+.bh-im__name { @apply m-0 text-xl font-semibold leading-tight text-slate-900; }
+.bh-im__who { @apply mt-0.5 text-sm text-slate-500; }
+.bh-im__who a, .bh-im__facts a { @apply text-accent-700 hover:underline; }
+.bh-im__x { @apply -mr-1 -mt-1 self-start; }
+.bh-im__body { @apply min-h-0 flex-auto overflow-y-auto px-6 pb-4; }
+.bh-im__chips { @apply mb-3 flex flex-wrap items-center gap-2; }
+.bh-im__chips:empty { @apply hidden; }
+.bh-im__stats { @apply mb-4 mt-1 grid grid-cols-4 border-y border-slate-100 py-3.5; }
+.bh-im__stats > div { @apply flex min-w-0 flex-col-reverse px-1.5 text-center; }
+.bh-im__stats > div + div { @apply border-l border-slate-100; }
+.bh-im__stats dd { @apply m-0 truncate text-base font-semibold text-slate-900; }
+.bh-im__stats dt { @apply mt-0.5 text-xs text-slate-500; }
+.bh-im__desc { @apply mb-4 whitespace-pre-line text-sm leading-relaxed text-slate-700; }
+.bh-im__facts { @apply grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 pb-2 pt-1 text-[0.8125rem]; }
+.bh-im__facts dt { @apply text-slate-500; }
+.bh-im__facts dd { @apply m-0 text-slate-900 [overflow-wrap:anywhere]; }
+.bh-im__foot { @apply flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-6 py-4; }
+.bh-im__state { @apply mr-auto inline-flex items-center gap-1.5 text-xs text-slate-500; }
+.bh-im__state svg { @apply h-4 w-4 flex-none; }
+.bh-im__state.is-error { @apply text-red-700; }
+.bh-im__state.is-ok { @apply text-emerald-700; }
+.bh-im__action { @apply inline-flex flex-wrap gap-2; }
+.bh-im__action:empty { @apply hidden; }
+.bh-im .bh-mk-art { @apply h-24 w-24 rounded-[22px] shadow-lg shadow-slate-900/15; }
+.bh-im-tags { @apply flex flex-wrap gap-1.5; }
+.bh-im-tag { @apply rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 transition-colors hover:bg-accent-50 hover:text-accent-700; }
+.bh-im-perm { @apply rounded bg-slate-100 px-1.5 py-px font-mono text-xs text-slate-700; }
+@media (max-width: 479px) {
+    .bh-im__stats { @apply grid-cols-2 gap-y-3; }
+    .bh-im__stats > div:nth-child(3) { @apply border-l-0; }
+    .bh-im__head, .bh-im__body, .bh-im__foot { @apply px-4; }
+    .bh-im .bh-mk-art { @apply h-16 w-16 rounded-2xl; }
+    /* The actions fill the footer, the main one at the bottom by the thumb;
+       the corner X closes, so Close steps aside while there is an action. */
+    .bh-im__foot { @apply pb-[calc(1rem+env(safe-area-inset-bottom,0px))]; }
+    .bh-im__state { @apply w-full; }
+    .bh-im__action { @apply w-full flex-col; }
+    .bh-im__action .bh-btn { @apply h-11 w-full text-[0.9375rem]; }
+    .bh-im__foot:has(.bh-im__action:not(:empty)) > [data-close] { @apply hidden; }
+    .bh-im__foot > [data-close] { @apply h-11 w-full; }
+}
+
+/* Consent: the permissions an app asks for, as switches (like Settings). */
+.bh-mk-consent__lead { @apply m-0 mb-3 text-sm leading-relaxed text-slate-700; }
+.bh-mk-perms { @apply m-0 mt-3 list-none divide-y divide-slate-100 rounded-xl border border-slate-200 p-0; }
+.bh-mk-perm { @apply flex cursor-pointer items-start gap-3 px-3.5 py-3; }
+.bh-mk-perm__main { @apply min-w-0 flex-1; }
+.bh-mk-perm__top { @apply flex flex-wrap items-center gap-2; }
+.bh-mk-perm__label { @apply text-sm font-medium text-slate-900; }
+.bh-mk-perm__desc { @apply mt-0.5 block text-[0.8125rem] leading-snug text-slate-500; }
+.bh-mk-perm .bh-switch { @apply mt-0.5; }
+
 @media (prefers-reduced-motion: reduce) {
     .bh-dskel__row, .bh-dskel__bone, .bh-dcard.is-refreshing .bh-dcard__refresh svg, .bh-dcard.is-new,
     .bh-dash-drawer__panel, .bh-dash-drawer__scrim,
@@ -715,6 +942,8 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
     .bh-switch__track, .bh-switch__track::after { @apply animate-none transition-none; }
     .bh-set.is-entering .bh-set__form, .bh-set.is-entering .bh-set__stack, .bh-set.is-entering-fwd, .bh-set.is-entering-back { animation: none; }
     .bh-dcard.is-dragging { @apply rotate-0; }
+    .bh-mk-ghost .bh-mk-art, .bh-mk-ghost .bh-dskel__bone, .bh-mk-card, .bh-mk-tab, .bh-mk-chip { @apply animate-none transition-none; }
+    .bh-im[open] { animation: none; }
 }
 
 @tailwind utilities;
