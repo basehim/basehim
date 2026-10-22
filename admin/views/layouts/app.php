@@ -844,7 +844,7 @@ try {
         </header>
 
         <!-- Content -->
-        <main class="p-4 sm:p-6">
+        <main id="bh-content" class="p-4 sm:p-6">
             <?php if ($flash): ?>
                 <div data-bh-flash class="mb-4 px-4 py-3 rounded-lg border <?php
                     echo $flash['type'] === 'error' ? 'bg-red-50 border-red-200 text-red-800' :

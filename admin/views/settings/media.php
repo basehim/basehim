@@ -1,175 +1,75 @@
 <?php $this->extend('layouts.app'); ?>
 <?php $this->section('content'); ?>
 <?php
-    // $media holds resolved current values (with defaults) from MediaService.
-    $m = $media ?? [];
-    $chk = fn($v) => !empty($v) ? 'checked' : '';
+require_once __DIR__ . '/_ui.php';
+// $media holds resolved current values (with defaults) from MediaService.
+$m = $media ?? [];
+$num = static fn(string $name, int|string $value, array $a = []): string =>
+    '<input type="number" id="' . bh_set_id($name) . '" name="' . bh_set_e($name) . '" class="bh-input" value="' . bh_set_e($value) . '"'
+    . (isset($a['min']) ? ' min="' . (int) $a['min'] . '"' : '') . (isset($a['max']) ? ' max="' . (int) $a['max'] . '"' : '')
+    . (isset($a['step']) ? ' step="' . bh_set_e($a['step']) . '"' : '') . '>';
+$size = static function (string $w, string $h, int $wv, int $hv, string $wl, string $hl) use ($num): string {
+    return '<div class="bh-set-fields">'
+        . '<div><label class="bh-set-fields__label" for="' . bh_set_id($w) . '">' . $wl . '</label>' . $num($w, $wv, ['min' => 1]) . '</div>'
+        . '<div><label class="bh-set-fields__label" for="' . bh_set_id($h) . '">' . $hl . '</label>' . $num($h, $hv, ['min' => 1]) . '</div></div>';
+};
+$ic = $imageCounts ?? ['images' => 0, 'missing' => 0];
 ?>
+<div class="bh-set">
+    <?php $this->include('settings._head', compact('tab', 'base')); ?>
 
-<div class="mb-5">
-    <h2 class="text-xl font-semibold text-slate-900">Settings</h2>
-    <p class="text-sm text-slate-500">Configure your site.</p>
-</div>
-
-<div>
-    <?php $this->include('settings._nav', compact('tab', 'base')); ?>
-    <div class="mt-0 space-y-5">
-
+    <div class="bh-set__stack">
         <?php if (empty($gdAvailable)): ?>
-        <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 text-sm flex items-start gap-2">
-            <?= icon('exclamation-triangle', 'w-5 h-5 shrink-0') ?>
-            <div>The <strong>GD image extension</strong> isn't available on this server, so thumbnails can't be generated. Other media settings still apply. Ask your host to enable <code>php-gd</code>.</div>
-        </div>
+        <div class="bh-note bh-note--warn"><?= icon('exclamation-triangle', 'w-4 h-4') ?><span>The <strong>GD image extension</strong> isn't available on this server, so thumbnails can't be generated. Other media settings still apply. Ask your host to enable <code>php-gd</code>.</span></div>
         <?php endif; ?>
 
-        <form method="POST" action="<?= $base ?>/admin/settings/media" class="space-y-5">
-            <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
+        <form method="POST" action="<?= $base ?>/admin/settings/media" class="bh-set__form">
+            <input type="hidden" name="_csrf" value="<?= bh_set_e($csrf) ?>">
 
-            <!-- Uploading -->
-            <div class="bg-white rounded-xl border border-slate-200 p-6">
-                <h3 class="font-semibold text-slate-900 mb-1">Uploading files</h3>
-                <p class="text-sm text-slate-500 mb-5">Control what can be uploaded and where it's stored.</p>
+            <?= bh_set_card_open('Uploading files', 'What can be uploaded and where it is stored.') ?>
+                <?= bh_set_row('Largest upload', '<div class="flex items-center gap-2">' . str_replace('class="bh-input"', 'class="bh-input max-w-[8rem]"', $num('max_upload_mb', (int) ($m['max_upload_mb'] ?? 64), ['min' => 1])) . '<span class="text-sm text-slate-500">MB</span></div>', 'Also limited by your server\'s <code>upload_max_filesize</code>.', ['for' => bh_set_id('max_upload_mb')]) ?>
+                <?= bh_set_row('Largest image', '<div class="flex items-center gap-2">' . str_replace('class="bh-input"', 'class="bh-input max-w-[8rem]"', $num('max_image_megapixels', (string) (float) ($m['max_image_megapixels'] ?? 50), ['min' => 1, 'max' => 100, 'step' => '1'])) . '<span class="text-sm text-slate-500">megapixels</span></div>', 'Width × height. Larger images are refused: a small file can still need a lot of memory to process. 50 suits most phone and camera photos.', ['for' => bh_set_id('max_image_megapixels')]) ?>
+                <?= bh_set_row('Allowed file types', '<input type="text" id="set-allowed-types" name="allowed_types" class="bh-input" value="' . bh_set_e($m['allowed_types'] ?? 'jpg, jpeg, png, gif, webp, svg, pdf, mp3, mp4, webm, doc, docx, xls, xlsx, zip') . '">', 'Extensions without dots, separated by commas.', ['for' => 'set-allowed-types', 'wide' => true]) ?>
+                <?= bh_set_toggle('organize_uploads', !empty($m['organize_uploads'] ?? true), 'Organise uploads into year and month folders') ?>
+            <?= bh_set_card_close() ?>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Maximum upload size (MB)</label>
-                        <input type="number" min="1" name="max_upload_mb" value="<?= (int)($m['max_upload_mb'] ?? 64) ?>"
-                            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                        <p class="text-xs text-slate-400 mt-1">Also limited by your server's <code>upload_max_filesize</code>.</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Image quality (1–100)</label>
-                        <input type="number" min="1" max="100" name="jpeg_quality" value="<?= (int)($m['jpeg_quality'] ?? 82) ?>"
-                            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                        <p class="text-xs text-slate-400 mt-1">Compression for generated JPEG/WebP thumbnails.</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Largest image (megapixels)</label>
-                        <input type="number" min="1" max="100" step="1" name="max_image_megapixels" value="<?= htmlspecialchars((string) (float) ($m['max_image_megapixels'] ?? 50)) ?>"
-                            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                        <p class="text-xs text-slate-400 mt-1">Width × height. Larger images are refused: a small file can still need a lot of memory to process. 50 suits most phone and camera photos.</p>
-                    </div>
-                </div>
+            <?= bh_set_card_open('Image sizes', 'The thumbnails made for each uploaded image, in pixels.') ?>
+                <?= bh_set_toggle('generate_thumbnails', !empty($m['generate_thumbnails'] ?? true), 'Make thumbnails on upload') ?>
+                <?= bh_set_row('Thumbnail', $size('thumb_w', 'thumb_h', (int) ($m['thumb_w'] ?? 150), (int) ($m['thumb_h'] ?? 150), 'Width', 'Height')) ?>
+                <?= bh_set_toggle('thumb_crop', !empty($m['thumb_crop'] ?? true), 'Crop thumbnails to exact size', 'Off: the image is fitted inside the size instead.', ['sub' => true]) ?>
+                <?= bh_set_row('Medium', $size('medium_w', 'medium_h', (int) ($m['medium_w'] ?? 300), (int) ($m['medium_h'] ?? 300), 'Max width', 'Max height'), 'Fitted inside this size.') ?>
+                <?= bh_set_row('Large', $size('large_w', 'large_h', (int) ($m['large_w'] ?? 1024), (int) ($m['large_h'] ?? 1024), 'Max width', 'Max height'), 'Fitted inside this size.') ?>
+                <?= bh_set_row('Quality', '<div class="flex items-center gap-2">' . str_replace('class="bh-input"', 'class="bh-input max-w-[8rem]"', $num('jpeg_quality', (int) ($m['jpeg_quality'] ?? 82), ['min' => 1, 'max' => 100])) . '<span class="text-sm text-slate-500">of 100</span></div>', 'Compression for JPEG and WebP thumbnails.', ['for' => bh_set_id('jpeg_quality')]) ?>
+                <?= bh_set_toggle('convert_webp', !empty($m['convert_webp'] ?? false), 'Save thumbnails as WebP', empty($gdWebp) ? 'Not supported on this server.' : 'Smaller files than JPEG, supported by every current browser.', ['disabled' => empty($gdWebp)]) ?>
+            <?= bh_set_card_close() ?>
 
-                <div class="mt-5">
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Allowed file types</label>
-                    <input type="text" name="allowed_types" value="<?= htmlspecialchars((string)($m['allowed_types'] ?? 'jpg, jpeg, png, gif, webp, svg, pdf, mp3, mp4, webm, doc, docx, xls, xlsx, zip')) ?>"
-                        class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                    <p class="text-xs text-slate-400 mt-1">Comma-separated extensions (without dots).</p>
-                </div>
-
-                <div class="mt-5">
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-                        <input type="hidden" name="organize_uploads" value="0">
-                        <input type="checkbox" name="organize_uploads" value="1" <?= $chk($m['organize_uploads'] ?? true) ?> class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
-                        Organize uploads into month- and year-based folders
-                    </label>
-                </div>
-            </div>
-
-            <!-- Image sizes -->
-            <div class="bg-white rounded-xl border border-slate-200 p-6">
-                <h3 class="font-semibold text-slate-900 mb-1">Image sizes</h3>
-                <p class="text-sm text-slate-500 mb-5">The dimensions (in pixels) of thumbnails generated for each uploaded image.</p>
-
-                <label class="inline-flex items-center gap-2 text-sm text-slate-700 mb-5">
-                    <input type="hidden" name="generate_thumbnails" value="0">
-                    <input type="checkbox" name="generate_thumbnails" value="1" <?= $chk($m['generate_thumbnails'] ?? true) ?> class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
-                    Generate thumbnail sizes on upload
-                </label>
-
-                <div class="space-y-5">
-                    <!-- Thumbnail -->
-                    <div class="grid grid-cols-1 sm:grid-cols-[120px_1fr_1fr_auto] gap-3 items-end">
-                        <div class="text-sm font-medium text-slate-700 sm:pb-2">Thumbnail</div>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">Width</label>
-                            <input type="number" min="1" name="thumb_w" value="<?= (int)($m['thumb_w'] ?? 150) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">Height</label>
-                            <input type="number" min="1" name="thumb_h" value="<?= (int)($m['thumb_h'] ?? 150) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500">
-                        </div>
-                        <label class="inline-flex items-center gap-2 text-xs text-slate-600 sm:pb-2 whitespace-nowrap">
-                            <input type="hidden" name="thumb_crop" value="0">
-                            <input type="checkbox" name="thumb_crop" value="1" <?= $chk($m['thumb_crop'] ?? true) ?> class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
-                            Crop to exact size
-                        </label>
-                    </div>
-                    <!-- Medium -->
-                    <div class="grid grid-cols-1 sm:grid-cols-[120px_1fr_1fr_auto] gap-3 items-end">
-                        <div class="text-sm font-medium text-slate-700 sm:pb-2">Medium</div>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">Max width</label>
-                            <input type="number" min="1" name="medium_w" value="<?= (int)($m['medium_w'] ?? 300) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">Max height</label>
-                            <input type="number" min="1" name="medium_h" value="<?= (int)($m['medium_h'] ?? 300) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500">
-                        </div>
-                        <div class="text-xs text-slate-400 sm:pb-2">fit inside</div>
-                    </div>
-                    <!-- Large -->
-                    <div class="grid grid-cols-1 sm:grid-cols-[120px_1fr_1fr_auto] gap-3 items-end">
-                        <div class="text-sm font-medium text-slate-700 sm:pb-2">Large</div>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">Max width</label>
-                            <input type="number" min="1" name="large_w" value="<?= (int)($m['large_w'] ?? 1024) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">Max height</label>
-                            <input type="number" min="1" name="large_h" value="<?= (int)($m['large_h'] ?? 1024) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500">
-                        </div>
-                        <div class="text-xs text-slate-400 sm:pb-2">fit inside</div>
-                    </div>
-                </div>
-
-                <div class="mt-6">
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-                        <input type="hidden" name="convert_webp" value="0">
-                        <input type="checkbox" name="convert_webp" value="1" <?= $chk($m['convert_webp'] ?? false) ?> <?= empty($gdWebp) ? 'disabled' : '' ?> class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50">
-                        Save generated thumbnails as WebP<?= empty($gdWebp) ? ' (not supported on this server)' : '' ?>
-                    </label>
-                </div>
-            </div>
-
-            <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm">
-                <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save changes
-            </button>
+            <?= bh_set_save() ?>
         </form>
 
-        <!-- Regenerate thumbnails -->
-        <?php $ic = $imageCounts ?? ['images' => 0, 'missing' => 0]; ?>
-        <div class="bg-white rounded-xl border border-slate-200 p-6" id="bh-regen">
-            <h3 class="font-semibold text-slate-900 mb-1">Regenerate thumbnails</h3>
-            <p class="text-sm text-slate-500 mb-4">
-                Builds the thumbnail, medium and large versions themes use for cards, lists and widgets.
-                <strong><?= number_format((int) $ic['images']) ?></strong> image<?= (int) $ic['images'] === 1 ? '' : 's' ?> in the library;
-                <strong><?= number_format((int) $ic['missing']) ?></strong> without thumbnails.
-            </p>
-            <div class="flex flex-wrap gap-x-6 gap-y-2 mb-4 text-sm text-slate-700">
-                <label class="inline-flex items-center gap-2"><input type="radio" name="regen_scope" value="missing" checked class="text-blue-600"> Only images without thumbnails</label>
-                <label class="inline-flex items-center gap-2"><input type="radio" name="regen_scope" value="all" class="text-blue-600"> All images <span class="text-slate-400">(after changing the sizes above)</span></label>
+        <?= bh_set_card_open('Regenerate thumbnails', 'Builds the thumbnail, medium and large versions themes use for cards, lists and widgets.', ['id' => 'bh-regen']) ?>
+            <div class="bh-set-card__block grid gap-4">
+                <p class="m-0 text-sm text-slate-600"><strong class="font-semibold text-slate-900"><?= number_format((int) $ic['images']) ?></strong> image<?= (int) $ic['images'] === 1 ? '' : 's' ?> in the library; <strong class="font-semibold text-slate-900"><?= number_format((int) $ic['missing']) ?></strong> without thumbnails.</p>
+                <div class="bh-choices sm:grid-cols-2" role="radiogroup" aria-label="Which images">
+                    <label class="bh-choice"><input type="radio" name="regen_scope" value="missing" checked><span><span class="bh-choice__title">Only images without thumbnails</span></span></label>
+                    <label class="bh-choice"><input type="radio" name="regen_scope" value="all"><span><span class="bh-choice__title">All images</span><span class="bh-choice__text">After changing the sizes above.</span></span></label>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" data-regen-start class="bh-btn bh-btn--secondary" <?= empty($gdAvailable) ? 'disabled' : '' ?>><?= icon('arrow-path', 'w-4 h-4') ?> Regenerate</button>
+                    <button type="button" data-regen-stop hidden class="bh-btn bh-btn--ghost">Stop</button>
+                    <?php if (empty($gdAvailable)): ?><span class="text-sm text-slate-500">The GD image extension is not available on this server.</span><?php endif; ?>
+                </div>
+                <div data-regen-progress hidden>
+                    <div class="h-2 overflow-hidden rounded-full bg-slate-100"><div data-regen-bar class="h-full bg-accent-600 transition-all" style="width:0%"></div></div>
+                    <p data-regen-status class="mt-2 text-sm text-slate-600" aria-live="polite"></p>
+                </div>
+                <noscript>
+                    <form method="POST" action="<?= $base ?>/admin/settings/media/regenerate" onsubmit="return confirm('Regenerate thumbnails for all images in one request? On a large library this can time out.')">
+                        <input type="hidden" name="_csrf" value="<?= bh_set_e($csrf) ?>">
+                        <button type="submit" class="bh-btn bh-btn--secondary">Regenerate all (one request)</button>
+                    </form>
+                </noscript>
             </div>
-            <div class="flex items-center gap-3">
-                <button type="button" data-regen-start <?= empty($gdAvailable) ? 'disabled' : '' ?>
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-                    <?= icon('arrow-path', 'w-4 h-4') ?> Regenerate
-                </button>
-                <button type="button" data-regen-stop hidden class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">Stop</button>
-                <?php if (empty($gdAvailable)): ?><span class="text-sm text-amber-700">The GD image extension is not available on this server.</span><?php endif; ?>
-            </div>
-            <div data-regen-progress hidden class="mt-4">
-                <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div data-regen-bar class="h-full bg-blue-600 transition-all" style="width:0%"></div></div>
-                <p data-regen-status class="mt-2 text-sm text-slate-600" aria-live="polite"></p>
-            </div>
-            <noscript>
-                <form method="POST" action="<?= $base ?>/admin/settings/media/regenerate" class="mt-3" onsubmit="return confirm('Regenerate thumbnails for all images in one request? On a large library this can time out.')">
-                    <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                    <button type="submit" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm">Regenerate all (one request)</button>
-                </form>
-            </noscript>
-        </div>
+        <?= bh_set_card_close() ?>
         <script>
         (function () {
             // Regenerate in batches: each request works for a few seconds and
@@ -208,7 +108,6 @@
             stop.addEventListener('click', function () { stopped = true; stop.hidden = true; });
         })();
         </script>
-
     </div>
 </div>
 

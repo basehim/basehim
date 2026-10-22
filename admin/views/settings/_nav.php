@@ -9,19 +9,8 @@ $this->include('partials.tabs', [
     'active'    => $tab ?? '',
     'urlPrefix' => '/admin/settings/',
     'ariaLabel' => 'Settings sections',
-    'tabs'      => [
-        'general'       => ['label' => 'General',       'icon' => 'cog-6-tooth'],
-        'reading'       => ['label' => 'Reading',       'icon' => 'book-open'],
-        'writing'       => ['label' => 'Writing',       'icon' => 'pencil'],
-        'discussion'    => ['label' => 'Discussion',    'icon' => 'chat-bubble-left-right'],
-        'permalinks'    => ['label' => 'Permalinks',    'icon' => 'link'],
-        'media'         => ['label' => 'Media',         'icon' => 'photo'],
-        'seo'           => ['label' => 'SEO',           'icon' => 'document-magnifying-glass'],
-        'ai'            => ['label' => 'AI Agents',     'icon' => 'cpu-chip'],
-        'email'         => ['label' => 'Email',         'icon' => 'envelope'],
-        'appearance'    => ['label' => 'Appearance',    'icon' => 'swatch'],
-        'authorization' => ['label' => 'Authentication', 'icon' => 'shield-check'],
-    ],
+    'tabs'      => array_map(static fn($t) => ['label' => $t['label'], 'icon' => $t['icon']], require __DIR__ . '/_sections.php'),
 ]);
 ?>
 <script src="<?= htmlspecialchars((string) ($base ?? ''), ENT_QUOTES) ?>/admin/assets/js/settings-save.js?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>" defer></script>
+<script src="<?= htmlspecialchars((string) ($base ?? ''), ENT_QUOTES) ?>/admin/assets/js/settings-nav.js?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>" defer></script>

@@ -32,6 +32,8 @@
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:ring-offset-1;
 }
 .bh-btn svg { @apply h-4 w-4 flex-none; }
+/* hidden always wins over a component's display (a Stop button kept hidden until needed). */
+.bh-btn[hidden], .bh-set [hidden], .bh-choice[hidden] { display: none !important; }
 .bh-btn:disabled, .bh-btn[aria-disabled="true"] { @apply cursor-not-allowed opacity-50; }
 .bh-btn--sm { @apply h-8 rounded-lg px-3 text-[0.8125rem]; }
 .bh-btn--lg { @apply h-10 px-4; }
@@ -89,6 +91,56 @@
 .bh-input--sm, .bh-select--sm { @apply h-8 rounded-lg px-2.5 py-0 text-[0.8125rem]; }
 .bh-help { @apply mt-1.5 text-xs leading-normal text-slate-500; }
 
+/* ── Switch (1.2.82): an on/off setting. A real checkbox with role="switch",
+      laid over its track so clicks, keyboard and forms work as usual:
+      <span class="bh-switch"><input type="checkbox" role="switch"
+      class="bh-switch__input" …><span class="bh-switch__track"></span></span>
+      Give it a label (for=) or an aria-label. ─────────────────────────── */
+.bh-switch { @apply relative inline-flex h-6 w-11 flex-none; }
+.bh-switch__input { @apply absolute inset-0 z-[1] m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0; }
+.bh-switch__input:disabled { @apply cursor-not-allowed; }
+.bh-switch__track {
+    @apply pointer-events-none relative block h-full w-full rounded-full bg-slate-300 transition-colors duration-150 ease-out;
+}
+.bh-switch__track::after {
+    content: "";
+    @apply absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm shadow-slate-900/20 transition-transform duration-150 ease-out;
+}
+.bh-switch__input:checked + .bh-switch__track { @apply bg-accent-600; }
+.bh-switch__input:checked + .bh-switch__track::after { @apply translate-x-5; }
+.bh-switch__input:focus-visible + .bh-switch__track { @apply ring-2 ring-accent-500/40 ring-offset-2; }
+.bh-switch__input:disabled + .bh-switch__track { @apply opacity-50; }
+.bh-switch:hover .bh-switch__input:not(:checked):not(:disabled) + .bh-switch__track { @apply bg-slate-400/80; }
+
+/* ── Choice list: radio options as rows (.bh-choices > label.bh-choice). ── */
+.bh-choices { @apply grid gap-2; }
+.bh-choice {
+    @apply flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 transition-colors duration-150;
+}
+.bh-choice:hover { @apply border-slate-300; }
+.bh-choice:has(input:checked) { @apply border-accent-500 bg-accent-50/50 ring-1 ring-inset ring-accent-500; }
+.bh-choice:has(input:focus-visible) { @apply ring-2 ring-accent-500/40; }
+.bh-choice input[type="radio"], .bh-choice input[type="checkbox"] { @apply mt-0.5 h-4 w-4 flex-none cursor-pointer accent-accent-600; }
+.bh-choice__title { @apply block text-sm font-medium leading-5 text-slate-900; }
+.bh-choice__text { @apply mt-0.5 block text-xs leading-relaxed text-slate-500; }
+
+/* ── Segmented control: two to four exclusive options in one track
+      (.bh-seg > label > input[type=radio].sr-only + text). ────────────── */
+.bh-seg { @apply inline-flex flex-none rounded-lg bg-slate-100 p-0.5; }
+.bh-seg label { @apply relative cursor-pointer select-none rounded-md px-3 py-1 text-[0.8125rem] font-medium leading-6 text-slate-600 transition-colors duration-150; }
+.bh-seg label:hover { @apply text-slate-900; }
+.bh-seg label:has(input:checked) { @apply bg-white text-slate-900 shadow-sm shadow-slate-900/10; }
+.bh-seg label:has(input:checked[value="block"]) { @apply text-red-700; }
+.bh-seg label:has(input:focus-visible) { @apply ring-2 ring-accent-500/40; }
+
+/* ── Notes inside a card: --info (neutral) and --warn. ─────────────────── */
+.bh-note { @apply flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-relaxed text-slate-700; }
+.bh-note > svg { @apply mt-0.5 h-4 w-4 flex-none text-slate-400; }
+.bh-note--warn { @apply border-amber-200 bg-amber-50 text-amber-900; }
+.bh-note--warn > svg { @apply text-amber-500; }
+.bh-note code, .bh-set code { @apply rounded bg-slate-100 px-1 py-px text-[0.75rem] text-slate-700; }
+.bh-note--warn code { @apply bg-amber-100/70 text-amber-900; }
+
 /* ── Badges ───────────────────────────────────────────────────────────── */
 .bh-badge { @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold leading-snug; }
 .bh-badge svg { @apply h-3.5 w-3.5; }
@@ -138,8 +190,16 @@
 .bh-dash-head__actions[hidden] { @apply hidden; }
 /* Phones: the buttons share one row under the greeting. */
 @media (max-width: 639px) {
-    .bh-dash-head__actions { @apply grid w-full auto-cols-fr grid-flow-col; }
-    .bh-dash-head__actions .bh-btn--lg { @apply min-w-0 gap-1.5 px-2 text-[0.8125rem]; }
+    /* Default size (36 px), each button as wide as its words plus 12 px a
+       side, sharing out what is left of the row. */
+    .bh-dash-head__actions { @apply w-full flex-nowrap gap-1.5; }
+    .bh-dash-head__actions .bh-btn--lg { @apply h-9 min-w-0 flex-auto gap-1.5 px-3 text-[0.8125rem]; }
+}
+/* Very narrow phones: Customize keeps its icon (and its name for screen
+   readers) so the other two keep theirs. */
+@media (max-width: 359px) {
+    .bh-dash-head__actions [data-bh-dash-customize] { @apply w-9 flex-none px-0; }
+    .bh-dash-head__actions [data-bh-dash-customize] .bh-btn__label { @apply sr-only; }
 }
 
 /* ── Customize bar ────────────────────────────────────────────────────── */
@@ -422,8 +482,26 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
 .bh-dview--html img { @apply h-auto max-w-full; }
 
 /* ── States: loading, empty, error, unavailable ───────────────────────── */
-.bh-dskel { @apply grid gap-2.5 pb-1 pt-2; }
-.bh-dskel__row { @apply block h-3 animate-bh-shimmer rounded-full bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 bg-[length:200%_100%]; }
+/* Loading placeholders (1.2.81): the shape of the view that is loading, in
+   the same grid and spacing, so nothing jumps when the data arrives. */
+.bh-dskel { @apply grid gap-2.5; }
+.bh-dskel__row, .bh-dskel__bone { @apply block h-3 animate-bh-shimmer rounded-full bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 bg-[length:200%_100%]; }
+.bh-dskel__line { @apply h-3; }
+.bh-dskel__line--sm { @apply mt-2 h-2.5; }
+.bh-dskel__tile { @apply pointer-events-none min-h-[8rem]; }
+.bh-dskel__tile .bh-dstat__top { @apply items-center; }
+.bh-dskel__icon { @apply h-7 w-7 flex-none rounded-lg; }
+.bh-dskel__value { @apply mt-3 h-6 w-14 rounded-md; }
+.bh-dskel__hint { @apply mt-2.5; }
+.bh-dskel__chart { @apply flex h-44 items-end gap-[5%] border-b border-l border-slate-200 pl-2 pt-6 ml-8; }
+.bh-dskel__bar { @apply min-w-0 flex-1 rounded-b-none rounded-t-md; }
+.bh-dskel__list { @apply grid; }
+.bh-dskel__item { @apply flex items-center gap-3 border-t border-slate-100 py-3 first:border-t-0 first:pt-1; }
+.bh-dskel__list--feed .bh-dskel__item, .bh-dskel__list--status .bh-dskel__item { @apply border-t-0 py-2; }
+.bh-dskel__lines { @apply min-w-0 flex-1; }
+.bh-dskel__dot { @apply h-3 w-3 flex-none; }
+.bh-dskel__end { @apply h-5 w-16 flex-none; }
+.bh-dskel__summary { @apply mt-2 h-12 rounded-xl; }
 .bh-dstate { @apply flex flex-col items-center gap-1 px-2 pb-4 pt-5 text-center; }
 .bh-dstate > .bh-dash-ico { @apply mb-1 grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-500; }
 .bh-dstate > .bh-dash-ico svg { @apply h-5 w-5; }
@@ -507,11 +585,135 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
 .bh-dfield__error { @apply mb-0 mt-1.5 text-xs text-red-700; }
 .bh-dfield__error[hidden] { @apply hidden; }
 
+/* ═══ Settings (1.2.82) ═════════════════════════════════════════════════════
+   admin/views/settings/*, built with admin/views/settings/_ui.php. Desktop:
+   full-width core cards, as on the dashboard, each a list of rows (name and help on the
+   left, the control on the right). Phones: like a phone's own Settings app —
+   a grouped list of sections, a back link and large title on each section,
+   inset groups with their heading above, and Save docked at the bottom.      */
+
+.bh-set { @apply min-w-0; }
+.bh-set__head { @apply mb-5; }
+.bh-set__back { @apply mb-2 hidden items-center gap-1 text-[0.9375rem] font-medium text-accent-600 no-underline; }
+.bh-set__back svg { @apply -ml-1 h-5 w-5; }
+.bh-set__title { @apply m-0 text-xl font-semibold leading-tight text-slate-900; }
+.bh-set__title-section { @apply hidden; }
+.bh-set__sub { @apply m-0 mt-1 text-sm text-slate-500; }
+.bh-set__form, .bh-set__stack { @apply grid gap-5; }
+
+/* A section card: the core card, its body a list of rows. */
+.bh-set-card { @apply min-w-0 scroll-mt-24; }
+.bh-set-card__body { @apply min-w-0; }
+.bh-set-card__intro { @apply border-b border-slate-100 px-4 py-3.5 text-[0.8125rem] leading-relaxed text-slate-600 sm:px-5; }
+.bh-set-card__block { @apply px-4 py-4 sm:px-5; }
+.bh-set-card__block + .bh-set-row, .bh-set-row + .bh-set-card__block, .bh-set-card__block + .bh-set-card__block { @apply border-t border-slate-100; }
+.bh-set-card__head-action { @apply flex-none; }
+/* A card that is only its header (a single action). */
+.bh-set-card__body:empty { @apply hidden; }
+.bh-set-card:has(> .bh-set-card__body:empty) > .bh-card__head { @apply border-b-0; }
+
+.bh-set-row { @apply grid gap-x-8 gap-y-2 px-4 py-4 sm:px-5 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-start; }
+.bh-set-row + .bh-set-row { @apply border-t border-slate-100; }
+.bh-set-row[hidden] { @apply hidden; }
+.bh-set-row__text { @apply min-w-0; }
+.bh-set-row__label { @apply block text-sm font-medium leading-5 text-slate-900; }
+.bh-set-row__help { @apply m-0 mt-1 text-xs leading-relaxed text-slate-500 [overflow-wrap:anywhere]; }
+.bh-set-row__help a, .bh-set-card__intro a, .bh-note a { @apply font-medium text-accent-600 no-underline hover:underline; }
+/* Full-width pages: a field stops at a comfortable width; long ones (--wide) don't. */
+.bh-set-row__control { @apply min-w-0 max-w-2xl; }
+.bh-set-row--wide .bh-set-row__control { @apply max-w-none; }
+.bh-set-row__control > .bh-help { @apply mt-1.5; }
+/* On/off rows: the switch at the right, level with the name. */
+.bh-set-row--switch { @apply flex items-start justify-between gap-6 md:grid-cols-none; }
+.bh-set-row--switch .bh-set-row__text { @apply max-w-2xl flex-1; }
+.bh-set-row--switch .bh-switch { @apply mt-px; }
+/* A long field (textarea, choices): under its name, full width. */
+.bh-set-row--wide { @apply md:grid-cols-1; }
+/* A setting that depends on the one above it. */
+.bh-set-row--sub { @apply pl-8 sm:pl-10; }
+.bh-set-row--sub .bh-set-row__label { @apply font-normal text-slate-700; }
+/* Several small fields side by side (sizes, numbers). */
+.bh-set-fields { @apply grid gap-3 sm:grid-cols-2; }
+.bh-set-fields--3 { @apply sm:grid-cols-3; }
+.bh-set-fields__label { @apply mb-1 block text-xs font-medium text-slate-500; }
+
+/* Save: one bar at the foot of the form, kept in view while scrolling. */
+.bh-set-save {
+    @apply sticky bottom-0 z-[5] flex items-center justify-end gap-3 border-t border-slate-200/80 bg-slate-50/85 py-3 backdrop-blur;
+}
+.bh-set-save__note { @apply mr-auto text-xs text-slate-500; }
+
+/* Moving between sections without a page load (settings-nav.js): the new
+   section fades in on desktop and slides in on phones, from the right going
+   in, from the left going back to the list. */
+.bh-set.is-loading .bh-set__form, .bh-set.is-loading .bh-set__stack, .bh-set.is-loading .bh-set-home { @apply opacity-60 transition-opacity duration-150; }
+.bh-set.is-entering .bh-set__form, .bh-set.is-entering .bh-set__stack { animation: bh-set-fade .18s ease-out both; }
+.bh-set.is-entering-fwd { animation: bh-set-in-fwd .26s cubic-bezier(.2, .8, .2, 1) both; }
+.bh-set.is-entering-back { animation: bh-set-in-back .26s cubic-bezier(.2, .8, .2, 1) both; }
+.bh-set__title:focus { @apply outline-none; }
+@keyframes bh-set-fade { from { opacity: 0; } }
+@keyframes bh-set-in-fwd { from { opacity: 0; transform: translateX(2.5rem); } }
+@keyframes bh-set-in-back { from { opacity: 0; transform: translateX(-2.5rem); } }
+
+/* The phone's Settings home: the sections as a grouped list. */
+.bh-set-home { @apply hidden; }
+.bh-set-home__list { @apply m-0 list-none overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-0 shadow-card; }
+.bh-set-home__item + .bh-set-home__item .bh-set-home__link > span:not(.bh-set-home__icon) { @apply border-t border-slate-100; }
+.bh-set-home__link { @apply flex items-stretch gap-3 pl-4 text-slate-900 no-underline active:bg-slate-50; }
+.bh-set-home__icon { @apply my-2.5 grid h-8 w-8 flex-none place-items-center self-center rounded-lg bg-accent-50 text-accent-600; }
+.bh-set-home__icon svg { @apply h-[1.125rem] w-[1.125rem]; }
+.bh-set-home__name { @apply flex min-w-0 flex-1 items-center py-3.5 text-[0.9375rem] font-medium; }
+.bh-set-home__chev { @apply flex flex-none items-center pr-3 text-slate-400; }
+.bh-set-home__chev svg { @apply h-4 w-4; }
+
+@media (max-width: 639px) {
+    .bh-set { @apply pb-24; }
+    .bh-set .bh-tabs { @apply hidden; }
+    .bh-set__back { @apply inline-flex; }
+    .bh-set__title { @apply text-[1.75rem] font-bold tracking-tight; }
+    .bh-set__title-all { @apply hidden; }
+    .bh-set__title-section { @apply inline; }
+    .bh-set__sub { @apply hidden; }
+    .bh-set__form, .bh-set__stack { @apply gap-6; }
+    /* Groups: the heading sits above an inset panel, as in a phone's settings. */
+    .bh-set-card { @apply rounded-none border-0 bg-transparent shadow-none; }
+    .bh-set-card > .bh-card__head { @apply border-0 px-1 pb-2 pt-0; }
+    .bh-set-card > .bh-card__head .bh-card__title { @apply text-[0.8125rem] font-semibold text-slate-500; }
+    .bh-set-card > .bh-card__head .bh-card__sub { @apply text-xs text-slate-400; }
+    .bh-set-card__body { @apply overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card; }
+    .bh-set-card__intro { @apply bg-slate-50/60; }
+    .bh-set-row { @apply py-3.5; }
+    .bh-set-row__label { @apply text-[0.9375rem]; }
+    .bh-set-row--switch .bh-set-row__label { @apply font-normal; }
+    .bh-switch { @apply h-7 w-12; }
+    .bh-switch__track::after { @apply h-6 w-6; }
+    .bh-switch__input:checked + .bh-switch__track::after { @apply translate-x-5; }
+    .bh-set-row--sub { @apply pl-8; }
+    /* Fields fill the row and are tall enough to tap. */
+    .bh-set .bh-input, .bh-set .bh-select { @apply h-11 text-base; }
+    .bh-set .bh-textarea { @apply text-base; }
+    /* Save docks to the bottom of the screen. */
+    .bh-set-save {
+        @apply fixed inset-x-0 bottom-0 z-40 mx-0 border-slate-200 bg-white/90 px-4 pt-3;
+        padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px));
+    }
+    .bh-set-save .bh-btn--primary { @apply h-11 w-full text-[0.9375rem]; }
+    .bh-set-save__note { @apply hidden; }
+    /* The home: sections as a list; General's own form waits behind its row. */
+    .bh-set--home .bh-set-home { @apply block; }
+    .bh-set--home .bh-set__form, .bh-set--home .bh-set__back { @apply hidden; }
+    .bh-set--home .bh-set__title-all { @apply inline; }
+    .bh-set--home .bh-set__title-section { @apply hidden; }
+    .bh-set--home { @apply pb-4; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-    .bh-dskel__row, .bh-dcard.is-refreshing .bh-dcard__refresh svg, .bh-dcard.is-new,
+    .bh-dskel__row, .bh-dskel__bone, .bh-dcard.is-refreshing .bh-dcard__refresh svg, .bh-dcard.is-new,
     .bh-dash-drawer__panel, .bh-dash-drawer__scrim,
     .bh-dchart.is-animated .bh-dchart__bar, .bh-dchart.is-animated .bh-dchart__val,
-    .bh-dchart.is-animated .bh-dchart__line { @apply animate-none; }
+    .bh-dchart.is-animated .bh-dchart__line,
+    .bh-switch__track, .bh-switch__track::after { @apply animate-none transition-none; }
+    .bh-set.is-entering .bh-set__form, .bh-set.is-entering .bh-set__stack, .bh-set.is-entering-fwd, .bh-set.is-entering-back { animation: none; }
     .bh-dcard.is-dragging { @apply rotate-0; }
 }
 

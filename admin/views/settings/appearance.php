@@ -1,95 +1,44 @@
 <?php $this->extend('layouts.app'); ?>
 <?php $this->section('content'); ?>
+<?php
+require_once __DIR__ . '/_ui.php';
+$logoUrl    = $values['logo_url'] ?? '';
+$faviconUrl = $values['favicon_url'] ?? '';
+$picker = static function (string $name, string $url, string $box, string $emptyIcon, string $help = ''): string {
+    return '<div class="flex items-start gap-3">'
+        . '<div id="' . $name . '-preview" class="grid ' . $box . ' flex-none place-items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">'
+        . '<img id="' . $name . '-thumb"' . ($url !== '' ? ' src="' . bh_set_e($url) . '"' : '') . ' alt="" class="max-h-full max-w-full object-contain' . ($url ? '' : ' hidden') . '">'
+        . '<span id="' . $name . '-placeholder" class="text-slate-300' . ($url ? ' hidden' : '') . '">' . icon($emptyIcon, 'w-6 h-6') . '</span></div>'
+        . '<div class="grid min-w-0 flex-1 gap-2">'
+        . '<input type="url" id="' . $name . '_url" name="' . $name . '_url" class="bh-input" value="' . bh_set_e($url) . '" placeholder="Choose from the Media Library or paste a URL">'
+        . '<div class="flex flex-wrap gap-2">'
+        . '<button type="button" id="' . $name . '-select" class="bh-btn bh-btn--secondary bh-btn--sm">' . icon('photo', 'w-4 h-4') . 'Choose from Media</button>'
+        . '<button type="button" id="' . $name . '-remove" class="bh-btn bh-btn--ghost bh-btn--sm text-red-600 hover:!bg-red-50 hover:!text-red-700' . ($url ? '' : ' hidden') . '">' . icon('trash', 'w-4 h-4') . 'Remove</button>'
+        . '</div>' . ($help !== '' ? '<p class="bh-help m-0">' . $help . '</p>' : '') . '</div></div>';
+};
+?>
+<div class="bh-set">
+    <?php $this->include('settings._head', compact('tab', 'base')); ?>
 
-<div class="mb-5">
-    <h2 class="text-xl font-semibold text-slate-900">Settings</h2>
-    <p class="text-sm text-slate-500">Configure your site.</p>
-</div>
+    <form method="POST" action="<?= $base ?>/admin/settings/appearance" class="bh-set__form">
+        <input type="hidden" name="_csrf" value="<?= bh_set_e($csrf) ?>">
 
-<div>
-    <?php $this->include('settings._nav', compact('tab', 'base')); ?>
-    <div class="mt-0">
-        <div class="bg-white rounded-xl border border-slate-200 p-6">
-            <h3 class="font-semibold text-slate-900 mb-5">Appearance Settings</h3>
-            <form method="POST" action="<?= $base ?>/admin/settings/appearance" class="space-y-5">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
+        <?= bh_set_card_open('Theme') ?>
+            <?= bh_set_row('Active theme', '<div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5"><span class="inline-flex items-center gap-2 text-sm font-medium text-slate-900">' . icon('swatch', 'w-4 h-4 text-accent-600') . bh_set_e($activeTheme) . '</span><a href="' . $base . '/admin/themes" class="bh-btn bh-btn--secondary bh-btn--sm">Change theme</a></div>') ?>
+        <?= bh_set_card_close() ?>
 
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-2">Active Theme</label>
-                    <div class="text-sm bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2">
-                        <?= icon('swatch', 'w-4 h-4 mr-1') ?> <?= htmlspecialchars($activeTheme) ?>
-                        <a href="<?= $base ?>/admin/themes" class="ml-2 underline">Change in Themes</a>
-                    </div>
-                </div>
+        <?= bh_set_card_open('Site identity', 'Shown by themes in the header and by browsers in tabs.') ?>
+            <?= bh_set_row('Logo', $picker('logo', $logoUrl, 'h-16 w-24', 'photo'), '', ['for' => 'logo_url']) ?>
+            <?= bh_set_row('Favicon', $picker('favicon', $faviconUrl, 'h-12 w-12', 'globe-alt'), 'A square PNG or ICO (for example 512×512) works best.', ['for' => 'favicon_url']) ?>
+        <?= bh_set_card_close() ?>
 
-                <?php
-                    $logoUrl    = $values['logo_url'] ?? '';
-                    $faviconUrl = $values['favicon_url'] ?? '';
-                ?>
+        <?= bh_set_card_open('Footer and styles') ?>
+            <?= bh_set_row('Footer text', '<input type="text" id="set-footer-text" name="footer_text" class="bh-input" value="' . bh_set_e($values['footer_text'] ?? '') . '">', '', ['for' => 'set-footer-text']) ?>
+            <?= bh_set_row('Custom CSS', '<textarea id="set-custom-css" name="custom_css" rows="8" class="bh-textarea font-mono text-xs">' . bh_set_e($values['custom_css'] ?? '') . '</textarea>', 'Added after the theme\'s own styles on every page.', ['for' => 'set-custom-css', 'wide' => true]) ?>
+        <?= bh_set_card_close() ?>
 
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Custom Logo</label>
-                    <div class="flex items-start gap-3">
-                        <div id="logo-preview" class="shrink-0 w-24 h-16 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
-                            <img id="logo-thumb" src="<?= htmlspecialchars($logoUrl) ?>" alt="" class="max-w-full max-h-full object-contain <?= $logoUrl ? '' : 'hidden' ?>">
-                            <span id="logo-placeholder" class="text-slate-300 <?= $logoUrl ? 'hidden' : '' ?>"><?= icon('photo', 'w-6 h-6') ?></span>
-                        </div>
-                        <div class="flex-1 min-w-0 space-y-2">
-                            <input type="url" id="logo_url" name="logo_url" value="<?= htmlspecialchars($logoUrl) ?>" placeholder="Select from the Media Library or paste a URL"
-                                class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none text-sm">
-                            <div class="flex flex-wrap gap-2">
-                                <button type="button" id="logo-select" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">
-                                    <?= icon('photo', 'w-4 h-4') ?> Select from {media} Library
-                                </button>
-                                <button type="button" id="logo-remove" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-medium <?= $logoUrl ? '' : 'hidden' ?>">
-                                    <?= icon('trash', 'w-4 h-4') ?> Remove
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Favicon</label>
-                    <div class="flex items-start gap-3">
-                        <div id="favicon-preview" class="shrink-0 w-12 h-12 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
-                            <img id="favicon-thumb" src="<?= htmlspecialchars($faviconUrl) ?>" alt="" class="max-w-full max-h-full object-contain <?= $faviconUrl ? '' : 'hidden' ?>">
-                            <span id="favicon-placeholder" class="text-slate-300 <?= $faviconUrl ? 'hidden' : '' ?>"><?= icon('globe-alt', 'w-5 h-5') ?></span>
-                        </div>
-                        <div class="flex-1 min-w-0 space-y-2">
-                            <input type="url" id="favicon_url" name="favicon_url" value="<?= htmlspecialchars($faviconUrl) ?>" placeholder="Select from the Media Library or paste a URL"
-                                class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none text-sm">
-                            <div class="flex flex-wrap gap-2">
-                                <button type="button" id="favicon-select" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">
-                                    <?= icon('photo', 'w-4 h-4') ?> Select from {media} Library
-                                </button>
-                                <button type="button" id="favicon-remove" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-medium <?= $faviconUrl ? '' : 'hidden' ?>">
-                                    <?= icon('trash', 'w-4 h-4') ?> Remove
-                                </button>
-                            </div>
-                            <p class="text-xs text-slate-400">A square PNG or ICO (e.g. 512×512) works best.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Footer Text</label>
-                    <input type="text" name="footer_text" value="<?= htmlspecialchars($values['footer_text'] ?? '') ?>"
-                        class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Custom CSS</label>
-                    <textarea name="custom_css" rows="6"
-                        class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none font-mono text-xs"><?= htmlspecialchars($values['custom_css'] ?? '') ?></textarea>
-                </div>
-
-                <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm">
-                    <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save changes
-                </button>
-            </form>
-        </div>
-    </div>
+        <?= bh_set_save() ?>
+    </form>
 </div>
 
 <script>
@@ -111,7 +60,7 @@
                 if (holder) holder.classList.add('hidden');
                 btnDrop.classList.remove('hidden');
             } else {
-                thumb.src = ''; thumb.classList.add('hidden');
+                thumb.removeAttribute('src'); thumb.classList.add('hidden');
                 if (holder) holder.classList.remove('hidden');
                 btnDrop.classList.add('hidden');
             }

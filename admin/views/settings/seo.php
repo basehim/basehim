@@ -2,28 +2,18 @@
 <?php $this->section('content'); ?>
 <?php
 /*
- * Settings → SEO (1.2.45).
+ * Settings → SEO (1.2.45; restyled 1.2.82).
  *
  * Core prints every SEO and social tag (App\Services\SeoHeadService), so
  * themes don't. Each switch below is posted as 0 or 1: an unticked checkbox
  * sends nothing, which used to mean an option could be switched on but never
  * off again (the sitemap switch had that bug).
  */
+require_once __DIR__ . '/_ui.php';
 $seoSvc = \App\Core\Application::getInstance()->make(\App\Services\SeoHeadService::class);
 $cfg = $seoSvc->settings();
 $v = $values ?? [];
 $e = static fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
-$input = 'w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none';
-
-$toggle = function (string $name, bool $on, string $label, string $help = '') use ($e): string {
-    return '<label class="flex items-start gap-3 py-2">'
-        . '<input type="hidden" name="' . $e($name) . '" value="0">'
-        . '<input type="checkbox" name="' . $e($name) . '" value="1" ' . ($on ? 'checked' : '')
-        . ' class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500">'
-        . '<span><span class="text-sm font-medium text-slate-800">' . $e($label) . '</span>'
-        . ($help !== '' ? '<span class="block text-xs text-slate-500 mt-0.5">' . $help . '</span>' : '')
-        . '</span></label>';
-};
 
 $groups = [
     'title'       => ['Page title', 'The <code>&lt;title&gt;</code> tag, built from the title format below. Off: the theme sets it.'],
@@ -47,114 +37,56 @@ try {
     $m = \App\Core\Application::getInstance()->make(\App\Services\ThemeService::class)->activeManifest();
     if (array_key_exists('seo', $m)) $themeSeo = $m['seo'];
 } catch (\Throwable) {}
+$sitemapOn = !in_array((string) ($v['generate_sitemap'] ?? '1'), ['0', ''], true) || ($v['generate_sitemap'] ?? null) === true;
+$themeNote = '';
+if ($themeSeo === false) {
+    $themeNote = '<div class="bh-set-card__block"><div class="bh-note bh-note--warn">' . icon('exclamation-triangle', 'w-4 h-4') . '<span>The active theme sets <code>"seo": false</code> in theme.json, so it prints these tags itself and the switches below have no effect while it is active.</span></div></div>';
+} elseif (is_array($themeSeo)) {
+    $themeNote = '<div class="bh-set-card__block"><div class="bh-note">' . icon('information-circle', 'w-4 h-4') . '<span>The active theme handles some groups itself (theme.json): '
+        . ($e(implode(', ', array_keys(array_filter($themeSeo, fn($x) => $x === false || $x === 'theme' || $x === 'external')))) ?: 'none') . '.</span></div></div>';
+}
 ?>
+<div class="bh-set">
+    <?php $this->include('settings._head', compact('tab', 'base')); ?>
 
-<div class="mb-5">
-    <h2 class="text-xl font-semibold text-slate-900">Settings</h2>
-    <p class="text-sm text-slate-500">Configure your site.</p>
-</div>
-
-<div>
-    <?php $this->include('settings._nav', compact('tab', 'base')); ?>
-    <form method="POST" action="<?= $base ?>/admin/settings/seo" class="space-y-5">
+    <form method="POST" action="<?= $base ?>/admin/settings/seo" class="bh-set__form">
         <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">
 
-        <div class="bg-white rounded-xl border border-slate-200 p-6">
-            <h3 class="font-semibold text-slate-900 mb-1">SEO and social tags</h3>
-            <p class="text-sm text-slate-500 mb-4">
-                Basehim writes every page's SEO and sharing tags itself, the same way for every theme.
-                Apps and themes can change them through the <code class="text-xs bg-slate-100 px-1 rounded">seo.*</code> filters.
-            </p>
-            <?= $toggle('head_enabled', $cfg['enabled'], 'Let Basehim manage SEO tags', 'Off: Basehim adds no SEO tags at all and leaves whatever the theme prints.') ?>
-            <?php if ($themeSeo === false): ?>
-                <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
-                    The active theme sets <code>"seo": false</code> in theme.json, so it prints these tags itself and the switches below have no effect while it is active.
-                </p>
-            <?php elseif (is_array($themeSeo)): ?>
-                <p class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-2">
-                    The active theme handles some groups itself (theme.json): <?= $e(implode(', ', array_keys(array_filter($themeSeo, fn($x) => $x === false || $x === 'theme' || $x === 'external')))) ?: 'none' ?>.
-                </p>
-            <?php endif; ?>
-        </div>
+        <?= bh_set_card_open('SEO and social tags', 'Basehim writes every page\'s SEO and sharing tags itself, the same way for every theme. Apps and themes can change them through the <code>seo.*</code> filters.') ?>
+            <?= bh_set_toggle('head_enabled', $cfg['enabled'], 'Let Basehim manage SEO tags', 'Off: Basehim adds no SEO tags at all and leaves whatever the theme prints.') ?>
+            <?= $themeNote ?>
+        <?= bh_set_card_close() ?>
 
-        <div class="bg-white rounded-xl border border-slate-200 p-6">
-            <h3 class="font-semibold text-slate-900 mb-1">Tags</h3>
-            <p class="text-sm text-slate-500 mb-3">Untick a group to leave it out of every page.</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-                <?php foreach ($groups as $g => [$label, $help]): ?>
-                    <?= $toggle('head_' . $g, $cfg['groups'][$g], $label, $help) ?>
-                <?php endforeach; ?>
-            </div>
-            <div class="mt-4 pl-4 border-l-2 border-slate-100">
-                <div class="text-sm font-medium text-slate-700 mb-1">Structured data types</div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-                    <?php foreach ($jsonTypes as $t => [$label, $help]): ?>
-                        <?= $toggle('jsonld_' . $t, $cfg['jsonld'][$t], $label, $e($help)) ?>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-            <div class="mt-4 border-t border-slate-100 pt-3">
-                <?= $toggle('head_strip_theme', $cfg['strip_theme'], 'Remove SEO tags printed by the theme', 'Themes written before 1.2.45 print their own title, description, Open Graph and JSON-LD tags. Basehim removes those, so crawlers see one consistent set. Untick only if a theme needs its own copies kept.') ?>
-                <?= $toggle('noindex_search', $cfg['noindex_search'], 'Keep search results out of search engines', '<code>noindex, follow</code> on /search pages.') ?>
-                <?= $toggle('max_image_preview', $cfg['max_image_preview'], 'Allow large image previews', 'Adds <code>max-image-preview:large</code>, so Google can show a post\'s image large in results and Discover.') ?>
-            </div>
-        </div>
+        <?= bh_set_card_open('Tags', 'Switch a group off to leave it out of every page.') ?>
+            <?php foreach ($groups as $g => [$label, $help]): ?>
+                <?= bh_set_toggle('head_' . $g, $cfg['groups'][$g], $label, $help) ?>
+                <?php if ($g === 'jsonld'): foreach ($jsonTypes as $t => [$tl, $th]): ?>
+                    <?= bh_set_toggle('jsonld_' . $t, $cfg['jsonld'][$t], $tl, $e($th), ['sub' => true]) ?>
+                <?php endforeach; endif; ?>
+            <?php endforeach; ?>
+        <?= bh_set_card_close() ?>
 
-        <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-            <h3 class="font-semibold text-slate-900">Home page</h3>
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1.5" for="seo-home-title">Home page title</label>
-                <input id="seo-home-title" type="text" name="home_title" maxlength="200" value="<?= $e($v['home_title'] ?? '') ?>" placeholder="<?= $e($cfg['title_format'] === '%title%' ? 'Your site title' : '') ?>" class="<?= $input ?>">
-                <p class="text-xs text-slate-500 mt-1">Empty: the site title. <code>%site%</code>, <code>%tagline%</code> and <code>%sep%</code> work here too.</p>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1.5" for="seo-home-desc">Home page description</label>
-                <textarea id="seo-home-desc" name="home_description" rows="2" maxlength="400" class="<?= $input ?>"><?= $e($v['home_description'] ?? '') ?></textarea>
-                <p class="text-xs text-slate-500 mt-1">Empty: the site tagline.</p>
-            </div>
-        </div>
+        <?= bh_set_card_open('Indexing') ?>
+            <?= bh_set_toggle('head_strip_theme', $cfg['strip_theme'], 'Remove SEO tags printed by the theme', 'Themes written before 1.2.45 print their own title, description, Open Graph and JSON-LD tags. Basehim removes those, so crawlers see one consistent set. Switch off only if a theme needs its own copies kept.') ?>
+            <?= bh_set_toggle('noindex_search', $cfg['noindex_search'], 'Keep search results out of search engines', '<code>noindex, follow</code> on /search pages.') ?>
+            <?= bh_set_toggle('max_image_preview', $cfg['max_image_preview'], 'Allow large image previews', 'Adds <code>max-image-preview:large</code>, so Google can show a post\'s image large in results and Discover.') ?>
+            <?= bh_set_toggle('generate_sitemap', $sitemapOn, 'XML sitemap', 'At <code>/sitemap.xml</code>.') ?>
+        <?= bh_set_card_close() ?>
 
-        <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-            <h3 class="font-semibold text-slate-900">Defaults</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="md:col-span-2">
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5" for="seo-title-format">Title format</label>
-                    <input id="seo-title-format" type="text" name="default_meta_title" value="<?= $e($v['default_meta_title'] ?? '') ?>" placeholder="%title%" class="<?= $input ?> font-mono text-sm">
-                    <p class="text-xs text-slate-500 mt-1">For pages without their own SEO title. <code>%title%</code>, <code>%site%</code>, <code>%tagline%</code>, <code>%sep%</code>, <code>%page%</code>. Example: <code>%title% %sep% %site%</code>.</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5" for="seo-sep">Separator</label>
-                    <select id="seo-sep" name="title_separator" class="<?= $input ?> bg-white">
-                        <?php foreach (['–', '-', '|', '·', '•', '—', '/', '»'] as $sep): ?>
-                            <option value="<?= $e($sep) ?>" <?= $cfg['separator'] === $sep ? 'selected' : '' ?>><?= $e($sep) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1.5" for="seo-desc">Default description</label>
-                <textarea id="seo-desc" name="default_meta_description" rows="2" class="<?= $input ?>"><?= $e($v['default_meta_description'] ?? '') ?></textarea>
-                <p class="text-xs text-slate-500 mt-1">For pages with no description or excerpt of their own.</p>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5" for="seo-img">Default share image</label>
-                    <input id="seo-img" type="text" name="default_og_image" value="<?= $e($v['default_og_image'] ?? '') ?>" placeholder="https://… or /uploads/…" class="<?= $input ?>">
-                    <p class="text-xs text-slate-500 mt-1">Used when a page has no social image or featured image. 1200×630 works everywhere.</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5" for="seo-tw">X (Twitter) handle</label>
-                    <input id="seo-tw" type="text" name="twitter_handle" value="<?= $e($v['twitter_handle'] ?? '') ?>" placeholder="@yourhandle" class="<?= $input ?>">
-                </div>
-            </div>
-            <div class="border-t border-slate-100 pt-3">
-                <?= $toggle('generate_sitemap', !in_array((string) ($v['generate_sitemap'] ?? '1'), ['0', ''], true) || ($v['generate_sitemap'] ?? null) === true, 'Generate XML sitemap', 'At <code>/sitemap.xml</code>.') ?>
-            </div>
-        </div>
+        <?= bh_set_card_open('Home page') ?>
+            <?= bh_set_row('Title', '<input id="seo-home-title" type="text" name="home_title" maxlength="200" class="bh-input" value="' . $e($v['home_title'] ?? '') . '" placeholder="' . $e($cfg['title_format'] === '%title%' ? 'Your site title' : '') . '">', 'Empty: the site title. <code>%site%</code>, <code>%tagline%</code> and <code>%sep%</code> work here too.', ['for' => 'seo-home-title']) ?>
+            <?= bh_set_row('Description', '<textarea id="seo-home-desc" name="home_description" rows="2" maxlength="400" class="bh-textarea">' . $e($v['home_description'] ?? '') . '</textarea>', 'Empty: the site tagline.', ['for' => 'seo-home-desc']) ?>
+        <?= bh_set_card_close() ?>
 
-        <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm">
-            <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save changes
-        </button>
+        <?= bh_set_card_open('Defaults', 'For pages without their own.') ?>
+            <?= bh_set_row('Title format', '<input id="seo-title-format" type="text" name="default_meta_title" class="bh-input font-mono text-sm" placeholder="%title%" value="' . $e($v['default_meta_title'] ?? '') . '">', '<code>%title%</code>, <code>%site%</code>, <code>%tagline%</code>, <code>%sep%</code>, <code>%page%</code>. Example: <code>%title% %sep% %site%</code>.', ['for' => 'seo-title-format']) ?>
+            <?= bh_set_row('Separator', '<select id="seo-sep" name="title_separator" class="bh-select max-w-[8rem]">' . bh_set_options(array_combine(['–', '-', '|', '·', '•', '—', '/', '»'], ['–', '-', '|', '·', '•', '—', '/', '»']), $cfg['separator']) . '</select>', '', ['for' => 'seo-sep']) ?>
+            <?= bh_set_row('Description', '<textarea id="seo-desc" name="default_meta_description" rows="2" class="bh-textarea">' . $e($v['default_meta_description'] ?? '') . '</textarea>', 'For pages with no description or excerpt of their own.', ['for' => 'seo-desc']) ?>
+            <?= bh_set_row('Share image', '<input id="seo-img" type="text" name="default_og_image" class="bh-input" placeholder="https://… or /uploads/…" value="' . $e($v['default_og_image'] ?? '') . '">', 'Used when a page has no social or featured image. 1200×630 works everywhere.', ['for' => 'seo-img']) ?>
+            <?= bh_set_row('X (Twitter) handle', '<input id="seo-tw" type="text" name="twitter_handle" class="bh-input" placeholder="@yourhandle" value="' . $e($v['twitter_handle'] ?? '') . '">', '', ['for' => 'seo-tw']) ?>
+        <?= bh_set_card_close() ?>
+
+        <?= bh_set_save() ?>
     </form>
 </div>
 

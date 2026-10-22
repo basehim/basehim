@@ -403,7 +403,7 @@ You don't build these; the card does.
 
 | State | When | What shows |
 |---|---|---|
-| Loading | Before data arrives | A skeleton. On Refresh the old content stays until the new arrives. |
+| Loading | Before data arrives, on Refresh, after a setting changes | A placeholder in the shape of your view (1.2.81): as many tiles, rows or bars as your data had last time (remembered in the browser), laid out by the same grid; the first time, `dashboard.view` decides, so declare it. Numbers and charts then animate again. Automatic refreshes (`refresh`) keep the content and count on from it. |
 | Empty | The view has nothing (no items/rows, a chart of zeros) | `dashboard.empty` title, text and optional button. |
 | Unavailable | Your provider threw `App\Services\Dashboard\WidgetUnavailable('…')` | Your message, neutral styling, not logged. For "not connected yet", "service offline". |
 | Error | Any other exception, a non-array return, an unknown view | "This widget couldn't load its data." with **Try again**. The real error goes to your app's log, never to the browser. |

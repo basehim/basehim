@@ -455,7 +455,7 @@
         if (!res || res.pending) {
             card.classList.add('is-loading');
             body.setAttribute('aria-busy', 'true');
-            body.appendChild(skeleton(w));
+            body.appendChild(skeleton(w, item));
             return;
         }
         body.removeAttribute('aria-busy');
@@ -490,6 +490,7 @@
         try {
             var animate = !!res.fresh && !REDUCED.matches;
             res.fresh = false;
+            rememberShape(item.id, res);
             body.appendChild(VIEWS[res.view] ? VIEWS[res.view](res.data || {}, res, { animate: animate, id: item.id }) : stateBlock('exclamation-triangle', 'Unknown view', res.view, 'error'));
             if (res.data && (res.data.footer || res.data.summary) && res.view !== 'status') body.appendChild(footer(res.data));
         } catch (ex) {
@@ -507,16 +508,97 @@
         return b;
     }
 
-    function skeleton(w) {
-        var s = el('div', 'bh-dskel');
-        s.setAttribute('aria-label', 'Loading ' + w.title);
-        var rows = 3;
-        for (var i = 0; i < rows; i++) {
-            var r = el('span', 'bh-dskel__row');
-            r.style.width = (92 - i * 18) + '%';
-            s.appendChild(r);
+    // ------------------------------------------------------------------
+    // Loading placeholders (1.2.81): the shape of what is loading. A card
+    // remembers the shape of its last data (how many tiles, rows or bars,
+    // which tile spans the row, whether a summary follows), in memory and in
+    // this browser, so the placeholder of At a glance is its five tiles, laid
+    // out by the same grid. The first time, the widget's view decides.
+    // ------------------------------------------------------------------
+
+    var SHAPE_KEY = 'bh.dashboard.shapes';
+    var shapes = (function () {
+        try { return JSON.parse(window.localStorage.getItem(SHAPE_KEY) || '{}') || {}; } catch (x) { return {}; }
+    })();
+    var DEFAULT_COUNT = { stat: 4, list: 5, table: 5, feed: 4, status: 4, chart: 6 };
+
+    function rememberShape(id, res) {
+        if (!res || !res.ok || res.empty || res.legacy) return;
+        var d = res.data || {}, shape = { view: res.view };
+        if (res.view === 'stat') {
+            var items = d.items || [];
+            shape.n = items.length;
+            shape.wide = items.map(function (it, i) { return it.wide ? i : -1; }).filter(function (i) { return i >= 0; });
+        } else if (res.view === 'chart') {
+            shape.n = (d.labels || []).length;
+        } else if (res.view === 'table') {
+            shape.n = (d.rows || []).length;
+            shape.cols = (d.columns || []).length;
+        } else {
+            shape.n = (d.items || []).length;
         }
-        return s;
+        shape.summary = !!d.summary;
+        shape.footer = !!d.footer;
+        shapes[id] = shape;
+        try { window.localStorage.setItem(SHAPE_KEY, JSON.stringify(shapes)); } catch (x) { /* private mode: memory only */ }
+    }
+
+    function bone(cls, width) {
+        var b = el('span', 'bh-dskel__bone' + (cls ? ' ' + cls : ''));
+        if (width) b.style.width = width;
+        return b;
+    }
+
+    function skeleton(w, item) {
+        var shape = (item && shapes[item.id]) || { view: w.view };
+        var view = shape.view || w.view;
+        var n = Math.max(1, Math.min(12, shape.n || DEFAULT_COUNT[view] || 3));
+        var wrap = el('div', 'bh-dskel');
+        wrap.setAttribute('aria-label', 'Loading ' + w.title);
+        var widths = ['72%', '58%', '84%', '64%', '76%', '52%'];
+        var i, row;
+
+        if (view === 'stat') {
+            var tiles = el('div', 'bh-dview bh-dview--stat');
+            var wide = shape.wide || [];
+            for (i = 0; i < n; i++) {
+                var t = el('div', 'bh-dstat bh-dskel__tile' + (wide.indexOf(i) >= 0 ? ' bh-dstat--wide' : ''));
+                var top = el('div', 'bh-dstat__top');
+                top.appendChild(bone('bh-dskel__icon'));
+                top.appendChild(bone('bh-dskel__line', '45%'));
+                t.appendChild(top);
+                t.appendChild(bone('bh-dskel__value'));
+                t.appendChild(bone('bh-dskel__line bh-dskel__hint', '62%'));
+                tiles.appendChild(t);
+            }
+            wrap.appendChild(tiles);
+        } else if (view === 'chart') {
+            var plot = el('div', 'bh-dskel__chart');
+            var heights = [38, 62, 30, 78, 50, 90, 44, 68, 36, 82, 56, 72];
+            for (i = 0; i < Math.max(n, 3); i++) {
+                var bar = bone('bh-dskel__bar');
+                bar.style.height = heights[i % heights.length] + '%';
+                plot.appendChild(bar);
+            }
+            wrap.appendChild(plot);
+        } else if (view === 'list' || view === 'feed' || view === 'status' || view === 'table') {
+            var list = el('div', 'bh-dskel__list bh-dskel__list--' + view);
+            for (i = 0; i < n; i++) {
+                row = el('div', 'bh-dskel__item');
+                if (view === 'feed' || view === 'status') row.appendChild(bone('bh-dskel__dot'));
+                var lines = el('div', 'bh-dskel__lines');
+                lines.appendChild(bone('bh-dskel__line', widths[i % widths.length]));
+                if (view === 'list' || view === 'feed') lines.appendChild(bone('bh-dskel__line bh-dskel__line--sm', '38%'));
+                row.appendChild(lines);
+                if (view !== 'feed') row.appendChild(bone('bh-dskel__end'));
+                list.appendChild(row);
+            }
+            wrap.appendChild(list);
+        } else {
+            for (i = 0; i < 3; i++) wrap.appendChild(bone('bh-dskel__line', (92 - i * 18) + '%'));
+        }
+        if (shape.summary) wrap.appendChild(bone('bh-dskel__summary'));
+        return wrap;
     }
 
     // The summary as a strip with its icon; footer text and link under it.
@@ -910,14 +992,20 @@
         return !r || r.stale;
     }
 
-    function load(ids, force) {
+    // quiet: an automatic refresh keeps what the card shows and counts on
+    // from there. Otherwise (first load, Refresh, a changed setting) the card
+    // shows its placeholder, kept up at least a moment so it doesn't flicker,
+    // and the numbers and charts play from the start again.
+    var MIN_SKELETON = 450;
+
+    function load(ids, force, quiet) {
         ids = ids.filter(function (id) { return !inflight[id]; });
         if (!ids.length) return Promise.resolve();
+        var started = Date.now();
         ids.forEach(function (id) {
             inflight[id] = true;
-            // A card with content keeps it while it refreshes; others show the skeleton.
-            var had = !!(data[id] && data[id].ok && !data[id].legacy);
-            if (!had) data[id] = { pending: true };
+            var had = !!(quiet && data[id] && data[id].ok && !data[id].legacy);
+            if (!had) { data[id] = { pending: true }; delete lastValues[id]; }
             var item = findItem(id), card = cardEl(id);
             if (item && card) {
                 card.classList.add('is-refreshing');
@@ -948,6 +1036,10 @@
                     });
                 })
                 .then(function () {
+                    var wait = quiet ? 0 : MIN_SKELETON - (Date.now() - started);
+                    return wait > 0 ? new Promise(function (r) { setTimeout(r, wait); }) : null;
+                })
+                .then(function () {
                     chunk.forEach(function (id) {
                         delete inflight[id];
                         var item = findItem(id), card = cardEl(id);
@@ -975,7 +1067,7 @@
     }
 
     function loadVisible() {
-        load(visibleItems().filter(needsData).map(function (i) { return i.id; }), false);
+        load(visibleItems().filter(needsData).map(function (i) { return i.id; }), false, true);
     }
 
     function refresh(id, manual) {
@@ -1006,7 +1098,7 @@
             var last = lastAuto[item.id] || window.performance.timing.navigationStart || now;
             if (now - last >= w.refresh * 1000) { due.push(item.id); lastAuto[item.id] = now; }
         });
-        if (due.length) load(due, false).catch(function () {});
+        if (due.length) load(due, false, true).catch(function () {});
     }, 15000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && !state.editing) loadVisible(); });
 
@@ -1363,17 +1455,49 @@
         handle.addEventListener('pointercancel', endDrag);
     }
 
+    // The part of the screen cards can be seen in while dragging: below the
+    // sticky top bar and the customize bar when that sits at the top
+    // (desktop), above the customize bar when it docks to the bottom (phones).
+    function dragViewport() {
+        var top = 0, bottom = window.innerHeight;
+        var head = document.querySelector('header.sticky');
+        if (head) top = Math.max(top, head.getBoundingClientRect().bottom);
+        var bar = root.querySelector('[data-bh-dash-editbar]');
+        if (bar && !bar.hidden) {
+            var r = bar.getBoundingClientRect();
+            if (r.top > window.innerHeight / 2) bottom = Math.min(bottom, r.top);
+            else top = Math.max(top, r.bottom);
+        }
+        return { top: top, bottom: bottom };
+    }
+
+    // Scrolls while the pointer rests near an edge, faster the closer it is,
+    // in both directions; runs every frame so a still finger keeps scrolling.
+    function autoScroll() {
+        if (!drag) return;
+        var v = dragViewport(), edge = 72, y = drag.y, speed = 0;
+        if (y < v.top + edge) speed = -Math.ceil(18 * Math.min(1, (v.top + edge - y) / edge));
+        else if (y > v.bottom - edge) speed = Math.ceil(18 * Math.min(1, (y - (v.bottom - edge)) / edge));
+        if (speed) {
+            var before = window.scrollY;
+            window.scrollBy(0, speed);
+            if (window.scrollY !== before) placeAt(drag.x, drag.y);
+        }
+        drag.raf = window.requestAnimationFrame(autoScroll);
+    }
+
     function onDrag(e) {
         if (!drag) return;
         drag.card.style.left = (e.clientX - drag.dx) + 'px';
         drag.card.style.top = (e.clientY - drag.dy) + 'px';
-        // Scroll near the edges so a long dashboard can be crossed. The top
-        // edge is the bottom of the sticky customize bar, which covers cards.
-        var bar = root.querySelector('[data-bh-dash-editbar]');
-        var top = bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
-        var edge = 56;
-        if (e.clientY < top + edge) window.scrollBy(0, -14); else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, 14);
+        drag.x = e.clientX;
+        drag.y = e.clientY;
+        if (!drag.raf) drag.raf = window.requestAnimationFrame(autoScroll);
+        placeAt(e.clientX, e.clientY);
+    }
 
+    function placeAt(x, y) {
+        var e = { clientX: x, clientY: y };
         var under = document.elementFromPoint(e.clientX, e.clientY);
         var target = under && under.closest ? under.closest('.bh-dcard:not(.is-dragging):not(.bh-dcard--placeholder)') : null;
         if (!target || target.parentNode !== grid) return;
@@ -1388,6 +1512,7 @@
         if (!drag) return;
         var d = drag;
         drag = null;
+        if (d.raf) window.cancelAnimationFrame(d.raf);
         d.handle.removeEventListener('pointermove', onDrag);
         d.handle.removeEventListener('pointerup', endDrag);
         d.handle.removeEventListener('pointercancel', endDrag);

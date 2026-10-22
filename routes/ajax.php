@@ -307,6 +307,21 @@ $ajax->register('settings.save', [
     'description' => 'Save one Settings screen (General, Reading, Email, Permalinks…).',
 ]);
 
+// 1.2.82 — moving between Settings sections without a page load (the tabs,
+// and the phone's list of sections). Returns the section's page content as a
+// page load renders it; admin/assets/js/settings-nav.js swaps it in.
+$ajax->register('settings.section', [
+    'handler'     => [\App\Http\Controllers\Ajax\SettingsActions::class, 'section'],
+    'methods'     => ['GET'],
+    'capability'  => 'manage_settings',
+    'area'        => '/admin/settings',
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'input'       => [
+        'tab' => ['type' => 'string', 'required' => true, 'in' => array_merge(['home'], array_values(array_diff(array_keys(\App\Services\SettingsSaver::TABS), ['appearance'])))],
+    ],
+    'description' => 'One Settings section, to show without a page load.',
+]);
+
 // ---------------------------------------------------------------------------
 // 1.2.54 — the Core Data Table system. One read action serves every table in
 // the registry (routes/tables.php); the table's own capability and area are

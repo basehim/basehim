@@ -12,7 +12,12 @@ use App\Services\ThemeService;
 
 class SettingController extends Controller
 {
-    public function general(Request $request): Response   { return $this->renderTab('general'); }
+    public function general(Request $request): Response
+    {
+        // /admin/settings is also the phone's Settings home (1.2.82): the sections as a list.
+        $home = (bool) preg_match('#/admin/settings/?$#', $request->path());
+        return $this->renderTab('general', $home ? ['settingsHome' => true, 'title' => 'Settings'] : []);
+    }
     public function reading(Request $request): Response   { return $this->renderTab('reading'); }
     public function writing(Request $request): Response   { return $this->renderTab('writing'); }
     public function discussion(Request $request): Response{ return $this->renderTab('discussion'); }
@@ -103,7 +108,16 @@ class SettingController extends Controller
         return $this->redirect('/admin/settings/media');
     }
 
-    private function renderTab(string $tab): Response
+    /**
+     * The whole page of one section (or of the phone's Settings home), as a
+     * page load would return it; settings.section (1.2.82) takes its <main>.
+     */
+    public function sectionPage(string $tab, bool $home = false): string
+    {
+        return $this->renderTab($tab, $home ? ['settingsHome' => true, 'title' => 'Settings'] : [])->getBody();
+    }
+
+    private function renderTab(string $tab, array $more = []): Response
     {
         /** @var SettingService $settings */
         $settings = $this->app->make(SettingService::class);
@@ -203,7 +217,7 @@ class SettingController extends Controller
             'allThemes' => $themes->scan(),
             'activeTheme' => $themes->activeSlug(),
             'csrf' => $session->csrfToken(),
-        ], $extra));
+        ], $extra, $more));
     }
 
     private function saveTab(Request $request, string $tab): Response

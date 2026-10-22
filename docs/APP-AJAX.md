@@ -634,6 +634,7 @@ POST action also needs the CSRF token; every one is rate-limited.
 | `users.activity` | GET | `manage_users` | A user's activity log |
 | `system.log` | GET | `manage_settings` | The end of a log file |
 | `settings.save` | POST | `manage_settings` (and the screen's own area rule) | Save one Settings screen. `tab`: general, reading, writing, discussion, seo, ai, appearance, permalinks, media, email or authorization; `form`: the screen's fields URL-encoded exactly as the form would post them. Same checks as `POST /admin/settings/{tab}` (`SettingsSaver`); answers `{type, message, values}` — `values` are the stored values, so the screen can show what the server adjusted |
+| `settings.section` | GET | `manage_settings` (and the screen's own area rule) | One Settings section to show without a page load (1.2.82). `tab`: `home` (the phone's list of sections) or a screen other than appearance (its address opens the Customizer). Answers `{tab, html, title, heading}`: `html` is the content of the page's `<main>` exactly as `GET /admin/settings/{tab}` renders it, with the screen's own scripts |
 
 The full list on a running site — core's and every active app's, with their
 input fields — is under **API → Reference → AJAX actions**.

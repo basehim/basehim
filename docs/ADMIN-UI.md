@@ -74,6 +74,49 @@ compact field (toolbars). Mark an invalid field with
 `aria-invalid="true"`. Always give a label `for=` (a label right before its
 field is linked automatically, but explicit is better).
 
+## Switches, choices and segmented controls (1.2.82)
+
+An on/off setting is a switch: a real checkbox with `role="switch"` laid over
+its track, so clicks, the keyboard (Space) and forms work as usual.
+
+```html
+<span class="bh-switch">
+  <input type="hidden" name="comments" value="0">   <!-- posts 0 when off -->
+  <input type="checkbox" role="switch" class="bh-switch__input" id="comments" name="comments" value="1" checked>
+  <span class="bh-switch__track" aria-hidden="true"></span>
+</span>
+```
+
+Give it a `<label for=…>` (or an `aria-label`). Radio options that need a
+sentence each are rows: `.bh-choices > label.bh-choice` with a radio, a
+`.bh-choice__title` and a `.bh-choice__text`; the chosen row is outlined in
+the accent. Two to four short exclusive options sit in one track:
+`.bh-seg > label > input[type=radio].sr-only + text` (a chosen `block` value
+shows in red). Notes inside a card: `.bh-note` (neutral) and
+`.bh-note--warn`, an icon then the text.
+
+## Settings screens (1.2.82)
+
+Core's Settings pages are built from `admin/views/settings/_ui.php`, which an
+app's own settings page can use too (`require_once` it):
+
+```php
+<?= bh_set_card_open('Comments', 'Who can comment, and when.') ?>
+  <?= bh_set_toggle('allow_comments', $on, 'Allow comments', 'Visitors can comment on posts.') ?>
+  <?= bh_set_row('Close after', '<input id="close" name="close_after" class="bh-input">', 'Days. 0 keeps them open.', ['for' => 'close']) ?>
+<?= bh_set_card_close() ?>
+<?= bh_set_save() ?>
+```
+
+A section is the core card; its rows put the name and help on the left and
+the control on the right (`wide` puts a long control under the name, `sub`
+indents a setting that depends on the one above). On phones the same markup
+becomes a phone-style settings screen: the group's heading above an inset
+panel, larger tap targets, and Save docked at the bottom.
+`/admin/settings` is the phone's list of sections, and the sections open
+without a page load (`settings.section`, `admin/assets/js/settings-nav.js`),
+sliding in as in a phone's own Settings app.
+
 ## Badges
 
 `<span class="bh-badge bh-badge--green">Published</span>` —

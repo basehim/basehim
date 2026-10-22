@@ -152,3 +152,14 @@ test('cards: the greeting says morning, afternoon or evening in the person\'s ow
     assert_contains('bh-dash-head__date', $html);
     assert_contains('what&rsquo;s happening on', $html);
 });
+
+test('cards: the catalogue names each widget\'s view, so a loading card can take its shape', function () {
+    $cat = array_column(dc_state(bh_browser('admin'))['catalog'], null, 'key');
+    assert_same('stat', $cat['core.dashboard.at-a-glance']['view'] ?? null);
+    assert_same('chart', $cat['core.dashboard.publishing-activity']['view'] ?? null);
+    $js = (string) file_get_contents(BASEHIM_ROOT . '/admin/assets/js/dashboard.js');
+    assert_contains('function rememberShape', $js);
+    assert_contains('function autoScroll', $js);
+    $css = (string) file_get_contents(BASEHIM_ROOT . '/admin/assets/css/tailwind.min.css');
+    assert_contains('.bh-dskel__tile{', $css);
+});

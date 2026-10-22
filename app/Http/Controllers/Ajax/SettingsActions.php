@@ -61,6 +61,40 @@ final class SettingsActions
         return $out;
     }
 
+    /**
+     * settings.section (1.2.82) — one Settings section, to swap in without a
+     * page load: the content of the page's <main> as GET /admin/settings/{tab}
+     * renders it (so a section's own scripts and live panels come with it),
+     * and the page title. tab "home" is the phone's list of sections.
+     */
+    public function section(AjaxContext $ctx): array
+    {
+        $tab = (string) $ctx->input('tab');
+        $home = $tab === 'home';
+        if ($home) $tab = 'general';
+        if (!isset(SettingsSaver::TABS[$tab])) throw AjaxException::notFound('Unknown settings screen.');
+        $cap = AdminAreaPolicy::requiredFor('/admin/settings/' . $tab);
+        if ($cap !== null && !CheckCapability::userCan($ctx->user(), $cap)) {
+            throw AjaxException::forbidden('You are not allowed to see these settings.');
+        }
+        $app = Application::getInstance();
+        // The views read the signed-in person the way a page request does.
+        if (!$app->has('auth.user') && $ctx->user() !== null) $app->instance('auth.user', $ctx->user());
+
+        $page = (new \App\Http\Controllers\Admin\SettingController())->sectionPage($tab, $home);
+        // The layout's own <main> (id bh-content), not the word in a comment or a style.
+        if (!preg_match('#<main id="bh-content"[^>]*>(.*)</main>#s', $page, $m)) {
+            throw new AjaxException('SERVER_ERROR', 'This settings screen could not be loaded.', 500);
+        }
+        $title = preg_match('#<title>(.*?)</title>#s', $page, $t) ? html_entity_decode(trim($t[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8') : '';
+        return [
+            'tab'     => $home ? 'home' : $tab,
+            'html'    => trim($m[1]),
+            'title'   => $title,
+            'heading' => $home ? 'Settings' : SettingsSaver::label($tab) . ' Settings',
+        ];
+    }
+
     /** The saved values of the fields a screen shows, as strings. */
     private static function shown(Application $app, string $tab): array
     {

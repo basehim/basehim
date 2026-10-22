@@ -114,6 +114,11 @@ test('gateway (in-process): the global per-IP limit applies across actions', fun
     $old = $config->get('ajax.global_limit');
     $config->set('ajax.global_limit', 3);
     $ip = '198.51.100.' . random_int(10, 250);
+    // The limit counts in fixed one-minute windows on the clock: four requests
+    // that straddle a minute were counted in two windows, and the fourth got
+    // through (a test that failed now and then). Start well inside a window.
+    $left = 60 - time() % 60;
+    if ($left <= 5) sleep($left + 1);
     try {
         for ($i = 1; $i <= 3; $i++) {
             assert_same(200, gateway_get('core.csrf', $ip)['status'], "request {$i}");

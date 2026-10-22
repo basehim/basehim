@@ -1,127 +1,71 @@
 <?php $this->extend('layouts.app'); ?>
 <?php $this->section('content'); ?>
+<?php
+require_once __DIR__ . '/_ui.php';
+$driver = $values['driver'] ?? 'mail';
+?>
+<div class="bh-set">
+    <?php $this->include('settings._head', compact('tab', 'base')); ?>
 
-<div class="mb-5">
-    <h2 class="text-xl font-semibold text-slate-900">Settings</h2>
-    <p class="text-sm text-slate-500">Configure how Basehim sends email (password resets, notifications, app mail).</p>
-</div>
+    <div class="bh-set__stack">
+        <form method="POST" action="<?= $base ?>/admin/settings/email" class="bh-set__form">
+            <input type="hidden" name="_csrf" value="<?= bh_set_e($csrf) ?>">
 
-<div>
-    <?php $this->include('settings._nav', compact('tab', 'base')); ?>
-
-    <div class="lg:col-span-3 space-y-5">
-        <div class="bg-white rounded-xl border border-slate-200 p-6">
-            <h3 class="font-semibold text-slate-900 mb-5">Email Settings</h3>
-            <form method="POST" action="<?= $base ?>/admin/settings/email" class="space-y-5">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-
-                <div data-settings-live="mail-warning">
-                <?php if (!empty($mail['foreignFrom'])): ?>
-                <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Emails are sent from <strong><?= htmlspecialchars($mail['from']) ?></strong>, which isn't on this site's domain.
+            <div data-settings-live="mail-warning">
+            <?php if (!empty($mail['foreignFrom'])): ?>
+                <div class="bh-note bh-note--warn"><?= icon('exclamation-triangle', 'w-4 h-4') ?><span>
+                    Emails are sent from <strong><?= bh_set_e($mail['from']) ?></strong>, which isn't on this site's domain.
                     Most mail servers refuse or spam-filter mail sent as another domain, so sign-in codes and password resets may not arrive.
-                    <?php if (($values['driver'] ?? 'mail') !== 'smtp'): ?>Change it to <strong><?= htmlspecialchars($mail['defaultFrom']) ?></strong>, or send through that provider's SMTP server.<?php else: ?>Make sure your SMTP account is allowed to send as this address.<?php endif; ?>
-                </div>
-                <?php elseif (empty($mail['realDomain'])): ?>
-                <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    This site's address (<?= htmlspecialchars($mail['domain'] ?? '') ?>) isn't a public domain, so there is no automatic sender address. Set APP_URL in .env to the site's real address, or type a From Email.
-                </div>
-                <?php endif; ?>
-                </div>
+                    <?php if ($driver !== 'smtp'): ?>Change it to <strong><?= bh_set_e($mail['defaultFrom']) ?></strong>, or send through that provider's SMTP server.<?php else: ?>Make sure your SMTP account is allowed to send as this address.<?php endif; ?>
+                </span></div>
+            <?php elseif (empty($mail['realDomain'])): ?>
+                <div class="bh-note bh-note--warn"><?= icon('exclamation-triangle', 'w-4 h-4') ?><span>
+                    This site's address (<?= bh_set_e($mail['domain'] ?? '') ?>) isn't a public domain, so there is no automatic sender address. Set APP_URL in .env to the site's real address, or type a From email.
+                </span></div>
+            <?php endif; ?>
+            </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1.5">From Email</label>
-                        <input type="email" name="from_email" value="<?= htmlspecialchars($values['from_email'] ?? '') ?>" placeholder="<?= htmlspecialchars($mail['defaultFrom'] ?? 'noreply@yourdomain.com') ?>"
-                            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                        <p class="text-xs text-slate-500 mt-1">Use an address on <strong><?= htmlspecialchars($mail['domain'] ?? '') ?></strong>. Leave empty to use <?= htmlspecialchars($mail['defaultFrom'] ?? '') ?>.</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1.5">From Name</label>
-                        <input type="text" name="from_name" value="<?= htmlspecialchars($values['from_name'] ?? '') ?>" placeholder="<?= htmlspecialchars($mail['siteTitle'] ?? 'Site name') ?>"
-                            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                        <p class="text-xs text-slate-500 mt-1">The name people see next to the address. Leave empty to use your site name.</p>
-                    </div>
-                </div>
+            <?= bh_set_card_open('Sender', 'Who your site\'s email comes from.') ?>
+                <?= bh_set_row('From email', '<input type="email" id="set-from-email" name="from_email" class="bh-input" placeholder="' . bh_set_e($mail['defaultFrom'] ?? 'noreply@yourdomain.com') . '" value="' . bh_set_e($values['from_email'] ?? '') . '">',
+                    'Use an address on <strong class="font-medium text-slate-700">' . bh_set_e($mail['domain'] ?? '') . '</strong>. Empty: ' . bh_set_e($mail['defaultFrom'] ?? '') . '.', ['for' => 'set-from-email']) ?>
+                <?= bh_set_row('From name', '<input type="text" id="set-from-name" name="from_name" class="bh-input" placeholder="' . bh_set_e($mail['siteTitle'] ?? 'Site name') . '" value="' . bh_set_e($values['from_name'] ?? '') . '">',
+                    'The name people see next to the address. Empty: your site name.', ['for' => 'set-from-name']) ?>
+            <?= bh_set_card_close() ?>
 
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Mail Driver</label>
-                    <select name="driver" id="email-driver"
-                        class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                        <option value="mail" <?= ($values['driver'] ?? 'mail') === 'mail' ? 'selected' : '' ?>>PHP mail() — works on most cPanel hosts</option>
-                        <option value="smtp" <?= ($values['driver'] ?? '') === 'smtp' ? 'selected' : '' ?>>SMTP — recommended for deliverability</option>
-                    </select>
-                </div>
-
-                <div id="smtp-fields" class="space-y-4 border-t border-slate-100 pt-4" <?= ($values['driver'] ?? 'mail') === 'smtp' ? '' : 'style="display:none"' ?>>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="md:col-span-2">
-                            <label class="block text-sm font-medium text-slate-700 mb-1.5">SMTP Host</label>
-                            <input type="text" name="smtp_host" value="<?= htmlspecialchars($values['smtp_host'] ?? '') ?>" placeholder="smtp.yourdomain.com"
-                                class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Port</label>
-                            <input type="number" name="smtp_port" value="<?= htmlspecialchars($values['smtp_port'] ?? '587') ?>"
-                                class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Encryption</label>
-                        <select name="smtp_encryption" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
-                            <option value="tls" <?= ($values['smtp_encryption'] ?? 'tls') === 'tls' ? 'selected' : '' ?>>STARTTLS (port 587)</option>
-                            <option value="ssl" <?= ($values['smtp_encryption'] ?? '') === 'ssl' ? 'selected' : '' ?>>SSL (port 465)</option>
-                            <option value="none" <?= ($values['smtp_encryption'] ?? '') === 'none' ? 'selected' : '' ?>>None</option>
-                        </select>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1.5">SMTP Username</label>
-                            <input type="text" name="smtp_username" value="<?= htmlspecialchars($values['smtp_username'] ?? '') ?>" autocomplete="off"
-                                class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
-                        </div>
-                        <div data-settings-live="smtp-password">
-                            <label class="block text-sm font-medium text-slate-700 mb-1.5">SMTP Password</label>
-                            <input type="password" name="smtp_password" value="" autocomplete="new-password" placeholder="<?= !empty($mail['hasPassword']) ? 'Saved — leave empty to keep it' : '' ?>"
-                                class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
-                            <?php if (!empty($mail['hasPassword'])): ?>
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-500 mt-1.5"><input type="checkbox" name="smtp_password_clear" value="1"> Remove the saved password</label>
-                            <?php endif; ?>
-                        </div>
+            <?= bh_set_card_open('Sending', 'How the mail leaves the server.') ?>
+                <?= bh_set_row('Send with', '<select name="driver" id="email-driver" class="bh-select">' . bh_set_options(['mail' => 'PHP mail(): works on most cPanel hosts', 'smtp' => 'SMTP: recommended for deliverability'], $driver) . '</select>', '', ['for' => 'email-driver']) ?>
+                <div id="smtp-fields" class="border-t border-slate-100"<?= $driver === 'smtp' ? '' : ' hidden' ?>>
+                    <?= bh_set_row('SMTP host', '<input type="text" id="set-smtp-host" name="smtp_host" class="bh-input" placeholder="smtp.yourdomain.com" value="' . bh_set_e($values['smtp_host'] ?? '') . '">', '', ['for' => 'set-smtp-host']) ?>
+                    <?= bh_set_row('Port', '<input type="number" id="set-smtp-port" name="smtp_port" class="bh-input max-w-[8rem]" value="' . bh_set_e($values['smtp_port'] ?? '587') . '">', '', ['for' => 'set-smtp-port']) ?>
+                    <?= bh_set_row('Encryption', '<select id="set-smtp-enc" name="smtp_encryption" class="bh-select">' . bh_set_options(['tls' => 'STARTTLS (port 587)', 'ssl' => 'SSL (port 465)', 'none' => 'None'], $values['smtp_encryption'] ?? 'tls') . '</select>', '', ['for' => 'set-smtp-enc']) ?>
+                    <?= bh_set_row('Username', '<input type="text" id="set-smtp-user" name="smtp_username" autocomplete="off" class="bh-input" value="' . bh_set_e($values['smtp_username'] ?? '') . '">', '', ['for' => 'set-smtp-user']) ?>
+                    <div data-settings-live="smtp-password" class="border-t border-slate-100">
+                        <?= bh_set_row('Password', '<input type="password" id="set-smtp-pass" name="smtp_password" value="" autocomplete="new-password" class="bh-input" placeholder="' . (!empty($mail['hasPassword']) ? 'Saved: leave empty to keep it' : '') . '">', '', ['for' => 'set-smtp-pass']) ?>
+                        <?php if (!empty($mail['hasPassword'])): ?>
+                            <div class="border-t border-slate-100"><?= bh_set_toggle('smtp_password_clear', false, 'Remove the saved password', '', ['hidden0' => false, 'sub' => true]) ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
+            <?= bh_set_card_close() ?>
 
-                <div class="pt-2">
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg">Save Email Settings</button>
-                </div>
-            </form>
-        </div>
+            <?= bh_set_save() ?>
+        </form>
 
-        <div class="bg-white rounded-xl border border-slate-200 p-6">
-            <h3 class="font-semibold text-slate-900 mb-2">Send a test email</h3>
-            <p class="text-sm text-slate-500 mb-4">Sends a test message to <strong><?= htmlspecialchars($currentUser['email'] ?? '') ?></strong> using the saved settings above.</p>
-            <form method="POST" action="<?= $base ?>/admin/settings/email/test">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                <button type="submit" class="border border-slate-300 hover:border-blue-500 hover:text-blue-600 text-slate-700 text-sm font-medium px-5 py-2.5 rounded-lg">
-                    <?= icon('paper-airplane', 'w-4 h-4 mr-1') ?> Send Test Email
-                </button>
-            </form>
-        </div>
+        <?= bh_set_card_open('Send a test email', 'Sends a message to <strong class="font-medium text-slate-700">' . bh_set_e($currentUser['email'] ?? '') . '</strong> with the saved settings above.', [
+            'action' => '<form method="POST" action="' . $base . '/admin/settings/email/test" class="m-0"><input type="hidden" name="_csrf" value="' . bh_set_e($csrf) . '"><button type="submit" class="bh-btn bh-btn--secondary bh-btn--sm">' . icon('paper-airplane', 'w-4 h-4') . 'Send test</button></form>',
+        ]) ?>
+        <?= bh_set_card_close() ?>
     </div>
 </div>
 
-<?php $this->endSection(); ?>
-
-<?php $this->section('scripts'); ?>
 <script>
 (function () {
     var driver = document.getElementById('email-driver');
     var smtp = document.getElementById('smtp-fields');
     if (driver && smtp) {
-        driver.addEventListener('change', function () {
-            smtp.style.display = driver.value === 'smtp' ? '' : 'none';
-        });
+        driver.addEventListener('change', function () { smtp.hidden = driver.value !== 'smtp'; });
     }
 })();
 </script>
+
 <?php $this->endSection(); ?>

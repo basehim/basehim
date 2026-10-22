@@ -100,6 +100,8 @@ final class DashboardService
                 'description' => $w['description'],
                 'icon'        => $w['icon'],
                 'tone'        => $d['tone'] ?? 'blue',
+                // The view, when declared (1.2.81): the loading placeholder takes its shape.
+                'view'        => is_string($d['view'] ?? null) ? $d['view'] : (isset($d['data']) || isset($d['endpoint']) ? null : 'html'),
                 'owner'       => $w['source'],
                 'owner_label' => ($this->ownerLabel)($w['source']),
                 'sizes'       => $d['sizes'],

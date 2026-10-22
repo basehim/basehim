@@ -151,6 +151,8 @@
     function init() {
         Array.prototype.forEach.call(document.querySelectorAll('form[method="POST"], form[method="post"]'), bind);
     }
+    // A section swapped in without a page load (settings-nav.js, 1.2.82) binds its forms too.
+    window.bhSettingsBind = init;
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
 })();
