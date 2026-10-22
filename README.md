@@ -11,6 +11,7 @@ files, open your site, and the installer takes it from there.
 ![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 [![CI](https://github.com/basehim/basehim/actions/workflows/ci.yml/badge.svg)](https://github.com/basehim/basehim/actions/workflows/ci.yml)
+[![SkillsLLM Automated Security Scan](https://skillsllm.com/badges/security.svg?slug=basehim)](https://skillsllm.com/skill/basehim)
 
 [basehim.com](https://www.basehim.com) · [Docs](https://www.basehim.com/docs) · [API reference](https://www.basehim.com/docs/api-reference) · [Getting started](https://www.basehim.com/docs/getting-started) · [**Download**](https://github.com/basehim/basehim/releases/latest/download/basehim.zip)
 
