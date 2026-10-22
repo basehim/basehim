@@ -61,12 +61,12 @@
 .bh-btn .bh-btn__chev { @apply -mr-0.5 ml-auto h-3.5 w-3.5 text-slate-400; }
 .bh-btn--primary .bh-btn__chev { @apply text-white/80; }
 
-/* Busy (bhBusy): a spinner in front, clicks blocked. */
-.bh-btn[aria-busy="true"] { @apply pointer-events-none cursor-progress opacity-85; }
-.bh-btn[aria-busy="true"]::before {
-    content: "";
-    @apply h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent;
-}
+/* Busy: clicks blocked. The spinner itself is drawn by one thing only, the
+   loader (bhLoader / bhBusy put .bh-btn-busy__icon inside the button; ui.css).
+   No stylesheet adds one here: in 1.2.77–1.2.82 this rule drew a second
+   spinner beside the loader's (BH-036). Don't style a busy button with
+   ::before / ::after content. */
+.bh-btn[aria-busy="true"] { @apply pointer-events-none cursor-progress; }
 
 /* ── Cards: .bh-card (+ __head, __title, __sub, __body, --pad). A dashboard
       card is the same card (.bh-dcard adds its icon and tools). ──────────── */

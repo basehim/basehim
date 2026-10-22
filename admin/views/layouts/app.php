@@ -1252,24 +1252,35 @@ try {
     };
 
     // ── busy buttons: bhBusy(button, true[, 'Saving…']) … bhBusy(button, false) ──
+    // The same loader as bhLoader(button) (1.2.83): one spinner, drawn one way.
+    // It used to set aria-busy and leave the spinner to a stylesheet, while
+    // bhLoader drew its own, so a button could get both (BH-036).
     window.bhBusy = function (btn, busy, label) {
         if (!btn) return;
         if (busy) {
-            btn.setAttribute('aria-busy', 'true');
-            btn.disabled = true;
-            if (label) { btn._bhLabel = btn.textContent; btn.textContent = label; }
+            if (btn._bhLoader) btn._bhLoader.remove();
+            var words = label || (btn.textContent || '').trim();
+            var l = buttonLoader(btn, words || ' ');
+            if (!words) l.set('');                    // an icon-only button: the spinner alone
+        } else if (btn._bhLoader) {
+            btn._bhLoader.remove();
         } else {
             btn.removeAttribute('aria-busy');
             btn.disabled = false;
-            if (btn._bhLabel != null) { btn.textContent = btn._bhLabel; btn._bhLabel = null; }
         }
     };
+
+    // Done / failed marks: icons from the icon set, never text characters.
+    function statusIcon(ok) {
+        return typeof window.BasehimIcon === 'function' ? window.BasehimIcon(ok ? 'check' : 'exclamation-circle', '') : '';
+    }
 
     // ── loader: the shared "working…" state (admin/assets/css/ui.css) ──
     //   var l = bhLoader(button, 'Saving draft…');        // inside the button
     //   l.done('Draft saved');  l.fail('Not saved');  l.set('Still saving…');  l.remove();
     // On a button (1.2.50) the spinner and words go inside it: the button is
-    // disabled while it works, shows ✓ / ! when done() / fail(), and gets its
+    // disabled while it works, shows a check / exclamation icon when done() /
+    // fail(), and gets its
     // own label back after `timeout` ms (2000; 3000 after a failure). Keep
     // button texts short — the full message belongs in a toast or banner.
     // Anything else gets the pill: place 'before' (default) or 'after' the
@@ -1294,7 +1305,7 @@ try {
             if (gone) return api;
             btn.classList.remove('is-done', 'is-error');
             btn.classList.add(cls);
-            icon.textContent = cls === 'is-done' ? '\u2713' : '!';
+            icon.innerHTML = statusIcon(cls === 'is-done');
             if (msg) text.textContent = msg;
             btn.disabled = false;
             btn.removeAttribute('aria-busy');
@@ -1347,6 +1358,7 @@ try {
             done: function (msg, o) {
                 if (gone) return api;
                 el.classList.remove('is-error'); el.classList.add('is-done');
+                el.firstChild.innerHTML = statusIcon(true);
                 if (msg) text.textContent = msg;
                 clearTimeout(timer);
                 timer = setTimeout(api.remove, (o && o.timeout) || 2000);
@@ -1355,6 +1367,7 @@ try {
             fail: function (msg) {
                 if (gone) return api;
                 el.classList.remove('is-done'); el.classList.add('is-error');
+                el.firstChild.innerHTML = statusIcon(false);
                 if (msg) text.textContent = msg;
                 clearTimeout(timer);
                 return api;

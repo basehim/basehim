@@ -46,6 +46,11 @@ still work and now look the same as the default.
 
 While a request runs: `bhBusy(button, true, 'Saving…')`, then
 `bhBusy(button, false)` — shows a spinner, blocks clicks, restores the label.
+It is the same loader as `bhLoader(button, …)` (1.2.83), which can also end
+with `done('Saved')` or `fail('Not saved')`: a check or exclamation icon, then
+the label comes back. A busy button's spinner and icon come from that loader
+only; don't add your own (no `::before` on `[aria-busy]`, no ✓ characters):
+a second source is what drew two spinners before 1.2.83.
 
 Wording: "Save changes" for saving a form; name other actions by what they do
 ("Delete", "Revoke", "Install updates"), sentence case.

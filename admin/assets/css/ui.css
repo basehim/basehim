@@ -24,9 +24,9 @@
 .bh-loader.is-done { background: rgba(4, 120, 87, .9); }
 .bh-loader.is-error { background: rgba(185, 28, 28, .9); pointer-events: auto; }
 .bh-loader.is-done .bh-loader__spin,
-.bh-loader.is-error .bh-loader__spin { animation: none; border: 0; width: auto; height: auto; }
-.bh-loader.is-done .bh-loader__spin::before { content: "\2713"; font-size: 12px; line-height: 1; }
-.bh-loader.is-error .bh-loader__spin::before { content: "!"; font-weight: 700; font-size: 12px; line-height: 1; }
+.bh-loader.is-error .bh-loader__spin { animation: none; border: 0; display: inline-flex; }
+/* Done / failed: an icon from the icon set (check, exclamation-circle), put in by bhLoader. */
+.bh-loader__spin svg { width: 14px; height: 14px; stroke-width: 2.25; }
 .bh-loader.is-leaving { opacity: 0; }
 /* Placed over something (an image): centred on it. */
 .bh-loader--over { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
@@ -36,9 +36,13 @@
 @keyframes bh-loader-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .bh-loader__spin { animation-duration: 2s; } }
 
-/* ── Loader inside a button (1.2.50): bhLoader(button, 'Saving…') ──────────
+/* ── Loader inside a button (1.2.50): bhLoader(button, 'Saving…'), and
+   bhBusy(button, true) since 1.2.83 ───────────────────────────────────────
    The button keeps its own colours; its label becomes a spinner and a word
-   or two, then ✓ (done) or ! (failed) before the label comes back.          */
+   or two, then a check (done) or an exclamation icon (failed) before the
+   label comes back. This is the only place a busy button's spinner and icon
+   come from (BH-036): nothing else may add one, so the guard below hides
+   anything else that ends up inside, and turns off pseudo-element content. */
 .bh-btn-busy { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .bh-btn-busy[aria-busy="true"] { cursor: progress; }
 button.bh-btn-busy:disabled { opacity: 1; cursor: progress; }   /* beats .bhe-btn:disabled and similar */
@@ -50,7 +54,11 @@ button.bh-btn-busy:disabled { opacity: 1; cursor: progress; }   /* beats .bhe-bt
     font-size: 1em; line-height: 1; font-weight: 700;
 }
 .bh-btn-busy.is-done .bh-btn-busy__icon,
-.bh-btn-busy.is-error .bh-btn-busy__icon { animation: none; border: 0; width: auto; height: auto; }
+.bh-btn-busy.is-error .bh-btn-busy__icon { animation: none; border: 0; opacity: 1; }
+.bh-btn-busy__icon svg { width: 1em; height: 1em; stroke-width: 2.25; }
+/* The guard: one spinner or icon, one label, nothing else. */
+.bh-btn-busy::before, .bh-btn-busy::after { content: none !important; display: none !important; }
+.bh-btn-busy > :not(.bh-btn-busy__icon):not(.bh-btn-busy__text) { display: none !important; }
 .bh-btn-busy.is-error { background-color: #dc2626 !important; border-color: #dc2626 !important; color: #fff !important; }
 .bh-btn-busy__text { white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .bh-btn-busy__icon { animation-duration: 2s; } }
