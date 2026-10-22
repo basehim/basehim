@@ -110,9 +110,52 @@ final class TableRegistry
             searchPlaceholder: (string) ($def['search_placeholder'] ?? 'Search…'),
             quickEdit: $quickEdit,
             rowLinks: $rowLinks,
+            actions: $this->buildActions($key, (array) ($def['actions'] ?? [])),
         );
 
         return $this->tables[$key] = $table;
+    }
+
+    /**
+     * Validate a table's declared actions (1.2.85). Only known keys pass; an
+     * href must be root-relative and may use {id} and {key}. A malformed
+     * action is a bug in the table's registration, so it throws.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function buildActions(string $key, array $raw): array
+    {
+        $out = [];
+        $seen = [];
+        foreach ($raw as $a) {
+            $id = is_array($a) ? ($a['id'] ?? null) : null;
+            if (!is_string($id) || !preg_match('/^[a-z][a-z0-9_-]{0,39}$/', $id) || isset($seen[$id])) {
+                throw new \InvalidArgumentException("Table '{$key}' has an invalid or duplicate action.");
+            }
+            $label = trim((string) ($a['label'] ?? ''));
+            if ($label === '') throw new \InvalidArgumentException("Table '{$key}' action '{$id}' needs a label.");
+            $href = isset($a['href']) ? (string) $a['href'] : null;
+            if ($href !== null && !preg_match('#^/[^\s"<>]*$#', $href)) {
+                throw new \InvalidArgumentException("Table '{$key}' action '{$id}' href must be root-relative.");
+            }
+            $tone = (string) ($a['tone'] ?? (!empty($a['danger']) ? 'danger' : 'neutral'));
+            $out[] = [
+                'id'      => $id,
+                'label'   => $label,
+                'icon'    => preg_match('/^[a-z0-9-]{1,40}$/', (string) ($a['icon'] ?? '')) ? (string) $a['icon'] : null,
+                'tone'    => in_array($tone, ['publish', 'neutral', 'danger'], true) ? $tone : 'neutral',
+                'danger'  => !empty($a['danger']) || $tone === 'danger',
+                'confirm' => isset($a['confirm']) ? (string) $a['confirm'] : null,
+                'when'    => array_values(array_map('strval', (array) ($a['when'] ?? []))),
+                'flag'    => isset($a['flag']) ? (string) $a['flag'] : null,
+                'bulk'    => array_key_exists('bulk', $a) ? (bool) $a['bulk'] : $href === null,
+                'row'     => array_key_exists('row', $a) ? (bool) $a['row'] : true,
+                'href'    => $href,
+                'event'   => !empty($a['event']),
+            ];
+            $seen[$id] = true;
+        }
+        return $out;
     }
 
     public function get(string $key): ?TableDefinition
@@ -246,6 +289,10 @@ final class TableRegistry
             $filter = ['field' => $raw['filter']['field']];
             if (isset($raw['filter']['in']) && is_array($raw['filter']['in'])) {
                 $filter['in'] = array_values(array_map('strval', $raw['filter']['in']));
+                // Words for the status menu (1.2.85), by value; ucfirst otherwise.
+                if (isset($raw['filter']['labels']) && is_array($raw['filter']['labels'])) {
+                    $filter['labels'] = array_map('strval', array_intersect_key($raw['filter']['labels'], array_flip($filter['in'])));
+                }
             }
         }
 

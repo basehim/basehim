@@ -165,11 +165,15 @@ class AppService
      * in fact worked. Adding a return value is backward compatible: the only
      * core caller discards it.
      *
-     * @return array{scanned:int,installed:string[],upgraded:array<int,array{slug:string,from:string,to:string}>,failed:array<int,array{slug:string,from:string,to:string,error:string}>,unchanged:string[]}
+     * Since 1.2.85 it no longer registers folders it finds: `installed` stays
+     * empty and `unregistered` lists folders that are not installed apps (see
+     * register()).
+     *
+     * @return array{scanned:int,installed:string[],upgraded:array<int,array{slug:string,from:string,to:string}>,failed:array<int,array{slug:string,from:string,to:string,error:string}>,unchanged:string[],unregistered:string[]}
      */
     public function sync(): array
     {
-        $summary = ['scanned' => 0, 'installed' => [], 'upgraded' => [], 'failed' => [], 'unchanged' => []];
+        $summary = ['scanned' => 0, 'installed' => [], 'upgraded' => [], 'failed' => [], 'unchanged' => [], 'unregistered' => []];
 
         $available = $this->scan();
         $summary['scanned'] = count($available);
@@ -177,28 +181,13 @@ class AppService
         foreach ($available as $slug => $manifest) {
             $row = $this->find($slug);
             if (!$row) {
-                $this->db->insert('apps', [
-                    'vendor'      => $manifest['vendor'] ?? 'community',
-                    'slug'        => $slug,
-                    'name'        => $manifest['name'] ?? $slug,
-                    'description' => $manifest['description'] ?? null,
-                    'version'     => $manifest['version'] ?? '0.0.1',
-                    'author'      => $this->manifestAuthor($manifest),
-                    'icon'        => $this->manifestIcon($manifest),
-                    'permissions' => $this->manifestPermissions($manifest),
-                    'status'      => 'inactive',
-                ] + ($this->hasSchemaColumn() ? ['schema_version' => ''] : []));
-                // schema_version stays '' until onInstall() has run (1.2.73,
-                // BH-024): a failure is recorded in the app's report and
-                // onInstall() runs again on activation. It used to be logged
-                // and forgotten.
-                $err = $this->fireLifecycle($slug, 'onInstall');
-                if ($err === null) {
-                    $this->markInstalled($slug, (string) ($manifest['version'] ?? '0.0.1'));
-                } elseif (!$err instanceof \App\Services\AppHealth\AppNotLoaded) {
-                    $this->guard()?->failed($slug, (string) ($manifest['version'] ?? ''), 'lifecycle:onInstall', $err);
-                }
-                $summary['installed'][] = $slug;
+                // 1.2.85: a folder is not an install. Only an app installed
+                // through a ZIP upload, the marketplace or register() (Dev
+                // Tools) is listed and can be activated; a folder copied in by
+                // hand (FTP, a file manager, a renamed folder) stays inert and
+                // is only counted on the Apps screen.
+                $summary['unregistered'][] = $slug;
+                continue;
             } else {
                 $oldVersion = (string) ($row['version'] ?? '');
                 $newVersion = (string) ($manifest['version'] ?? $oldVersion);
@@ -251,6 +240,213 @@ class AppService
         }
 
         return $summary;
+    }
+
+    // ==================================================================
+    // Registration (1.2.85)
+    //
+    // An app is installed when core registered it — from a ZIP upload, the
+    // marketplace, or register() called by a trusted tool (Basehim Dev
+    // Tools). A folder that appears in content/apps any other way is not
+    // listed, loaded or activatable, so a file manager or FTP can't add code
+    // that runs, and a renamed folder can't show up as a second app.
+    // ==================================================================
+
+    public const SOURCES = ['upload', 'marketplace', 'devtools', 'legacy'];
+
+    /**
+     * Register an app whose files are already in place: insert its row,
+     * run onInstall(), the security scan and code validation.
+     *
+     * @param string $source upload | marketplace | devtools
+     * @return array{slug:string,registered:bool,scan:array,validation:?array}
+     * @throws \RuntimeException when the folder is not a valid app
+     */
+    public function register(string $slug, string $source): array
+    {
+        $slug = $this->sanitizeSlug($slug);
+        if (!in_array($source, ['upload', 'marketplace', 'devtools'], true)) {
+            throw new \RuntimeException("Unknown install source '{$source}'.");
+        }
+        if ($this->find($slug)) {
+            return ['slug' => $slug, 'registered' => false, 'scan' => $this->scanResult($slug) ?? [], 'validation' => null];
+        }
+        $dir = $this->appPath . '/' . $slug;
+        $manifest = $this->readManifest($dir);
+        if ($manifest === null) {
+            throw new \RuntimeException("content/apps/{$slug} has no readable app.json.");
+        }
+        $this->validateManifest($manifest);
+        if (($manifest['slug'] ?? $slug) !== $slug) {
+            throw new \RuntimeException("The folder '{$slug}' holds the app '" . (string) $manifest['slug'] . "': an app's folder must be named after its slug.");
+        }
+        unset($this->dirCache[$slug]);
+
+        $this->db->insert('apps', [
+            'vendor'      => $manifest['vendor'] ?? 'community',
+            'slug'        => $slug,
+            'name'        => $manifest['name'] ?? $slug,
+            'description' => $manifest['description'] ?? null,
+            'version'     => $manifest['version'] ?? '0.0.1',
+            'author'      => $this->manifestAuthor($manifest),
+            'icon'        => $this->manifestIcon($manifest),
+            'permissions' => $this->manifestPermissions($manifest),
+            'status'      => 'inactive',
+        ] + ($this->hasSchemaColumn() ? ['schema_version' => ''] : [])
+          + ($this->hasSourceColumn() ? ['source' => $source] : []));
+
+        // schema_version stays '' until onInstall() has run (1.2.73, BH-024):
+        // a failure is recorded in the app's report and onInstall() runs
+        // again on activation.
+        $err = $this->fireLifecycle($slug, 'onInstall');
+        if ($err === null) {
+            $this->markInstalled($slug, (string) ($manifest['version'] ?? '0.0.1'));
+        } elseif (!$err instanceof \App\Services\AppHealth\AppNotLoaded) {
+            $this->guard()?->failed($slug, (string) ($manifest['version'] ?? ''), 'lifecycle:onInstall', $err);
+        }
+
+        // The security scan and code validation, so any finding is on the
+        // Apps screen before anyone activates it. Neither blocks the install.
+        $scan = $this->scanApp($slug);
+        $validation = null;
+        try { $validation = $this->validate($slug); } catch (\Throwable) {}
+        $this->logSafe("App '{$slug}' registered ({$source}).");
+
+        return ['slug' => $slug, 'registered' => true, 'scan' => $scan, 'validation' => $validation];
+    }
+
+    /**
+     * Folders in content/apps with an app.json that are not installed apps:
+     * copied in by hand, or renamed. Listed by name for the Apps screen's note.
+     *
+     * @return string[]
+     */
+    public function unregisteredFolders(): array
+    {
+        $out = [];
+        foreach (array_keys($this->scan()) as $slug) {
+            if (!$this->find((string) $slug)) $out[] = (string) $slug;
+        }
+        sort($out);
+        return $out;
+    }
+
+    /**
+     * Keep the registry honest about files that changed by hand:
+     *
+     *  - an installed app whose folder is gone (deleted or renamed) is
+     *    switched off — its code can't run — and listed as "Files missing";
+     *    its settings and data stay until it is removed;
+     *  - a row registered before 1.2.85 for a folder whose app.json names a
+     *    different app (a renamed copy that older versions picked up) is
+     *    dropped from the list when it isn't running. Files are never touched.
+     *
+     * @return array{switched_off:string[],dropped:string[]}
+     */
+    public function reconcile(): array
+    {
+        $out = ['switched_off' => [], 'dropped' => []];
+        try { $rows = $this->installed(); } catch (\Throwable) { return $out; }
+        $onDisk = $this->scan();
+        foreach ($rows as $row) {
+            $slug = (string) $row['slug'];
+            $status = (string) ($row['status'] ?? '');
+            if (!isset($onDisk[$slug])) {
+                if ($status === 'active' || $status === 'error') {
+                    $this->db->update('apps', ['status' => 'inactive'], ['slug' => $slug]);
+                    unset($this->instances[$slug], $this->booted[$slug]);
+                    $out['switched_off'][] = $slug;
+                    $this->logSafe("App '{$slug}' was switched off: its folder content/apps/{$slug} is missing.");
+                }
+                continue;
+            }
+            $claimed = $onDisk[$slug]['slug'] ?? null;
+            if (is_string($claimed) && $claimed !== '' && $claimed !== $slug
+                && ($row['source'] ?? 'legacy') === 'legacy' && $status === 'inactive') {
+                $this->db->delete('apps', ['slug' => $slug]);
+                $out['dropped'][] = $slug;
+                $this->logSafe("App record '{$slug}' removed from the list: the folder holds '{$claimed}', so it was a renamed copy, not an install.");
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Run the security scan on installed apps that were never scanned (apps
+     * from before the scanner, or an older install route), at most $limit
+     * per call so a page load stays quick.
+     */
+    public function scanUnscanned(int $limit = 5): int
+    {
+        $n = 0;
+        try {
+            foreach ($this->db->select('SELECT slug FROM {apps} WHERE scanned_at IS NULL ORDER BY id') as $row) {
+                if ($n >= $limit) break;
+                if ($this->filesMissing((string) $row['slug'])) continue;
+                $this->scanApp((string) $row['slug']);
+                $n++;
+            }
+        } catch (\Throwable) {}
+        return $n;
+    }
+
+    /**
+     * What the permission window shows besides the permissions (1.2.85): the
+     * app's own reasons for each (app.json `permission_reasons`, plain text),
+     * and the checks it passed — where it came from, the security scan and
+     * the code check — so the person deciding sees why it is safe to allow.
+     *
+     * @return array{reasons:array<string,string>,checks:array{source:string,scanned:bool,findings:int,code_ok:bool}}
+     */
+    public function consentContext(string $slug): array
+    {
+        $row = $this->find($slug) ?? [];
+        $manifest = $this->readManifest($this->appPath . '/' . $slug) ?? [];
+        $reasons = [];
+        foreach ((array) ($manifest['permission_reasons'] ?? []) as $key => $why) {
+            if (!is_string($key) || !is_string($why)) continue;
+            $why = trim(preg_replace('/\s+/', ' ', strip_tags($why)) ?? '');
+            if ($why !== '') $reasons[$key] = mb_substr($why, 0, 200);
+        }
+        $scan = $this->scanResult($slug);
+        $state = '';
+        try { $state = (string) ($this->guard()?->store()->get($slug)['state'] ?? ''); } catch (\Throwable) {}
+        return [
+            'reasons' => $reasons,
+            'checks'  => [
+                'source'   => (string) ($row['source'] ?? 'legacy'),
+                'scanned'  => is_array($scan),
+                'findings' => is_array($scan) ? (int) ($scan['high'] ?? 0) + (int) ($scan['medium'] ?? 0) : 0,
+                'code_ok'  => !in_array($state, ['invalid', 'quarantined'], true),
+            ],
+        ];
+    }
+
+    /** Whether an installed app's files are missing (folder gone or renamed). */
+    public function filesMissing(string $slug): bool
+    {
+        return $this->manifestFileIn($this->appPath . '/' . $slug) === null;
+    }
+
+    private ?bool $sourceColumn = null;
+
+    /** Whether apps.source exists (migration 021), created on first need. */
+    private function hasSourceColumn(): bool
+    {
+        if ($this->sourceColumn !== null) return $this->sourceColumn;
+        try {
+            $col = $this->db->selectOne("SHOW COLUMNS FROM {apps} LIKE 'source'");
+            if ($col === null) {
+                // New files can run before migration 021 (a patch uploaded by
+                // hand): add the column here, marking existing rows as legacy.
+                $this->db->execute("ALTER TABLE {apps} ADD COLUMN `source` VARCHAR(20) NULL AFTER `status`");
+                $this->db->execute("UPDATE {apps} SET `source` = 'legacy' WHERE `source` IS NULL");
+            }
+            return $this->sourceColumn = true;
+        } catch (\Throwable $e) {
+            $this->logSafe('apps.source is unavailable: ' . $e->getMessage());
+            return $this->sourceColumn = false;
+        }
     }
 
     /**
@@ -464,7 +660,7 @@ class AppService
      * @return array{slug:string, manifest:array}
      * @throws \RuntimeException on validation failure.
      */
-    public function installFromZip(string $zipPath): array
+    public function installFromZip(string $zipPath, string $source = 'upload'): array
     {
         $staged = $this->stageZip($zipPath);
         $slug = $staged['slug'];
@@ -472,6 +668,9 @@ class AppService
 
         if (is_dir($targetDir)) {
             $this->rrmdir($staged['tempDir']);
+            if (!$this->find($slug)) {
+                throw new \RuntimeException("A folder named '{$slug}' is already in content/apps, but it isn't an installed app. Delete or rename that folder, then install again.");
+            }
             throw new \RuntimeException("An app with slug '{$slug}' is already installed. Uninstall it first to reinstall, or use the upgrade flow.");
         }
 
@@ -480,18 +679,23 @@ class AppService
             throw new \RuntimeException('Could not move the extracted app into place.');
         }
 
-        // Insert DB row & fire onInstall.
-        $this->sync();
+        // Register it (1.2.85): the row, onInstall(), the security scan and
+        // code validation. A row left from an earlier install whose files
+        // went missing is reused as it is.
+        try {
+            $reg = $this->register($slug, $source);
+            if (!$reg['registered']) {
+                // Its row was already there (the files had gone missing):
+                // refresh it from the new manifest and scan the new files.
+                $this->sync();
+                $reg['scan'] = $this->scanApp($slug);
+            }
+        } catch (\Throwable $e) {
+            $this->rrmdir($targetDir);
+            throw $e instanceof \RuntimeException ? $e : new \RuntimeException($e->getMessage(), 0, $e);
+        }
 
-        // Scan at install time so the operator sees any flags before deciding
-        // whether to activate. Never blocks the install.
-        $this->scanApp($slug);
-
-        // And validate its code (1.2.71), so a problem is on the Apps screen
-        // before anyone activates it. Never blocks the install either.
-        try { $this->validate($slug); } catch (\Throwable) {}
-
-        return ['slug' => $slug, 'manifest' => $staged['manifest']];
+        return ['slug' => $slug, 'manifest' => $staged['manifest'], 'scan' => $reg['scan'], 'validation' => $reg['validation']];
     }
 
     /**
@@ -753,6 +957,7 @@ class AppService
         //     app that fails is switched off; its upgrade hooks are then not
         //     run (AppGuard refuses to load it) and the report says why.
         try { $this->validate($slug); } catch (\Throwable) {}
+        $this->scanApp($slug);   // the new files, scanned like a fresh install (1.2.85)
 
         // 3. Refresh DB row from the new manifest. sync() also runs the app's
         //    onUpgrade(from, to) and records the new schema version only if it
@@ -908,7 +1113,15 @@ class AppService
             $slug = (string) $row['slug'];
             $dir = $this->dirFor($slug);
             $manifest = $this->readManifest($dir);
-            if ($manifest === null) continue;
+            if ($manifest === null) {
+                // Its folder was deleted or renamed by hand (1.2.85): switch
+                // it off so the list says so, instead of "active" with no code.
+                try {
+                    $this->db->update('apps', ['status' => 'inactive'], ['slug' => $slug]);
+                    $this->logSafe("App '{$slug}' was switched off: its folder content/apps/{$slug} is missing.");
+                } catch (\Throwable) {}
+                continue;
+            }
             $apps[$slug] = ['dir' => $dir, 'manifest' => $manifest];
         }
         $this->validatedForBoot = array_fill_keys($guard->preflightActive($apps), true);
@@ -920,6 +1133,10 @@ class AppService
             if ($this->bootGuarded($app, $guard, $slug, (string) ($row['version'] ?? ''))) $booted[] = $slug;
         }
         $this->validatedForBoot = [];
+
+        // An app that didn't start for want of a permission: its admin
+        // screens (as remembered from its last start) ask for it (1.2.85).
+        if ($this->permissionBlocked) $this->askForBlockedPermissions($guard);
 
         // Close any open recovery, and remember each app's URL prefixes so
         // its screens can show the report if it is ever switched off.
@@ -955,6 +1172,15 @@ class AppService
         } catch (\Throwable $e) {
             $stage = $this->bootStage ?? 'load';
             $this->rollback($app, $slug);
+            // A permission it hasn't been allowed (1.2.85) is not broken code:
+            // don't switch it off. Its screens ask for the permission instead
+            // (AppPermissionPage), and it starts normally once it's allowed.
+            if (($pm = \App\Core\AppPermissionMissing::in($e)) !== null) {
+                $this->permissionBlocked[$slug] = $pm;
+                $this->logSafe("App '{$slug}' did not start: it needs the '{$pm->permission}' permission.");
+                try { \App\Core\Application::getInstance()->make(\App\Services\AppLogger::class)->log($slug, 'warning', "Not started: it needs the '{$pm->permission}' permission. Allow it under Apps → Permissions.", []); } catch (\Throwable) {}
+                return false;
+            }
             $guard->failed($slug, $version, $stage, $e);
             return false;
         } finally {
@@ -963,6 +1189,12 @@ class AppService
             $guard->end();
         }
     }
+
+    /** Apps that didn't start for want of a permission, this request (1.2.85). @var array<string,\App\Core\AppPermissionMissing> */
+    private array $permissionBlocked = [];
+
+    /** @return array<string,\App\Core\AppPermissionMissing> */
+    public function permissionBlocked(): array { return $this->permissionBlocked; }
 
     /** Stage of the app being booted, for the failure report. */
     private ?string $bootStage = null;
@@ -997,6 +1229,28 @@ class AppService
         }
         unset($this->instances[$slug], $this->booted[$slug]);
         $this->logSafe("App '{$slug}' registrations removed after a failed boot: " . json_encode($removed));
+    }
+
+    private function askForBlockedPermissions(\App\Services\AppHealth\AppGuard $guard): void
+    {
+        $blocked = $this->permissionBlocked;
+        $prev = $this->hooks->setOwner(null);
+        $this->hooks->addFilter('route.miss', static function ($handled, $request = null, $path = '') use ($guard, $blocked) {
+            if ($handled !== null || !is_string($path) || $path === '' || !$request instanceof \App\Core\Request) return $handled;
+            $path = '/' . trim($path, '/');
+            $routes = $guard->store()->index()['routes'] ?? [];
+            foreach ($blocked as $slug => $pm) {
+                foreach (['admin', 'public'] as $kind) {
+                    foreach ((array) ($routes[$slug][$kind] ?? []) as $prefix) {
+                        if ($path === $prefix || str_starts_with($path, $prefix . '/')) {
+                            return \App\Http\Controllers\Admin\AppPermissionPage::answer($request, $pm) ?? $handled;
+                        }
+                    }
+                }
+            }
+            return $handled;
+        }, 4, 3);
+        $this->hooks->setOwner($prev);
     }
 
     /**
@@ -1850,11 +2104,13 @@ class AppService
         }
 
         try {
-            $existing = $this->scan()[$slug] ?? null;
-            if ($existing) {
+            // Installed (a row) → replace its files, which also restores an
+            // app whose folder went missing. Otherwise a fresh install, which
+            // refuses to overwrite a folder that isn't an installed app.
+            if ($this->find($slug)) {
                 $result = $this->replaceAppFiles($tmp, $slug); // update in place
             } else {
-                $result = $this->installFromZip($tmp);            // fresh install + sync()
+                $result = $this->installFromZip($tmp, 'marketplace');
             }
             @unlink($tmp);
             $this->forgetCachedUpdate($slug);
@@ -1903,8 +2159,10 @@ class AppService
         $this->forgetInstance($expectedSlug);
         try { $this->validate($expectedSlug); } catch (\Throwable) {}
 
-        // Refresh the DB row's version/manifest without disturbing active state.
+        // Refresh the DB row's version/manifest without disturbing active state,
+        // and scan the new files (1.2.85; updates weren't scanned before).
         $this->sync();
+        $this->scanApp($expectedSlug);
         return ['slug' => $expectedSlug, 'manifest' => $staged['manifest'], 'replaced' => true];
     }
 

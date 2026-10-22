@@ -189,7 +189,8 @@ final class TableService
                 'id'     => isset($row['id']) ? (int) $row['id'] : null,
                 'status' => isset($row['status']) ? (string) $row['status'] : null,
                 'cells'  => $cells,
-            ] + (isset($row['id'], $links[(int) $row['id']]) ? ['link' => $links[(int) $row['id']]] : []);
+            ] + (isset($row['id'], $links[(int) $row['id']]) ? ['link' => $links[(int) $row['id']]] : [])
+              + self::rowExtras($row);
         }
 
         return [
@@ -206,6 +207,7 @@ final class TableService
             'page_sizes'   => $table->pageSizes,
             'bulk_actions' => $table->bulkActions,
             'row_actions'  => $table->rowActions,
+            'actions'      => $table->actions,
             'quick_edit'   => $table->quickEdit !== null,
         ];
     }
@@ -303,6 +305,21 @@ final class TableService
             if ($c->filter !== null && isset($c->filter['field'], $c->filter['in'])) {
                 $out[$c->filter['field']] = $c->filter['in'];
             }
+        }
+        return $out;
+    }
+
+    /**
+     * What a row may carry for declared actions (1.2.85): `row_key`, a string
+     * id for {key} in an action's href (a slug, say), and `row_flags`, the
+     * names an action's `flag` checks. Both come from the provider.
+     */
+    private static function rowExtras(array $row): array
+    {
+        $out = [];
+        if (isset($row['row_key']) && is_scalar($row['row_key'])) $out['key'] = (string) $row['row_key'];
+        if (isset($row['row_flags']) && is_array($row['row_flags'])) {
+            $out['flags'] = array_values(array_filter(array_map('strval', $row['row_flags']), fn($f) => preg_match('/^[a-z][a-z0-9_]{0,39}$/', $f)));
         }
         return $out;
     }

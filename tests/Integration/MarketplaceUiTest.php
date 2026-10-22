@@ -12,6 +12,7 @@ declare(strict_types=1);
 test('marketplace actions: read actions answer GET only, and every action is rate limited', function () {
     $src = file_get_contents(BASEHIM_ROOT . '/routes/ajax.php');
     $block = substr($src, strpos($src, 'use App\Http\Controllers\Ajax\MarketplaceActions;'));
+    $block = substr($block, 0, strpos($block, 'use App\Http\Controllers\Ajax\AppActions;') ?: strlen($block));
     // Three registered per namespace in the loop, plus three on their own.
     assert_same(6, substr_count($block, '$ajax->register('), 'six register() calls');
     assert_same(6, substr_count($block, "'rate_limit'"), 'each has a rate limit');
@@ -44,7 +45,7 @@ test('marketplace actions: input is checked before anything is downloaded or cha
 test('marketplace page: core components only, no own stylesheet, no inline styles', function () {
     $html = bh_browser('admin')->request('GET', '/admin/marketplace')->body;
     assert_contains('class="bh-mk"', $html);
-    assert_contains('bh-mk-head', $html);
+    assert_contains('bh-page-head', $html);
     assert_contains('?tab=themes', $html, 'an admin sees the Themes tab');
     assert_not_contains('marketplace.css', $html);
     assert_not_contains('data-csrf="', substr($html, strpos($html, 'id="mk-root"'), 400), 'the gateway client carries the token');

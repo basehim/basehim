@@ -416,3 +416,101 @@ $tables->register('media.library', [
     'bulk_actions' => ['delete'],
     'search_placeholder' => 'Search files…',
 ]);
+
+// ---------------------------------------------------------------------------
+// Apps (1.2.85): the installed apps, /admin/apps. Only apps core registered
+// (ZIP upload, marketplace, Dev Tools) are listed — see AppService::register().
+// The page runs the actions over the AJAX gateway (apps.bulk, apps.consent,
+// apps.consent_save) from the table's bh:dt-bulk and bh:dt-action events.
+// ---------------------------------------------------------------------------
+$appStates = \App\Services\Table\AppTableProvider::STATES;
+$appSources = ['upload' => 'Upload', 'marketplace' => 'Marketplace', 'devtools' => 'Dev Tools', 'legacy' => 'Earlier install'];
+
+$tables->register('apps.installed', [
+    'label'        => 'Apps',
+    'capability'   => 'manage_apps',
+    'area'         => '/admin/apps',
+    'provider'     => \App\Services\Table\AppTableProvider::class,
+    'default_sort' => 'name_az',
+    'page_sizes'   => [20, 50, 100],
+    'columns'      => [
+        ['id' => 'thumb', 'label' => 'Icon', 'can_hide' => false, 'card' => 'media', 'render' => static function (array $row): string {
+            $i = $row['icon'] ?? ['type' => 'none', 'value' => ''];
+            $inner = match ($i['type'] ?? 'none') {
+                'image' => '<img src="' . htmlspecialchars((string) $i['value'], ENT_QUOTES) . '" alt="" loading="lazy">',
+                'glyph' => icon((string) $i['value'], 'w-5 h-5'),
+                'fa'    => '<i class="fa ' . htmlspecialchars((string) $i['value'], ENT_QUOTES) . '" aria-hidden="true"></i>',
+                default => icon('puzzle-piece', 'w-5 h-5'),
+            };
+            return '<span class="bh-app-icon' . (($i['type'] ?? '') === 'image' ? ' bh-app-icon--img' : '') . '">' . $inner . '</span>';
+        }],
+        ['id' => 'title', 'label' => 'App', 'can_hide' => false, 'card' => 'title', 'sortable' => ['name_az', 'name_za'],
+         'render' => static function (array $row): string {
+            $h = '<span class="bh-dt-title">' . htmlspecialchars((string) $row['name'], ENT_QUOTES) . '</span>';
+            if (($row['problem'] ?? '') !== '') {
+                $h .= '<span class="bh-app-problem">' . htmlspecialchars((string) $row['problem'], ENT_QUOTES) . '</span>';
+            } elseif ($row['status'] === 'missing') {
+                $h .= '<span class="bh-app-problem">Its folder content/apps/' . htmlspecialchars((string) $row['slug'], ENT_QUOTES) . ' was renamed or deleted. Upload the app again to restore it.</span>';
+            } elseif (($row['description'] ?? '') !== '') {
+                $h .= '<span class="bh-dt-sub bh-app-desc">' . htmlspecialchars((string) $row['description'], ENT_QUOTES) . '</span>';
+            }
+            return $h;
+        }],
+        ['id' => 'status', 'label' => 'Status', 'card' => 'under', 'align' => 'center',
+         'filter' => ['field' => 'status', 'in' => array_keys($appStates), 'labels' => $appStates],
+         'render' => static function (array $row) use ($appStates): string {
+            $s = (string) $row['status'];
+            [$tone, $ic] = match ($s) {
+                'active'  => ['green', 'check-circle'],
+                'consent', 'invalid' => ['amber', 'exclamation-triangle'],
+                'failed', 'missing'  => ['red', 'exclamation-circle'],
+                default   => ['gray', null],
+            };
+            return '<span class="bh-badge bh-badge--' . $tone . '">' . ($ic ? icon($ic, '') : '') . htmlspecialchars($appStates[$s] ?? ucfirst($s), ENT_QUOTES) . '</span>';
+        }],
+        ['id' => 'version', 'label' => 'Version', 'card' => 'meta', 'card_icon' => 'tag', 'responsive' => 'tablet-up',
+         'render' => static fn(array $row): string => '<span class="bh-dt-sub">' . htmlspecialchars('v' . $row['version'], ENT_QUOTES) . '</span>'],
+        ['id' => 'permissions', 'label' => 'Permissions', 'card' => 'row', 'responsive' => 'tablet-up',
+         'render' => static function (array $row): string {
+            $declared = $row['declared'] ?? [];
+            if ($declared === []) return '<span class="bh-dt-sub">None needed</span>';
+            $granted = array_flip($row['granted'] ?? []);
+            $chips = '';
+            foreach (array_slice($declared, 0, 2) as $p) {
+                $off = $row['consented'] && !isset($granted[$p]);
+                $chips .= '<span class="bh-app-perm' . ($off ? ' is-off' : '') . '"' . ($off ? ' title="Withheld"' : '') . '>' . htmlspecialchars($p, ENT_QUOTES) . '</span>';
+            }
+            if (count($declared) > 2) $chips .= '<span class="bh-dt-sub">+' . (count($declared) - 2) . '</span>';
+            return '<span class="bh-app-perms">' . $chips . '</span>';
+        }],
+        ['id' => 'scan', 'label' => 'Security scan', 'card' => 'hide', 'responsive' => 'desktop-only',
+         'render' => static function (array $row): string {
+            if (empty($row['scanned'])) return '<span class="bh-dt-sub">Not scanned</span>';
+            $n = (int) $row['scan_high'] + (int) $row['scan_medium'];
+            if ($n === 0) return '<span class="bh-app-scan">' . icon('shield-check', 'w-4 h-4') . 'Clean</span>';
+            return '<span class="bh-app-scan is-flagged">' . icon('exclamation-triangle', 'w-4 h-4') . $n . ' to review</span>';
+        }],
+        ['id' => 'source', 'label' => 'Installed from', 'card' => 'hide', 'responsive' => 'desktop-only',
+         'render' => static fn(array $row): string => '<span class="bh-dt-sub">' . htmlspecialchars($appSources[$row['source']] ?? 'Earlier install', ENT_QUOTES) . '</span>'],
+        ['id' => 'developer', 'label' => 'Developer', 'card' => 'hide', 'default_visible' => false, 'responsive' => 'desktop-only',
+         'render' => static fn(array $row): string => '<span class="bh-dt-sub">' . htmlspecialchars($row['developer'] !== '' ? $row['developer'] : '—', ENT_QUOTES) . '</span>'],
+        ['id' => 'installed', 'label' => 'Installed', 'align' => 'right', 'card' => 'hide', 'responsive' => 'desktop-only',
+         'default_visible' => false, 'sortable' => ['newest', 'oldest'],
+         'render' => static function (array $row): string {
+            $dt = Time::local($row['created_at'] ?? null);
+            return $dt === null ? '' : '<span class="bh-dt-date">' . htmlspecialchars($dt->format(Time::dateFormat()), ENT_QUOTES) . '</span>';
+        }],
+    ],
+    'actions' => [
+        ['id' => 'activate', 'label' => 'Activate', 'icon' => 'bolt', 'tone' => 'publish', 'when' => ['inactive', 'consent', 'invalid']],
+        ['id' => 'deactivate', 'label' => 'Deactivate', 'icon' => 'power', 'when' => ['active', 'failed']],
+        ['id' => 'permissions', 'label' => 'Permissions', 'icon' => 'shield-check', 'flag' => 'permissions', 'bulk' => false, 'event' => true],
+        ['id' => 'retry', 'label' => 'Check again', 'icon' => 'arrow-path', 'flag' => 'retry', 'bulk' => false],
+        ['id' => 'report', 'label' => 'View report', 'icon' => 'document-magnifying-glass', 'flag' => 'report', 'href' => '/admin/apps/{key}/health'],
+        ['id' => 'logs', 'label' => 'Logs', 'icon' => 'document-text', 'flag' => 'files', 'href' => '/admin/apps/{key}/logs'],
+        ['id' => 'delete', 'label' => 'Delete', 'icon' => 'trash', 'danger' => true,
+         'confirm' => 'Delete {n} app{s}? The files, settings and permissions go with it, and this can\'t be undone.'],
+    ],
+    'search_placeholder' => 'Search apps…',
+]);
+unset($appStates, $appSources);

@@ -93,6 +93,7 @@ about the request, so a user who reports an error can be matched to the log.
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | A POST that is not `application/json` (UTF-8) |
 | 422 | `VALIDATION_FAILED` | Input does not match the schema |
 | 429 | `RATE_LIMITED` | Too many requests; see `Retry-After` |
+| 403 | `APP_PERMISSION_MISSING` | An app's handler used something its app hasn't been allowed (`db()` without `db.raw`). The message names the app and the permission; allow it under Apps → Permissions (1.2.85) |
 | 500 | `INTERNAL_ERROR` | The handler threw something unexpected (details are logged, never sent) |
 | 503 | `SERVICE_UNAVAILABLE` | The rate-limit store is down and the action fails closed |
 
@@ -641,6 +642,9 @@ POST action also needs the CSRF token; every one is rate-limited.
 | `apps.market_consent` | GET | `manage_apps` | The permissions an installed app asks for before it is turned on: `{needs_consent, permissions: [{key, label, description, risk}], unknown, granted}` |
 | `apps.market_activate` | POST | `manage_apps` | Turn on an installed app. With `consent: true`, `permissions` (the keys to grant; empty withholds all) is recorded first; without it, an app that still needs approval answers `{active: false, needs_consent: true}`. Answers `{active, withheld_count}`; requirements not met: `ACTIVATION_FAILED` (422) |
 | `themes.market_activate` | POST | `manage_themes` | Make an installed theme the active one |
+| `apps.consent` | GET | `manage_apps` | The permission window for an installed app (1.2.85): `{name, active, consented, needs_consent, permissions: [{key, label, description, friendly, risk}], unknown, granted, reasons, checks: {source, scanned, findings, code_ok}}`. `apps.market_consent` answers the same |
+| `apps.consent_save` | POST | `manage_apps` | Record which permissions are granted (`permissions`: the keys; empty withholds all); with `activate: true`, turn the app on too. Answers `{active, withheld_count}` |
+| `apps.bulk` | POST | `manage_apps` | The Apps table's actions: `action` (activate, deactivate, retry, delete) on `ids`. Each app is handled on its own: `{action, done, failed, results: [{id, slug, ok, message, needs_consent?}]}` |
 
 The full list on a running site — core's and every active app's, with their
 input fields — is under **API → Reference → AJAX actions**.

@@ -295,7 +295,7 @@ PHP);
         assert_contains('bhiso-off — view report', $dash->body, 'the admin is told');
         assert_not_contains('bhiso-off — view report', bh_browser('editor')->request('GET', '/admin/dashboard')->body, 'only those who manage apps');
         $apps = $admin->request('GET', '/admin/apps');
-        assert_contains('Disabled — error', $apps->body);
+        assert_contains('Switched off</span>', $apps->body, 'its row shows it switched off');
 
         // The app's own admin screen leads to its report; its public page is 503.
         $screen = $admin->request('GET', '/admin/bhiso-off');

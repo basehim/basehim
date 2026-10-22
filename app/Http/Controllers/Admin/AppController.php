@@ -18,20 +18,21 @@ class AppController extends Controller
     {
         /** @var AppService $apps */
         $apps = $this->app->make(AppService::class);
+        // Bring installed apps up to date with their files, and switch off any
+        // whose folder was deleted or renamed by hand (1.2.85). Folders that
+        // were never installed are only counted for the note.
         $apps->sync();
-        $installed = $apps->installed();
-        $available = $apps->scan();
-        $session = $this->app->make(Session::class);
+        $apps->reconcile();
+        // Apps installed before the scan existed get it now, a few per visit.
+        $apps->scanUnscanned(5);
 
         return $this->view('apps.index', [
-            'title'       => 'Apps',
-            'currentUser' => $this->user(),
-            'installed'   => $installed,
-            'available'   => $available,
-            'meta'        => $apps->metaAll(),
-            'health'      => $apps->guard()?->store()->all() ?? [],
-            'csrf'        => $session->csrfToken(),
-            'canUpload'   => class_exists(\ZipArchive::class),
+            'title'        => 'Apps',
+            'currentUser'  => $this->user(),
+            'unregistered' => $apps->unregisteredFolders(),
+            'installedCount' => count($apps->installed()),
+            'csrf'         => $this->app->make(Session::class)->csrfToken(),
+            'canUpload'    => class_exists(\ZipArchive::class),
         ]);
     }
 

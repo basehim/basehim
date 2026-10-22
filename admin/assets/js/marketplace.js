@@ -16,6 +16,8 @@
  * components only (.bh-mk-*, .bh-btn, .bh-badge, .bh-empty); busy buttons
  * use bhBusy(), the one shared spinner.
  *
+ * The permission step is the shared window in app-consent.js (1.2.85).
+ *
  * Flow: Install downloads and installs the package; the button then becomes
  * Activate. A theme is applied directly. An app that declares permissions
  * shows the consent step in its details window first, and is activated with
@@ -448,62 +450,25 @@
             }
             if (!IS_APPS) Object.keys(items).forEach(function (k) { if (k !== slug && items[k].active) { items[k].active = false; refresh(k); } });
             t.active = true;
-            if (consentSlug === slug) { consentSlug = null; bhItemModal.close(); }
+            consentSlug = null;
             refresh(slug);
             var withheld = d && d.withheld_count ? ' ' + d.withheld_count + ' permission' + (d.withheld_count === 1 ? '' : 's') + ' withheld.' : '';
             toast('“' + t.name + '” is ' + (IS_APPS ? 'active.' : 'now your theme.') + withheld, 'success');
         }).catch(function (err) {
             setBusy(slug, null);
-            if (consentSlug === slug) modalState(slug, ic('exclamation-triangle', '') + esc(err.message), 'error');
-            else toast(err.message, 'error');
+            if (consentSlug !== slug) toast(err.message, 'error');   // the permission window shows its own
             throw err;
         });
     }
 
-    /* ---------- consent, inside the app's details window ---------- */
-    function riskBadge(r) {
-        var tone = { low: 'green', medium: 'amber', high: 'red' }[r] || 'gray';
-        var word = { low: 'Low risk', medium: 'Medium risk', high: 'High risk' }[r] || 'Info';
-        return '<span class="bh-badge bh-badge--' + tone + '">' + word + '</span>';
-    }
+    /* ---------- consent: the shared permission window (app-consent.js) ---------- */
     function renderConsent(slug, d) {
-        if (!window.bhItemModal) return;
+        if (!window.BasehimAppConsent || !window.bhItemModal) return;
         if (bhItemModal.current() !== slug) open(slug);
         consentSlug = slug;
-        var t = items[slug] || { name: (d && d.name) || slug };
-        var rows = ((d && d.permissions) || []).map(function (pp, i) {
-            var id = 'mk-perm-' + i;
-            return '<li><label class="bh-mk-perm" for="' + id + '">'
-                 + '<span class="bh-mk-perm__main"><span class="bh-mk-perm__top"><span class="bh-mk-perm__label">' + esc(pp.label || pp.key) + '</span>' + riskBadge(pp.risk) + '</span>'
-                 + '<span class="bh-mk-perm__desc">' + esc(pp.description || '') + '</span></span>'
-                 + '<span class="bh-switch"><input type="checkbox" role="switch" class="bh-switch__input" id="' + id + '" name="perm" value="' + esc(pp.key) + '" checked>'
-                 + '<span class="bh-switch__track" aria-hidden="true"></span></span>'
-                 + '</label></li>';
-        }).join('');
-        var unknown = (d && d.unknown) || [];
-        ['bh-im-chips', 'bh-im-stats', 'bh-im-desc', 'bh-im-facts'].forEach(function (id) { var el = $(id); if (el) el.classList.add('hidden'); });
-        $('bh-im-extra').innerHTML =
-            '<p class="bh-mk-consent__lead">“' + esc(t.name) + '” asks for the permissions below. Leave on the ones you’re happy to grant; you can change them later under Apps.</p>'
-          + '<div class="bh-note">' + ic('shield-check', '') + '<span>Only grant apps you trust. Each permission is one the app asked for, and an app with fewer may not work fully.</span></div>'
-          + '<ul class="bh-mk-perms">' + rows + '</ul>'
-          + (unknown.length ? '<div class="bh-note bh-note--warn mt-3">' + ic('exclamation-triangle', '') + '<span>Not recognised, so they grant nothing: ' + unknown.map(esc).join(', ') + '.</span></div>' : '');
-        bhItemModal.state('');
-        bhItemModal.action(
-            '<button type="button" class="bh-btn bh-btn--secondary" data-consent-none>Activate without them</button>'
-          + '<button type="button" class="bh-btn bh-btn--primary" data-consent-allow>' + ic('check') + 'Allow and activate</button>'
-        );
-        var allow = document.querySelector('#bh-im-action [data-consent-allow]');
-        if (allow) allow.focus();
-    }
-    function submitConsent(btn, granted) {
-        var slug = consentSlug; if (!slug) return;
-        var btns = document.querySelectorAll('#bh-im-action button');
-        Array.prototype.forEach.call(btns, function (b) { b.disabled = true; });
-        if (window.bhBusy) bhBusy(btn, true, 'Activating…');
-        bhItemModal.state('');
-        doActivate(slug, granted).catch(function () {
-            if (window.bhBusy) bhBusy(btn, false);
-            Array.prototype.forEach.call(btns, function (b) { b.disabled = false; });
+        BasehimAppConsent.show({
+            slug: slug, data: d, mode: 'activate',
+            submit: function (granted) { return doActivate(slug, granted); }
         });
     }
 
@@ -530,11 +495,6 @@
     if (modalHost) modalHost.addEventListener('click', function (e) {
         if (onClick(e)) return;
         var el;
-        if ((el = e.target.closest('[data-consent-none]'))) { submitConsent(el, []); return; }
-        if ((el = e.target.closest('[data-consent-allow]'))) {
-            submitConsent(el, Array.prototype.map.call(modalHost.querySelectorAll('input[name="perm"]:checked'), function (c) { return c.value; }));
-            return;
-        }
         if ((el = e.target.closest('[data-mk-tag]'))) { bhItemModal.close(); setTag(el.getAttribute('data-mk-tag')); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     });
 

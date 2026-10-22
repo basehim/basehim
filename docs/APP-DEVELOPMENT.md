@@ -289,6 +289,16 @@ Your own tables should use `$this->table('things')` → `app_myapp_things`.
 ZIP the app folder with `app.json` at the root (or one folder deep). Install via
 Admin → Apps → Upload, or publish through CloudHim.
 
+**A folder is not an install (1.2.85).** An app is installed when core
+registers it — from a ZIP upload, the marketplace, or Basehim Dev Tools
+through `AppService::register($slug, 'devtools')` — which records it, runs
+`onInstall()`, the security scan and the code check. A folder copied into
+`content/apps` by FTP or a file manager is not listed, loaded or activatable;
+Apps names it in a note. The folder must be named after the manifest's `slug`.
+If an installed app's folder is renamed or deleted, the app is switched off and
+listed as "Files missing" (its settings and data are kept); upload it again to
+restore it. Installs before 1.2.85 are kept as they are (`source` = `legacy`).
+
 Once published through CloudHim, every site with the app installed sees a new
 version on **Admin → Updates** (and in the sidebar's update count) at its next
 check, with that version's notes, and can install it on its own or with

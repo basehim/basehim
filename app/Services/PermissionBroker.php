@@ -238,6 +238,39 @@ class PermissionBroker
         return false;
     }
 
+    /**
+     * Each permission in plain words, for the permission window (1.2.85): what
+     * it lets the app do, said calmly and truthfully, without jargon. The
+     * catalogue's own description stays for the technical screens.
+     */
+    public const FRIENDLY = [
+        'posts.read'        => 'See your posts, including drafts.',
+        'posts.write'       => 'Write new posts and edit existing ones.',
+        'posts.delete'      => 'Move posts to the trash or delete them.',
+        'pages.read'        => 'See your pages, including drafts.',
+        'pages.write'       => 'Create pages and edit existing ones.',
+        'pages.delete'      => 'Move pages to the trash or delete them.',
+        'media.read'        => 'See the files in your media library.',
+        'media.write'       => 'Add files to your media library and edit their details.',
+        'media.delete'      => 'Remove files from your media library.',
+        'users.read'        => 'See the people who have accounts and their roles. Passwords are never shared.',
+        'users.write'       => 'Add accounts and change existing ones.',
+        'users.delete'      => 'Remove accounts.',
+        'comments.read'     => 'See comments on your site.',
+        'comments.write'    => 'Post comments.',
+        'comments.moderate' => 'Approve, unapprove and remove comments.',
+        'terms.read'        => 'See your categories and tags.',
+        'terms.write'       => 'Add, rename and remove categories and tags.',
+        'menus.read'        => 'See your navigation menus.',
+        'menus.write'       => 'Change your navigation menus.',
+        'settings.read'     => 'See your site\'s settings.',
+        'settings.write'    => 'Change your site\'s settings.',
+        'mail.send'         => 'Send email from your site, such as notifications.',
+        'http.outbound'     => 'Connect to other websites and services.',
+        'schedule'          => 'Do routine work in the background, on a schedule.',
+        'db.raw'            => 'Store and read its own data in your site\'s database. It can reach the rest of the database too.',
+    ];
+
     /** Catalogue entry, or a generated one for an unknown permission. */
     public function describe(string $permission): array
     {
@@ -252,6 +285,7 @@ class PermissionBroker
         return [
             'key' => $permission, 'label' => $entry[0],
             'description' => $entry[1], 'risk' => $entry[2],
+            'friendly' => self::FRIENDLY[$permission] ?? $entry[1],
         ];
     }
 

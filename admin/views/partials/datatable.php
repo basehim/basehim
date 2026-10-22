@@ -119,7 +119,7 @@ $__bulkMeta = [
     <script type="application/json" data-dt-config><?= json_encode($__cfg, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 
     <!-- Toolbar -->
-    <div class="bh-card--pad" style="position:relative;border-bottom:1px solid #e2e8f0">
+    <div class="bh-card--pad bh-dt-top">
         <div class="bh-dt-toolbar">
             <label class="bh-dt-search">
                 <?= icon('magnifying-glass') ?>
@@ -134,7 +134,7 @@ $__bulkMeta = [
             <select class="bh-select bh-select--auto" data-dt-filter="status">
                 <option value="">All status</option>
                 <?php foreach ($__statusCol['filter']['in'] as $__opt): ?>
-                <option value="<?= htmlspecialchars($__opt) ?>" <?= (($__filters['status'] ?? '') === $__opt) ? 'selected' : '' ?>><?= htmlspecialchars(ucfirst($__opt)) ?></option>
+                <option value="<?= htmlspecialchars($__opt) ?>" <?= (($__filters['status'] ?? '') === $__opt) ? 'selected' : '' ?>><?= htmlspecialchars($__statusCol['filter']['labels'][$__opt] ?? ucfirst($__opt)) ?></option>
                 <?php endforeach; ?>
             </select>
             <?php endif; ?>

@@ -718,20 +718,22 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
 .bh-mk { @apply text-slate-700; }
 .bh-mk [hidden], .bh-im [hidden] { display: none !important; }
 
-/* Header: the dashboard greeting's panel, with the page's icon. */
-.bh-mk-head {
+/* Page header (1.2.84; shared since 1.2.85 as .bh-page-head — Marketplace,
+   Apps): the dashboard greeting's panel, with the page's icon and actions. */
+.bh-page-head {
     @apply relative mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5;
     @apply bg-gradient-to-r from-accent-50/80 via-white to-white;
 }
-.bh-mk-head::before {
+.bh-page-head::before {
     content: "";
     @apply pointer-events-none absolute -left-10 -top-16 h-44 w-44 rounded-full bg-accent-100/70 blur-3xl;
 }
-.bh-mk-head__text { @apply relative flex min-w-0 flex-1 items-center gap-3.5 sm:gap-4; }
-.bh-mk-head__icon { @apply grid h-12 w-12 flex-none place-items-center rounded-2xl bg-accent-600 text-white shadow-sm shadow-accent-900/20 ring-4 ring-white; }
-.bh-mk-head__title { @apply m-0 text-xl font-semibold leading-tight text-slate-900; }
-.bh-mk-head__sub { @apply m-0 mt-1 text-sm text-slate-500; }
-.bh-mk-head__back { @apply relative; }
+.bh-page-head__text { @apply relative flex min-w-0 flex-1 items-center gap-3.5 sm:gap-4; }
+.bh-page-head__icon { @apply grid h-12 w-12 flex-none place-items-center rounded-2xl bg-accent-600 text-white shadow-sm shadow-accent-900/20 ring-4 ring-white; }
+.bh-page-head__title { @apply m-0 text-xl font-semibold leading-tight text-slate-900; }
+.bh-page-head__sub { @apply m-0 mt-1 text-sm text-slate-500; }
+.bh-page-head__back { @apply relative; }
+.bh-page-head__actions { @apply relative flex flex-wrap gap-2; }
 
 /* Toolbar: tabs, search and sort in one row on a card. */
 .bh-mk-bar { @apply mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-card; }
@@ -835,11 +837,13 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
 
 /* Phones: a compact toolbar and smaller artwork. */
 @media (max-width: 639px) {
-    .bh-mk-head { @apply mb-3 p-4; }
-    .bh-mk-head__icon { @apply h-10 w-10 rounded-xl; }
-    .bh-mk-head__title { @apply text-lg; }
-    .bh-mk-head__sub { @apply text-[0.8125rem] leading-snug; }
-    .bh-mk-head__back { @apply h-8 w-full rounded-lg text-[0.8125rem]; }
+    .bh-page-head { @apply mb-3 p-4; }
+    .bh-page-head__icon { @apply h-10 w-10 rounded-xl; }
+    .bh-page-head__title { @apply text-lg; }
+    .bh-page-head__sub { @apply text-[0.8125rem] leading-snug; }
+    .bh-page-head__back { @apply h-8 w-full rounded-lg text-[0.8125rem]; }
+    .bh-page-head__actions { @apply w-full flex-nowrap; }
+    .bh-page-head__actions .bh-btn { @apply h-9 min-w-0 flex-1 px-3 text-[0.8125rem]; }
     .bh-mk-bar { @apply gap-1.5; }
     .bh-mk-tabs { @apply w-full; }
     .bh-mk-tab { @apply flex-1 justify-center; }
@@ -874,6 +878,46 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
     .bh-mk-card__foot > .bh-badge { @apply hidden; }
     .bh-mk-ghost .bh-mk-card__foot .bh-dskel__bone { @apply w-full; }
 }
+
+/* ═══ Apps (1.2.85) ═══════════════════════════════════════════════════════
+   /admin/apps: admin/views/apps/index.php and admin/assets/js/apps.js. The
+   page header above, an upload card, a note about folders that aren't
+   installed, and the core Data Table (apps.installed, routes/tables.php). */
+.bh-apps [hidden] { display: none !important; }
+.bh-apps-upload { @apply mb-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5; }
+.bh-apps-upload__form { @apply flex flex-col gap-3 sm:flex-row sm:items-end; }
+.bh-apps-upload__drop { @apply flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600 transition-colors hover:border-accent-400 hover:bg-accent-50/50; }
+.bh-apps-upload__drop svg { @apply h-6 w-6 flex-none text-accent-600; }
+.bh-apps-upload__drop input { @apply sr-only; }
+.bh-apps-upload__name { @apply block truncate font-medium text-slate-900; }
+.bh-apps-upload__hint { @apply block text-xs text-slate-500; }
+.bh-apps-note { @apply mb-4; }
+.bh-apps-note strong { @apply font-semibold text-slate-900; }
+.bh-apps-note code { @apply whitespace-nowrap; }
+
+/* An app's screen asking for a permission it needs (apps/permission-needed). */
+.bh-perm-gate { @apply grid min-h-[60vh] place-items-center py-6; }
+.bh-perm-gate__card { @apply flex w-full max-w-xl flex-col items-center rounded-2xl border border-slate-200/80 bg-white px-6 py-8 text-center shadow-card sm:px-10; }
+.bh-perm-gate__icon { @apply mb-4 h-16 w-16 rounded-2xl; }
+.bh-perm-gate__icon svg { @apply h-7 w-7; }
+.bh-perm-gate__title { @apply m-0 text-lg font-semibold text-slate-900 sm:text-xl; }
+.bh-perm-gate__text { @apply m-0 mt-2 text-sm leading-relaxed text-slate-600; }
+.bh-perm-gate__text strong { @apply font-semibold text-slate-900; }
+.bh-perm-gate__why { @apply mt-3 justify-center text-left; }
+.bh-perm-gate__hint { @apply m-0 mt-3 text-[0.8125rem] text-slate-500; }
+.bh-perm-gate__actions { @apply mt-5 flex flex-wrap justify-center gap-2; }
+
+/* Table cells. */
+.bh-app-icon { @apply grid h-10 w-10 flex-none place-items-center overflow-hidden rounded-xl bg-accent-50 text-accent-600 ring-1 ring-inset ring-slate-900/5; }
+.bh-app-icon--img { @apply bg-white; }
+.bh-app-icon img { @apply h-full w-full object-cover; }
+.bh-dt .bh-app-desc { @apply line-clamp-2 max-w-md; display: -webkit-box; }
+.bh-app-problem { @apply mt-0.5 block max-w-xl text-[0.8125rem] leading-snug text-red-700 line-clamp-2; }
+.bh-app-perms { @apply inline-flex max-w-[15rem] flex-wrap items-center gap-1; }
+.bh-app-perm { @apply whitespace-nowrap rounded bg-slate-100 px-1.5 py-px font-mono text-[0.6875rem] text-slate-700; }
+.bh-app-perm.is-off { @apply text-slate-400 line-through; }
+.bh-app-scan { @apply inline-flex items-center gap-1 whitespace-nowrap text-[0.8125rem] text-emerald-700; }
+.bh-app-scan.is-flagged { @apply text-amber-700; }
 
 /* ── Details window (partials/item-modal.php; inline styles until 1.2.84) */
 .bh-im { @apply m-auto flex-col overflow-hidden rounded-2xl border-0 bg-white p-0 text-slate-900 shadow-pop; width: min(42rem, calc(100vw - 2rem)); max-height: min(46rem, calc(100vh - 2rem)); }
@@ -924,6 +968,21 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
     .bh-im__foot > [data-close] { @apply h-11 w-full; }
 }
 
+/* The permission window, friendlier (1.2.85): what was checked, plain-words
+   permissions, the app's own reasons, a quiet "Sensitive" tag. */
+.bh-consent-checks { @apply mb-3 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-3; }
+.bh-consent-checks__title { @apply m-0 mb-1.5 flex items-center gap-1.5 text-[0.8125rem] font-semibold text-emerald-800; }
+.bh-consent-checks__title svg { @apply h-4 w-4; }
+.bh-consent-checks ul { @apply m-0 grid list-none gap-1 p-0; }
+.bh-consent-checks li { @apply flex items-start gap-2 text-[0.8125rem] leading-snug text-slate-700; }
+.bh-consent-checks li svg { @apply mt-px h-4 w-4 flex-none text-emerald-600; }
+.bh-consent-checks li.is-note svg { @apply text-slate-400; }
+.bh-consent-checks a { @apply font-medium text-accent-700 hover:underline; }
+.bh-consent-tag { @apply rounded-full bg-slate-100 px-2 py-px text-[0.6875rem] font-medium text-slate-500; }
+.bh-consent-why { @apply mt-1 flex items-start gap-1.5 text-[0.8125rem] leading-snug text-accent-800; }
+.bh-consent-why svg { @apply mt-px h-4 w-4 flex-none text-accent-500; }
+.bh-consent-unknown { @apply mt-3 flex items-start gap-1.5 text-xs leading-snug text-slate-500; }
+.bh-consent-unknown svg { @apply h-4 w-4 flex-none; }
 /* Consent: the permissions an app asks for, as switches (like Settings). */
 .bh-mk-consent__lead { @apply m-0 mb-3 text-sm leading-relaxed text-slate-700; }
 .bh-mk-perms { @apply m-0 mt-3 list-none divide-y divide-slate-100 rounded-xl border border-slate-200 p-0; }

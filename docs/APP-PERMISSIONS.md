@@ -88,6 +88,20 @@ The exceptions are `db()`, `schema()` and `agents()` on the base class, which
 *do* throw. Every caller of those expects a real object and would fatal on a
 null anyway, so a clear exception is the more useful failure.
 
+Since 1.2.85 that exception is `App\Core\AppPermissionMissing` (a
+`RuntimeException`, so existing `catch` blocks still work), and core answers it
+for you instead of showing an error:
+
+- **An admin screen of your app** shows *"{App} needs one more permission"*
+  with the permission window open. Someone who manages apps allows it and the
+  page reloads, working; anyone else is told to ask an administrator.
+- **Your app's AJAX action** answers `403 APP_PERMISSION_MISSING` with a
+  sentence the page can show, not a 500.
+- **Your `boot()`** needing it: the app is *not* switched off as broken. It
+  doesn't start this request, its row on Apps reads "Needs approval" with the
+  reason, and its admin screens ask for the permission as above. It starts
+  normally once allowed.
+
 Degrade gracefully rather than tripping a denial:
 
 ```php
@@ -98,8 +112,24 @@ if ($this->allowed('mail.send')) {
 
 ## Consent
 
-Activating an app that declares permissions sends the operator to a consent
-screen first. They can withhold individual items — the app then runs with less,
+Activating an app that declares permissions shows the permission window first
+(1.2.85: inside the page, on Apps and in the Marketplace). It is written to be
+reassuring and truthful: what the app came from and the checks it passed (the
+security scan, the code check), each permission in plain words, and — if you
+provide them — your own reasons. Give one per permission in `app.json`:
+
+```json
+"permission_reasons": {
+    "db.raw":    "Keeps your forms and the entries people send in its own tables.",
+    "mail.send": "Emails you when a form is submitted."
+}
+```
+
+Plain text, up to 200 characters each; they appear under the permission as
+"why". High-risk permissions carry a quiet "Sensitive" tag rather than a red
+warning.
+
+Before 1.2.85 the operator was sent to a separate consent screen first. They can withhold individual items — the app then runs with less,
 which may break parts of it. That is the operator's call, and each refusal is
 logged so the cause is findable.
 

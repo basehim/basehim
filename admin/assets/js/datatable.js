@@ -154,6 +154,8 @@
          *   bh:dt-bulk    (out, cancelable) before a bulk action is submitted as
          *                 a form: { table, action, ids }. preventDefault() to
          *                 run it yourself (say, over AJAX).
+         *   bh:dt-action  (out)  a declared action with `event: true` (1.2.85):
+         *                 { table, action, id, key, row } — the page runs it.
          *   bh:dt-query   (in)   { search?, filters?, sort? } — merged, page 1, load
          *   bh:dt-reload  (in)   { clearSelection? } — reload the current page
          */
@@ -401,7 +403,13 @@
             if (row.link && row.link.url) items.push({ label: row.link.live ? 'View' : 'Preview', icon: 'eye', href: row.link.url, newTab: true });
             if (cfg.editBase) items.push({ label: 'Edit', icon: 'pencil-square', href: cfg.editBase.replace('{id}', row.id) });
             if (payload.quick_edit) items.push({ label: 'Quick Edit', icon: 'bolt', quick: true, id: row.id });
-            var bulk = payload.bulk_actions || [];
+            // Declared actions (1.2.85) replace the built-in ids below.
+            declared().forEach(function (a) {
+                if (!a.row || !offers(a, row.status, row.flags)) return;
+                if (a.href) items.push({ label: a.label, icon: a.icon || 'arrow-top-right-on-square', href: base() + a.href.replace('{id}', encodeURIComponent(row.id)).replace('{key}', encodeURIComponent(row.key || '')) });
+                else items.push({ label: a.label, icon: a.icon || 'bolt', danger: a.danger, declared: a, id: row.id, row: row });
+            });
+            var bulk = declared().length ? [] : (payload.bulk_actions || []);
             if (bulk.indexOf('publish') !== -1 && row.status !== 'published') items.push({ label: 'Publish', icon: 'arrow-up-tray', action: 'publish', id: row.id });
             if (bulk.indexOf('draft') !== -1 && row.status === 'published') items.push({ label: 'Move to Draft', icon: 'arrow-down-tray', action: 'draft', id: row.id });
             if (bulk.indexOf('approve') !== -1 && row.status !== 'approved') items.push({ label: 'Approve', icon: 'arrow-up-tray', action: 'approve', id: row.id });
@@ -422,6 +430,8 @@
                     if (it.newTab) { node.target = '_blank'; node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener'); node.addEventListener('click', closeMenu); }
                 }
                 else if (it.quick) node.addEventListener('click', function () { closeMenu(); quickEdit.open(row, btn); });
+                else if (it.declared && it.declared.event) node.addEventListener('click', function () { closeMenu(); emit('bh:dt-action', { table: cfg.table, action: it.declared.id, id: it.id, key: row.key || null, row: row }); });
+                else if (it.declared) node.addEventListener('click', function () { closeMenu(); runBulk(it.declared.id, [it.id], [row]); });
                 else node.addEventListener('click', function () { closeMenu(); runBulk(it.action, [it.id]); });
                 menu.appendChild(node);
             });
@@ -949,8 +959,13 @@
             var statuses = ids.map(function (id) { return selected[id]; });
             var anyPublished = statuses.indexOf('published') !== -1;
             var anyUnpublished = statuses.some(function (s) { return s !== 'published'; });
-            var bulk = payload.bulk_actions || [];
+            var bulk = declared().length ? [] : (payload.bulk_actions || []);
             var btns = [];
+            declared().forEach(function (a) {
+                if (!a.bulk || a.href || a.event) return;
+                var ok = ids.filter(function (id) { return offers(a, selected[id], null); });
+                if (ok.length) btns.push([a.id, a.label + (ok.length < n ? ' (' + ok.length + ')' : ''), a.tone, ok]);
+            });
             if (bulk.indexOf('publish') !== -1 && anyUnpublished) btns.push(['publish', 'Publish', 'publish']);
             if (bulk.indexOf('draft') !== -1 && anyPublished) btns.push(['draft', 'Unpublish', 'neutral']);
             if (bulk.indexOf('approve') !== -1) btns.push(['approve', 'Approve', 'publish']);
@@ -959,7 +974,7 @@
             if (bulk.indexOf('delete') !== -1) btns.push(['delete', 'Delete', 'danger']);
             btns.forEach(function (b) {
                 var btn = el('button', 'bh-dt-bulkbtn bh-dt-bulkbtn--' + b[2], esc(b[1]));
-                btn.type = 'button'; btn.addEventListener('click', function () { runBulk(b[0], selectedIds()); });
+                btn.type = 'button'; btn.addEventListener('click', function () { runBulk(b[0], b[3] || selectedIds()); });
                 r.bulkActions.appendChild(btn);
             });
             var clear = el('button', 'bh-dt-bulkclear', 'Clear'); clear.type = 'button';
@@ -986,8 +1001,29 @@
             root.querySelectorAll('.bh-dt-rowcheck').forEach(function (cb) { cb.checked = on; });
             syncBulk(); syncSelectAll();
         }
-        function runBulk(action, ids) {
+        /** The admin's base path, for a declared action's href. */
+        function base() { return cfg.base || ''; }
+        /** The table's declared actions (1.2.85), or none. */
+        function declared() { return payload.actions || []; }
+        /** Whether a declared action applies to a row with this status / flags. */
+        function offers(a, status, flags) {
+            if (a.when && a.when.length && a.when.indexOf(String(status || '')) === -1) return false;
+            if (a.flag && flags && flags.indexOf(a.flag) === -1) return false;
+            if (a.flag && !flags) return true;   // bulk: the server checks each row
+            return true;
+        }
+        function runBulk(action, ids, rows) {
             if (!action || !ids || !ids.length || (!cfg.bulkEndpoint && !cfg.bulkEvents)) return;
+            var decl = declared().filter(function (a) { return a.id === action; })[0];
+            if (decl) {
+                if (decl.confirm && window.bhConfirm) {
+                    window.bhConfirm(decl.confirm.replace('{n}', ids.length).replace('{s}', ids.length === 1 ? '' : 's'), { danger: !!decl.danger, confirmLabel: decl.label })
+                        .then(function (ok) { if (ok) submitBulk(action, ids); });
+                    return;
+                }
+                submitBulk(action, ids);
+                return;
+            }
             if (action === 'delete' && window.bhConfirm) {
                 var dmsg = cfg.deleteConfirm ? cfg.deleteConfirm.replace('{n}', ids.length) : ('Move ' + ids.length + ' item(s) to trash?');
                 window.bhConfirm(dmsg).then(function (ok) { if (ok) submitBulk(action, ids); });

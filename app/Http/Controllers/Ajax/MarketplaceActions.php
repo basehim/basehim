@@ -65,7 +65,7 @@ final class MarketplaceActions
             'permissions'   => $broker->describeAll($broker->declared($slug)),
             'unknown'       => $broker->unknownDeclared($slug),
             'granted'       => $broker->grantedFor($slug),
-        ];
+        ] + $apps->consentContext($slug);
     }
 
     /**

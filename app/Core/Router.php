@@ -685,15 +685,30 @@ final class Router
             $params = $decoded;
 
             $this->current = $route;
+            $obLevel = ob_get_level();
             try {
                 $response = $this->runMiddleware($route['middleware'], $request, function ($req) use ($route, $params) {
                     return $this->callHandler($route['handler'], $req, $params);
                 });
             } catch (\Throwable $e) {
+                // Whatever the handler had half-rendered is dropped (1.2.86):
+                // a view that threw mid-way left its output buffers open, and
+                // that partial page — without the admin layout — reached the
+                // browser ahead of the page meant to answer the failure.
+                while (ob_get_level() > $obLevel) { if (!@ob_end_clean()) break; }
                 // An app's route failed: say which app, route and kind of
                 // failure in its own log, then let the error page answer
                 // (core's ErrorHandler: no details for visitors).
-                if (($route['owner'] ?? null) !== null) $this->logAppRouteFailure($route, $request, $e);
+                if (($route['owner'] ?? null) !== null) {
+                    $this->logAppRouteFailure($route, $request, $e);
+                    // The app needs a permission it hasn't been allowed
+                    // (1.2.85): ask for it on the spot instead of a 500.
+                    $pm = \App\Core\AppPermissionMissing::in($e);
+                    if ($pm !== null && ($answer = \App\Http\Controllers\Admin\AppPermissionPage::answer($request, $pm)) !== null) {
+                        $this->emit($answer);
+                        return;
+                    }
+                }
                 throw $e;
             }
 

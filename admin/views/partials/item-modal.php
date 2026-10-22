@@ -94,3 +94,6 @@ window.bhItemModal = (function () {
     };
 })();
 </script>
+<?php $__imBase = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : ''; ?>
+<?php // The permission window drawn inside this dialog (1.2.85; Apps and Marketplace). ?>
+<script src="<?= $__imBase ?>/admin/assets/js/app-consent.js?v=<?= urlencode(defined('BASEHIM_VERSION') ? (string) BASEHIM_VERSION : '1') ?>" defer></script>

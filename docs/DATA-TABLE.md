@@ -37,7 +37,7 @@ $this->addFilter('datatable.columns.content.posts', function (array $cols): arra
 | **Provider** | A thin adapter that maps the generic request onto a feature's existing `paginate()`. Core owns the SQL; the table service never does. |
 | **Preferences** | Per-user column visibility, order, page size and density, in `users.meta`. |
 
-The core tables in 1.2.54: `content.posts`, `content.pages`, `comments.list`.
+The core tables in 1.2.54: `content.posts`, `content.pages`, `comments.list`; since 1.2.85 also `apps.installed` (Apps).
 
 ## Adding a column to a core table
 
@@ -186,6 +186,34 @@ $tables->register('content.posts', [
 ]);
 ```
 
+### Declared actions (1.2.85)
+
+Instead of the built-in `bulk_actions` ids (publish, draft, approve, …), a table
+can declare its own `actions`. They build the row menu and the bulk bar:
+
+```php
+'actions' => [
+    ['id' => 'activate', 'label' => 'Activate', 'icon' => 'bolt', 'tone' => 'publish', 'when' => ['inactive']],
+    ['id' => 'permissions', 'label' => 'Permissions', 'icon' => 'shield-check', 'flag' => 'permissions', 'bulk' => false, 'event' => true],
+    ['id' => 'logs', 'label' => 'Logs', 'icon' => 'document-text', 'href' => '/admin/apps/{key}/logs'],
+    ['id' => 'delete', 'label' => 'Delete', 'icon' => 'trash', 'danger' => true, 'confirm' => 'Delete {n} app{s}?'],
+],
+```
+
+| Key | |
+|---|---|
+| `when` | Row statuses (`$row['status']`) the action applies to; empty means all. The bulk bar shows it when any selected row matches, and runs it on those rows. |
+| `flag` | A name the row must carry in `$row['row_flags']` (row menu only). |
+| `href` | A root-relative link; `{id}` and `{key}` (`$row['row_key']`) are filled in. Not a bulk action. |
+| `event` | Emit `bh:dt-action` `{table, action, id, key, row}` on the table instead of running it; the page handles it. |
+| `confirm` | Ask first; `{n}` is the count, `{s}` an "s" when it isn't one. |
+| `tone` | `publish`, `neutral` or `danger`, for the bulk button. |
+| `bulk` / `row` | Whether it appears in the bulk bar / the row menu (both by default; an `href` is row-only). |
+
+Everything else runs through `bh:dt-bulk` (with `bulkEvents`) or the
+`bulkEndpoint` form, as before. A status filter can name its options:
+`'filter' => ['field' => 'status', 'in' => [...], 'labels' => ['consent' => 'Needs approval']]`.
+
 A provider implements three methods and owns no SQL of its own:
 
 ```php
@@ -234,53 +262,6 @@ server-rendered table.
 
 The CSS and JS are versioned by their file modification time, so a changed
 asset is picked up by browsers immediately — no release bump or hard refresh.
-
-### Driving a table from its page (1.2.67)
-
-A screen that hosts a table can steer it and react to it through events on
-the table's root element (`.bh-dt`). Nothing else about the table changes.
-
-| Event | Direction | `detail` |
-|---|---|---|
-| `bh:dt-query` | dispatch it | `{ search?, filters?, sort? }`. Merged into the table's state; back to page 1; reload. An empty filter value removes that filter. |
-| `bh:dt-reload` | dispatch it | `{ clearSelection? }`. Reload the current page. |
-| `bh:dt-loaded` | listen | `{ table, meta, sort, search, filters }`, after every load. |
-| `bh:dt-bulk` | listen (cancelable) | `{ table, action, ids }`, after any confirmation and before the bulk action is posted as a form. Call `preventDefault()` to run it yourself, for example over AJAX. |
-
-Pass `'bulkEvents' => true` to the partial when the page handles bulk
-actions itself and there is no `bulkEndpoint`. The Media Library does this
-for `media.library`: Delete goes to `media.delete`, which reports each file,
-and the table reloads in place.
-
-```js
-var dt = document.querySelector('.my-screen .bh-dt');
-dt.dispatchEvent(new CustomEvent('bh:dt-query', { detail: { search: 'cat', filters: { type: 'image' } } }));
-dt.addEventListener('bh:dt-bulk', function (e) {
-    e.preventDefault();
-    Basehim.ajax.request('my.bulk', { ids: e.detail.ids }).then(function () {
-        dt.dispatchEvent(new CustomEvent('bh:dt-reload', { detail: { clearSelection: true } }));
-    });
-});
-```
-
-Also from 1.2.67: an answer that arrives after a newer request is dropped, so a
-slow response to an old search never replaces a newer one. Changing a filter
-goes back to page 1.
-
-### `media.library` (1.2.67)
-
-The Media Library's List view. Provider `App\Services\Table\MediaTableProvider`
-wraps `MediaService::paginate()`, which is the same query the grid and the picker use.
-
-- **Columns:** `thumb` (the generated thumbnail), `name` (opens the details
-  dialog), `type`, `size`, `dimensions`, `date`, `actions`.
-- **Filters:** `type` (`image`, `svg`, `video`, `audio`, `document`), and
-  `month` (`YYYY-MM` in the site's timezone).
-- **Sorts:** `newest`, `oldest`, `title_az`, `title_za`, `size_desc`, `size_asc`.
-- **Capability:** `upload_media`, area `/admin/media`.
-
-Apps add columns with the `datatable.columns.media.library` filter, like any
-other table.
 
 ## Reusable cell components
 

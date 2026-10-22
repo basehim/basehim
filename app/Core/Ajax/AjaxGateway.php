@@ -345,6 +345,12 @@ final class AjaxGateway
             // Nothing happened (or not completely): let the client retry.
             if ($claim !== null) $store->releaseHash($claim);
             if ($e instanceof AjaxException) throw $e;
+            // An app that hasn't been allowed what this needs (1.2.85): say
+            // so, instead of a bare server error, so the page can ask for it.
+            if (($pm = \App\Core\AppPermissionMissing::in($e)) !== null) {
+                $this->logThrowable($e, $action);
+                throw new AjaxException('APP_PERMISSION_MISSING', \App\Http\Controllers\Admin\AppPermissionPage::sentence($pm), 403);
+            }
             $this->logThrowable($e, $action);
             return $this->fail(500, 'INTERNAL_ERROR');
         } finally {

@@ -23,15 +23,15 @@ $noun      = $isApps ? 'apps' : 'themes';
 ?>
 <div class="bh-mk" id="mk-root" data-tab="<?= htmlspecialchars($tab) ?>" data-base="<?= htmlspecialchars($base) ?>">
 
-    <header class="bh-mk-head">
-        <div class="bh-mk-head__text">
-            <span class="bh-mk-head__icon" aria-hidden="true"><?= icon('building-storefront', 'w-5 h-5') ?></span>
+    <header class="bh-page-head">
+        <div class="bh-page-head__text">
+            <span class="bh-page-head__icon" aria-hidden="true"><?= icon('building-storefront', 'w-5 h-5') ?></span>
             <div class="min-w-0">
-                <h2 class="bh-mk-head__title">Marketplace</h2>
-                <p class="bh-mk-head__sub">Apps and themes for your site. Every download is checksum-verified before it installs.</p>
+                <h2 class="bh-page-head__title">Marketplace</h2>
+                <p class="bh-page-head__sub">Apps and themes for your site. Every download is checksum-verified before it installs.</p>
             </div>
         </div>
-        <a href="<?= $base ?>/admin/<?= $isApps ? 'apps' : 'themes' ?>" class="bh-btn bh-btn--secondary bh-mk-head__back">
+        <a href="<?= $base ?>/admin/<?= $isApps ? 'apps' : 'themes' ?>" class="bh-btn bh-btn--secondary bh-page-head__back">
             <?= icon($isApps ? 'puzzle-piece' : 'swatch', 'w-4 h-4') ?> <span>Installed <?= $noun ?></span>
         </a>
     </header>

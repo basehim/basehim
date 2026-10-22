@@ -42,6 +42,15 @@ final class TableDefinition
          * (1.2.62). Called once per page, like a column's prepare().
          */
         public readonly mixed $rowLinks = null,
+        /**
+         * Declared actions (1.2.85): each {id, label, icon, tone, danger,
+         * confirm, when, flag, bulk, row, href, event}. A table that declares
+         * them gets its row menu and bulk bar from this list instead of the
+         * built-in publish/draft/approve/… ids. See docs/DATA-TABLE.md.
+         *
+         * @var array<int,array<string,mixed>>
+         */
+        public readonly array $actions = [],
     ) {
     }
 

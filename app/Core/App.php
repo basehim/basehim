@@ -602,7 +602,9 @@ abstract class App
             ['permission' => $permission],
             'warning'
         );
-        throw new \RuntimeException(sprintf(
+        // A typed exception since 1.2.85, so the admin can offer the
+        // permission window instead of an error page (AppPermissionPage).
+        throw new \App\Core\AppPermissionMissing($this->slug, $permission, sprintf(
             "App '%s' called %s without the '%s' permission. Declare it in the "
             . 'manifest and approve the app under Admin > Apps.',
             $this->slug, $what, $permission
@@ -631,7 +633,15 @@ abstract class App
 
         extract($data, EXTR_SKIP);
         ob_start();
-        include $file;
+        try {
+            include $file;
+        } catch (\Throwable $e) {
+            // Don't leave the half-rendered view in an open buffer (1.2.86):
+            // it reached the browser ahead of the page that answered the
+            // failure (the permission screen, or the error page).
+            ob_end_clean();
+            throw $e;
+        }
         return (string) ob_get_clean();
     }
 

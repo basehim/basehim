@@ -51,6 +51,8 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-filterhint { font-size: .74rem; color: #94a3b8; }
 
 /* Toolbar ------------------------------------------------------------------ */
+/* The toolbar band (1.2.85; an inline style on the partial before). */
+.bh-dt-top { position: relative; border-bottom: 1px solid rgb(226 232 240); }
 .bh-dt-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 .bh-dt-search { position: relative; flex: 1 1 260px; min-width: 200px; }
 .bh-dt-search > svg { position: absolute; top: 50%; left: .85rem; width: 1rem; height: 1rem;

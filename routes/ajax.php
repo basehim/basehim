@@ -566,3 +566,43 @@ $ajax->register('themes.market_activate', [
     'description' => 'Make an installed theme the one the site uses.',
 ]);
 unset($marketQuery, $marketSlug, $ns, $m);
+
+// ---------------------------------------------------------------------------
+// 1.2.85 — the Apps screen (admin/assets/js/apps.js): the permission window
+// and the table's actions. The screen's forms remain for no-JS browsers.
+// ---------------------------------------------------------------------------
+use App\Http\Controllers\Ajax\AppActions;
+
+$appSlug = ['slug' => ['type' => 'string', 'required' => true, 'regex' => '/^[a-z0-9][a-z0-9_-]{0,79}$/']];
+$ajax->register('apps.consent', [
+    'handler'     => [AppActions::class, 'consent'],
+    'methods'     => ['GET'],
+    'capability'  => 'manage_apps',
+    'area'        => '/admin/apps',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => $appSlug,
+    'description' => 'The permissions an installed app asks for and what it has been granted.',
+]);
+$ajax->register('apps.consent_save', [
+    'handler'     => [AppActions::class, 'consentSave'],
+    'capability'  => 'manage_apps',
+    'area'        => '/admin/apps',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => $appSlug + [
+        'permissions' => ['type' => 'array', 'max' => 50, 'items' => 'string|max:64'],
+        'activate'    => 'bool',
+    ],
+    'description' => "Record which of an app's permissions are granted; with activate, turn it on too.",
+]);
+$ajax->register('apps.bulk', [
+    'handler'     => [AppActions::class, 'bulk'],
+    'capability'  => 'manage_apps',
+    'area'        => '/admin/apps',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => [
+        'action' => ['type' => 'string', 'required' => true, 'in' => ['activate', 'deactivate', 'retry', 'delete']],
+        'ids'    => ['type' => 'array', 'required' => true, 'min' => 1, 'max' => 100, 'items' => 'int|min:1'],
+    ],
+    'description' => 'Activate, deactivate, check again or delete installed apps, each reported on its own.',
+]);
+unset($appSlug);
