@@ -50,6 +50,7 @@ class MediaController extends ApiController
                     'title' => $request->input('title'),
                     'alt_text' => $request->input('alt_text'),
                     'caption' => $request->input('caption'),
+                    'context' => 'core:api',
                 ]
             );
             return Response::json(['data' => $created], 201);

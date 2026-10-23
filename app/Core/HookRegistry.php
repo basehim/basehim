@@ -105,6 +105,27 @@ final class HookRegistry
     }
 
     /**
+     * Like applyFilters(), but a callback that throws ends the chain and the
+     * Throwable is returned in place of the value (1.2.87). For checks that
+     * must fail closed: a security or policy filter that cannot run (a scanner
+     * that is down) must refuse, not wave the value through. The failure is
+     * logged as usual.
+     */
+    public function applyFiltersStrict(string $tag, mixed $value, mixed ...$args): mixed
+    {
+        foreach ($this->filters[$tag] ?? [] as $hook) {
+            $callArgs = array_slice(array_merge([$value], $args), 0, $hook['accepted_args']);
+            try {
+                $value = ($hook['callback'])(...$callArgs);
+            } catch (\Throwable $e) {
+                $this->logHookFailure('filter', $tag, $hook, $e);
+                return $e;
+            }
+        }
+        return $value;
+    }
+
+    /**
      * Log a hook callback failure to the application logger if available.
      * Best-effort: never re-throws (we're already in an error path).
      */

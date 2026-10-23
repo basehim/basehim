@@ -20,6 +20,18 @@
  * fetches the current token once and retries; if that fails too, the error
  * is passed on.
  *
+ * Uploads (1.2.87): Basehim.ajax.upload(action, data, files, options) sends
+ * multipart/form-data to an action that declares `files`:
+ *
+ *   Basehim.ajax.upload('my-app.import', { note: 'March' }, { file: input.files[0] }, {
+ *     onProgress: function (percent, loaded, total) { … }
+ *   }).then(function (data) { … });
+ *
+ * `files` is { field: File|Blob } (a single File means the field "file").
+ * The same options apply except method; timeout defaults to none, since an
+ * upload takes as long as the connection needs. Errors are the same
+ * AjaxError, plus UPLOAD_TOO_LARGE when the server refuses the size.
+ *
  * Configuration comes from window.BASEHIM_AJAX = { url, csrf } when a page
  * prints it (bh_ajax_client() does, for themes), else from the admin
  * layout's <body data-base data-csrf>.
@@ -157,6 +169,94 @@
         });
     }
 
+    // ----- Uploads (1.2.87) --------------------------------------------------
+
+    function sendUpload(action, data, files, opts, key) {
+        return new Promise(function (resolve, reject) {
+            var s = settings();
+            var fd = new FormData();
+            fd.append('action', action);
+            fd.append('data', JSON.stringify(data || {}));
+            Object.keys(files).forEach(function (field) {
+                var f = files[field];
+                if (f == null) return;
+                fd.append(field, f, f.name || field);
+            });
+            var xhr = new XMLHttpRequest();
+            var timer = null;
+            var done = false;
+            function finish(fn, v) {
+                if (done) return;
+                done = true;
+                if (timer) clearTimeout(timer);
+                if (opts.signal && onAbort) opts.signal.removeEventListener('abort', onAbort);
+                fn(v);
+            }
+            var onAbort = function () { try { xhr.abort(); } catch (e) {} finish(reject, AjaxError('ABORTED', 'The upload was cancelled.', 0)); };
+            xhr.open('POST', s.url);
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            if (s.token) xhr.setRequestHeader('X-CSRF-Token', s.token);
+            if (key) xhr.setRequestHeader('Idempotency-Key', key);
+            xhr.withCredentials = true;
+            if (xhr.upload && typeof opts.onProgress === 'function') {
+                xhr.upload.onprogress = function (e) {
+                    if (!e.lengthComputable) return;
+                    try { opts.onProgress(Math.round(e.loaded / e.total * 100), e.loaded, e.total); } catch (x) {}
+                };
+            }
+            xhr.onload = function () {
+                var json = null;
+                try { json = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (e) { json = null; }
+                if (!json || typeof json !== 'object' || typeof json.success !== 'boolean') {
+                    // A web server limit (nginx client_max_body_size, a proxy) answers in HTML.
+                    if (xhr.status === 413) return finish(reject, AjaxError('UPLOAD_TOO_LARGE', 'The upload is larger than this server accepts.', 413));
+                    return finish(reject, AjaxError('BAD_RESPONSE', 'The server sent an unexpected response.', xhr.status));
+                }
+                if (json.success && xhr.status >= 200 && xhr.status < 300) return finish(resolve, json.data);
+                var err = json.error || {};
+                finish(reject, AjaxError(
+                    typeof err.code === 'string' ? err.code : 'ERROR',
+                    typeof err.message === 'string' ? err.message : 'The upload could not be completed.',
+                    xhr.status, json.request_id, err.fields
+                ));
+            };
+            xhr.onerror = function () { finish(reject, AjaxError('NETWORK_ERROR', 'Could not reach the server. Check your connection and try again.', 0)); };
+            xhr.onabort = function () { finish(reject, AjaxError('ABORTED', 'The upload was cancelled.', 0)); };
+            if (opts.signal) {
+                if (opts.signal.aborted) return onAbort();
+                opts.signal.addEventListener('abort', onAbort);
+            }
+            if (opts.timeout > 0) {
+                timer = setTimeout(function () { try { xhr.abort(); } catch (e) {} finish(reject, AjaxError('TIMEOUT', 'The upload took too long. Try again.', 0)); }, opts.timeout);
+            }
+            xhr.send(fd);
+        });
+    }
+
+    function upload(action, data, files, options) {
+        var opts = options || {};
+        if (typeof action !== 'string' || action === '') {
+            return Promise.reject(AjaxError('BAD_REQUEST', 'Name an action.', 0));
+        }
+        if (typeof Blob !== 'undefined' && files instanceof Blob) files = { file: files };
+        if (!files || typeof files !== 'object') {
+            return Promise.reject(AjaxError('BAD_REQUEST', 'Give the files as { field: File }.', 0));
+        }
+        var key = null;
+        if (opts.idempotencyKey === true) key = newKey();
+        else if (typeof opts.idempotencyKey === 'string') key = opts.idempotencyKey;
+        var ready = !settings().token ? refreshToken().catch(function () {}) : Promise.resolve();
+        return ready.then(function () {
+            return sendUpload(action, data, files, opts, key);
+        }).catch(function (err) {
+            if (!(err && err.code === 'CSRF_INVALID')) throw err;
+            return refreshToken().then(function () {
+                return sendUpload(action, data, files, opts, key);
+            }, function () { throw err; });
+        });
+    }
+
     function refreshToken() {
         return send('core.csrf', {}, { method: 'GET' }, null).then(function (d) {
             tokenOverride = d && typeof d.token === 'string' ? d.token : '';
@@ -171,6 +271,7 @@
             return request(action, data, o);
         },
         post: function (action, data, options) { return request(action, data, options); },
+        upload: upload,
         newIdempotencyKey: newKey,
         AjaxError: AjaxError
     };

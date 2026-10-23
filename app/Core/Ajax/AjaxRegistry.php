@@ -51,8 +51,14 @@ final class AjaxRegistry
     private const NAME_PATTERN = '/^[a-z0-9][a-z0-9_-]{0,79}(\.[a-z][a-z0-9_-]{0,63}){1,3}$/';
     private const ALLOWED_OPTIONS = [
         'handler', 'methods', 'auth', 'capability', 'area', 'csrf', 'input', 'allow_unknown',
-        'rate_limit', 'max_body', 'idempotent', 'description',
+        'rate_limit', 'max_body', 'idempotent', 'description', 'files',
     ];
+
+    /** Most file fields one action may declare (1.2.87). */
+    public const MAX_FILE_FIELDS = 10;
+
+    /** Largest max_size an action may declare: 2 GB (PHP's own limits usually bite first). */
+    public const MAX_FILE_BYTES = 2147483647;
 
     /** @var array<string,AjaxAction> */
     private array $actions = [];
@@ -289,6 +295,23 @@ final class AjaxRegistry
 
         $description = (string) ($d['description'] ?? '');
 
+        // Files (1.2.87): an action that declares them accepts
+        // multipart/form-data as well as JSON. Each field is one file, with a
+        // size limit and the extensions it accepts, written out here; the
+        // gateway checks every file against them before the handler runs.
+        $files = [];
+        if (array_key_exists('files', $d)) {
+            if (!is_array($d['files']) || $d['files'] === [] || array_is_list($d['files'])) {
+                $fail("'files' must map field names to rules, e.g. ['file' => ['types' => ['zip'], 'max_size' => 10485760]].");
+            }
+            if (count($d['files']) > self::MAX_FILE_FIELDS) $fail("'files' may declare at most " . self::MAX_FILE_FIELDS . ' fields.');
+            if (!in_array('POST', $methods, true)) $fail("'files' needs a POST action.");
+            if ($auth !== self::AUTH_USER) $fail("'files' is for signed-in actions only.");
+            foreach ($d['files'] as $field => $rule) {
+                $files[(string) $field] = self::fileRule((string) $field, $rule, $fail);
+            }
+        }
+
         return new AjaxAction(
             name: $name,
             owner: $owner,
@@ -303,6 +326,69 @@ final class AjaxRegistry
             maxBody: $maxBody,
             idempotent: $idempotent,
             description: $description,
+            files: $files,
         );
+    }
+
+    /**
+     * One file field's rule, normalised:
+     *
+     *   required  bool   (default true)
+     *   types     list of extensions, or 'media' for the site's media types
+     *   max_size  bytes, or 'media' for the site's upload limit (default 'media')
+     *   mimes     optional list of detected types the content must have;
+     *             'image/*' style prefixes allowed
+     *
+     * Extensions that can run on a web server (php, html, js, …) can never
+     * be declared: no setting or app makes them uploadable.
+     *
+     * @param callable(string):never $fail
+     * @return array{required:bool,types:string[]|string,max_size:int|string,mimes:string[]}
+     */
+    private static function fileRule(string $field, mixed $rule, callable $fail): array
+    {
+        if (!preg_match('/^[a-z][a-z0-9_]{0,39}$/', $field)) {
+            $fail("file field '{$field}' must be a lower-case name like 'file' or 'screenshot'.");
+        }
+        if (!is_array($rule)) $fail("file field '{$field}' needs a rule array.");
+        foreach (array_keys($rule) as $k) {
+            if (!in_array($k, ['required', 'types', 'max_size', 'mimes'], true)) $fail("file field '{$field}': unknown option '{$k}'.");
+        }
+        $required = $rule['required'] ?? true;
+        if (!is_bool($required)) $fail("file field '{$field}': 'required' must be true or false.");
+
+        if (!array_key_exists('types', $rule)) {
+            $fail("file field '{$field}' must declare 'types' (a list of extensions, or 'media').");
+        }
+        $types = $rule['types'];
+        if ($types !== 'media') {
+            if (!is_array($types) || $types === [] || !array_is_list($types)) {
+                $fail("file field '{$field}': 'types' must be a list of extensions like ['zip'], or 'media'.");
+            }
+            $clean = [];
+            foreach ($types as $t) {
+                $t = is_string($t) ? strtolower(ltrim(trim($t), '.')) : '';
+                if (!preg_match('/^[a-z0-9]{1,10}$/', $t)) $fail("file field '{$field}': '{$t}' is not an extension.");
+                if (in_array($t, \App\Services\MediaService::NEVER_ALLOWED, true)) {
+                    $fail("file field '{$field}': '.{$t}' files can run on a web server and cannot be accepted.");
+                }
+                $clean[] = $t;
+            }
+            $types = array_values(array_unique($clean));
+        }
+
+        $max = $rule['max_size'] ?? 'media';
+        if ($max !== 'media' && (!is_int($max) || $max < 1 || $max > self::MAX_FILE_BYTES)) {
+            $fail("file field '{$field}': 'max_size' must be a number of bytes (1–" . self::MAX_FILE_BYTES . ") or 'media'.");
+        }
+
+        $mimes = $rule['mimes'] ?? [];
+        if (!is_array($mimes) || !array_is_list($mimes)) $fail("file field '{$field}': 'mimes' must be a list.");
+        foreach ($mimes as $m) {
+            if (!is_string($m) || !preg_match('#^[a-z0-9.+-]+/([a-z0-9.+-]+|\*)$#', $m)) {
+                $fail("file field '{$field}': '" . (is_string($m) ? $m : gettype($m)) . "' is not a MIME type like 'application/zip' or 'image/*'.");
+            }
+        }
+        return ['required' => $required, 'types' => $types, 'max_size' => $max, 'mimes' => array_values($mimes)];
     }
 }

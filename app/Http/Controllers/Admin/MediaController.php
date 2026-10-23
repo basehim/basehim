@@ -156,6 +156,9 @@ class MediaController extends Controller
                 // The post editor sends the post title; used only when the
                 // file's own name is meaningless (see MediaService::upload).
                 'name_hint' => is_scalar($request->input('name_hint')) ? mb_substr((string) $request->input('name_hint'), 0, 200) : '',
+                // 1.2.87: a hint for the media.upload.* filters; colon contexts are the server's own.
+                'context' => is_string($request->input('context')) && preg_match('/^[a-z][a-z0-9_-]{0,39}$/', (string) $request->input('context'))
+                    ? (string) $request->input('context') : 'library',
             ]);
             if ($isAjax) {
                 // upload() returns the inserted row; decorate URL with base prefix

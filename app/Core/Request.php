@@ -37,7 +37,13 @@ final class Request
 
         $body = [];
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && !self::isAjaxGatewayPath($uri)) {
+        $gateway = self::isAjaxGatewayPath($uri);
+        if ($gateway && $method === 'POST' && stripos($contentType, 'multipart/form-data') === 0) {
+            // Uploads to the AJAX gateway (1.2.87): PHP has parsed the form;
+            // the gateway reads its "action" and "data" fields from here.
+            // JSON to the gateway is still read from php://input by the gateway.
+            $body = $_POST;
+        } elseif (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && !$gateway) {
             if (str_contains($contentType, 'application/json')) {
                 $raw = file_get_contents('php://input') ?: '';
                 $decoded = json_decode($raw, true);

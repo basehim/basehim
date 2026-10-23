@@ -13,9 +13,147 @@ use App\Services\MediaService;
  *     $api->media()->paginate(['type' => 'image']);
  *     $api->media()->update($id, ['alt_text' => 'A cat']);
  *     $api->media()->uploadFromPath('/tmp/x.png', 'chart.png');
+ *
+ * 1.2.87, for apps that work with files:
+ *
+ *     $api->media()->fromUpload($ctx->file('file'), ['title' => 'Logo']);  // an AJAX upload into the library
+ *     $api->media()->path($id);              // absolute path of the file on this server, or null
+ *     $api->media()->replaceFile($id, $tmp); // swap the file in place (same URL), rebuild sizes
+ *     $api->media()->regenerate($id);        // rebuild generated sizes
+ *     $api->media()->sizes('image/jpeg');    // size definitions, after the media.sizes filter
+ *     $api->media()->uploadRules('app:my-app'); // allowed extensions and size limit
+ *     $api->media()->lastError();            // why the last call returned null, for the person
  */
 class MediaApi extends Resource
 {
+    private ?string $lastError = null;
+
+    /**
+     * Why the last fromUpload(), replaceFile() or regenerate() call returned
+     * null: a sentence for the person (a rejected file), or a generic one
+     * when something else went wrong (details are in the app's log). Null
+     * after a call that succeeded.
+     */
+    public function lastError(): ?string
+    {
+        return $this->lastError;
+    }
+
+    /** Run $fn, keeping a person-facing reason when it fails. */
+    private function tryFile(string $what, callable $fn): mixed
+    {
+        $this->lastError = null;
+        if (!$this->permitted($what)) {
+            $this->lastError = 'This app has not been allowed to change media.';
+            return null;
+        }
+        try {
+            return $fn();
+        } catch (\App\Services\MediaRejected $e) {
+            $this->lastError = $e->getMessage();
+            return null;
+        } catch (\Throwable $e) {
+            $this->log("API {$what} failed: " . $e->getMessage(), [], 'warning');
+            $this->lastError = 'The file could not be processed.';
+            return null;
+        }
+    }
+
+    /**
+     * Add a file sent to one of this app's AJAX actions to the media library
+     * (1.2.87). It goes through every check a library upload does, and the
+     * media.upload.* filters with context 'app:{slug}' unless $context says
+     * otherwise. The upload is moved into the library.
+     *
+     * $meta: title, alt_text (or alt), caption, name_hint.
+     *
+     * @return array|null the new media row; null with lastError() on refusal
+     */
+    public function fromUpload(\App\Core\Ajax\UploadedFile $file, array $meta = [], ?int $authorId = null, ?string $context = null): ?array
+    {
+        return $this->tryFile('fromUpload', function () use ($file, $meta, $authorId, $context) {
+            if ($file->wasMoved()) throw new \App\Services\MediaRejected('This upload was already stored elsewhere.');
+            // Whoever is signed in must be allowed to upload media, whatever
+            // capability the app's action asked for.
+            $user = $this->currentUser();
+            if ($user !== null && !\App\Http\Middleware\CheckCapability::userCan($user, 'upload_media')) {
+                throw new \App\Services\MediaRejected('You are not allowed to add files to the media library.');
+            }
+            $service = $this->service();
+            $config = $this->make(Config::class);
+            $meta = self::normalizeMeta($meta);
+            $meta['context'] = $context ?? ('app:' . $this->slug);
+            $allowed = $service->allowedTypes((array) $config->get('cms.media.allowed_types', []));
+            $max = $service->maxUploadBytes((int) $config->get('cms.media.max_upload_size', 64 * 1024 * 1024));
+            $author = $authorId ?? (isset($user['id']) ? (int) $user['id'] : null) ?? 1;
+            $entry = ['name' => $file->name(), 'tmp_name' => $file->path(), 'error' => UPLOAD_ERR_OK, 'size' => $file->size()];
+            $row = $file->isHttpUpload()
+                ? $service->upload($entry, $author, $allowed, $max, $meta)
+                : $service->importFile($file->path(), $file->name(), $author, $allowed, $max, $meta);
+            $this->log("Added media #{$row['id']} from an upload ({$file->name()})");
+            return $row;
+        });
+    }
+
+    /** Absolute path of an item's file on this server, or null (see MediaService::localPath). */
+    public function path(int $id): ?string
+    {
+        return $this->attempt(function () use ($id) {
+            $row = $this->service()->find($id);
+            return $row ? $this->service()->localPath($row) : null;
+        }, null, 'path');
+    }
+
+    /**
+     * Replace an item's file in place (MediaService::replaceFile): same name
+     * and URL, size and dimensions updated, generated sizes rebuilt.
+     * Options: regenerate (bool, default true), expect_sha1 (string).
+     *
+     * @return array|null the updated row; null with lastError() on refusal
+     */
+    public function replaceFile(int $id, string $sourcePath, array $opts = []): ?array
+    {
+        return $this->tryFile('replaceFile', function () use ($id, $sourcePath, $opts) {
+            $row = $this->service()->replaceFile($id, $sourcePath, array_intersect_key($opts, ['regenerate' => 1, 'expect_sha1' => 1]));
+            $this->log("Replaced the file of media #{$id}");
+            return $row;
+        });
+    }
+
+    /**
+     * Rebuild an item's generated sizes.
+     *
+     * @return array|null ['status' => processed|skipped|failed, 'variants' => n, 'item' => row]
+     */
+    public function regenerate(int $id): ?array
+    {
+        return $this->tryFile('regenerate', fn() => $this->service()->regenerate($id));
+    }
+
+    /** Size definitions {name => [w, h, crop]}, after the media.sizes filter. */
+    public function sizes(string $mime = ''): array
+    {
+        return $this->attempt(fn() => $this->service()->sizeDefinitions(null, $mime), [], 'sizes');
+    }
+
+    /**
+     * What an upload in $context may be: ['types' => [...], 'max_bytes' => n],
+     * after the media.upload.allowed_types and media.upload.max_bytes filters.
+     */
+    public function uploadRules(?string $context = null): array
+    {
+        return $this->attempt(fn() => $this->service()->uploadRules($context ?? ('app:' . $this->slug)), ['types' => [], 'max_bytes' => 0], 'uploadRules');
+    }
+
+    private function currentUser(): ?array
+    {
+        try {
+            $u = $this->app->has('auth.user') ? $this->app->make('auth.user') : null;
+            return is_array($u) && !empty($u['id']) ? $u : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
     private function service(): MediaService
     {
         return $this->make(MediaService::class);

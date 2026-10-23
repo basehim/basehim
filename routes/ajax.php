@@ -164,6 +164,29 @@ $ajax->register('media.list', [
     'description' => 'One page of the media library; meta.has_more says whether there is another.',
 ]);
 
+// 1.2.87 — uploads through the gateway. The old POST /admin/media/upload
+// stays for older callers; media.js uses this when the gateway takes files.
+$ajax->register('media.upload', [
+    'handler'     => [MediaActions::class, 'upload'],
+    'capability'  => 'upload_media',
+    'area'        => '/admin/media',
+    // Dropping a folder of photos: media.js sends three at a time.
+    'rate_limit'  => ['max' => 300, 'per' => 60],
+    'files'       => ['file' => ['types' => 'media', 'max_size' => 'media']],
+    'input'       => [
+        // Longer titles are cut to 255 characters, as the old route stored them.
+        'title'     => 'string|max:2000',
+        'alt_text'  => 'string|max:255',
+        'caption'   => 'string|max:16000',
+        'name_hint' => 'string|max:200',
+        // Where the upload starts (library, editor, picker, …): a hint for
+        // the media.upload.* filters. Contexts with a colon (core:import,
+        // core:api, app:slug) are set by the server and cannot be sent.
+        'context'   => ['type' => 'string', 'max' => 40, 'regex' => '/^[a-z][a-z0-9_-]{0,39}$/'],
+    ],
+    'description' => 'Upload one file to the media library (multipart/form-data, field "file").',
+]);
+
 $ajax->register('media.get', [
     'handler'     => [MediaActions::class, 'get'],
     'methods'     => ['GET'],

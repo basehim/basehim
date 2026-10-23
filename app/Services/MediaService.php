@@ -89,6 +89,9 @@ class MediaService
         }
         if ($clean !== []) {
             $this->repo->update($id, $clean);
+            // 1.2.87: the item after the change, and which fields changed.
+            $row = $this->repo->find($id);
+            if ($row !== null) $this->hooks->doAction('media.updated', $row, array_keys($clean));
         }
         return $clean;
     }
@@ -161,15 +164,80 @@ class MediaService
         ];
     }
 
-    /** Named size definitions {name => [w,h,crop]} derived from {settings}. */
-    public function sizeDefinitions(?array $ms = null): array
+    /** Most generated sizes per image, whatever filters add (1.2.87). */
+    public const MAX_SIZES = 12;
+
+    /**
+     * Named size definitions {name => [w,h,crop]} derived from {settings}.
+     *
+     * Apps can add, change or remove sizes with the `media.sizes` filter
+     * (1.2.87), e.g. a 1200×630 crop for social cards:
+     *
+     *     $this->addFilter('media.sizes', function (array $sizes, string $mime) {
+     *         $sizes['social'] = ['w' => 1200, 'h' => 630, 'crop' => true];
+     *         return $sizes;
+     *     }, 10, 2);
+     *
+     * Names are lower-case words; width and height 1–10000; at most
+     * MAX_SIZES. Anything else a filter returns is ignored.
+     */
+    public function sizeDefinitions(?array $ms = null, string $mime = ''): array
     {
         $ms = $ms ?? $this->mediaSettings();
-        return [
+        $core = [
             'thumbnail' => ['w' => $ms['thumb_w'],  'h' => $ms['thumb_h'],  'crop' => $ms['thumb_crop']],
             'medium'    => ['w' => $ms['medium_w'], 'h' => $ms['medium_h'], 'crop' => false],
             'large'     => ['w' => $ms['large_w'],  'h' => $ms['large_h'],  'crop' => false],
         ];
+        if (!$this->hooks->hasFilter('media.sizes')) return $core;
+        $out = $this->hooks->applyFilters('media.sizes', $core, $mime);
+        if (!is_array($out)) return $core;
+        $clean = [];
+        foreach ($out as $name => $def) {
+            if (count($clean) >= self::MAX_SIZES) break;
+            if (!is_string($name) || !preg_match('/^[a-z][a-z0-9_-]{0,31}$/', $name) || !is_array($def)) continue;
+            $w = $def['w'] ?? null; $h = $def['h'] ?? null;
+            if (!is_int($w) || !is_int($h) || $w < 1 || $h < 1 || $w > 10000 || $h > 10000) continue;
+            $clean[$name] = ['w' => $w, 'h' => $h, 'crop' => !empty($def['crop'])];
+        }
+        return $clean;
+    }
+
+    /**
+     * What an upload may be, after apps have had their say: the allowed
+     * extensions and the size limit (1.2.87).
+     *
+     * Filters: `media.upload.allowed_types` (list of extensions) and
+     * `media.upload.max_bytes` (int), each given the upload's $context
+     * ('library', 'editor', 'ajax:media.upload', 'import', 'app:my-app', …).
+     * The extensions in NEVER_ALLOWED are removed whatever a filter returns.
+     *
+     * @return array{types:string[],max_bytes:int}
+     */
+    public function uploadRules(string $context = 'library'): array
+    {
+        $cfg = \App\Core\Application::getInstance()->make(\App\Core\Config::class);
+        return $this->filterRules(
+            $this->allowedTypes((array) $cfg->get('cms.media.allowed_types', [])),
+            $this->maxUploadBytes((int) $cfg->get('cms.media.max_upload_size', 64 * 1024 * 1024)),
+            $context
+        );
+    }
+
+    /** @return array{types:string[],max_bytes:int} */
+    private function filterRules(array $types, int $maxBytes, string $context): array
+    {
+        $t = $this->hooks->applyFilters('media.upload.allowed_types', $types, $context);
+        if (is_array($t)) {
+            $t = array_values(array_unique(array_filter(array_map(
+                static fn($x) => is_string($x) ? strtolower(trim($x, " .\t")) : '', $t
+            ), static fn($x) => preg_match('/^[a-z0-9]{1,10}$/', $x) === 1)));
+        } else {
+            $t = $types;
+        }
+        $m = $this->hooks->applyFilters('media.upload.max_bytes', $maxBytes, $context);
+        $m = is_int($m) && $m > 0 ? $m : $maxBytes;
+        return ['types' => array_values(array_diff($t, self::NEVER_ALLOWED)), 'max_bytes' => $m];
     }
 
     /** Allowed upload extensions from {settings}, falling back to config. */
@@ -291,6 +359,13 @@ class MediaService
 
     private function store(array $file, int $authorId, array $allowed, int $maxBytes, array $meta, bool $isHttpUpload): array
     {
+        // Where this upload comes from, for the media.upload.* hooks (1.2.87).
+        $context = is_string($meta['context'] ?? null) && preg_match('/^[a-z0-9][a-z0-9:._-]{0,79}$/', $meta['context'])
+            ? $meta['context'] : ($isHttpUpload ? 'library' : 'core:import');
+        $rules = $this->filterRules($allowed, $maxBytes, $context);
+        $allowed = $rules['types'];
+        $maxBytes = $rules['max_bytes'];
+
         if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
             $code = (int) ($file['error'] ?? -1);
             throw new MediaRejected(match ($code) {
@@ -337,24 +412,53 @@ class MediaService
         }
 
         $ms = $this->mediaSettings();
+        $this->checkPixels($file['tmp_name'], $mime, $ms);
 
-        // Pixel limit, checked on the uploaded file before it is placed
-        // (1.2.73, BH-027). A file's size says nothing about its dimensions:
-        // a 250 KB PNG can be 16,000 × 16,000 pixels, about 1 GB once GD
-        // decodes it for thumbnails, which ended the request on hosts where
-        // that counts against memory_limit and left the file behind.
-        if (str_starts_with($mime, 'image/') && $mime !== 'image/svg+xml') {
-            $dim = @getimagesize($file['tmp_name']);
-            if ($dim) {
-                $px = (int) $dim[0] * (int) $dim[1];
-                $max = (int) round($ms['max_image_megapixels'] * 1_000_000);
-                if ($px > $max) {
-                    throw new MediaRejected(sprintf(
-                        'This image is %d × %d pixels (%.1f megapixels); the limit is %s megapixels. Resize it and upload it again.',
-                        (int) $dim[0], (int) $dim[1], $px / 1_000_000, rtrim(rtrim(number_format($ms['max_image_megapixels'], 1), '0'), '.')
-                    ));
-                }
+        // Apps (1.2.87). What they are told about the file, read-only:
+        $info = ['path' => (string) $file['tmp_name'], 'name' => $originalName, 'ext' => $ext, 'mime' => $mime, 'size' => $size,
+                 'author_id' => $authorId, 'context' => $context];
+        $hookCtx = ['context' => $context, 'author_id' => $authorId, 'source' => $isHttpUpload ? 'upload' : 'import'];
+
+        // media.upload.check: refuse with a sentence for the person
+        // uploading, or return null. Core's own checks above always apply.
+        // Fails closed: a check that throws (a scanner that is down, say)
+        // refuses the file instead of letting it through.
+        $veto = $this->hooks->applyFiltersStrict('media.upload.check', null, $info, $hookCtx);
+        if ($veto instanceof \Throwable) {
+            throw new MediaRejected('This file could not be checked, so it was not uploaded. Try again later.');
+        }
+        if (is_string($veto) && trim($veto) !== '') {
+            throw new MediaRejected(mb_substr(trim($veto), 0, 300));
+        }
+
+        // media.upload.file: hand back the path of a different file to store
+        // instead (a compressed or converted copy the app wrote). It goes
+        // through the same checks again, and must keep the extension.
+        $source = (string) $file['tmp_name'];
+        $replaced = $this->hooks->applyFilters('media.upload.file', $source, $info, $hookCtx);
+        if (is_string($replaced) && $replaced !== $source) {
+            if (!is_file($replaced) || !is_readable($replaced)) {
+                throw new MediaRejected('The file could not be prepared for storing.');
             }
+            $newSize = (int) filesize($replaced);
+            if ($newSize <= 0 || $newSize > $maxBytes) {
+                throw new MediaRejected('The prepared file exceeds the maximum size of ' . Helpers::bytesFormat($maxBytes) . '.');
+            }
+            $f2 = finfo_open(FILEINFO_MIME_TYPE);
+            $newMime = finfo_file($f2, $replaced) ?: 'application/octet-stream';
+            finfo_close($f2);
+            if (($p = self::contentProblem($ext, $newMime)) !== null) throw new MediaRejected($p);
+            if ($ext === 'svg' || $ext === 'svgz' || $newMime === 'image/svg+xml') {
+                $raw = (string) @file_get_contents($replaced);
+                if (str_starts_with($raw, "\x1f\x8b")) throw new MediaRejected('Compressed SVG (.svgz) files are not accepted.');
+                if (($why = SvgGuard::problem($raw)) !== null) throw new MediaRejected('This SVG was not uploaded because ' . $why . '.');
+            }
+            $this->checkPixels($replaced, $newMime, $ms);
+            $source = $replaced;
+            $size = $newSize;
+            $mime = $newMime;
+            $isHttpUpload = false;   // copy the app's file; PHP removes its own temporary one
+            $info['size'] = $size; $info['mime'] = $mime; $info['path'] = $source;
         }
 
         // Build storage path: /YYYY/MM/{name}.{ext} (or flat if organising is off)
@@ -362,6 +466,14 @@ class MediaService
             $relDir = date('Y') . '/' . date('m');
         } else {
             $relDir = '';
+        }
+        // media.upload.directory (1.2.87): a folder under storage/uploads for
+        // this file, e.g. 'products/2026'. Lower-case words and slashes, at
+        // most five levels; anything else is ignored.
+        $dirOut = $this->hooks->applyFilters('media.upload.directory', $relDir, $info, $hookCtx);
+        if (is_string($dirOut) && $dirOut !== $relDir
+            && ($dirOut === '' || preg_match('#^[a-z0-9][a-z0-9_-]{0,63}(/[a-z0-9][a-z0-9_-]{0,63}){0,4}$#', $dirOut))) {
+            $relDir = $dirOut;
         }
         $absDir = rtrim($this->uploadPath, '/') . ($relDir !== '' ? '/' . $relDir : '');
         if (!is_dir($absDir)) {
@@ -386,6 +498,13 @@ class MediaService
                 if (!isset($meta['title']) || trim((string) $meta['title']) === '') $meta['title'] = $hint;
             }
         }
+        // media.upload.filename (1.2.87): the name to store it under. The
+        // extension stays the file's own, and the name is made safe and
+        // unique exactly as core's own are.
+        $nameOut = $this->hooks->applyFilters('media.upload.filename', $nameFor, $info, $hookCtx);
+        if (is_string($nameOut) && trim($nameOut) !== '' && $nameOut !== $nameFor) {
+            $nameFor = pathinfo(basename(str_replace('\\', '/', $nameOut)), PATHINFO_FILENAME) . '.' . $ext;
+        }
         $safeName = $this->reserveFileName($absDir, $relDir, $nameFor, $ext, $mime);
         $absPath = $absDir . '/' . $safeName;
         $relPath = ($relDir !== '' ? $relDir . '/' : '') . $safeName;
@@ -394,8 +513,8 @@ class MediaService
         // below replace it. On failure the placeholder is removed, so a failed
         // upload does not keep a name taken.
         $placed = $isHttpUpload
-            ? @move_uploaded_file($file['tmp_name'], $absPath)
-            : @copy($file['tmp_name'], $absPath);
+            ? @move_uploaded_file($source, $absPath)
+            : @copy($source, $absPath);
         if (!$placed) {
             @unlink($absPath);
             throw new MediaRejected('Could not move uploaded file.');
@@ -432,6 +551,25 @@ class MediaService
             'sizes' => $sizes ? json_encode($sizes) : null,
         ];
 
+        // media.upload.row (1.2.87): the descriptive fields only (title, alt
+        // text, caption, description). Everything that describes the file
+        // stays core's.
+        // The file is already in place here, so a filter that fails is
+        // ignored rather than allowed to leave it behind.
+        try {
+            $rowOut = $this->hooks->applyFilters('media.upload.row', $row, $info, $hookCtx);
+        } catch (\Throwable) {
+            $rowOut = $row;
+        }
+        if (is_array($rowOut)) {
+            foreach (self::META_FIELDS as $f => $limit) {
+                if (!array_key_exists($f, $rowOut) || $rowOut[$f] === ($row[$f] ?? null)) continue;
+                $v = $rowOut[$f];
+                if ($v !== null && !is_string($v)) continue;
+                $row[$f] = $v === null ? null : (isset($limit['chars']) ? mb_substr($v, 0, $limit['chars'], 'UTF-8') : mb_strcut($v, 0, $limit['bytes'], 'UTF-8'));
+            }
+        }
+
         try {
             $id = $this->repo->create($row);
         } catch (\Throwable $e) {
@@ -444,8 +582,31 @@ class MediaService
             throw $e;
         }
         $created = $this->repo->find($id);
-        $this->hooks->doAction('media.uploaded', $created);
+        // Second argument since 1.2.87: ['context', 'author_id', 'source'].
+        $this->hooks->doAction('media.uploaded', $created, $hookCtx);
         return $created;
+    }
+
+    /**
+     * Pixel limit, checked on a file before it is placed (1.2.73, BH-027).
+     * A file's size says nothing about its dimensions: a 250 KB PNG can be
+     * 16,000 × 16,000 pixels, about 1 GB once GD decodes it for thumbnails,
+     * which ended the request on hosts where that counts against
+     * memory_limit and left the file behind.
+     */
+    private function checkPixels(string $path, string $mime, array $ms): void
+    {
+        if (!str_starts_with($mime, 'image/') || $mime === 'image/svg+xml') return;
+        $dim = @getimagesize($path);
+        if (!$dim) return;
+        $px = (int) $dim[0] * (int) $dim[1];
+        $max = (int) round($ms['max_image_megapixels'] * 1_000_000);
+        if ($px > $max) {
+            throw new MediaRejected(sprintf(
+                'This image is %d × %d pixels (%.1f megapixels); the limit is %s megapixels. Resize it and upload it again.',
+                (int) $dim[0], (int) $dim[1], $px / 1_000_000, rtrim(rtrim(number_format($ms['max_image_megapixels'], 1), '0'), '.')
+            ));
+        }
     }
 
     // ── File names ────────────────────────────────────────────────────────
@@ -539,11 +700,13 @@ class MediaService
     private function reserveFileName(string $absDir, string $relDir, string $originalName, string $ext, string $mime): string
     {
         $base = $this->fileStem($originalName, $mime);
-        $variants = array_keys($this->sizeDefinitions());
+        // Every name a generated size of this file could take: the sizes for
+        // its own type (media.sizes may depend on it) and the general ones.
+        $variants = array_keys($this->sizeDefinitions(null, $mime) + $this->sizeDefinitions());
 
         $lock = $this->acquireNameLock();
         try {
-            $taken = $this->takenStems($absDir, $relDir, $base);
+            $taken = $this->takenStems($absDir, $relDir, $base, $mime);
 
             for ($n = 1; $n <= 100000; $n++) {
                 $stem = $n === 1 ? $base : $base . '-' . $n;
@@ -595,7 +758,7 @@ class MediaService
      *
      * @return array<string,bool>
      */
-    private function takenStems(string $absDir, string $relDir, string $base): array
+    private function takenStems(string $absDir, string $relDir, string $base, string $mime = ''): array
     {
         $taken = [];
         foreach (@scandir($absDir) ?: [] as $f) {
@@ -609,7 +772,7 @@ class MediaService
         // owner of "x-thumbnail" is "x", a shorter prefix, so match on the
         // stem with any variant suffix removed.
         $prefix = $base;
-        foreach (array_keys($this->sizeDefinitions()) as $v) {
+        foreach (array_keys($this->sizeDefinitions(null, $mime) + $this->sizeDefinitions()) as $v) {
             if (str_ends_with($prefix, '-' . $v)) { $prefix = substr($prefix, 0, -strlen($v) - 1); break; }
         }
         $dirPart = $relDir !== '' ? $relDir . '/' : '';
@@ -654,9 +817,13 @@ class MediaService
         $urlBase = '/uploads/' . ($relDir !== '' ? $relDir . '/' : '');
 
         $out = [];
-        foreach ($this->sizeDefinitions($ms) as $name => $def) {
+        foreach ($this->sizeDefinitions($ms, $mime) as $name => $def) {
             $variantFile = $stem . '-' . $name . '.' . $ext;
             $destAbs     = $absDir . '/' . $variantFile;
+            // Never write over a file that exists: this item's own old sizes
+            // were removed before regenerating, so anything here belongs to
+            // another item (a size added since its name was reserved).
+            if (file_exists($destAbs)) continue;
             $res = $this->images->generate(
                 $srcAbs, $destAbs, $mime,
                 (int) $def['w'], (int) $def['h'], (bool) $def['crop'],
@@ -749,8 +916,8 @@ class MediaService
     private function regenerateOne(array $row, array $ms): array
     {
         $mime = (string) ($row['mime_type'] ?? '');
-        $abs  = rtrim($this->uploadPath, '/') . '/' . $row['storage_path'];
-        if (!$this->images->supports($mime) || !is_file($abs)) return ['skipped', 0];
+        $abs  = $this->localPath($row);
+        if (!$this->images->supports($mime) || $abs === null) return ['skipped', 0];
 
         $dir = dirname($abs);
         // Remove any previously generated variants.
@@ -764,10 +931,166 @@ class MediaService
                 ? $this->buildSizes($dir, $relDir, basename((string) $row['storage_path']), $mime, $ms)
                 : [];
             $this->repo->update((int) $row['id'], ['sizes' => $sizes ? json_encode($sizes) : null]);
+            $fresh = $this->repo->find((int) $row['id']);
+            if ($fresh !== null) $this->hooks->doAction('media.sizes_generated', $fresh, $sizes);
             return ['processed', count($sizes)];
         } catch (\Throwable) {
             return ['failed', 0];
         }
+    }
+
+    /**
+     * An item as the admin screens receive it, with data apps add (1.2.87).
+     *
+     * The `media.item` filter is given the row and returns it; only what it
+     * puts under `ext` is kept — an object keyed by the app's slug:
+     *
+     *     $this->addFilter('media.item', function (array $item) {
+     *         $item['ext']['image-compressor'] = ['badge' => '−42%', 'tone' => 'green'];
+     *         return $item;
+     *     });
+     *
+     * Core fields can't be changed this way. `ext` is capped at 8 KB per item.
+     * media.list, media.get and media.upload return decorated items; the
+     * library and picker scripts can show `ext` through BasehimMedia.addItemBadge().
+     */
+    public function decorate(array $row): array
+    {
+        if (!$this->hooks->hasFilter('media.item')) return $row;
+        try {
+            $out = $this->hooks->applyFilters('media.item', $row);
+        } catch (\Throwable $e) {
+            return $row;
+        }
+        if (!is_array($out) || !isset($out['ext']) || !is_array($out['ext'])) return $row;
+        $ext = [];
+        foreach ($out['ext'] as $k => $v) {
+            if (is_string($k) && preg_match('/^[a-z0-9][a-z0-9_-]{0,79}$/', $k) && (is_array($v) || is_scalar($v))) $ext[$k] = $v;
+        }
+        $json = json_encode($ext, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($ext !== [] && is_string($json) && strlen($json) <= 8192) $row['ext'] = $ext;
+        return $row;
+    }
+
+    // ── Files of existing items (1.2.87) ──────────────────────────────────────
+
+    /**
+     * Absolute path of an item's file on this server, or null when it is not
+     * a regular file inside storage/uploads (missing, remote storage, or a
+     * stored path that would point outside — "..", absolute paths, symlinks
+     * leading elsewhere). The only way an app should find a media file.
+     */
+    public function localPath(array $row): ?string
+    {
+        if (($row['storage_disk'] ?? 'local') !== 'local') return null;
+        $rel = (string) ($row['storage_path'] ?? '');
+        if ($rel === '' || str_contains($rel, "\0") || str_contains($rel, '..') || str_starts_with($rel, '/') || str_contains($rel, '\\')) return null;
+        $base = realpath(rtrim($this->uploadPath, '/'));
+        $abs = realpath(rtrim($this->uploadPath, '/') . '/' . $rel);
+        if ($base === false || $abs === false || !str_starts_with($abs, $base . DIRECTORY_SEPARATOR) || !is_file($abs)) return null;
+        return $abs;
+    }
+
+    /**
+     * Rebuild one item's generated sizes with the current settings (and the
+     * media.sizes filter). Returns ['status' => processed|skipped|failed,
+     * 'variants' => n, 'item' => row|null].
+     */
+    public function regenerate(int $id): array
+    {
+        $row = $this->repo->find($id);
+        if ($row === null || $this->localPath($row) === null) return ['status' => 'skipped', 'variants' => 0, 'item' => $row];
+        [$outcome, $n] = $this->regenerateOne($row, $this->mediaSettings());
+        return ['status' => $outcome, 'variants' => $n, 'item' => $this->repo->find($id)];
+    }
+
+    /**
+     * Replace an item's file with $source, keeping its name, folder, URL and
+     * row (1.2.87). For apps that edit, compress or convert a file in place.
+     *
+     * The new content goes through the upload checks for the item's own
+     * extension (no script or page, a real image under an image name, SVG
+     * guard, pixel limit) and must have the same MIME type as the file it
+     * replaces. It is copied next to the original under a temporary name and
+     * renamed over it, which is atomic on one filesystem, so a visitor never
+     * sees half a file. The source is copied, never moved.
+     *
+     * Options:
+     *   regenerate  bool  rebuild the generated sizes (default true)
+     *   expect_sha1 string only replace if the current file still has this
+     *               SHA-1 (it has not changed since the caller read it)
+     *
+     * Core does not keep a copy of the old file: an app that may need to
+     * undo the change backs it up first. Fires media.file_replaced
+     * ($newRow, $oldRow).
+     *
+     * @throws MediaRejected with a sentence for the person, on any refusal
+     */
+    public function replaceFile(int $id, string $source, array $opts = []): array
+    {
+        $row = $this->repo->find($id);
+        if ($row === null) throw new MediaRejected('That media item no longer exists.');
+        $target = $this->localPath($row);
+        if ($target === null) throw new MediaRejected('The file for this media item is missing or not stored on this server.');
+        if (!is_file($source) || !is_readable($source)) throw new MediaRejected('The replacement file is missing.');
+        if (realpath($source) === $target) throw new MediaRejected('The replacement is the file itself.');
+        $size = (int) filesize($source);
+        if ($size <= 0) throw new MediaRejected('The replacement file is empty.');
+
+        $ms = $this->mediaSettings();
+        if ($size > $ms['max_upload_mb'] * 1024 * 1024) {
+            throw new MediaRejected('The replacement exceeds the maximum size of ' . Helpers::bytesFormat($ms['max_upload_mb'] * 1024 * 1024) . '.');
+        }
+        if (isset($opts['expect_sha1']) && is_string($opts['expect_sha1']) && @sha1_file($target) !== $opts['expect_sha1']) {
+            throw new MediaRejected('The file changed since it was read; nothing was replaced.');
+        }
+
+        // Copy first, then check the copy: what is checked is exactly what
+        // gets swapped in, whatever happens to the source meanwhile.
+        $stage = dirname($target) . '/.bh-replace-' . bin2hex(random_bytes(6)) . '.tmp';
+        if (!@copy($source, $stage)) {
+            @unlink($stage);
+            throw new MediaRejected('The replacement could not be written next to the original (is the uploads folder writable?).');
+        }
+        try {
+            $ext = strtolower(pathinfo($target, PATHINFO_EXTENSION));
+            $f = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($f, $stage) ?: 'application/octet-stream';
+            finfo_close($f);
+            if (($p = self::contentProblem($ext, $mime)) !== null) throw new MediaRejected($p);
+            if ($mime !== (string) $row['mime_type']) {
+                throw new MediaRejected('The replacement is ' . $mime . ', but this item is ' . $row['mime_type'] . '. Upload it as a new file instead.');
+            }
+            if ($ext === 'svg' || $ext === 'svgz' || $mime === 'image/svg+xml') {
+                $raw = (string) @file_get_contents($stage);
+                if (str_starts_with($raw, "\x1f\x8b")) throw new MediaRejected('Compressed SVG files are not accepted.');
+                if (($why = SvgGuard::problem($raw)) !== null) throw new MediaRejected('This SVG was refused because ' . $why . '.');
+            }
+            $this->checkPixels($stage, $mime, $ms);
+        } catch (\Throwable $e) {
+            @unlink($stage);
+            throw $e;
+        }
+        @chmod($stage, 0644);
+        if (!@rename($stage, $target)) {
+            @unlink($stage);
+            throw new MediaRejected('The file system refused to swap the files; the original is unchanged.');
+        }
+        clearstatcache(true, $target);
+
+        $fields = ['file_size' => (int) filesize($target)];
+        if (str_starts_with($mime, 'image/') && $mime !== 'image/svg+xml' && ($dim = @getimagesize($target))) {
+            $fields['width'] = (int) $dim[0];
+            $fields['height'] = (int) $dim[1];
+        }
+        $this->repo->update($id, $fields);
+        $updated = $this->repo->find($id) ?? ($fields + $row);
+        if (($opts['regenerate'] ?? true) && $this->images->supports($mime)) {
+            $this->regenerateOne($updated, $ms);
+            $updated = $this->repo->find($id) ?? $updated;
+        }
+        $this->hooks->doAction('media.file_replaced', $updated, $row);
+        return $updated;
     }
 
     // ── Delete ────────────────────────────────────────────────────────────────
@@ -799,6 +1122,10 @@ class MediaService
     {
         $row = $this->repo->find($id);
         if (!$row) return ['status' => 'missing'];
+
+        // 1.2.87: while the row and its files still exist (an app that keeps
+        // backups or records of its own cleans up here).
+        $this->hooks->doAction('media.deleting', $row);
 
         try {
             $removed = $this->repo->delete($id);

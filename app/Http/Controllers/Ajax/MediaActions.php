@@ -16,11 +16,42 @@ use App\Services\MediaService;
  * is whose file this is, so the ownership rules are applied here, through the
  * same MediaService methods the admin controller and the REST API use.
  *
- * Uploads stay on /admin/media/upload: the gateway takes JSON only.
+ * Uploads: media.upload (1.2.87) takes the file as multipart/form-data
+ * through the gateway; POST /admin/media/upload remains for older callers.
  */
 final class MediaActions
 {
     public function __construct(private MediaService $media) {}
+
+    /**
+     * media.upload — one file into the library (1.2.87).
+     *
+     * The gateway has checked the file against the site's media types and
+     * size limit; MediaService checks it again (content, SVG, pixel limit)
+     * and runs the media.upload.* filters, then stores it.
+     */
+    public function upload(AjaxContext $ctx): array
+    {
+        $file = $ctx->file('file');
+        if ($file === null) {
+            throw AjaxException::invalid('No file was selected.', ['file' => ['No file was selected.']]);
+        }
+        $config = \App\Core\Application::getInstance()->make(\App\Core\Config::class);
+        $meta = array_intersect_key($ctx->all(), ['title' => 1, 'alt_text' => 1, 'caption' => 1, 'name_hint' => 1]);
+        $meta['context'] = (string) ($ctx->input('context') ?? 'library');
+        if (isset($meta['title'])) $meta['title'] = mb_substr((string) $meta['title'], 0, 255);
+        try {
+            $allowed = $this->media->allowedTypes((array) $config->get('cms.media.allowed_types', []));
+            $max = $this->media->maxUploadBytes((int) $config->get('cms.media.max_upload_size', 64 * 1024 * 1024));
+            $row = $file->isHttpUpload()
+                ? $this->media->upload(['name' => $file->name(), 'tmp_name' => $file->path(), 'error' => UPLOAD_ERR_OK, 'size' => $file->size()],
+                    (int) $ctx->userId(), $allowed, $max, $meta)
+                : $this->media->importFile($file->path(), $file->name(), (int) $ctx->userId(), $allowed, $max, $meta);
+        } catch (\App\Services\MediaRejected $e) {
+            throw AjaxException::invalid($e->getMessage(), ['file' => [$e->getMessage()]]);
+        }
+        return ['item' => $this->media->decorate($this->media->find((int) $row['id']) ?? $row)];
+    }
 
     /** media.update — title, alt text, caption and description of one item. */
     public function update(AjaxContext $ctx): array
@@ -110,6 +141,9 @@ final class MediaActions
         $filters = self::filtersFrom($in);
         $page = (int) ($ctx->input('page') ?? 1);
         $result = $this->media->paginate($filters, $page, (int) ($ctx->input('per_page') ?? 60));
+        if (isset($result['data']) && is_array($result['data'])) {
+            $result['data'] = array_map(fn($r) => is_array($r) ? $this->media->decorate($r) : $r, $result['data']);
+        }
         if ($page <= 1) {
             // Each pill counts the same search and month, whatever its type.
             $counts = $this->media->typeCounts($filters['search'] ?? null, array_intersect_key($filters, ['from' => 1, 'to' => 1]));
@@ -131,7 +165,7 @@ final class MediaActions
             throw AjaxException::notFound('That file no longer exists.');
         }
         $user = $ctx->user();
-        return ['item' => $item, 'can' => [
+        return ['item' => $this->media->decorate($item), 'can' => [
             'edit'   => MediaService::userCanEdit($user, $item),
             'delete' => MediaService::userCanModify($user, $item),
         ]];

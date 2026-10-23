@@ -621,6 +621,14 @@
 .nml-ext { font-size:11px; font-weight:700; color:#64748b; letter-spacing:.06em; }
 .nml-badge { position:absolute; top:8px; left:8px; font-size:9px; font-weight:700; letter-spacing:.06em; padding:2px 6px; border-radius:5px; background:rgba(15,23,42,.7); color:#fff; }
 .nml-badge--svg { background:rgba(147,51,234,.85); }
+/* Labels apps add to cards (BasehimMedia.addItemBadge, 1.2.87) */
+.nml-ext-badges { display:flex; flex-wrap:wrap; gap:4px; padding:6px 10px 0; }
+.nml-ext-badge { font-size:10px; font-weight:600; line-height:1.4; padding:1px 6px; border-radius:999px; background:#f1f5f9; color:#334155; white-space:nowrap; }
+.nml-ext-badge--green { background:#dcfce7; color:#166534; }
+.nml-ext-badge--amber { background:#fef3c7; color:#92400e; }
+.nml-ext-badge--red { background:#fee2e2; color:#991b1b; }
+.nml-ext-badge--blue { background:#dbeafe; color:#1e40af; }
+.nm-card-badges { position:absolute; left:4px; bottom:4px; padding:0; pointer-events:none; }
 .nml-card__foot { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; }
 .nml-card__name { font-size:12.5px; color:#334155; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .nml-card__size { font-size:11px; color:#94a3b8; flex-shrink:0; }

@@ -211,9 +211,12 @@
       var ext = (m.file_name || '').split('.').pop().toUpperCase();
       inner = '<div class="nml-card__media nml-card__media--icon"><span style="color:' + di[1] + '">' + BasehimIcon(di[0], 'w-10 h-10') + '</span><span class="nml-ext">' + esc(ext) + '</span></div>';
     }
+    // Labels apps add (BasehimMedia.addItemBadge, 1.2.87); escaped by media.js.
+    var badges = (window.BasehimMedia && BasehimMedia.itemBadgesHtml) ? BasehimMedia.itemBadgesHtml(m) : '';
     return '<div class="nml-card' + sel + (chosen[m.id] ? ' is-chosen' : '') + '" data-id="' + (+m.id) + '" tabindex="0" role="listitem" aria-label="' + esc(name) + '">'
          + '<span class="nml-check" data-check="' + (+m.id) + '" role="checkbox" aria-checked="' + (chosen[m.id] ? 'true' : 'false') + '" aria-label="Select ' + esc(name) + '">' + BasehimIcon('check', 'w-4 h-4') + '</span>'
          + inner
+         + (badges ? '<div class="nml-ext-badges">' + badges + '</div>' : '')
          + '<div class="nml-card__foot"><span class="nml-card__name" title="' + esc(name) + '">' + esc(name) + '</span>'
          + '<span class="nml-card__size">' + fmtSize(m.file_size) + '</span></div>'
          + '</div>';

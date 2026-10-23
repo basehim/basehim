@@ -35,7 +35,15 @@ final class AjaxAction
         public readonly int $maxBody,
         public readonly bool $idempotent,
         public readonly string $description,
+        /** @var array<string,array{required:bool,types:string[]|string,max_size:int|string,mimes:string[]}> (1.2.87) */
+        public readonly array $files = [],
     ) {}
+
+    /** True when this action declares file fields (and so accepts multipart/form-data). */
+    public function acceptsFiles(): bool
+    {
+        return $this->files !== [];
+    }
 
     public function isPublic(): bool
     {

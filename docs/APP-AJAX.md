@@ -162,6 +162,7 @@ $ajax->register('media.update', [...]);
 | `rate_limit` | 120/min per user; public 30/min per IP | `['max' => 10, 'per' => 60, 'by' => 'user'\|'ip'\|'session', 'fail' => 'open'\|'closed']`, or `false` (signed-in actions only). |
 | `max_body` | `AJAX_MAX_BODY` (64 KB) | Bytes, 256 B – 1 MB. |
 | `idempotent` | `false` | Require an `Idempotency-Key` header and run once per key. POST only. |
+| `files` | — | File fields the action accepts (1.2.87): `['file' => ['types' => ['zip'], 'max_size' => 10485760]]`. The action then also takes multipart/form-data. See [Uploads](#uploads). |
 | `description` | `''` | For people reading the code. |
 
 Every option is checked at registration. A typo — `capabilty`, `requred`, a
@@ -426,6 +427,7 @@ The client is loaded on every admin page (`admin/assets/js/ajax.js`, in
 Basehim.ajax.request(action, data, options)   // → Promise<data>
 Basehim.ajax.get(action, data, options)       // same, with method GET
 Basehim.ajax.post(action, data, options)
+Basehim.ajax.upload(action, data, files, options)   // multipart, for actions with `files` (1.2.87)
 Basehim.ajax.newIdempotencyKey()
 Basehim.ajax.AjaxError                        // the rejection type
 ```
@@ -455,6 +457,32 @@ The client sends the CSRF token in a header, never in the URL, and logs
 nothing. It uses `credentials: 'same-origin'`, `cache: 'no-store'`, and
 refuses redirects (the gateway never redirects, so one means something else
 answered). GET requests take flat values only.
+
+## Uploads
+
+Since 1.2.87 an action can take files. It declares them with `files`, and the
+gateway then accepts multipart/form-data for it as well as JSON: a form with
+an `action` field, a `data` field holding the same JSON object a JSON request
+sends, and the files. Every check above applies unchanged (the CSRF token
+still goes in the header). Each file is then checked against its field's
+rule (extension, size, content matching the name, optional `mimes`) before
+the handler runs, and the handler reads it with `$ctx->file('field')`, an
+`App\Core\Ajax\UploadedFile`.
+
+```php
+$this->ajax('import', [
+    'handler'    => [$this, 'import'],
+    'capability' => 'manage_options',
+    'files'      => ['file' => ['types' => ['csv'], 'max_size' => 5 * 1024 * 1024]],
+]);
+```
+
+```js
+Basehim.ajax.upload('my-app.import', {}, { file: input.files[0] }, { onProgress: function (p) { … } });
+```
+
+The rules, `UploadedFile`, private storage, adding uploads to the media
+library and the media hooks are in [MEDIA-EXTENSIONS.md](MEDIA-EXTENSIONS.md).
 
 ## Themes and the public site
 
@@ -625,6 +653,7 @@ POST action also needs the CSRF token; every one is rate-limited.
 | `posts.tag_add`, `posts.tag_remove` | POST | whoever may edit the post | Add or remove a tag at once; a new name is kept pending until the post is published |
 | `terms.tag_suggest`, `terms.tag_overview` | GET | `edit_posts` | Tag typeahead; most used and recently used tags |
 | `media.list` | GET | `upload_media` | One page of the media library |
+| `media.upload` | POST (multipart) | `upload_media` (and the `/admin/media` area rule) | One file into the library (1.2.87): field `file`; `title`, `alt_text`, `caption`, `name_hint`, `context`. Answers `{item}`. Same checks and filters as every library upload |
 | `media.update` | POST | own file, or `delete_media` / `edit_others_posts` | Title, alt text, caption, description |
 | `media.delete` | POST | own files; others' need `delete_media` | Delete files (denied ones are counted, not deleted) |
 | `media.regenerate_batch` | POST | `manage_settings` | One batch of thumbnail regeneration |
@@ -649,8 +678,8 @@ POST action also needs the CSRF token; every one is rate-limited.
 The full list on a running site — core's and every active app's, with their
 input fields — is under **API → Reference → AJAX actions**.
 
-Still on their own routes: uploads (`/admin/media/upload`, avatars), which the
-gateway cannot take because it accepts JSON only; and the updater and the
+Still on their own routes: the avatar editor; `/admin/media/upload`, kept for
+older callers now that `media.upload` exists; and the updater and the
 marketplace installers, which replace files while they run and keep the
 routes they were tested with.
 
@@ -671,7 +700,10 @@ Defaults for per-action limits are in `config/ajax.php`.
 - **One session lock.** PHP's file sessions lock, so a user's simultaneous
   requests run one after another. A slow handler holds up that user's other
   requests (not anyone else's).
-- **No uploads.** JSON only; files go through the media endpoints.
+- **One file per field, buffered by PHP.** Uploads are ordinary multipart
+  requests: PHP receives the whole body before the gateway sees it, and
+  `upload_max_filesize` / `post_max_size` apply. There is no chunking or
+  resuming.
 - **Fixed windows.** Up to twice a limit can pass across a window boundary.
 - **Not a sandbox.** Like everything an app does, registration is enforced
   for honest code. A hostile app is PHP in the same process (APP-PERMISSIONS.md).

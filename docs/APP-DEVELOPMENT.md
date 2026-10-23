@@ -243,7 +243,12 @@ $this->addFilter('html.iframe_hosts', fn(array $h) => [...$h, 'player.example.or
 
 **Taxonomy:** `term.created` `term.updated` `term.deleted`
 
-**Media:** `media.uploaded` `media.deleted`
+**Media:** `media.uploaded` `media.updated` `media.file_replaced`
+`media.sizes_generated` `media.deleting` `media.deleted`; filters
+`media.upload.allowed_types` `media.upload.max_bytes` `media.upload.check`
+`media.upload.file` `media.upload.filename` `media.upload.directory`
+`media.upload.row` `media.sizes` `media.item` (1.2.87, see
+[MEDIA-EXTENSIONS.md](MEDIA-EXTENSIONS.md))
 
 **Mail:** `mail.before_send` `mail.sent` `mail.failed`
 
@@ -264,6 +269,7 @@ $this->addFilter('html.iframe_hosts', fn(array $h) => [...$h, 'player.example.or
 **Editor** `addEditorScript` `addEditorStyle` `addEditorConfig` `registerBlockRenderer`
 **Widgets** `registerWidget` — dashboard cards with `'surfaces' => ['dashboard']`: [DASHBOARD-WIDGETS.md](DASHBOARD-WIDGETS.md)
 **Views/assets** `view` `asset`
+**Files** `appStorageDir` — a private folder under `storage/apps/{slug}` for uploads that aren't media (1.2.87, [MEDIA-EXTENSIONS.md](MEDIA-EXTENSIONS.md))
 **Settings** `getSetting` `setSetting` `deleteSetting` `allSettings`
 **Database** `table` `legacyTable` `renameLegacyTable` `schema` `db`
 **Core API** `api` `schedule`

@@ -45,21 +45,141 @@
         return node;
     }
 
+    // ----- Upload filters (1.2.87) ------------------------------------------
+    //
+    // An app can change a file before it is sent, for example to compress an
+    // image in the browser:
+    //
+    //   BasehimMedia.addUploadFilter(function (file, ctx) {
+    //       // ctx.original: the file the person chose; ctx.opts: uploadFile's opts;
+    //       // ctx.status(text): show a short note on the upload's progress row.
+    //       return file;              // a File/Blob, or a Promise of one
+    //   });
+    //
+    // Filters run in the order they were added, each receiving the previous
+    // one's file. A filter that rejects stops the upload with its message, so
+    // a filter that wants the original sent on failure resolves with it. With
+    // no filter registered, uploadFile() behaves exactly as before.
+    //
+    // Events on document (1.2.87, for every upload): 'bh:media-upload-start'
+    // { file, original, context }, 'bh:media-uploaded' { response, item, file,
+    // original, context } and 'bh:media-upload-failed' { error, file,
+    // original, context }. uploadFile(file, { context: 'editor' }) tells the
+    // server's media.upload.* filters where the upload started, and
+    // { signal } cancels it.
+    var uploadFilters = [];
+    function addUploadFilter(fn) {
+        if (typeof fn === 'function' && uploadFilters.indexOf(fn) === -1) uploadFilters.push(fn);
+    }
+    function prepareUpload(file, opts) {
+        var ctx = {
+            original: file,
+            opts: opts,
+            status: function (text) { if (typeof opts.onStatus === 'function') opts.onStatus(String(text)); }
+        };
+        return uploadFilters.reduce(function (p, fn) {
+            return p.then(function (f) {
+                return Promise.resolve(fn(f, ctx)).then(function (out) {
+                    return (out instanceof Blob) ? out : f;   // anything else keeps the file unchanged
+                });
+            });
+        }, Promise.resolve(file));
+    }
+
     // ----- Upload (XHR with progress) ----------------------------------------
     function uploadFile(file, opts) {
         opts = opts || {};
+        if (!uploadFilters.length) return sendFile(file, opts, file);
+        return prepareUpload(file, opts).then(function (prepared) {
+            return sendFile(prepared, opts, file);
+        });
+    }
+
+    function emit(name, detail) {
+        try { document.dispatchEvent(new CustomEvent(name, { detail: detail })); } catch (e) { /* an observer's error must not fail the upload */ }
+    }
+
+    // Through the AJAX gateway's media.upload when it takes files (1.2.87),
+    // else the older POST /admin/media/upload. Either way the promise
+    // resolves with { success: true, data: item }, as it always has.
+    function sendFile(file, opts, original) {
+        var name = file.name || (original && original.name) || 'upload';
+        var context = typeof opts.context === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(opts.context) ? opts.context : '';
+        emit('bh:media-upload-start', { file: file, original: original || file, context: context || 'library' });
+        var useGateway = opts.legacy !== true && window.Basehim && window.Basehim.ajax && typeof window.Basehim.ajax.upload === 'function';
+        var p = useGateway ? sendViaGateway(file, name, opts, context) : sendViaRoute(file, name, opts, context);
+        return p.then(function (resp) {
+            emit('bh:media-uploaded', { response: resp, item: resp.data, file: file, original: original || file, context: context || 'library' });
+            return resp;
+        }, function (err) {
+            emit('bh:media-upload-failed', { error: err, file: file, original: original || file, context: context || 'library' });
+            throw err;
+        });
+    }
+
+    function uploadData(opts, context) {
+        var d = {};
+        if (opts.title) d.title = String(opts.title);
+        if (opts.alt_text) d.alt_text = String(opts.alt_text);
+        if (opts.caption) d.caption = String(opts.caption);
+        // A page can say what its uploads are about (the post editor sends
+        // the post title). The server uses it only to name files whose own
+        // name is meaningless, like 1000477992.jpg or image.png.
+        var hint = opts.name_hint != null ? opts.name_hint
+            : (window.BasehimMedia && typeof window.BasehimMedia.nameHint === 'function' ? window.BasehimMedia.nameHint() : '');
+        if (hint) d.name_hint = String(hint).slice(0, 200);
+        if (context) d.context = context;
+        return d;
+    }
+
+    // At most three uploads at a time through the gateway, so dropping a
+    // folder of photos stays within its rate limits; one that is still
+    // limited waits and tries again (twice).
+    var MAX_PARALLEL = 3, running = 0, waiting = [];
+    function slot() {
+        return new Promise(function (resolve) {
+            if (running < MAX_PARALLEL) { running++; resolve(); } else waiting.push(resolve);
+        });
+    }
+    function release() {
+        var next = waiting.shift();
+        if (next) next(); else running = Math.max(0, running - 1);
+    }
+    function sendViaGateway(file, name, opts, context) {
+        return slot().then(function () {
+            var attempt = function (n) {
+                return sendViaGatewayOnce(file, name, opts, context).catch(function (err) {
+                    if (err && err.code === 'RATE_LIMITED' && n < 2 && !(opts.signal && opts.signal.aborted)) {
+                        return new Promise(function (r) { setTimeout(r, 3000 * (n + 1)); }).then(function () { return attempt(n + 1); });
+                    }
+                    throw err;
+                });
+            };
+            return attempt(0);
+        }).then(function (v) { release(); return v; }, function (e) { release(); throw e; });
+    }
+
+    function sendViaGatewayOnce(file, name, opts, context) {
+        var blob = file;
+        // A filtered Blob has no name of its own: keep the chosen file's.
+        if (!file.name) {
+            try { blob = new File([file], name, { type: file.type }); } catch (e) { blob = file; blob.name = name; }
+        }
+        return window.Basehim.ajax.upload('media.upload', uploadData(opts, context), { file: blob }, {
+            signal: opts.signal,
+            onProgress: function (n) { if (opts.onProgress) opts.onProgress(n); }
+        }).then(function (data) {
+            return { success: true, data: (data && data.item) || data };
+        });
+    }
+
+    function sendViaRoute(file, name, opts, context) {
         return new Promise(function (resolve, reject) {
             var fd = new FormData();
-            fd.append('file', file);
+            fd.append('file', file, name);
             fd.append('_csrf', CSRF);
-            if (opts.title)    fd.append('title', opts.title);
-            if (opts.alt_text) fd.append('alt_text', opts.alt_text);
-            // A page can say what its uploads are about (the post editor sends
-            // the post title). The server uses it only to name files whose own
-            // name is meaningless, like 1000477992.jpg or image.png.
-            var hint = opts.name_hint != null ? opts.name_hint
-                : (window.BasehimMedia && typeof window.BasehimMedia.nameHint === 'function' ? window.BasehimMedia.nameHint() : '');
-            if (hint) fd.append('name_hint', String(hint).slice(0, 200));
+            var d = uploadData(opts, context);
+            Object.keys(d).forEach(function (k) { fd.append(k, d[k]); });
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', url('/admin/media/upload?ajax=1'));
@@ -70,6 +190,7 @@
                     opts.onProgress(Math.round((e.loaded / e.total) * 100));
                 }
             };
+            if (opts.signal) opts.signal.addEventListener('abort', function () { try { xhr.abort(); } catch (e) {} });
             xhr.onload = function () {
                 try {
                     var resp = JSON.parse(xhr.responseText);
@@ -80,8 +201,48 @@
                 }
             };
             xhr.onerror = function () { reject(new Error('Network error')); };
+            xhr.onabort = function () { reject(new Error('The upload was cancelled.')); };
             xhr.send(fd);
         });
+    }
+
+    // ----- Item badges (1.2.87) ------------------------------------------------
+    //
+    // A short label on library and picker cards, from data an app put on the
+    // item with the media.item filter (item.ext['my-app']):
+    //
+    //   BasehimMedia.addItemBadge(function (item) {
+    //       var x = item.ext && item.ext['image-compressor'];
+    //       return x ? { text: x.badge, tone: x.tone, title: x.note } : null;
+    //   });
+    //
+    // Return null, one badge or a list. Text is shown as text (never HTML);
+    // tone is one of gray, green, amber, red, blue.
+    var badgeFns = [];
+    function addItemBadge(fn) {
+        if (typeof fn === 'function' && badgeFns.indexOf(fn) === -1) badgeFns.push(fn);
+    }
+    var TONES = ['gray', 'green', 'amber', 'red', 'blue'];
+    function itemBadges(item) {
+        var out = [];
+        badgeFns.forEach(function (fn) {
+            var r;
+            try { r = fn(item); } catch (e) { return; }
+            (Array.isArray(r) ? r : (r ? [r] : [])).forEach(function (b) {
+                if (!b || b.text == null || out.length >= 3) return;
+                out.push({
+                    text: String(b.text).slice(0, 24),
+                    tone: TONES.indexOf(b.tone) >= 0 ? b.tone : 'gray',
+                    title: b.title != null ? String(b.title).slice(0, 200) : ''
+                });
+            });
+        });
+        return out;
+    }
+    function itemBadgesHtml(item) {
+        return itemBadges(item).map(function (b) {
+            return '<span class="nml-ext-badge nml-ext-badge--' + b.tone + '"' + (b.title ? ' title="' + escapeHtml(b.title) + '"' : '') + '>' + escapeHtml(b.text) + '</span>';
+        }).join('');
     }
 
     // ----- Progress row ------------------------------------------------------
@@ -100,6 +261,18 @@
     function swapRowIcon(row, name) {
         var el = row.querySelector('.nm-progress-row-icon');
         if (el) el.outerHTML = BasehimIcon(name, 'w-4 h-4 nm-progress-row-icon');
+    }
+    // A short line under the file name, written by an upload filter (1.2.87).
+    function setRowNote(row, text) {
+        var body = row.querySelector('.nm-progress-row-body');
+        if (!body) return;
+        var note = body.querySelector('.nm-progress-row-note');
+        if (!note) {
+            note = el('div', { class: 'nm-progress-row-note' });
+            note.style.cssText = 'font-size:11px;color:#64748b;margin-top:2px';
+            body.appendChild(note);
+        }
+        note.textContent = text;
     }
     function progressDone(row) {
         row.classList.add('is-done');
@@ -140,7 +313,9 @@
             var pct  = row.querySelector('.nm-progress-row-pct');
 
             uploadFile(file, {
-                onProgress: function (n) { fill.style.width = n + '%'; pct.textContent = n + '%'; }
+                onProgress: function (n) { fill.style.width = n + '%'; pct.textContent = n + '%'; },
+                // A note from an upload filter (1.2.87), e.g. "Compressing…".
+                onStatus: function (text) { setRowNote(row, text); }
             }).then(function (resp) {
                 progressDone(row);
                 if (opts.onUploaded) opts.onUploaded(resp.data || resp);
@@ -431,6 +606,8 @@
                 card.innerHTML = '<div class="nm-card-file">' + BasehimIcon(k === 'video' ? 'film' : (k === 'audio' ? 'musical-note' : 'document'), 'w-4 h-4') +
                     '<div class="nm-card-file-name">' + escapeHtml(m.original_name || m.file_name || '') + '</div></div>';
             }
+            var badges = itemBadgesHtml(m);
+            if (badges) card.insertAdjacentHTML('beforeend', '<div class="nml-ext-badges nm-card-badges">' + badges + '</div>');
             card.setAttribute('role', 'option');
             card.setAttribute('tabindex', '0');
             card.title = m.title || m.original_name || m.file_name || '';
@@ -579,7 +756,7 @@
             var row = makeProgressRow(file, true);
             progress.appendChild(row);
             var pct = row.querySelector('.nm-progress-row-pct');
-            uploadFile(file, { onProgress: function (n) { pct.textContent = n + '%'; } }).then(function (resp) {
+            uploadFile(file, { onProgress: function (n) { pct.textContent = n + '%'; }, onStatus: function (text) { setRowNote(row, text); } }).then(function (resp) {
                 row.remove();
                 var m = resp && (resp.data || resp);
                 if (!m || !m.id || !me.parentNode) return;
@@ -716,6 +893,12 @@
         openPicker: openPicker,
         attachDropzone: attachDropzone,
         uploadFile: uploadFile,
+        // 1.2.87: change a file before it is sent (see "Upload filters" above).
+        addUploadFilter: addUploadFilter,
+        // 1.2.87: labels on library and picker cards (see "Item badges").
+        addItemBadge: addItemBadge,
+        itemBadges: itemBadges,
+        itemBadgesHtml: itemBadgesHtml,
         url: url,
         // Exposed so a screen can drive a field it built itself.
         setValue: setValue,

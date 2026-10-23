@@ -34,7 +34,24 @@ final class AjaxContext
         private readonly Request $request,
         private readonly string $requestId,
         private readonly string $clientIp,
+        /** @var array<string,UploadedFile> checked files, for actions that declare them (1.2.87) */
+        private readonly array $files = [],
     ) {}
+
+    /**
+     * A file the action declared, already checked by the gateway (size,
+     * extension, content), or null when an optional one was not sent.
+     */
+    public function file(string $field): ?UploadedFile
+    {
+        return $this->files[$field] ?? null;
+    }
+
+    /** @return array<string,UploadedFile> every file that was sent, by field */
+    public function files(): array
+    {
+        return $this->files;
+    }
 
     /** One validated input field, or $default when it was not sent. */
     public function input(string $key, mixed $default = null): mixed

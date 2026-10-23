@@ -136,6 +136,9 @@ abstract class Resource
             'find' => 'media.read', 'paginate' => 'media.read', 'stats' => 'media.read',
             'update' => 'media.write', 'uploadFromPath' => 'media.write',
             'delete' => 'media.delete',
+            // 1.2.87
+            'path' => 'media.read', 'sizes' => 'media.read', 'uploadRules' => null,
+            'fromUpload' => 'media.write', 'replaceFile' => 'media.write', 'regenerate' => 'media.write',
         ],
         'UsersApi' => [
             'find' => 'users.read', 'findByEmail' => 'users.read',

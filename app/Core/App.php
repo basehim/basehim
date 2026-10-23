@@ -678,6 +678,38 @@ abstract class App
     }
 
     /**
+     * This app's private folder under storage/ (1.2.87), created on first
+     * use: storage/apps/{slug}/{$sub}. The web server never serves storage/
+     * (the root .htaccess forbids it, and a deny-all .htaccess and an empty
+     * index.html are written into the folder as well), so it is the place
+     * for uploads that are not media: packages, imports, exports, backups.
+     *
+     *     $file->moveTo($this->appStorageDir('releases'), 'basehim-1.2.87.zip');
+     *
+     * $sub is one or more lower-case folder names separated by "/".
+     *
+     * @throws \InvalidArgumentException for a $sub that is not a plain folder path
+     * @throws \RuntimeException when the folder cannot be created
+     */
+    protected function appStorageDir(string $sub = ''): string
+    {
+        $sub = trim($sub, '/');
+        if ($sub !== '' && !preg_match('#^[a-z0-9][a-z0-9_-]{0,63}(/[a-z0-9][a-z0-9_-]{0,63}){0,5}$#', $sub)) {
+            throw new \InvalidArgumentException('appStorageDir(): use lower-case folder names like "releases" or "imports/2026".');
+        }
+        $root = (defined('BASEHIM_ROOT') ? BASEHIM_ROOT : dirname(__DIR__, 2)) . '/storage/apps/' . $this->slug;
+        $dir = $root . ($sub !== '' ? '/' . $sub : '');
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new \RuntimeException("appStorageDir(): could not create storage/apps/{$this->slug}" . ($sub !== '' ? "/{$sub}" : '') . '.');
+        }
+        if (!is_file($root . '/.htaccess')) {
+            @file_put_contents($root . '/.htaccess', "Require all denied\n<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n");
+            @file_put_contents($root . '/index.html', '');
+        }
+        return $dir;
+    }
+
+    /**
      * URL for an app-bundled asset (e.g. css, js, image).
      * Files in `{app}/assets/...` are served via the app asset route.
      *

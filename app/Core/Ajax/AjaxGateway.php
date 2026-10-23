@@ -34,6 +34,8 @@ use App\Services\RateLimiter;
  *   3. global rate limit for the client address                    429
  *   4. not cross-site (Sec-Fetch-Site, Origin)                     403
  *   5. POST: application/json, size within limit, valid JSON       415 413 400
+ *      (or multipart/form-data with "action" and "data" fields, for
+ *      actions that declare `files` — 1.2.87)
  *   6. the action is registered, its app is active                 404
  *   7. the action accepts this method, and this body size          405 413
  *   8. signed in, when the action requires it                      401
@@ -41,6 +43,7 @@ use App\Services\RateLimiter;
  *  10. the action's capabilities                                   403
  *  11. the action's rate limit                                     429
  *  12. input matches the action's schema                           422
+ *      and every file matches its declared rule (1.2.87)           422
  *  13. idempotency key, when the action asks for one               400 409
  *  14. the handler runs; its AjaxException becomes the answer, anything
  *      else it throws is logged and answered with a generic        500
@@ -62,6 +65,7 @@ final class AjaxGateway
         'UNSUPPORTED_AUTH'       => 'This endpoint uses the browser session. API clients should use /api/v1 with a token.',
         'ORIGIN_REJECTED'        => 'Requests from other sites are not accepted.',
         'UNSUPPORTED_MEDIA_TYPE' => 'Send the request as application/json.',
+        'UPLOAD_TOO_LARGE'       => 'The upload is larger than this server accepts.',
         'PAYLOAD_TOO_LARGE'      => 'The request is too large.',
         'MALFORMED_JSON'         => 'The request body is not valid JSON.',
         'BAD_REQUEST'            => 'The request is not in the expected format.',
@@ -84,8 +88,12 @@ final class AjaxGateway
     /** @var \Closure(int):?string reads at most N+1 bytes of the body */
     private \Closure $bodyReader;
 
-    /** @param (callable(int):?string)|null $bodyReader for tests; defaults to php://input */
-    public function __construct(?callable $bodyReader = null)
+    /**
+     * @param (callable(int):?string)|null $bodyReader for tests; defaults to php://input
+     * @param bool $acceptTestFiles for tests only: accept files that are not
+     *        PHP uploads of this request (is_uploaded_file() is false for them)
+     */
+    public function __construct(?callable $bodyReader = null, private bool $acceptTestFiles = false)
     {
         $this->app = Application::getInstance();
         $this->config = $this->app->make(Config::class);
@@ -156,7 +164,40 @@ final class AjaxGateway
 
         // 5. Read and parse ----------------------------------------------
         $bodyLength = 0;
-        if ($method === 'POST') {
+        $multipart = false;
+        if ($method === 'POST' && $this->isMultipart($request)) {
+            // Uploads (1.2.87). PHP has already parsed the body into $_POST
+            // and $_FILES; the action and its data are two ordinary fields,
+            // "action" and "data" (the same JSON object a JSON request sends).
+            $multipart = true;
+            $post = $request->body;
+            if ($post === [] && $request->files === []) {
+                // A body over post_max_size is dropped whole by PHP: say so,
+                // rather than "unknown action".
+                $declared = $request->server['CONTENT_LENGTH'] ?? '';
+                if (ctype_digit((string) $declared) && (int) $declared > 0) {
+                    return $this->fail(413, 'UPLOAD_TOO_LARGE', [], [], 'The upload is larger than this server accepts (PHP post_max_size is ' . (string) ini_get('post_max_size') . ').');
+                }
+                return $this->fail(400, 'BAD_REQUEST', [], [], 'The request body is empty.');
+            }
+            foreach (array_keys($post) as $key) {
+                if ($key !== 'action' && $key !== 'data') {
+                    return $this->fail(400, 'BAD_REQUEST', [], [], 'Only "action" and "data" fields, and files, are accepted.');
+                }
+            }
+            $name = $post['action'] ?? null;
+            $raw = $post['data'] ?? '{}';
+            if (!is_string($raw)) {
+                return $this->fail(400, 'BAD_REQUEST', [], [], 'The "data" field must hold a JSON object.');
+            }
+            $readLimit = $this->readLimit();
+            if (strlen($raw) > $readLimit) {
+                return $this->fail(413, 'PAYLOAD_TOO_LARGE');
+            }
+            $bodyLength = strlen($raw);
+            $data = $this->decodeObject($raw);
+            if ($data instanceof Response) return $data;
+        } elseif ($method === 'POST') {
             if (!$this->isJson($request)) {
                 return $this->fail(415, 'UNSUPPORTED_MEDIA_TYPE');
             }
@@ -173,17 +214,8 @@ final class AjaxGateway
             if (trim($raw) === '') {
                 return $this->fail(400, 'BAD_REQUEST', [], [], 'The request body is empty.');
             }
-            try {
-                $payload = json_decode($raw, true, 64, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
-            } catch (\JsonException) {
-                return $this->fail(400, 'MALFORMED_JSON');
-            }
-            // "{}" and "[]" both decode to an empty PHP array; only the first
-            // is an object.
-            if (!is_array($payload) || ($payload !== [] && array_is_list($payload))
-                || ($payload === [] && ltrim($raw)[0] !== '{')) {
-                return $this->fail(400, 'BAD_REQUEST', [], [], 'The request body must be a JSON object.');
-            }
+            $payload = $this->decodeObject($raw);
+            if ($payload instanceof Response) return $payload;
             foreach (array_keys($payload) as $key) {
                 if ($key !== 'action' && $key !== 'data') {
                     return $this->fail(400, 'BAD_REQUEST', [], [], 'Only "action" and "data" are accepted at the top level.');
@@ -222,6 +254,16 @@ final class AjaxGateway
         if ($bodyLength > $action->maxBody) {
             return $this->fail(413, 'PAYLOAD_TOO_LARGE');
         }
+        if ($multipart) {
+            if (!$action->acceptsFiles()) {
+                return $this->fail(415, 'UNSUPPORTED_MEDIA_TYPE');
+            }
+            // The whole request may not be larger than the files it may carry.
+            $declared = $request->server['CONTENT_LENGTH'] ?? '';
+            if (ctype_digit((string) $declared) && (int) $declared > $this->uploadCeiling($action)) {
+                return $this->fail(413, 'UPLOAD_TOO_LARGE');
+            }
+        }
 
         // 8. Who is asking. A public action that opted out of CSRF runs as a
         // visitor: the session is not even opened, so a request forged from
@@ -234,6 +276,11 @@ final class AjaxGateway
             if (!$action->isPublic() && $user === null) {
                 return $this->fail(401, 'AUTH_REQUIRED');
             }
+            // The signed-in user, where core's services look for it, as the
+            // admin routes' Authenticate middleware does (1.2.87). Without
+            // it, code a handler calls (MediaApi::fromUpload(), say) could not
+            // tell who is uploading.
+            if ($user !== null) $this->app->instance('auth.user', $user);
         }
 
         // 9. CSRF on every state-changing request. GET actions are reads and
@@ -298,6 +345,7 @@ final class AjaxGateway
             throw AjaxException::invalid('The request data must be an object.', ['data' => ['Must be an object.']]);
         }
         $input = $action->input->validate($data, $method === 'GET');
+        $files = $action->acceptsFiles() ? $this->checkFiles($action, $multipart ? $request->files : [], $input) : [];
 
         // 13 ---------------------------------------------------------------
         $claim = null;
@@ -319,8 +367,11 @@ final class AjaxGateway
             // the same key with different data, is 409 DUPLICATE_REQUEST.
             try {
                 $store = $this->app->make(\App\Services\IdempotencyStore::class);
-                $begin = $store->begin($scope, $key, \App\Services\IdempotencyStore::requestHash('POST', $action->name,
-                    json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: ''));
+                // Files count as part of the request: the same key with a
+                // different file is a different request.
+                $body = (json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '')
+                    . implode('|', array_map(static fn(UploadedFile $f) => $f->fingerprint(), $files));
+                $begin = $store->begin($scope, $key, \App\Services\IdempotencyStore::requestHash('POST', $action->name, $body));
             } catch (\Throwable $e) {
                 // Without the store there is no way to promise "once".
                 $this->logThrowable($e, $action);
@@ -336,7 +387,7 @@ final class AjaxGateway
         }
 
         // 14 ---------------------------------------------------------------
-        $ctx = new AjaxContext($action, $input, $user, $request, $this->requestId, $this->clientIp);
+        $ctx = new AjaxContext($action, $input, $user, $request, $this->requestId, $this->clientIp, $files);
         $level = ob_get_level();
         ob_start();
         try {
@@ -417,6 +468,125 @@ final class AjaxGateway
             }
         }
         return true;
+    }
+
+    private function isMultipart(Request $request): bool
+    {
+        $ct = strtolower(trim((string) ($request->server['CONTENT_TYPE'] ?? $request->header('content-type', ''))));
+        return str_starts_with($ct, 'multipart/form-data');
+    }
+
+    /** A JSON object, or the error response for anything else. */
+    private function decodeObject(string $raw): array|Response
+    {
+        try {
+            $v = json_decode($raw, true, 64, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
+        } catch (\JsonException) {
+            return $this->fail(400, 'MALFORMED_JSON');
+        }
+        // "{}" and "[]" both decode to an empty PHP array; only the first
+        // is an object.
+        if (!is_array($v) || ($v !== [] && array_is_list($v)) || ($v === [] && (ltrim($raw)[0] ?? '') !== '{')) {
+            return $this->fail(400, 'BAD_REQUEST', [], [], 'The request body must be a JSON object.');
+        }
+        return $v;
+    }
+
+    /** Largest body an upload action can need: its files, its data and form overhead. */
+    private function uploadCeiling(AjaxAction $action): int
+    {
+        $total = $action->maxBody + 65536;
+        foreach ($action->files as $rule) {
+            $total += $this->fileRules($rule, $action)['max'] + 16384;
+        }
+        return $total;
+    }
+
+    /**
+     * A file rule with 'media' resolved to the site's own lists (Settings →
+     * Media, and the media.upload.* filters apps may add).
+     *
+     * @return array{types:string[],max:int}
+     */
+    private function fileRules(array $rule, AjaxAction $action, ?string $context = null): array
+    {
+        $types = $rule['types'];
+        $max = $rule['max_size'];
+        if ($types === 'media' || $max === 'media') {
+            $m = $this->app->make(\App\Services\MediaService::class)->uploadRules($context ?? ('ajax:' . $action->name));
+            if ($types === 'media') $types = $m['types'];
+            if ($max === 'media') $max = $m['max_bytes'];
+        }
+        return ['types' => array_values(array_diff((array) $types, \App\Services\MediaService::NEVER_ALLOWED)), 'max' => (int) $max];
+    }
+
+    /**
+     * Check every file against the action's rules. Returns the files by
+     * field; throws 422 with a message per field for anything wrong.
+     *
+     * @param array<string,mixed> $sent $_FILES
+     * @return array<string,UploadedFile>
+     */
+    private function checkFiles(AjaxAction $action, array $sent, array $input = []): array
+    {
+        // An action whose input has a "context" field (media.upload's
+        // library, editor, …) has its 'media' rules resolved for that
+        // context, exactly as MediaService will when it stores the file.
+        $context = is_string($input['context'] ?? null) && preg_match('/^[a-z][a-z0-9_-]{0,39}$/', $input['context'])
+            ? $input['context'] : null;
+        $errors = [];
+        foreach (array_keys($sent) as $field) {
+            if (!isset($action->files[$field])) $errors[(string) $field] = ['This action does not accept a file here.'];
+        }
+        $out = [];
+        foreach ($action->files as $field => $rule) {
+            $entry = $sent[$field] ?? null;
+            if (!is_array($entry) || (int) ($entry['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                if ($rule['required']) $errors[$field] = ['No file was selected.'];
+                continue;
+            }
+            [$file, $problem] = UploadedFile::fromEntry($field, $entry, !$this->acceptTestFiles);
+            if ($file === null) { $errors[$field] = [(string) $problem]; continue; }
+
+            $r = $this->fileRules($rule, $action, $context);
+            $ext = $file->extension();
+            if ($ext === '' || !in_array($ext, $r['types'], true)) {
+                $errors[$field] = [$ext === '' ? 'The file has no extension.'
+                    : 'Files of type ".' . $ext . '" are not accepted here (accepted: ' . implode(', ', $r['types']) . ').'];
+                continue;
+            }
+            if ($file->size() > $r['max']) {
+                $errors[$field] = ['The file is larger than ' . \App\Core\Helpers::bytesFormat($r['max']) . '.'];
+                continue;
+            }
+            // The content must be what the name says: no script or page under
+            // any name, a real image under an image name (MediaService's rule).
+            $problem = \App\Services\MediaService::contentProblem($ext, $file->mime());
+            if ($problem === null && ($ext === 'svg' || $file->mime() === 'image/svg+xml')) {
+                $why = \App\Services\SvgGuard::problem((string) @file_get_contents($file->path(), false, null, 0, 8 * 1048576));
+                if ($why !== null) $problem = 'This SVG was refused because ' . $why . '.';
+            }
+            if ($problem === null && $rule['mimes'] !== [] && !self::mimeMatches($file->mime(), $rule['mimes'])) {
+                $problem = 'The file\'s content (' . $file->mime() . ') is not what this field accepts.';
+            }
+            if ($problem !== null) { $errors[$field] = [$problem]; continue; }
+            $out[$field] = $file;
+        }
+        if ($errors !== []) {
+            $first = reset($errors)[0];
+            throw AjaxException::invalid(count($errors) === 1 ? $first : 'Some files were not accepted.', $errors);
+        }
+        return $out;
+    }
+
+    /** @param string[] $allowed 'application/zip' or 'image/*' */
+    private static function mimeMatches(string $mime, array $allowed): bool
+    {
+        foreach ($allowed as $a) {
+            if ($a === $mime) return true;
+            if (str_ends_with($a, '/*') && str_starts_with($mime, substr($a, 0, -1))) return true;
+        }
+        return false;
     }
 
     /** The most any registered action accepts, so the body is read once. */

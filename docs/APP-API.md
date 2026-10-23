@@ -61,6 +61,14 @@ $item = $this->api()->media()->uploadFromPath('/tmp/chart.png', 'chart.png', nul
 // rewriting the file in place, its width, height and file_size.
 $this->api()->media()->update($item['id'], ['width' => 1600, 'height' => 900, 'file_size' => 245112]);
 
+// 1.2.87: a file sent to one of your AJAX actions, into the library…
+$item = $this->api()->media()->fromUpload($ctx->file('file'), ['title' => 'Logo']);
+// …or a file replaced in place (same URL; size, dimensions and thumbnails updated).
+$this->api()->media()->replaceFile($id, $optimizedPath, ['expect_sha1' => $sha1]);
+$why = $this->api()->media()->lastError();     // when either returned null
+$abs = $this->api()->media()->path($id);        // the file on disk, safely resolved
+// More in MEDIA-EXTENSIONS.md.
+
 // Moderation
 foreach ($this->api()->comments()->all(['status' => 'pending']) as $c) {
     if ($this->looksFine($c)) $this->api()->comments()->approve((int) $c['id']);
