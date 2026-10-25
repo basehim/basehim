@@ -566,7 +566,15 @@ final class SeoHeadService
                 if ($d = Time::iso($post['published_at'] ?? null)) $page['datePublished'] = $d;
                 if ($d = Time::iso($post['updated_at'] ?? null)) $page['dateModified'] = $d;
             }
+            // A ProfilePage must name whose profile it is (1.2.88): Google's
+            // Rich Results test reports a missing "mainEntity" as critical.
+            if ($pType === 'ProfilePage' && ($person = $this->profilePerson($ctx)) !== null) {
+                $page['mainEntity'] = ['@id' => $person['@id']];
+            }
             $nodes[] = $page;
+        }
+        if ($type === 'author' && ($person = $this->profilePerson($ctx)) !== null) {
+            $nodes[] = $person;
         }
         if ($on['article'] && $type === 'post' && $post) {
             $art = ['@type' => 'BlogPosting', '@id' => $pageUrl . '#article', 'headline' => mb_substr((string) ($post['title'] ?? ''), 0, 110),
@@ -652,10 +660,51 @@ final class SeoHeadService
             $u = $svc->find((int) ($post['author_id'] ?? 0));
             if ($u) {
                 $url = $svc->url($u);
-                if ($url !== '') $a['url'] = $this->origin() . $this->base() . $url;
+                if ($url !== '') {
+                    $a['url'] = $this->origin() . $this->base() . $url;
+                    // The same @id as the Person on the author's profile page
+                    // (1.2.88), so search engines see one author, not one per post.
+                    $a = ['@type' => 'Person', '@id' => $a['url'] . '#person', 'name' => $name, 'url' => $a['url']];
+                }
             }
         } catch (\Throwable) {}
         return $a;
+    }
+
+    /**
+     * The Person an author page is about (1.2.88), from the author's public
+     * profile (AuthorController passes AuthorService::publicProfile(); no
+     * email or account details are in it). Null on other pages.
+     *
+     * Follows Google's ProfilePage guidance: name, url, description, image,
+     * a site-specific identifier, and the number of posts written as an
+     * agentInteractionStatistic.
+     */
+    private function profilePerson(array $ctx): ?array
+    {
+        $author = is_array($ctx['author'] ?? null) ? $ctx['author'] : null;
+        if ($author === null) return null;
+        $name = trim((string) ($author['display_name'] ?? ''));
+        if ($name === '') return null;
+        $path = (string) ($author['url'] ?? '');
+        $url = $path !== '' ? $this->origin() . $this->base() . $path : '';
+        if ($url === '') return null;
+
+        $p = ['@type' => 'Person', '@id' => $url . '#person', 'name' => $name, 'url' => $url];
+        $slug = trim((string) ($author['slug'] ?? ''));
+        if ($slug !== '') $p['identifier'] = $slug;
+        $bio = $this->oneLine((string) ($author['bio'] ?? ''), 500);
+        if ($bio !== '') $p['description'] = $bio;
+        $avatar = trim((string) ($author['avatar_url'] ?? ''));
+        if ($avatar !== '') $p['image'] = ['@type' => 'ImageObject', 'url' => $this->absolute($avatar), 'caption' => $name];
+        if (isset($author['post_count']) && (int) $author['post_count'] >= 0) {
+            $p['agentInteractionStatistic'] = [
+                '@type' => 'InteractionCounter',
+                'interactionType' => 'https://schema.org/WriteAction',
+                'userInteractionCount' => (int) $author['post_count'],
+            ];
+        }
+        return $p;
     }
 
     private function postSeoMeta(int $postId): array
