@@ -10,7 +10,8 @@ namespace App\Services;
  *
  * The editor sends the status select plus the publish panel's choice:
  *
- *   publish_mode   "now" | "schedule" | "keep" | "date"  (absent from older forms and apps)
+ *   publish_mode   "now" | "schedule" | "keep" | "date"  (absent from older forms and apps;
+ *                  "date" on a post that is not live yet since 1.2.88)
  *   publish_date   Y-m-d               in the site timezone
  *   publish_time   H:i                 in the site timezone
  *
@@ -28,6 +29,9 @@ namespace App\Services;
  *    unless the editor explicitly chose "Change date" (1.2.62, or "Schedule"
  *    from 1.2.60 forms): a date that has passed re-dates the live post; a
  *    future one takes it off the site until then. The panel asks first.
+ *  - "Set date" on a post that is not live yet (1.2.88): a date that has
+ *    passed publishes it dated then (so it sorts where it belongs among
+ *    other posts); a future one schedules it. "Schedule" stays future-only.
  *  - A refused request never changes the status or the date: the caller gets
  *    an error and keeps what the post already had, so no save loses work and
  *    no mistake publishes anything.
@@ -100,10 +104,12 @@ final class PostPublishing
             if ($current === 'scheduled') { $mode = null; $requested = 'scheduled'; }
             else $mode = 'now';
         }
-        // "date" (1.2.62): set the publication date of a live post. A time
-        // that has passed re-dates it and it stays live; a future one
-        // schedules it. On a post that is not live it means "schedule".
-        if ($mode === 'date' && $current !== 'published') $mode = 'schedule';
+        // "date" (1.2.62): set the publication date. A time that has passed
+        // dates the post then and it is (or stays) live; a future one
+        // schedules it. Until 1.2.88 a post that was not live yet could only
+        // be scheduled, so a new post could never be given an earlier time:
+        // it took the moment Publish was pressed, and lists ordered by
+        // publication time put it in the wrong place.
         if ($mode === 'date') {
             $at = self::parseLocal(trim((string) ($input['publish_date'] ?? '')), trim((string) ($input['publish_time'] ?? '')), $zone);
             if ($at === null) return self::keep($current, 'Choose a valid date and time.');

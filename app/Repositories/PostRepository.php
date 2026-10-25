@@ -783,7 +783,7 @@ class PostRepository
                LEFT JOIN {media} av ON av.id = u.avatar_media_id
              LEFT JOIN {media} m ON m.id = p.featured_media_id
              WHERE p.type = :type AND p.deleted_at IS NULL
-             ORDER BY p.created_at DESC
+             ORDER BY COALESCE(p.published_at, p.created_at) DESC, p.id DESC
              LIMIT {$limit}",
             ['type' => $type]
         );

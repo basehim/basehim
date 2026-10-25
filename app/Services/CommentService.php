@@ -140,10 +140,17 @@ class CommentService
         return $id;
     }
 
+    /** The statuses a comment can have. */
+    public const STATUSES = ['approved', 'pending', 'spam', 'trash'];
+
     public function setStatus(int $id, string $status): bool
     {
+        // Only a known status is stored (1.2.88). Every caller passes one
+        // today, but this is the service apps and the API reach too.
+        if (!in_array($status, self::STATUSES, true)) return false;
         $existing = $this->find($id);
         if (!$existing) return false;
+        if (($existing['status'] ?? '') === $status) return true;   // nothing to change, no hook fired
         $this->db->update('comments', ['status' => $status], ['id' => $id]);
         $updated = $this->find($id);
         $this->hooks->doAction('comment.status_changed', $updated, $existing);

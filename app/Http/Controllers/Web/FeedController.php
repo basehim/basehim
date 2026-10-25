@@ -4,12 +4,22 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Web;
 
 use App\Core\Helpers;
+use App\Core\HookRegistry;
 use App\Core\Request;
 use App\Core\Response;
 use App\Http\Controllers\Controller;
+use App\Services\FeedBuilder;
 use App\Services\PostService;
 use App\Services\SettingService;
 
+/**
+ * /feed: the site's RSS 2.0 feed (rebuilt in 1.2.88, see FeedBuilder).
+ *
+ * Each post's content is rendered exactly as its page renders it (the
+ * post.content filter turns block JSON and Markdown into HTML and lets apps
+ * add to it), then FeedBuilder makes every URL absolute and adds the item's
+ * image as media:content, an enclosure and a lead <img>.
+ */
 class FeedController extends Controller
 {
     public function rss(Request $request): Response
@@ -18,49 +28,65 @@ class FeedController extends Controller
         $settings = $this->app->make(SettingService::class);
         /** @var PostService $posts */
         $posts = $this->app->make(PostService::class);
+        /** @var HookRegistry $hooks */
+        $hooks = $this->app->make(HookRegistry::class);
 
-        $limit = (int)$settings->get('reading', 'feed_items', 10);
+        $limit = max(1, min(100, (int) $settings->get('reading', 'feed_items', 10)));
         $feed = $posts->feed(1, $limit);
 
-        $site = $settings->get('general', 'site_title', 'Basehim');
-        $tagline = $settings->get('general', 'tagline', '');
-        $base = $this->baseUrl();
+        $origin = FeedBuilder::requestOrigin();
+        $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
+        $builder = new FeedBuilder($origin, fn(string $url): int => $this->uploadSize($url, $origin . $base));
 
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-        $xml .= '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">' . "\n";
-        $xml .= "  <channel>\n";
-        $xml .= "    <title>" . htmlspecialchars($site) . "</title>\n";
-        $xml .= "    <link>{$base}/</link>\n";
-        $xml .= "    <description>" . htmlspecialchars($tagline) . "</description>\n";
-        $xml .= "    <language>" . htmlspecialchars($settings->get('general', 'language', 'en-US')) . "</language>\n";
-        $xml .= "    <atom:link href=\"{$base}/feed\" rel=\"self\" type=\"application/rss+xml\" />\n";
-        $xml .= "    <generator>Basehim</generator>\n";
-
+        $items = [];
+        $newest = null;
         foreach ($feed['data'] as $post) {
-            $url = $base . Helpers::postUrl($post);
-            $xml .= "    <item>\n";
-            $xml .= "      <title>" . htmlspecialchars($post['title']) . "</title>\n";
-            $xml .= "      <link>{$url}</link>\n";
-            $xml .= "      <guid isPermaLink=\"true\">{$url}</guid>\n";
-            $xml .= "      <pubDate>" . date(DATE_RSS, strtotime($post['published_at'] ?? $post['created_at'])) . "</pubDate>\n";
-            $xml .= "      <description><![CDATA[" . ($post['excerpt'] ?? mb_substr(strip_tags($post['content']), 0, 300)) . "]]></description>\n";
-            $xml .= "      <content:encoded><![CDATA[" . $post['content'] . "]]></content:encoded>\n";
-            if (!empty($post['author_name'])) {
-                $xml .= "      <author>" . htmlspecialchars($post['author_name']) . "</author>\n";
+            $html = (string) ($post['content'] ?? '');
+            try {
+                $html = (string) $hooks->applyFilters('post.content', $html, $post);
+            } catch (\Throwable) {
+                // applyFilters already isolates listeners; this guards the call itself.
             }
-            $xml .= "    </item>\n";
+            $categories = [];
+            try {
+                foreach ($posts->terms((int) $post['id']) as $t) {
+                    if (in_array($t['taxonomy_slug'] ?? '', ['category', 'tag'], true) && ($t['name'] ?? '') !== '') {
+                        $categories[] = (string) $t['name'];
+                    }
+                }
+            } catch (\Throwable) {}
+
+            $items[] = $builder->item($post, $html, $origin . $base . Helpers::postUrl($post), $categories);
+            $at = (string) ($post['published_at'] ?? '');
+            if ($at !== '' && ($newest === null || $at > $newest)) $newest = $at;
         }
 
-        $xml .= "  </channel>\n</rss>\n";
+        $xml = $builder->document([
+            'title'       => (string) $settings->get('general', 'site_title', 'Basehim'),
+            'link'        => $origin . $base . '/',
+            'description' => (string) $settings->get('general', 'tagline', ''),
+            'language'    => (string) $settings->get('general', 'language', 'en-US'),
+            'self'        => $origin . $base . '/feed',
+            'updated'     => $newest,
+        ], $items);
 
         return Response::make($xml, 200, ['Content-Type' => 'application/rss+xml; charset=utf-8']);
     }
 
-    private function baseUrl(): string
+    /**
+     * Bytes of an uploaded image given its absolute URL, for <enclosure length>.
+     * Only files inside storage/uploads are looked at; anything else is 0
+     * ("unknown"), which feed readers accept.
+     */
+    private function uploadSize(string $url, string $siteRoot): int
     {
-        $scheme = ($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http';
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
-        return $scheme . '://' . $host . $base;
+        $prefix = $siteRoot . '/uploads/';
+        if (!str_starts_with($url, $prefix)) return 0;
+        $rel = rawurldecode((string) parse_url(substr($url, strlen($prefix)), PHP_URL_PATH));
+        if ($rel === '' || str_contains($rel, "\0") || str_contains($rel, '..') || str_contains($rel, '\\')) return 0;
+        $root = realpath(BASEHIM_ROOT . '/storage/uploads');
+        $abs = realpath(BASEHIM_ROOT . '/storage/uploads/' . $rel);
+        if ($root === false || $abs === false || !str_starts_with($abs, $root . DIRECTORY_SEPARATOR) || !is_file($abs)) return 0;
+        return (int) (@filesize($abs) ?: 0);
     }
 }

@@ -168,6 +168,37 @@ test('a live post: a future date says Schedule and asks first; cancelling keeps 
   eq(p.form.submitted, 1, 'submitted once after confirming');
 });
 
+test('a new post: Set date to earlier today publishes it dated then (1.2.88)', () => {
+  const p = page();
+  ok(p.radio('date'), 'Immediately / Schedule / Set date');
+  p.choose('date');
+  eq(p.when.hidden, false);
+  eq(p.date.getAttribute('min'), null, 'Set date may go back in time');
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(p.date.value) && /^\d{2}:\d{2}$/.test(p.time.value), 'starts from now: ' + p.date.value + ' ' + p.time.value);
+  const [d, t] = local(Date.now() - 3 * 3600e3);
+  p.type(p.date, d); p.type(p.time, t);
+  eq(p.button.textContent, 'Publish');
+  ok(/^Publishes now, dated /.test(p.preview.textContent), p.preview.textContent);
+  p.button.click();
+  eq(p.form.submitted, 1, 'no error for a past time');
+  eq(p.error.hidden, true);
+  eq(p.sel.value, 'published');
+  eq(p.confirms.length, 0);
+});
+
+test('a new post: Set date in the future says Schedule; Schedule still blocks past days (1.2.88)', () => {
+  const p = page();
+  p.choose('date');
+  const [d, t] = local(Date.now() + 2 * 86400e3);
+  p.type(p.date, d); p.type(p.time, t);
+  eq(p.button.textContent, 'Schedule');
+  ok(/^Goes live /.test(p.preview.textContent), p.preview.textContent);
+  p.choose('schedule');
+  eq(p.date.getAttribute('min'), '2026-10-18', 'Schedule keeps its minimum day');
+  p.choose('date');
+  eq(p.date.getAttribute('min'), null);
+});
+
 test('a live post switched to Draft in the select: no timing, plain Update', () => {
   const p = page({ status: 'published' });
   p.sel.value = 'draft';

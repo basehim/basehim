@@ -349,7 +349,7 @@
    *       names (true: fields are named publish_mode/date/time for a form post),
    *       idPrefix, compact, showSummary (true), skin ('editor' | 'admin').
    *
-   * Modes: a post that is not live — Immediately | Schedule (a future time);
+   * Modes: a post that is not live — Now | Schedule (a future time) | Set date (any time; 1.2.88);
    * a scheduled post — the same, starting on Schedule; a live post — Keep
    * date | Change date (a past time re-dates it, a future one schedules it).
    */
@@ -381,7 +381,10 @@
       modesBox = el('fieldset', 'bh-publish__modes'); modesBox.setAttribute('data-bh-publish-modes', '');
       modesBox.appendChild(el('legend', skinCls(opts.skin, 'label'), 'When'));
       var seg = el('div', skinCls(opts.skin, 'seg') + 'bh-publish__seg');
-      var choices = live ? [['keep', 'Keep date'], ['date', 'Change date']] : [['now', 'Immediately'], ['schedule', 'Schedule']];
+      // "Set date" (1.2.88): give a post that is not live yet any date. A
+      // past one publishes it dated then, so it sorts where it belongs; a
+      // future one schedules it. "Schedule" stays future-only.
+      var choices = live ? [['keep', 'Keep date'], ['date', 'Change date']] : [['now', 'Now'], ['schedule', 'Schedule'], ['date', 'Set date']];
       var initial = cfg.mode && choices.some(function (c) { return c[0] === cfg.mode; }) ? cfg.mode : choices[0][0];
       choices.forEach(function (c) {
         var lab = el('label', 'bh-publish__mode');
@@ -480,7 +483,7 @@
       if (!dateIn.value || !timeIn.value) return 'Choose a date and a time.';
       var t = chosen();
       if (isNaN(t)) return 'Choose a valid date and time.';
-      if (mode() === 'schedule' && t <= serverNow()) return 'Pick a time in the future, or choose Immediately.';
+      if (mode() === 'schedule' && t <= serverNow()) return 'Pick a time in the future, or choose Now or Set date.';
       if (t > MAX) return 'Choose a date before 19 January 2038.';
       return null;
     }
@@ -488,9 +491,17 @@
     function label() {
       var t = target(), m = mode();
       if (!canPublish) return (stored === 'published' || stored === 'scheduled' || stored === 'private') ? 'Update' : 'Submit for review';
-      if (stored !== 'published' && stored !== 'scheduled' && stored !== 'private') return m === 'schedule' ? 'Schedule' : 'Publish';
+      if (stored !== 'published' && stored !== 'scheduled' && stored !== 'private') {
+        if (m === 'schedule') return 'Schedule';
+        if (m === 'date') { var cd = chosen(); return !isNaN(cd) && cd > serverNow() ? 'Schedule' : 'Publish'; }
+        return 'Publish';
+      }
       if (t !== 'published' && t !== 'scheduled') return 'Update';
-      if (stored === 'scheduled') return m === 'schedule' ? 'Update' : 'Publish now';
+      if (stored === 'scheduled') {
+        if (m === 'schedule') return 'Update';
+        if (m === 'date') { var cs = chosen(); return !isNaN(cs) && cs > serverNow() ? 'Update' : 'Publish'; }
+        return 'Publish now';
+      }
       if (stored === 'published') { var c = chosen(); return m === 'date' && !isNaN(c) && c > serverNow() ? 'Schedule' : 'Update'; }
       return 'Update';
     }
@@ -514,6 +525,12 @@
       if (modesBox) modesBox.hidden = !on;
       var timed = usesTime();
       if (when) when.hidden = !timed;
+      // Only Schedule needs a future day; Set date may go back in time (1.2.88).
+      if (!live && dateIn) { if (mode() === 'schedule' && cfg.min_date) dateIn.setAttribute('min', cfg.min_date); else dateIn.removeAttribute('min'); }
+      // First switch to Set date on a new post: start from now, ready to move back.
+      if (timed && !live && mode() === 'date' && !dateIn.value && !timeIn.value) {
+        dateIn.value = localDate(serverNow()); timeIn.value = localTime(serverNow());
+      }
       // First switch to Schedule: the next whole hour, an hour ahead.
       if (timed && mode() === 'schedule' && !dateIn.value && !timeIn.value) {
         var next = serverNow() + 3600000, w = wall(next);
@@ -525,7 +542,7 @@
         var c = chosen(), m = mode();
         if (timed && !isNaN(c)) {
           var rel = relative(c);
-          if (m === 'date' && c <= serverNow()) text = 'The publication date becomes ' + describe(c) + '. It stays live.';
+          if (m === 'date' && c <= serverNow()) text = live ? 'The publication date becomes ' + describe(c) + '. It stays live.' : 'Publishes now, dated ' + describe(c) + '.';
           else {
             text = 'Goes live ' + describe(c) + (rel ? ' — ' + rel : '') + '.';
             if (live) text += ' Until then it is taken off the site.';

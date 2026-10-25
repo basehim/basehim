@@ -164,6 +164,9 @@ $router->group(['prefix' => '/admin'], function ($router) {
         // Comments
         $router->get('/comments', ['App\\Http\\Controllers\\Admin\\CommentController', 'index']);
         $router->get('/comments/pending.json', ['App\\Http\\Controllers\\Admin\\CommentController', 'pendingCount']);
+        // The Comments data table's row menu and bulk bar submit here (1.2.88):
+        // without this route every Approve, Unapprove, Spam and Delete was a 404.
+        $router->post('/comments/bulk', ['App\\Http\\Controllers\\Admin\\CommentController', 'bulk']);
         $router->post('/comments/{id}/approve', ['App\\Http\\Controllers\\Admin\\CommentController', 'approve']);
         $router->post('/comments/{id}/spam', ['App\\Http\\Controllers\\Admin\\CommentController', 'spam']);
         $router->post('/comments/{id}/delete', ['App\\Http\\Controllers\\Admin\\CommentController', 'destroy']);

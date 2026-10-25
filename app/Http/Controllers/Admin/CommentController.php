@@ -84,7 +84,8 @@ class CommentController extends Controller
         }
 
         $action = (string) $request->input('bulk_action', '');
-        $ids = array_values(array_filter(array_map('intval', (array) $request->input('ids', []))));
+        // Positive ids only, each once, and a page's worth at most (the table's largest page is 100).
+        $ids = array_slice(array_values(array_unique(array_filter(array_map('intval', (array) $request->input('ids', [])), fn($i) => $i > 0))), 0, 500);
         $statusMap = ['approve' => 'approved', 'pending' => 'pending', 'spam' => 'spam'];
 
         if ((!isset($statusMap[$action]) && $action !== 'delete') || $ids === []) {

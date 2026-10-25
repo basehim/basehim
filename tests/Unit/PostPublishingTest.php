@@ -160,9 +160,10 @@ test('publishing: "date" re-dates a live post into the past and schedules it int
         assert_true(isset($r['error']), "refused {$d} {$t}");
         assert_same('published', $r['status']);
     }
-    // On a post that is not live, "date" is a schedule: the past is refused.
+    // On a post that is not live (1.2.88): a past date publishes it dated then.
     $r = pp(['status' => 'draft', 'published_at' => null], ['status' => 'published', 'publish_mode' => 'date', 'publish_date' => '2023-02-03', 'publish_time' => '09:05']);
-    assert_true(isset($r['error']));
+    assert_same(['published', '2023-02-03 04:05:00'], [$r['status'], $r['published_at']]);
+    assert_true(!isset($r['error']));
     // Without publish rights: review, no date.
     $r = pp($live, ['status' => 'published', 'publish_mode' => 'date', 'publish_date' => '2023-02-03', 'publish_time' => '09:05'], false);
     assert_same('pending', $r['status']);
@@ -175,4 +176,33 @@ test('publishing: the panel settings name the stored date in site time and the r
     $c = PostPublishing::panel(null, false);
     assert_same(['draft', 'now', '', false], [$c['status'], $c['mode'], $c['date'], $c['can_publish']]);
     assert_contains('New', $c['summary']);
+});
+
+test('publishing: "Set date" on a new post publishes it at an earlier time, so it sorts below a post published later in the day (1.2.88)', function () {
+    // Post A was published at 14:00 site time (09:00 UTC) on 18 Oct 2026.
+    $a = '2026-10-18 09:00:00';
+    // Post B is written afterwards but dated 12:00 the same day.
+    $r = pp(null, ['status' => 'published', 'publish_mode' => 'date', 'publish_date' => '2026-10-18', 'publish_time' => '12:00'], true, 'Asia/Karachi', strtotime('2026-10-18 10:30:00 UTC'));
+    assert_same('published', $r['status']);
+    assert_same('2026-10-18 07:00:00', $r['published_at']);
+    // Newest first: A (09:00 UTC) before B (07:00 UTC), whatever order they were written in.
+    $list = [['id' => 2, 'published_at' => $r['published_at']], ['id' => 1, 'published_at' => $a]];
+    usort($list, fn($x, $y) => [$y['published_at'], $y['id']] <=> [$x['published_at'], $x['id']]);
+    assert_same([1, 2], array_column($list, 'id'));
+});
+
+test('publishing: "Set date" with a future time schedules a new post, and still checks the date (1.2.88)', function () {
+    $r = pp(null, ['status' => 'published', 'publish_mode' => 'date', 'publish_date' => '2026-10-20', 'publish_time' => '09:30']);
+    assert_same(['scheduled', '2026-10-20 04:30:00'], [$r['status'], $r['published_at']]);
+    foreach ([['', '09:30'], ['2026-02-30', '10:00'], ['2040-01-01', '10:00']] as [$d, $t]) {
+        $r = pp(['status' => 'draft', 'published_at' => null], ['status' => 'published', 'publish_mode' => 'date', 'publish_date' => $d, 'publish_time' => $t]);
+        assert_true(isset($r['error']), "refused {$d} {$t}");
+        assert_same('draft', $r['status']);
+    }
+    // A scheduled post given a past date goes live dated then.
+    $r = pp(['status' => 'scheduled', 'published_at' => '2026-11-01 05:00:00'], ['status' => 'scheduled', 'publish_mode' => 'date', 'publish_date' => '2026-10-17', 'publish_time' => '08:00']);
+    assert_same(['published', '2026-10-17 03:00:00'], [$r['status'], $r['published_at']]);
+    // "Schedule" itself is unchanged: future only.
+    $r = pp(null, ['status' => 'published', 'publish_mode' => 'schedule', 'publish_date' => '2023-02-03', 'publish_time' => '09:05']);
+    assert_true(isset($r['error']));
 });

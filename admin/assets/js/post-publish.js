@@ -1,7 +1,7 @@
 /*
  * Post editor: the Publish panel (1.2.60; shared component since 1.2.62).
  *
- * The control itself — Immediately / Schedule for a post that is not live,
+ * The control itself — Now / Schedule / Set date for a post that is not live,
  * Keep date / Change date for a live one, in the SITE timezone — is
  * BasehimPostFields.publish() from post-fields.js, the same one Quick Edit
  * uses. It posts publish_mode, publish_date and publish_time with the form;
