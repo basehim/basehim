@@ -8,6 +8,14 @@ final class ErrorHandler
 {
     public static function handle(\Throwable $e): void
     {
+        // Error pages are answered here, not through the router: give them
+        // the same plain headers (1.2.90), without PHP's version.
+        if (!headers_sent()) {
+            header_remove('X-Powered-By');
+            header('X-Powered-By: Basehim');
+            header('X-Content-Type-Options: nosniff');
+            header('X-XSS-Protection: 0');
+        }
         // Always log it
         try {
             $logger = Application::getInstance()->make(Logger::class);

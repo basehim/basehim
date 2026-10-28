@@ -89,9 +89,7 @@ class SystemInfoService
         }
 
         // HTTPS
-        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || ($_SERVER['SERVER_PORT'] ?? '') === '443'
-            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+        $https = \App\Core\Request::serverIsSecure();
         $checks[] = $this->check('HTTPS', $https ? 'pass' : 'warn',
             $https ? 'Secure connection' : 'Not using HTTPS');
 

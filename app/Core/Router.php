@@ -147,6 +147,7 @@ final class Router
 
     /** Whether the request being answered is in the admin or the AJAX gateway (set by dispatch). */
     private bool $privateArea = false;
+    private ?Request $emitRequest = null;
 
     /** The route being dispatched, while its middleware and handler run. */
     private ?array $current = null;
@@ -652,6 +653,7 @@ final class Router
 
         // The admin and the AJAX gateway are never for search engines (1.2.50).
         $this->privateArea = $path === '/admin' || str_starts_with($path, '/admin/') || $path === Request::AJAX_PATH;
+        $this->emitRequest = $request;
 
         // A path with "." or ".." segments or a NUL byte, encoded or not, is
         // never a page: refuse it before any handler sees it (1.2.72).
@@ -954,6 +956,8 @@ final class Router
         if ($this->privateArea && !isset($response->getHeaders()['X-Robots-Tag'])) {
             $response->header('X-Robots-Tag', 'noindex, nofollow');
         }
+        // Security headers and the page's CSP nonces (1.2.90, Settings → Security).
+        \App\Services\SecurityHeaders::apply($response, $this->emitRequest ?? Request::capture(), $this->privateArea);
         $response->send();
     }
 

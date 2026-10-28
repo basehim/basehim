@@ -72,16 +72,24 @@ final class AppActions
         $bySlug = [];
         foreach ($apps->installed() as $row) $bySlug[(int) $row['id']] = (string) $row['slug'];
 
+        $ids = array_values(array_unique(array_map('intval', (array) $ctx->input('ids', []))));
+        $selected = array_values(array_filter(array_map(fn($id) => $bySlug[$id] ?? null, $ids)));
+        if ($action === 'deactivate' || $action === 'delete') {
+            // Dependents first, then what they depend on (1.2.90, BH-059).
+            $needed = [];
+            foreach ($selected as $s) $needed[$s] = count(array_intersect(array_keys($apps->activeDependents($s)), $selected));
+            usort($ids, fn($a, $b) => ($needed[$bySlug[$a] ?? ''] ?? 0) <=> ($needed[$bySlug[$b] ?? ''] ?? 0));
+        }
         $results = [];
-        foreach (array_unique(array_map('intval', (array) $ctx->input('ids', []))) as $id) {
+        foreach ($ids as $id) {
             $slug = $bySlug[$id] ?? null;
             if ($slug === null) { $results[] = ['id' => $id, 'ok' => false, 'message' => 'Not installed.']; continue; }
             try {
                 $msg = match ($action) {
                     'activate'   => $this->activateOne($apps, $slug),
-                    'deactivate' => $apps->deactivate($slug) ? 'Deactivated.' : throw new \RuntimeException('It could not be deactivated.'),
+                    'deactivate' => $this->deactivateOne($apps, $slug, $selected),
                     'retry'      => $this->retry($apps, $slug),
-                    'delete'     => $this->deleteOne($apps, $slug, $ctx),
+                    'delete'     => $this->deleteOne($apps, $slug, $ctx, $selected),
                 };
                 $results[] = ['id' => $id, 'slug' => $slug, 'ok' => true, 'message' => $msg];
             } catch (NeedsConsent) {
@@ -129,8 +137,17 @@ final class AppActions
         return 'Its code passes the checks now.';
     }
 
-    private function deleteOne(AppService $apps, string $slug, AjaxContext $ctx): string
+    /** @param string[] $selected every app in this bulk action */
+    private function deactivateOne(AppService $apps, string $slug, array $selected): string
     {
+        $apps->assertNotNeeded($slug, 'switch off', $selected);
+        if (!$apps->deactivate($slug)) throw new \RuntimeException('It could not be deactivated.');
+        return 'Deactivated.';
+    }
+
+    private function deleteOne(AppService $apps, string $slug, AjaxContext $ctx, array $selected = []): string
+    {
+        $apps->assertNotNeeded($slug, 'delete', $selected);
         $missing = $apps->filesMissing($slug);
         $ok = $missing ? $apps->uninstall($slug) : $apps->delete($slug);
         if (!$ok) throw new \RuntimeException('It could not be deleted.');

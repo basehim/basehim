@@ -49,7 +49,7 @@ content/apps/my-app/
 | `developer` | no | `{ "name": "…", "url": "https://…" }` — the person who wrote the app. Replaces `author`, which is still read |
 | `company` | no | `{ "name": "…", "url": "https://…" }` — the business behind it, when there is one |
 | `permissions` | no | Declaring **any** opts you into enforcement — see APP-PERMISSIONS.md |
-| `requires` | no | Checked at install **and** activate |
+| `requires` | no | Checked at install **and** activate. An app other active apps require can't be switched off or deleted from Apps until they are (or they're selected too, 1.2.90) |
 
 ### App listing details (1.2.36)
 
@@ -365,8 +365,14 @@ them compatibly. See [APP-FAULT-ISOLATION.md](APP-FAULT-ISOLATION.md).
   own settings helpers don't.
 - **Scheduled tasks need traffic** unless a real crontab is configured — see
   APP-API.md.
-- **Assets are served from a route,** not directly by Apache, so they respect
-  the install's base path. Always build URLs with `$this->asset()`.
+- **Build asset URLs with `$this->asset()`.** It respects the install's base
+  path and, since 1.2.90, adds `?v={your app version}`: browsers and servers
+  keep assets for days, so bump the version with every release. (Adding your
+  own `?v=` still works.)
+- **Sitemaps:** an app with public pages can list its own sitemap in
+  `/sitemap.xml` (1.2.90):
+  `$this->addFilter('sitemap.index', fn(array $l, string $origin) => [...$l, $origin . '/shop/sitemap.xml'], 10, 2);`
+  Only URLs on the site's own origin are kept.
 - **For browser calls that return JSON, register an AJAX action** with
   `$this->ajax()` rather than an `adminPost()` route. The action gets the
   session, CSRF, capability, rate-limit and input checks without you writing

@@ -336,8 +336,11 @@ hashes; no address or user ID is stored readable. IPv6 clients are counted per
 **Client addresses.** `X-Forwarded-For` is believed only from proxies listed
 in `TRUSTED_PROXIES` (IPs or CIDR ranges). Otherwise the connecting address is
 the client, whatever headers say — without that, anyone could reset their own
-limit by inventing an address. Behind Cloudflare or a load balancer, list its
-ranges.
+limit by inventing an address. Behind a load balancer or reverse proxy, list
+its address. Requests that come from Cloudflare's published ranges use
+`CF-Connecting-IP`, which Cloudflare sets itself (1.2.90); its
+`X-Forwarded-For` is still ignored unless listed. The same rule applies to
+site routes' `rate`, search and idempotency keys (`Request::visitorIp()`).
 
 **If the store is unavailable** (database down), requests are let through and
 a warning is logged once per request (`AJAX_RATE_LIMIT_FAIL=open`, the
@@ -439,7 +442,8 @@ The promise resolves with the handler's `data`. It rejects with an `AjaxError`
 carrying `code`, `message` (safe to show), `status`, `fields` and `requestId`.
 Besides the server's codes, the client produces `NETWORK_ERROR`, `TIMEOUT`,
 `ABORTED` and `BAD_RESPONSE` (the answer was not the gateway's JSON — a proxy
-error page, say).
+error page, say). On a 429 or 503 with `Retry-After`, `err.retryAfter` holds
+the seconds to wait (1.2.90; `null` otherwise).
 
 ```js
 var save = document.getElementById('save');

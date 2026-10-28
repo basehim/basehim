@@ -33,6 +33,7 @@ final class SettingsSaver
         'media'         => 'Media',
         'email'         => 'Email',
         'authorization' => 'Authentication',
+        'security'      => 'Security',
     ];
 
     private Application $app;
@@ -63,6 +64,7 @@ final class SettingsSaver
             'permalinks'    => $this->permalinks($in),
             'ai'            => $this->ai($in),
             'reading'       => $this->reading($in),
+            'security'      => $this->security($in),
             default         => isset(self::TABS[$tab]) ? $this->generic($tab, $in) : self::result(false, 'error', 'Unknown settings screen.'),
         };
     }
@@ -80,6 +82,25 @@ final class SettingsSaver
             $this->settings->set($tab, (string) $key, $val);
         }
         return self::result(true, 'success', self::label($tab) . ' settings saved.');
+    }
+
+    /** Security (1.2.90): HSTS and the Content-Security-Policy mode; nothing else is stored. */
+    private function security(array $in): array
+    {
+        $s = $this->settings;
+        $g = SecurityHeaders::GROUP;
+        $mode = (string) ($in['csp_mode'] ?? 'report');
+        if (!in_array($mode, SecurityHeaders::MODES, true)) return self::result(false, 'error', 'Choose Off, Report only or Enforce for the Content-Security-Policy.');
+        $age = (int) ($in['hsts_max_age'] ?? 31536000);
+        if (!isset(SecurityHeaders::HSTS_AGES[$age])) return self::result(false, 'error', 'Choose one of the listed HSTS durations.');
+        $s->set($g, 'hsts', !empty($in['hsts']) ? '1' : '0');
+        $s->set($g, 'hsts_max_age', (string) $age);
+        $s->set($g, 'hsts_subdomains', !empty($in['hsts_subdomains']) ? '1' : '0');
+        $s->set($g, 'hsts_preload', !empty($in['hsts_preload']) && !empty($in['hsts_subdomains']) && $age >= 31536000 ? '1' : '0');
+        $s->set($g, 'csp_mode', $mode);
+        $note = !empty($in['hsts_preload']) && (empty($in['hsts_subdomains']) || $age < 31536000)
+            ? ' Preload was left off: it needs "Include subdomains" and at least one year.' : '';
+        return self::result(true, $note === '' ? 'success' : 'error', 'Security settings saved.' . $note);
     }
 
     /** Reading: the search and view-count options (1.2.76) are checked first. */

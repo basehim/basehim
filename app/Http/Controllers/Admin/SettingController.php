@@ -28,6 +28,7 @@ class SettingController extends Controller
     public function media(Request $request): Response     { return $this->renderTab('media'); }
     public function email(Request $request): Response     { return $this->renderTab('email'); }
     public function authorization(Request $request): Response { return $this->renderTab('authorization'); }
+    public function security(Request $request): Response { return $this->renderTab('security'); }
 
     /**
      * POST /admin/settings/media/regenerate-batch — one batch of thumbnail
@@ -90,6 +91,19 @@ class SettingController extends Controller
     public function saveEmail(Request $request): Response         { return $this->saveTab($request, 'email'); }
     public function saveAuthorization(Request $request): Response { return $this->saveTab($request, 'authorization'); }
     public function saveAi(Request $request): Response            { return $this->saveTab($request, 'ai'); }
+    public function saveSecurity(Request $request): Response      { return $this->saveTab($request, 'security'); }
+
+    /** POST /admin/settings/security/clear-reports */
+    public function clearCspReports(Request $request): Response
+    {
+        if ($this->verifyCsrf($request)) {
+            \App\Services\SecurityHeaders::clearReports();
+            $this->flash('success', 'The policy reports were cleared.');
+        } else {
+            $this->flash('error', 'Security check failed.');
+        }
+        return $this->redirect('/admin/settings/security');
+    }
 
     /** POST /admin/settings/media/regenerate — rebuild thumbnails for all images. */
     public function regenerateThumbnails(Request $request): Response
@@ -198,6 +212,14 @@ class SettingController extends Controller
                 'from_name'     => (string) ($cfg['from_name'] ?? '') ?: $extra['mail']['siteTitle'],
                 'smtp_password' => '',
             ]);
+        }
+        if ($tab === 'security') {
+            $req = $this->app->make(\App\Core\Request::class);
+            $extra['security'] = \App\Services\SecurityHeaders::settings();
+            $extra['secure'] = $req->isSecure();
+            $extra['reports'] = \App\Services\SecurityHeaders::reports();
+            $extra['htaccessXss'] = (string) $settings->get(\App\Services\SecurityHeaders::GROUP, 'htaccess_xss', '');
+            $extra['host'] = (string) ($_SERVER['HTTP_HOST'] ?? '');
         }
         if ($tab === 'media') {
             /** @var \App\Services\MediaService $media */

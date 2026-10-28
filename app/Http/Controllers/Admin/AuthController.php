@@ -795,7 +795,7 @@ class AuthController extends Controller
     public static function origin(): string
     {
         $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') ? 'https' : 'http';
+        $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
         $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
         if (!preg_match('/^[a-z0-9.-]+(:\d{1,5})?$/', $host)) $host = strtolower((string) ($_SERVER['SERVER_NAME'] ?? 'localhost'));
         $isLocal = static fn(string $h): bool => (bool) preg_match('/^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?)(:\d+)?$/', $h);

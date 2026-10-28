@@ -45,7 +45,7 @@
     var DEFAULT_TIMEOUT = 30000;
     var tokenOverride = null;
 
-    function AjaxError(code, message, status, requestId, fields) {
+    function AjaxError(code, message, status, requestId, fields, retryAfter) {
         var e = new Error(message);
         Object.setPrototypeOf(e, AjaxError.prototype);
         e.name = 'AjaxError';
@@ -53,6 +53,8 @@
         e.status = status || 0;
         e.requestId = requestId || null;
         e.fields = fields || {};
+        // Seconds to wait before trying again, from Retry-After (429/503), or null (1.2.90).
+        e.retryAfter = retryAfter > 0 ? retryAfter : null;
         return e;
     }
     AjaxError.prototype = Object.create(Error.prototype);
@@ -128,7 +130,8 @@
                 throw AjaxError(
                     typeof err.code === 'string' ? err.code : 'ERROR',
                     typeof err.message === 'string' ? err.message : 'The request could not be completed.',
-                    res.status, json.request_id, err.fields
+                    res.status, json.request_id, err.fields,
+                    parseInt(res.headers.get('Retry-After') || '', 10)
                 );
             });
         }, function () {
@@ -218,7 +221,8 @@
                 finish(reject, AjaxError(
                     typeof err.code === 'string' ? err.code : 'ERROR',
                     typeof err.message === 'string' ? err.message : 'The upload could not be completed.',
-                    xhr.status, json.request_id, err.fields
+                    xhr.status, json.request_id, err.fields,
+                    parseInt(xhr.getResponseHeader('Retry-After') || '', 10)
                 ));
             };
             xhr.onerror = function () { finish(reject, AjaxError('NETWORK_ERROR', 'Could not reach the server. Check your connection and try again.', 0)); };

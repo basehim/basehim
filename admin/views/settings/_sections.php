@@ -16,4 +16,5 @@ return [
     'email'         => ['label' => 'Email',          'icon' => 'envelope',                  'sub' => 'How Basehim sends password resets, notifications and app mail.'],
     'appearance'    => ['label' => 'Appearance',     'icon' => 'swatch',                    'sub' => 'Logo, favicon, footer and custom CSS.'],
     'authorization' => ['label' => 'Authentication', 'icon' => 'shield-check',              'sub' => 'Two-step verification, registration and sign-in protection.'],
+    'security'      => ['label' => 'Security',       'icon' => 'lock-closed',               'sub' => 'HTTPS and the security headers sent with every page.'],
 ];

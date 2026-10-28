@@ -180,9 +180,14 @@ from your app and puts it in the theme's layout: header, footer, menus, the
 customizer's styles and the SEO tags, as for a core page.
 
 - **Page options:** `title`, `description`, `status`, `robots`, and
-  `layout => false` for your HTML without the theme.
-- **Layout used:** the theme's `templates/app.php` if it has one (it receives
-  `$content` and `$title`), otherwise its `page.php`. Every theme has
+  `layout => false` for your HTML without the theme. The `<title>` is your
+  title in the site's format (Settings → SEO), as for core pages (1.2.90).
+- **Canonical:** the page's own address without a trailing slash, absolute.
+  A path given with `bh_seo()->set('canonical', '/shop')` is made absolute too
+  (1.2.90).
+- **Layout used:** the theme's `templates/app-{app-slug}.php` if it has one
+  (1.2.90), else its `templates/app.php` (both receive `$content`, `$title` and
+  `$app_slug`), otherwise its `page.php`. Every theme has
   `page.php`, and it prints the title above your content, so don't repeat it
   as an `<h1>`.
 - **Theme overrides:** a theme can restyle an app's page by shipping

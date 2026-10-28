@@ -22,7 +22,10 @@ final class SitePageController extends Controller
         $site = '';
         try { $site = (string) $this->app->make(\App\Services\SettingService::class)->get('general', 'site_title', ''); } catch (\Throwable) {}
 
-        $seo = ['title' => $title !== '' ? ($site !== '' ? "{$title} – {$site}" : $title) : $site];
+        // The page's own title; the SEO head adds the site name in the form
+        // Settings → SEO asks for (1.2.90, BH-052). It used to be joined here
+        // as "Title – Site" and then formatted again.
+        $seo = ['title' => $title !== '' ? $title : $site];
         if (!empty($page['description'])) $seo['description'] = (string) $page['description'];
         if (!empty($page['robots'])) $seo['robots'] = (string) $page['robots'];
 
@@ -33,8 +36,14 @@ final class SitePageController extends Controller
             'app_page' => true,
         ];
 
-        // A theme may lay app pages out its own way (templates/app.php gets
-        // $content and $title); every theme has page.php.
+        // A theme may lay app pages out its own way: templates/app-{slug}.php
+        // for one app (1.2.90, BH-055), templates/app.php for all of them
+        // (both get $content, $title and $app_slug); every theme has page.php.
+        $slug = (string) ($page['app'] ?? '');
+        $data['app_slug'] = $slug;
+        if ($slug !== '' && preg_match('/^[a-z0-9_-]+$/i', $slug) && $themes->templatePath('app-' . $slug) !== null) {
+            return $this->renderTheme('app-' . $slug, $data);
+        }
         if ($themes->templatePath('app') !== null) {
             return $this->renderTheme('app', $data);
         }

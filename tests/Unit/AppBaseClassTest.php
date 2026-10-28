@@ -18,7 +18,7 @@ test('app base class: no public or protected method is added without review', fu
     $expected = [
         '__construct', 'addAction', 'addAdminMenu', 'addAdminScript', 'addAdminStyle', 'addEditorConfig',
         'addEditorScript', 'addEditorStyle', 'addFilter', 'addFooter', 'addHead', 'adminGet', 'adminPost',
-        'adminView', 'ajax', 'allSettings', 'allowed', 'api', 'applyFilters', 'asset', 'cache', 'config',
+        'adminView', 'ajax', 'allSettings', 'allowed', 'api', 'appStorageDir', 'applyFilters', 'asset', 'cache', 'config',
         'containerDir', 'db', 'deleteSetting', 'doAction', 'dropAllSettings', 'enqueueScript', 'enqueueStyle',
         'get', 'getSetting', 'icon', 'iconUrl', 'log', 'logger', 'make', 'manifest', 'onActivate',
         'onDeactivate', 'onInstall', 'onUninstall', 'onUpgrade', 'path', 'permissions', 'post',

@@ -39,6 +39,7 @@ $this->api()->cache()            // namespaced to your app
 $this->api()->mail()
 $this->api()->schedule()
 $this->api()->http()
+$this->api()->rateLimit()        // counting limits (1.2.90)
 ```
 
 ## Examples
@@ -184,6 +185,23 @@ arbitrary code execution, so a task whose app isn't booted is skipped, not fired
   (`$this->setSetting()` always autoloads). They are
   read the first time they are asked for, and writing one does not clear the
   cached settings of every request (1.2.76).
+- **`http()` only reaches public internet addresses** (1.2.90). The host is
+  resolved once and every address must be public (no loopback, private,
+  link-local/cloud metadata or reserved ranges, IPv4 or IPv6); the connection
+  goes to the address that was checked. Redirects (at most 5) are followed by
+  core and each is checked the same way; `Authorization` is not sent to
+  another host. Only `http`/`https`; responses over 20 MB are refused
+  (`->maxBytes()`). An app that talks to a service on the server's own network
+  on purpose calls `->allowPrivateNetwork()` for that request (never for an
+  address a visitor typed), or the site lists hosts or ranges in
+  `HTTP_ALLOW_PRIVATE` in .env.
+- **`rateLimit()`** counts anything the gateway's and site routes' own limits
+  don't cover:
+  `$r = $this->api()->rateLimit()->hit('exports', 'user:' . $id, 5, 3600);`
+  returns `allowed`, `remaining` and `retry_after`. Counters are atomic and
+  shared by every PHP worker, and namespaced to your app. For visitors, key by
+  `Request::visitorIp()` / `AjaxContext::ip()`, never by a header. If the store
+  can't be reached the hit is refused, unless you pass `$failOpen = true`.
 - **`users()` strips password hashes** from every return value.
 - **`all()` is capped** (500 by default) so a large table can't exhaust memory
   on shared hosting. Raise it deliberately or use `paginate()`.

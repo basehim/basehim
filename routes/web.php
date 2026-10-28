@@ -26,6 +26,9 @@ $router->get('/author/{username}', ['App\\Http\\Controllers\\Web\\AuthorControll
 // Search
 $router->get('/search', ['App\\Http\\Controllers\\Web\\SearchController', 'index']);
 
+// Content-Security-Policy violation reports from browsers (1.2.90, Settings → Security)
+$router->post('/csp-report', ['App\\Http\\Controllers\\Web\\CspReportController', 'store']);
+
 // Submit comment (CSRF protected)
 $router->post('/comments', ['App\\Http\\Controllers\\Web\\CommentController', 'store']);
 

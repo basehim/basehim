@@ -158,9 +158,10 @@ test('quick edit: slugs are normalised, unique across posts and pages, and refre
     assert_error($res, 422, 'VALIDATION_FAILED');
     assert_true(isset($res->json()['error']['fields']['slug']));
     assert_same($slug, qe_row($id)['slug'], 'unchanged');
-    // Reserved by a route, or nothing usable left after normalising.
+    // Reserved by a route, or nothing usable left after normalising. Non-Latin
+    // letters are valid in slugs since 1.2.76, so only punctuation is empty.
     assert_error(qe_save($b, $id, ['slug' => 'admin']), 422, 'VALIDATION_FAILED');
-    assert_error(qe_save($b, $id, ['slug' => 'لاہور']), 422, 'VALIDATION_FAILED');
+    assert_error(qe_save($b, $id, ['slug' => '---']), 422, 'VALIDATION_FAILED');
     assert_same($slug, qe_row($id)['slug'], 'still unchanged');
     // Empty: made from the title.
     $res = qe_save($b, $id, ['slug' => '', 'title' => 'QE From the title']);

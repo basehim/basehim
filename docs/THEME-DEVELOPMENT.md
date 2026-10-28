@@ -810,3 +810,25 @@ resumed.
 
 The featured image is also the page's share image (Open Graph, X, JSON-LD)
 unless the post's SEO panel sets a different one. Nothing to do in the theme.
+
+## Content-Security-Policy (1.2.90)
+
+Basehim sends a Content-Security-Policy with every public page (Settings →
+Security). Every `<script>` element in the page, whether inline or with a
+`src`, gets that response's nonce automatically, and scripts they load are
+trusted in turn (`'strict-dynamic'`), so a theme's scripts need no changes.
+
+When a site switches the policy to **Enforce**, three things stop working,
+as they should:
+
+- inline event handlers: `onclick="…"`, `onload="…"`. Attach handlers from a
+  script with `addEventListener`;
+- `javascript:` links: use a button and a handler;
+- `<script>` elements written into the page by `innerHTML` after it loaded.
+  Create them with `document.createElement('script')` instead (allowed by
+  `'strict-dynamic'`).
+
+Report-only mode, the default, lists these in Settings → Security without
+blocking anything. App pages can be laid out per app with
+`templates/app-{app-slug}.php` (receives `$content`, `$title`, `$app_slug`).
+

@@ -40,12 +40,16 @@ class SitemapController extends Controller
     public function index(Request $request): Response
     {
         if (!$this->enabled()) return Response::make('Sitemap disabled', 404);
-        return $this->cached('index', function (): string {
+        // Apps' sitemaps are asked for on every request (cheap) and keyed into
+        // the cache, so switching an app on or off shows at once.
+        $appSitemaps = $this->appSitemaps($this->origin());
+        return $this->cached('index' . ($appSitemaps ? '.' . md5(implode('|', $appSitemaps)) : ''), function () use ($appSitemaps): string {
             $o = $this->origin();
             $files = [];
             foreach ($this->contentStarts() as $n => $_) $files[] = $o . '/sitemap-content-' . ($n + 1) . '.xml';
             $files[] = $o . '/sitemap-terms.xml';
             if ($this->authorsOn()) $files[] = $o . '/sitemap-authors.xml';
+            $files = array_merge($files, $appSitemaps);
             $lastmod = $this->db()->selectOne(
                 "SELECT MAX(updated_at) AS m FROM {posts} WHERE status = 'published' AND deleted_at IS NULL"
             )['m'] ?? null;
@@ -61,6 +65,34 @@ class SitemapController extends Controller
             }
             return $xml . '</sitemapindex>';
         });
+    }
+
+    /**
+     * Sitemaps apps add to the index (1.2.90, BH-054), through the
+     * `sitemap.index` filter: a list of absolute URLs of this site. The second
+     * argument is the site's origin (with the install's base path):
+     *
+     *     $this->addFilter('sitemap.index', fn(array $l, string $origin) => [...$l, $origin . '/tools/sitemap.xml'], 10, 2);
+     *
+     * Only http(s) URLs on this site's origin are kept (a sitemap index may not
+     * point elsewhere), at most 100, without duplicates.
+     *
+     * @return string[]
+     */
+    private function appSitemaps(string $origin): array
+    {
+        try {
+            $list = $this->app->make(\App\Core\HookRegistry::class)->applyFilters('sitemap.index', [], $origin);
+        } catch (\Throwable) {
+            return [];
+        }
+        $out = [];
+        foreach (is_array($list) ? $list : [] as $url) {
+            if (!is_string($url) || !str_starts_with($url, $origin . '/') || preg_match('/[\s<>"]/', $url)) continue;
+            $out[$url] = $url;
+            if (count($out) >= 100) break;
+        }
+        return array_values($out);
     }
 
     /** /sitemap-{name}.xml: content-N, terms, authors. */
@@ -235,8 +267,7 @@ class SitemapController extends Controller
                 return rtrim($m[1], '/') . $base;
             }
         }
-        $https = (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off')
-            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+        $https = \App\Core\Request::serverIsSecure();
         $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
         if (!preg_match('/^[A-Za-z0-9.\-]+(:\d+)?$/', $host)) $host = 'localhost';
         return ($https ? 'https' : 'http') . '://' . $host . $base;

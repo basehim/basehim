@@ -49,7 +49,7 @@ final class SiteRouteGuard
                 $limiter = $app->make(\App\Services\RateLimiter::class);
                 $route = $app->make(\App\Core\Router::class)->currentRoute();
                 $bucket = 'site:' . $this->owner . ':' . implode('|', (array) ($route['methods'] ?? [])) . ' ' . ($route['pattern'] ?? $request->path());
-                $hit = $limiter->hit($bucket, 'ip:' . $request->ip(), (int) $max, (int) $per);
+                $hit = $limiter->hit($bucket, 'ip:' . $request->visitorIp(), (int) $max, (int) $per);
                 if (!$hit['allowed']) {
                     $r = $this->error($request, 429, 'Too Many Requests', 'Too many requests. Please wait a moment and try again.');
                     $r->header('Retry-After', (string) max(1, (int) $hit['retry_after']));

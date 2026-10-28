@@ -182,8 +182,7 @@ final class McpOAuthService
     /** Absolute origin + install base, e.g. https://example.com/sub */
     public function issuer(): string
     {
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        if (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') $scheme = 'https';
+        $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
         return $scheme . '://' . $host . $base;

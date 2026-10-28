@@ -112,6 +112,12 @@ class AppApi
         return $this->resources['schedule'] ??= new ScheduleApi($this->app, $this->slug);
     }
 
+    /** Counting limits (1.2.90): per visitor, per target, site-wide. */
+    public function rateLimit(): RateLimitApi
+    {
+        return $this->resources['rateLimit'] ??= new RateLimitApi($this->app, $this->slug);
+    }
+
     /** Outbound HTTP with sane defaults and timeouts. */
     public function http(): HttpApi
     {

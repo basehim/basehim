@@ -243,7 +243,15 @@ final class SeoHeadService
 
         // Canonical -----------------------------------------------------------
         $canonical = trim((string) ($ctrl['canonical'] ?? ''));
-        if ($canonical === '' && !in_array($type, ['404', 'search'], true)) $canonical = $this->currentUrl($pageNo);
+        if ($canonical === '' && !in_array($type, ['404', 'search'], true)) {
+            $canonical = $this->currentUrl($pageNo);
+            // App pages (type "other"): /shop/ and /shop are one page, so its
+            // canonical has no trailing slash (1.2.90, BH-051). Core's own page
+            // types keep the permalink setting's form.
+            if ($type === 'other') {
+                $canonical = preg_replace('#^(https?://[^/?\#]+/.*?[^/])/+(?=$|\?)#', '$1', $canonical) ?? $canonical;
+            }
+        }
         $canonical = $canonical !== '' ? $this->absolute($canonical) : '';
 
         // Robots --------------------------------------------------------------
@@ -288,6 +296,10 @@ final class SeoHeadService
             $f = $this->hooks->applyFilters('seo.image', $values['image'], $ctx);
             $values['image'] = $f === null ? null : $this->normaliseImage($f);
         } catch (\Throwable) {}
+        // An override or filter may give a site path ("/shop"); search engines
+        // need the absolute URL in the canonical link, og:url and JSON-LD
+        // (1.2.90, BH-050).
+        if ($values['canonical'] !== '') $values['canonical'] = $this->absolute($values['canonical']);
         if (!array_key_exists('twitter_card', $this->overrides)) {
             $values['twitter_card'] = $values['image'] ? 'summary_large_image' : 'summary';
         }
@@ -789,8 +801,7 @@ final class SeoHeadService
 
     private function origin(): string
     {
-        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+        $https = \App\Core\Request::serverIsSecure();
         $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
         if ($host === '' || !preg_match('/^[A-Za-z0-9.\-]+(:\d+)?$/', $host)) {
             $app = (string) (\App\Core\Env::get('APP_URL', '') ?? '');

@@ -36,7 +36,9 @@ class AppScanner
             'eval()', 'high',
             'Executes strings as code. Whatever the app declares, eval can do anything.',
         ],
-        '/\b(?:exec|shell_exec|system|passthru|popen|proc_open)\s*\(/i' => [
+        // Not after -> ?-> :: (a method: $pdo->exec(), Tls::exec()) or
+        // `function ` (a declaration), which are not shell calls (1.2.90, BH-068).
+        '/(?<![>:\w$])(?<!function\s)\b(?:exec|shell_exec|system|passthru|popen|proc_open)\s*\(/i' => [
             'Shell execution', 'high',
             'Runs operating-system commands, outside anything Basehim can mediate.',
         ],

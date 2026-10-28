@@ -417,7 +417,12 @@ final class Icon
     /** True if an icon name (after resolution) exists in the set. */
     public static function has(string $name): bool
     {
-        return isset(self::icons()[self::resolve($name)]);
+        // resolve() falls back to a default icon for unknown names, so the
+        // lookup alone was always true (BH-053): an unknown name must not
+        // count just because the fallback exists.
+        $resolved = self::resolve($name);
+        if ($resolved === self::FALLBACK && strtolower(trim($name)) !== self::FALLBACK) return false;
+        return isset(self::icons()[$resolved]);
     }
 
     /** All available Heroicon names. */

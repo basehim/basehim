@@ -55,8 +55,7 @@ final class FeedBuilder
      */
     public static function requestOrigin(): string
     {
-        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+        $https = \App\Core\Request::serverIsSecure();
         $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
         if ($host === '' || !preg_match('/^[A-Za-z0-9.\-]+(:\d+)?$/', $host)) {
             $app = (string) (\App\Core\Env::get('APP_URL', '') ?? '');

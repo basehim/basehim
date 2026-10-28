@@ -97,7 +97,7 @@ final class Idempotency
         } catch (\Throwable) {}
         $name = session_name() ?: 'PHPSESSID';
         if (!empty($request->cookies[$name])) return 'session:' . hash('sha256', (string) $request->cookies[$name]);
-        return 'ip:' . $request->ip();
+        return 'ip:' . $request->visitorIp();
     }
 
     private static function problem(int $status, string $title, string $detail): Response

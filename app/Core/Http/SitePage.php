@@ -60,7 +60,7 @@ final class SitePage
             return self::failure($slug, "Template '{$template}' was not found in views/ of the app (nor in the theme's templates/apps/{$slug}/).");
         }
         $html = self::include($file, $data + ['app' => $app]);
-        return self::html((string) ($page['title'] ?? ''), $html, $page);
+        return self::html((string) ($page['title'] ?? ''), $html, $page + ['app' => $slug]);
     }
 
     /**

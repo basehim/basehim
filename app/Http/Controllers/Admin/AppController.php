@@ -87,7 +87,9 @@ class AppController extends Controller
         }
 
         try {
-            $this->app->make(AppService::class)->deactivate($slug);
+            $svc = $this->app->make(AppService::class);
+            $svc->assertNotNeeded($slug, 'switch off');
+            $svc->deactivate($slug);
             $this->flash('success', "App '{$slug}' deactivated.");
         } catch (\Throwable $e) {
             $this->flash('error', "Deactivation failed: " . $e->getMessage());
@@ -233,7 +235,9 @@ class AppController extends Controller
         }
 
         try {
-            $this->app->make(AppService::class)->delete($slug);
+            $svc = $this->app->make(AppService::class);
+            $svc->assertNotNeeded($slug, 'delete');
+            $svc->delete($slug);
             $this->flash('success', "App '{$slug}' deleted.");
         } catch (\Throwable $e) {
             $this->flash('error', 'Delete failed: ' . $e->getMessage());

@@ -553,6 +553,48 @@ class AppService
         return false;
     }
 
+    /**
+     * Active apps whose app.json requires $slug (`requires.apps`), as
+     * slug => name (1.2.90, BH-059). Admin actions refuse to switch off or
+     * delete an app while these depend on it.
+     *
+     * @return array<string,string>
+     */
+    public function activeDependents(string $slug): array
+    {
+        $out = [];
+        foreach ($this->installed() as $row) {
+            $other = (string) ($row['slug'] ?? '');
+            if ($other === '' || $other === $slug || ($row['status'] ?? '') !== 'active') continue;
+            $m = $this->readManifest($this->dirFor($other)) ?? [];
+            $needs = $m['requires']['apps'] ?? null;
+            if (is_array($needs) && array_key_exists($slug, $needs)) {
+                $out[$other] = (string) ($row['name'] ?? $other);
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Refuse when active apps still need $slug, unless they are switched off
+     * in the same action ($alsoGoing).
+     *
+     * @param string[] $alsoGoing
+     * @throws \RuntimeException
+     */
+    public function assertNotNeeded(string $slug, string $verb, array $alsoGoing = []): void
+    {
+        $left = array_diff_key($this->activeDependents($slug), array_flip($alsoGoing));
+        if (!$left) return;
+        $names = array_values($left);
+        $list = count($names) === 1 ? $names[0] : implode(', ', array_slice($names, 0, -1)) . ' and ' . end($names);
+        throw new \RuntimeException(sprintf(
+            '%s %s on it. %s %s first, or select %s too.',
+            $list, count($names) === 1 ? 'depends' : 'depend',
+            ucfirst($verb), count($names) === 1 ? 'that app' : 'those apps', count($names) === 1 ? 'it' : 'them'
+        ));
+    }
+
     public function deactivate(string $slug): bool
     {
         $row = $this->find($slug);
@@ -678,6 +720,10 @@ class AppService
             $this->rrmdir($staged['tempDir']);
             throw new \RuntimeException('Could not move the extracted app into place.');
         }
+        // An app deleted moments ago may still be compiled in OPcache under
+        // these same paths; without this the first request ran the old code
+        // against the new files and the boot guard switched the app off (BH-069).
+        $this->forgetCompiled($targetDir);
 
         // Register it (1.2.85): the row, onInstall(), the security scan and
         // code validation. A row left from an earlier install whose files
@@ -1970,10 +2016,32 @@ class AppService
         foreach ($this->searchPaths() as $container) {
             $base = realpath($container);
             if ($base && str_starts_with($real, $base . DIRECTORY_SEPARATOR)) {
+                $this->forgetCompiled($real);
                 $this->rrmdir($real);
                 unset($this->dirCache[$slug]);
                 return;
             }
+        }
+    }
+
+    /**
+     * Drop OPcache's compiled copy of every PHP file under $dir (1.2.90), so
+     * the next request compiles what is on disk now. Used after a fresh
+     * install and before a delete; the in-place upgrade resets the whole
+     * cache instead.
+     */
+    private function forgetCompiled(string $dir): void
+    {
+        if (!function_exists('opcache_invalidate') || !is_dir($dir)) return;
+        try {
+            $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
+            foreach ($it as $file) {
+                if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+                    @opcache_invalidate($file->getPathname(), true);
+                }
+            }
+        } catch (\Throwable) {
+            if (function_exists('opcache_reset')) @opcache_reset();
         }
     }
 

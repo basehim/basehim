@@ -74,7 +74,11 @@ class AppAssetController extends Controller
         $response->header('Content-Length', (string)$size);
         $response->header('ETag', $etag);
         $response->header('Last-Modified', gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
-        $response->header('Cache-Control', 'public, max-age=2592000');
+        // A versioned URL (?v=…, App::asset() adds one since 1.2.90) changes
+        // with each release, so it can be kept for a month; an unversioned one
+        // must be checked each time, or an update never reaches browsers.
+        $versioned = ($request->query['v'] ?? '') !== '';
+        $response->header('Cache-Control', $versioned ? 'public, max-age=2592000' : 'public, no-cache');
         return $response;
     }
 

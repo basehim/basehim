@@ -719,8 +719,15 @@ abstract class App
     protected function asset(string $relativePath): string
     {
         $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
-        return $base . '/content/' . $this->containerDir() . '/' . $this->slug
+        $url = $base . '/content/' . $this->containerDir() . '/' . $this->slug
              . '/assets/' . ltrim($relativePath, '/');
+        // Versioned (1.2.90, BH-049): browsers and servers cache app assets
+        // for days, so an update must change the URL to reach visitors. An
+        // app that adds its own ?v= still works (the second one is ignored).
+        if (!str_contains($relativePath, '?')) {
+            $url .= '?v=' . rawurlencode((string) ($this->manifest['version'] ?? '0'));
+        }
+        return $url;
     }
 
     // ------------------------------------------------------------------

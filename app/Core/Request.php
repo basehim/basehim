@@ -157,6 +157,119 @@ final class Request
         return str_contains($accept, 'application/json') || str_contains($accept, '+json');
     }
 
+    /**
+     * Cloudflare's published ranges (https://www.cloudflare.com/ips/). A
+     * request from one of these came through Cloudflare, which sets
+     * CF-Connecting-IP and CF-Visitor itself, overwriting anything the client
+     * sent, so those two headers are believed from these addresses (1.2.90).
+     * X-Forwarded-For is not: a Cloudflare Worker can fetch from these ranges
+     * with any X-Forwarded-For it likes.
+     */
+    public const CLOUDFLARE = [
+        '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18',
+        '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17',
+        '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+        '2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32',
+        '2a06:98c0::/29', '2c0f:f248::/32',
+    ];
+
+    /**
+     * Proxies whose X-Forwarded-* headers are believed: TRUSTED_PROXIES in
+     * .env (IPs or CIDR ranges, comma-separated). Empty by default, as the
+     * AJAX gateway has always had it; one list for all of core since 1.2.90.
+     *
+     * @return string[]
+     */
+    public static function trustedProxies(): array
+    {
+        try {
+            $raw = (string) (Env::get('TRUSTED_PROXIES', '') ?? '');
+        } catch (\Throwable) {
+            return [];
+        }
+        return array_values(array_filter(array_map('trim', explode(',', $raw)), fn($t) => $t !== ''));
+    }
+
+    /** True when the connecting address is in TRUSTED_PROXIES. */
+    public static function fromTrustedProxy(array $server): bool
+    {
+        $remote = trim((string) ($server['REMOTE_ADDR'] ?? ''));
+        $trusted = self::trustedProxies();
+        return $trusted !== [] && filter_var($remote, FILTER_VALIDATE_IP) !== false && self::ipInAny($remote, $trusted);
+    }
+
+    /** True when the connecting address is one of Cloudflare's. */
+    public static function fromCloudflare(array $server): bool
+    {
+        $remote = trim((string) ($server['REMOTE_ADDR'] ?? ''));
+        return filter_var($remote, FILTER_VALIDATE_IP) !== false && self::ipInAny($remote, self::CLOUDFLARE);
+    }
+
+    /**
+     * Was this request made over HTTPS? Directly (HTTPS / port 443); through
+     * a trusted proxy that says so (X-Forwarded-Proto, X-Forwarded-SSL);
+     * through Cloudflare (CF-Visitor); or, for a CDN that isn't listed, to
+     * the host of an https:// APP_URL. Before 1.2.90 seven places believed
+     * X-Forwarded-Proto from any visitor, who could flip the scheme of
+     * absolute URLs (and of cached feeds and sitemaps).
+     *
+     * @param array|null $server $_SERVER-shaped; defaults to $_SERVER
+     */
+    public static function serverIsSecure(?array $server = null): bool
+    {
+        $s = $server ?? $_SERVER;
+        $https = strtolower((string) ($s['HTTPS'] ?? ''));
+        if ($https !== '' && $https !== 'off') return true;
+        if ((string) ($s['SERVER_PORT'] ?? '') === '443') return true;
+        if (self::fromTrustedProxy($s)) {
+            $proto = strtolower(trim(explode(',', (string) ($s['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+            if ($proto === 'https' || strtolower((string) ($s['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on') return true;
+        }
+        if (self::fromCloudflare($s) && str_contains(strtolower((string) ($s['HTTP_CF_VISITOR'] ?? '')), '"scheme":"https"')) {
+            return true;
+        }
+        // Nothing a visitor sends can change this answer either way.
+        return self::appUrlIsHttpsFor((string) ($s['HTTP_HOST'] ?? ''));
+    }
+
+    private static function appUrlIsHttpsFor(string $host): bool
+    {
+        try {
+            $app = (string) (Env::get('APP_URL', '') ?? '');
+        } catch (\Throwable) {
+            return false;
+        }
+        $p = parse_url($app);
+        if (!is_array($p) || strtolower((string) ($p['scheme'] ?? '')) !== 'https') return false;
+        $want = strtolower((string) ($p['host'] ?? ''));
+        $host = strtolower((string) preg_replace('/:\d+$/', '', trim($host)));
+        return $want !== '' && $host === $want;
+    }
+
+    public function isSecure(): bool
+    {
+        return self::serverIsSecure($this->server);
+    }
+
+    /**
+     * The visitor's address for rate limits and anything else that must not
+     * be spoofable: X-Forwarded-For only from TRUSTED_PROXIES, and
+     * CF-Connecting-IP only on requests that come from Cloudflare.
+     */
+    public function visitorIp(): string
+    {
+        if (self::fromCloudflare($this->server)) {
+            $cf = trim((string) ($this->server['HTTP_CF_CONNECTING_IP'] ?? ''));
+            if (filter_var($cf, FILTER_VALIDATE_IP) !== false) return $cf;
+        }
+        return $this->clientIp(self::trustedProxies());
+    }
+
+    /**
+     * The first address any forwarding header names, believed from anyone.
+     * For display only: a visitor can put any address here. Rate limits and
+     * other checks use visitorIp().
+     */
     public function ip(): string
     {
         $candidates = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'];

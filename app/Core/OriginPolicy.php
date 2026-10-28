@@ -39,7 +39,11 @@ final class OriginPolicy
         // bare, or a staging alias) is always same-origin with itself.
         $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
         if ($host !== '' && preg_match('/^[A-Za-z0-9.\-]+(:\d+)?$|^\[[0-9a-fA-F:]+\](:\d+)?$/', $host)) {
-            $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            // The request's own scheme. X-Forwarded-Proto may only ADD the
+            // https:// origin of this same host, which is the site itself, so
+            // believing it from anyone opens nothing; the http:// origin is
+            // trusted only when the request really is plain http.
+            $https = Request::serverIsSecure()
                 || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
             $out[] = self::normalise(($https ? 'https' : 'http') . '://' . $host);
         }

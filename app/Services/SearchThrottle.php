@@ -26,7 +26,7 @@ final class SearchThrottle
         try {
             $max = (int) $app->make(SettingService::class)->get('reading', 'search_rate_limit', self::DEFAULT_PER_MINUTE);
             if ($max <= 0) return null;
-            $hit = $app->make(RateLimiter::class)->hit('search', 'ip:' . $request->ip(), $max, 60);
+            $hit = $app->make(RateLimiter::class)->hit('search', 'ip:' . $request->visitorIp(), $max, 60);
             return $hit['allowed'] ? null : max(1, (int) $hit['retry_after']);
         } catch (\Throwable) {
             return null;

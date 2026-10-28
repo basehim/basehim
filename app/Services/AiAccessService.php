@@ -119,9 +119,7 @@ final class AiAccessService
     /** https://example.com (plus the install's base path), no trailing slash. */
     public function origin(): string
     {
-        $https = (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off')
-            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
-            || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
+        $https = \App\Core\Request::serverIsSecure();
         $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
         $host = preg_replace('/[^A-Za-z0-9.:\-\[\]]/', '', $host) ?: 'localhost';
         $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';

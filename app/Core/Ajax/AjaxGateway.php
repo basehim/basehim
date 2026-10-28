@@ -103,7 +103,8 @@ final class AjaxGateway
     public function handle(Request $request): Response
     {
         $this->requestId = bin2hex(random_bytes(8));
-        $this->clientIp = $request->clientIp((string) $this->config->get('ajax.trusted_proxies', ''));
+        // Request::trustedProxies() reads the same TRUSTED_PROXIES as ajax.trusted_proxies, plus core's defaults (1.2.90).
+        $this->clientIp = $request->visitorIp();
 
         try {
             try {
