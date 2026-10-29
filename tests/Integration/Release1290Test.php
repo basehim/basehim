@@ -28,7 +28,7 @@ class App extends \App\Core\App
         $this->addFilter('sitemap.index', function (array $list, string $origin) {
             return array_merge($list, [$origin . '/r1290/sitemap.xml', 'https://elsewhere.example/x.xml', $origin . '/r1290/sitemap.xml']);
         }, 10, 2);
-        $this->ajax('asset', ['handler' => fn() => ['url' => $this->asset('x.css')], 'auth' => 'public', 'methods' => ['GET'], 'rate_limit' => ['max' => 100, 'per' => 60, 'by' => 'ip']]);
+        $this->ajax('asset', ['handler' => fn() => ['url' => $this->asset('x.css'), 'dir' => $this->asset(''), 'slash' => $this->asset('/'), 'sub' => $this->asset('img'), 'subslash' => $this->asset('img/'), 'own' => $this->asset('x.css?v=9')], 'auth' => 'public', 'methods' => ['GET'], 'rate_limit' => ['max' => 100, 'per' => 60, 'by' => 'ip']]);
         $this->ajax('fetch', [
             'handler' => [$this, 'fetch'], 'auth' => 'public', 'methods' => ['GET'],
             'input' => ['url' => 'required|string|max:500', 'private' => 'bool'],
@@ -202,3 +202,18 @@ test('1.2.90 e2e: api()->http() refuses private addresses and redirects into the
     $r = $v->ajaxGet('r1290-fixture.fetch', ['url' => $self . '/robots.txt', 'private' => '1'])->json()['data'] ?? [];
     assert_true($r['ok'] ?? false, json_encode($r));
 });
+
+test('1.2.91 e2e: folder asset URLs carry no version, so apps can append file names (BH-070)', function () {
+    r1290_setup();
+    $d = bh_browser()->ajaxGet('r1290-fixture.asset')->json()['data'] ?? [];
+    $base = '/content/apps/r1290-fixture/assets/';
+    assert_true(str_ends_with($d['dir'] ?? '', $base), $d['dir'] ?? '');
+    assert_true(str_ends_with($d['slash'] ?? '', $base), $d['slash'] ?? '');
+    assert_true(str_ends_with($d['sub'] ?? '', $base . 'img'), $d['sub'] ?? '');
+    assert_true(str_ends_with($d['subslash'] ?? '', $base . 'img/'), $d['subslash'] ?? '');
+    assert_true(str_ends_with($d['own'] ?? '', $base . 'x.css?v=9'), $d['own'] ?? '');
+    // The pattern that broke apps on 1.2.90: folder URL + file name loads.
+    $res = bh_browser()->request('GET', parse_url(rtrim($d['dir'], '/') . '/x.css', PHP_URL_PATH));
+    assert_same(200, $res->status);
+});
+

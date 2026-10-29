@@ -455,13 +455,19 @@ class PostService
         return $this->repo->byTermId($termId, $page, $perPage);
     }
 
+    /**
+     * Site search over published content (1.2.92, BH Search): every word in
+     * any order, best match first, across the content types chosen in
+     * Settings → Search (posts and pages by default). Rows are post rows,
+     * plus `search_snippet` (HTML with <mark>) and `search_title`.
+     */
     public function search(string $term, int $page = 1, int $perPage = 10): array
     {
-        return $this->repo->paginate([
-            'type' => 'post',
-            'status' => 'published',
-            'search' => $term,
-        ], $page, $perPage);
+        $r = (new \App\Core\Search\SiteSearch(\App\Core\Application::getInstance()))->search($term, $page, $perPage, true);
+        return [
+            'data' => $r['posts'],
+            'meta' => ['page' => $r['page'], 'per_page' => $r['per_page'], 'total' => $r['total'], 'last_page' => $r['last_page']],
+        ];
     }
 
     /** Count a view: buffered, direct or not at all (Settings → Reading; PostViewCounter, 1.2.76). */

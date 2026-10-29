@@ -150,6 +150,13 @@ List templates (`index`, `archive`, `search`):
 | `$posts` | the rows for this page |
 | `$meta` | `['page' => 1, 'per_page' => 10, 'total' => 2930, 'last_page' => 293]` |
 | `$query` | the search term, on `search` |
+| `$results` | on `search` (1.2.92): every result, apps' included: `source`, `title`, `title_html`, `url`, `snippet` (HTML with `<mark>`), `date`, `item` |
+
+On `search`, each row of `$posts` also has `search_snippet` (the matching
+passage, HTML with `<mark>`) and `search_title` (the title, HTML with
+`<mark>`). Both are already escaped: print them as they are. Results are
+ordered best match first unless Settings → Search says newest first. See
+[SEARCH.md](SEARCH.md).
 
 Single templates (`single`, `page`): `$post`, with `content` already rendered to
 HTML whatever format it was written in.

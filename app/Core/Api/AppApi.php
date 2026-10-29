@@ -112,6 +112,12 @@ class AppApi
         return $this->resources['schedule'] ??= new ScheduleApi($this->app, $this->slug);
     }
 
+    /** BH Search (1.2.92): index this app's records, search them and the site. */
+    public function search(): SearchApi
+    {
+        return $this->resources['search'] ??= new SearchApi($this->app, $this->slug);
+    }
+
     /** Counting limits (1.2.90): per visitor, per target, site-wide. */
     public function rateLimit(): RateLimitApi
     {

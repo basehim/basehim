@@ -34,6 +34,7 @@ final class SettingsSaver
         'email'         => 'Email',
         'authorization' => 'Authentication',
         'security'      => 'Security',
+        'search'        => 'Search',
     ];
 
     private Application $app;
@@ -65,6 +66,7 @@ final class SettingsSaver
             'ai'            => $this->ai($in),
             'reading'       => $this->reading($in),
             'security'      => $this->security($in),
+            'search'        => $this->search($in),
             default         => isset(self::TABS[$tab]) ? $this->generic($tab, $in) : self::result(false, 'error', 'Unknown settings screen.'),
         };
     }
@@ -101,6 +103,28 @@ final class SettingsSaver
         $note = !empty($in['hsts_preload']) && (empty($in['hsts_subdomains']) || $age < 31536000)
             ? ' Preload was left off: it needs "Include subdomains" and at least one year.' : '';
         return self::result(true, $note === '' ? 'success' : 'error', 'Security settings saved.' . $note);
+    }
+
+    /** Search (1.2.92): what site search covers and its order; only known types and sources are stored. */
+    private function search(array $in): array
+    {
+        $site = new \App\Core\Search\SiteSearch($this->app);
+        $sort = (string) ($in['site_sort'] ?? 'relevance');
+        if (!in_array($sort, \App\Core\Search\SiteSearch::SORTS, true)) return self::result(false, 'error', 'Choose an order from the list.');
+        $types = [];
+        foreach (array_keys($site->availableTypes()) as $t) {
+            if (!empty(((array) ($in['site_type'] ?? []))[$t])) $types[] = $t;
+        }
+        $off = [];
+        foreach (array_keys($site->appSources()) as $id) {
+            if (empty(((array) ($in['site_source'] ?? []))[$id])) $off[] = $id;
+        }
+        $g = \App\Core\Search\SiteSearch::GROUP;
+        $this->settings->set($g, 'site_types', $types);
+        $this->settings->set($g, 'site_sources_off', $off);
+        $this->settings->set($g, 'site_sort', $sort);
+        return self::result(true, $types === [] ? 'error' : 'success',
+            'Search settings saved.' . ($types === [] ? ' No content type is searched now: the search page finds only what apps add.' : ''));
     }
 
     /** Reading: the search and view-count options (1.2.76) are checked first. */

@@ -366,9 +366,11 @@ them compatibly. See [APP-FAULT-ISOLATION.md](APP-FAULT-ISOLATION.md).
 - **Scheduled tasks need traffic** unless a real crontab is configured — see
   APP-API.md.
 - **Build asset URLs with `$this->asset()`.** It respects the install's base
-  path and, since 1.2.90, adds `?v={your app version}`: browsers and servers
-  keep assets for days, so bump the version with every release. (Adding your
-  own `?v=` still works.)
+  path and, since 1.2.90, adds `?v={your app version}` to file paths: browsers
+  and servers keep assets for days, so bump the version with every release.
+  (Adding your own `?v=` still works.) Folder paths (`asset('')`,
+  `asset('img')`, `asset('img/')`) and paths with their own query string come
+  back without it (1.2.91), so a folder URL can have file names appended.
 - **Sitemaps:** an app with public pages can list its own sitemap in
   `/sitemap.xml` (1.2.90):
   `$this->addFilter('sitemap.index', fn(array $l, string $origin) => [...$l, $origin . '/shop/sitemap.xml'], 10, 2);`

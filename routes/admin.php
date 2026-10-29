@@ -217,6 +217,8 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->get('/settings/security', ['App\\Http\\Controllers\\Admin\\SettingController', 'security']);
         $router->post('/settings/security', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveSecurity']);
         $router->post('/settings/security/clear-reports', ['App\\Http\\Controllers\\Admin\\SettingController', 'clearCspReports']);
+        $router->get('/settings/search', ['App\\Http\\Controllers\\Admin\\SettingController', 'search']);
+        $router->post('/settings/search', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveSearch']);
         $router->post('/settings/email', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveEmail']);
         $router->post('/settings/email/test', ['App\\Http\\Controllers\\Admin\\SettingController', 'testEmail']);
         $router->post('/settings/appearance', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveAppearance']);

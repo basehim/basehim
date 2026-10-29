@@ -17,4 +17,5 @@ return [
     'appearance'    => ['label' => 'Appearance',     'icon' => 'swatch',                    'sub' => 'Logo, favicon, footer and custom CSS.'],
     'authorization' => ['label' => 'Authentication', 'icon' => 'shield-check',              'sub' => 'Two-step verification, registration and sign-in protection.'],
     'security'      => ['label' => 'Security',       'icon' => 'lock-closed',               'sub' => 'HTTPS and the security headers sent with every page.'],
+    'search'        => ['label' => 'Search',         'icon' => 'magnifying-glass',          'sub' => 'The search index, and what the site\'s search page finds.'],
 ];

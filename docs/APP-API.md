@@ -40,6 +40,7 @@ $this->api()->mail()
 $this->api()->schedule()
 $this->api()->http()
 $this->api()->rateLimit()        // counting limits (1.2.90)
+$this->api()->search()           // BH Search: index and search your records (1.2.92)
 ```
 
 ## Examples
@@ -202,6 +203,10 @@ arbitrary code execution, so a task whose app isn't booted is skipped, not fired
   shared by every PHP worker, and namespaced to your app. For visitors, key by
   `Request::visitorIp()` / `AjaxContext::ip()`, never by a header. If the store
   can't be reached the hit is refused, unless you pass `$failOpen = true`.
+- **`search()`** (1.2.92) makes your records searchable through core's shared
+  index, gives `constrain()` for queries on your own tables (every word, any
+  order, fast at any size), ranked `query()` results, and a place in the
+  site's search page. See [SEARCH.md](SEARCH.md).
 - **`users()` strips password hashes** from every return value.
 - **`all()` is capped** (500 by default) so a large table can't exhaust memory
   on shared hosting. Raise it deliberately or use `paginate()`.

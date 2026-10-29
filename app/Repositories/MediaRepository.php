@@ -9,6 +9,17 @@ class MediaRepository
 {
     public function __construct(private Database $db) {}
 
+    /** BH Search (1.2.92), or null where it is not available. */
+    private function searchIndex(): ?\App\Core\Search\SearchManager
+    {
+        try {
+            $app = \App\Core\Application::getInstance();
+            return $app->has(\App\Core\Search\SearchManager::class) ? $app->make(\App\Core\Search\SearchManager::class) : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     /** Decorate a media row by making `url` install-base-aware. */
     private function decorate(?array $row): ?array
     {
@@ -36,17 +47,23 @@ class MediaRepository
 
     public function create(array $data): int
     {
-        return (int)$this->db->insert('media', $data);
+        $id = (int)$this->db->insert('media', $data);
+        $this->searchIndex()?->touch('media', $id);
+        return $id;
     }
 
     public function update(int $id, array $data): int
     {
-        return $this->db->update('media', $data, ['id' => $id]);
+        $n = $this->db->update('media', $data, ['id' => $id]);
+        $this->searchIndex()?->touch('media', $id);
+        return $n;
     }
 
     public function delete(int $id): int
     {
-        return $this->db->delete('media', ['id' => $id]);
+        $n = $this->db->delete('media', ['id' => $id]);
+        $this->searchIndex()?->remove('media', $id);
+        return $n;
     }
 
     /** The type pills / picker groups, each a fixed SQL condition (never user text). */
@@ -113,11 +130,14 @@ class MediaRepository
             $params['author'] = (int) $filters['author_id'];
         }
         if (isset($filters['search']) && $filters['search'] !== '') {
-            $where[] = '(title LIKE :search1 OR original_name LIKE :search2 OR alt_text LIKE :search3)';
-            $like = '%' . addcslashes((string) $filters['search'], '\\%_') . '%';
-            $params['search1'] = $like;
-            $params['search2'] = $like;
-            $params['search3'] = $like;
+            // BH Search (1.2.92): every word, in any order, in the title, file
+            // names, alt text, caption or description; through the search
+            // index once it is built, the table's own columns until then.
+            $index = $this->searchIndex();
+            $where[] = $index !== null
+                ? $index->constrain('media', (string) $filters['search'], '', $params)
+                : \App\Core\Search\LikeMatcher::condition(\App\Core\Search\SearchQuery::parse((string) $filters['search']),
+                    ['title', 'original_name', 'file_name', 'alt_text', 'caption', 'description'], $params);
         }
         if (!empty($filters['from'])) {
             $where[] = 'created_at >= :from';

@@ -41,11 +41,10 @@ class CommentService
             // Distinct placeholders per column: PDO runs with emulated prepares
             // off (app/Core/Database.php), where a reused named placeholder
             // throws HY093 — the same idiom the Post/User/Media repositories use.
-            $where[] = '(c.content LIKE :search1 OR c.author_name LIKE :search2 OR c.author_email LIKE :search3)';
-            $like = '%' . addcslashes((string) $filters['search'], '\\%_') . '%';
-            $params['search1'] = $like;
-            $params['search2'] = $like;
-            $params['search3'] = $like;
+            // BH Search (1.2.92): every word, in any order; the index once built.
+            $where[] = self::searchIndex()?->constrain('comments', (string) $filters['search'], 'c', $params)
+                ?? \App\Core\Search\LikeMatcher::condition(\App\Core\Search\SearchQuery::parse((string) $filters['search']),
+                    ['c.content', 'c.author_name', 'c.author_email'], $params);
         }
         $whereSql = implode(' AND ', $where);
 
@@ -125,6 +124,7 @@ class CommentService
         ];
 
         $id = (int)$this->db->insert('comments', $payload);
+        self::searchIndex()?->touch('comments', $id);
         $comment = $this->find($id);
         $this->hooks->doAction('comment.created', $comment);
 
@@ -152,6 +152,7 @@ class CommentService
         if (!$existing) return false;
         if (($existing['status'] ?? '') === $status) return true;   // nothing to change, no hook fired
         $this->db->update('comments', ['status' => $status], ['id' => $id]);
+        self::searchIndex()?->touch('comments', $id);
         $updated = $this->find($id);
         $this->hooks->doAction('comment.status_changed', $updated, $existing);
 
@@ -166,11 +167,23 @@ class CommentService
         return true;
     }
 
+    /** BH Search (1.2.92), or null where it is not available. */
+    private static function searchIndex(): ?\App\Core\Search\SearchManager
+    {
+        try {
+            $app = \App\Core\Application::getInstance();
+            return $app->has(\App\Core\Search\SearchManager::class) ? $app->make(\App\Core\Search\SearchManager::class) : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public function delete(int $id): bool
     {
         $existing = $this->find($id);
         if (!$existing) return false;
         $this->db->delete('comments', ['id' => $id]);
+        self::searchIndex()?->remove('comments', $id);
         $this->hooks->doAction('comment.deleted', $existing);
         return true;
     }

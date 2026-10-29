@@ -27,6 +27,63 @@ class PostRepository
         private ?\Closure $searchMode = null,
     ) {}
 
+    /** BH Search (1.2.92), or null where it is not available (tools that build a bare repository). */
+    private function searchIndex(): ?\App\Core\Search\SearchManager
+    {
+        try {
+            $app = \App\Core\Application::getInstance();
+            return $app->has(\App\Core\Search\SearchManager::class) ? $app->make(\App\Core\Search\SearchManager::class) : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /** Keep the search index current after a write. Never throws. */
+    private function indexed(int ...$ids): void
+    {
+        $this->searchIndex()?->touch('content', ...$ids);
+    }
+
+    /**
+     * The search condition for a list query (1.2.92): BH Search's index when
+     * it is built, else FULLTEXT on the posts table, else every word with LIKE.
+     */
+    private function searchCondition(string $search, array &$params, bool $fulltext, ?string $type): string
+    {
+        $index = $this->searchIndex();
+        if ($fulltext && $index !== null && $index->ready('content')) {
+            return $index->constrain('content', $search, 'p', $params, $type !== null ? ['type' => $type] : []);
+        }
+        return $this->searchClause($search, 'p', $params, $fulltext);
+    }
+
+    /**
+     * Rows for search results, keyed by id, with the same joins as lists.
+     * $publicOnly: published, not trashed.
+     *
+     * @param list<int> $ids
+     * @return array<int, array>
+     */
+    public function findForSearch(array $ids, bool $publicOnly): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn($i) => $i > 0)));
+        if ($ids === []) return [];
+        $where = 'p.id IN (' . implode(',', $ids) . ')';
+        if ($publicOnly) $where .= " AND p.status = 'published' AND p.deleted_at IS NULL";
+        $rows = $this->db->select(
+            "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes, u.username AS author_username,
+                    m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height
+               FROM {posts} p
+               LEFT JOIN {users} u ON u.id = p.author_id
+               LEFT JOIN {media} av ON av.id = u.avatar_media_id
+               LEFT JOIN {media} m ON m.id = p.featured_media_id
+              WHERE {$where}"
+        );
+        $out = [];
+        foreach ($rows as $r) $out[(int) $r['id']] = $this->decorate($r);
+        return $out;
+    }
+
     /**
      * Decorate a row: normalize featured_url for the install location, and
      * decode the featured image's generated sizes (thumbnail, medium, large)
@@ -375,9 +432,9 @@ class PostRepository
         // order of published content, the one with a matching index.
         $cursor = $published && $sortKey === 'newest' ? self::decodeCursor($filters['after'] ?? null) : null;
 
-        $run = function (bool $fulltext) use ($where, $params, $search, $orderBy, $page, $perPage, $published, $cursor, $sortKey): array {
+        $run = function (bool $fulltext) use ($where, $params, $search, $orderBy, $page, $perPage, $published, $cursor, $sortKey, $type): array {
             if ($search !== null && $search !== '') {
-                $where[] = $this->searchClause((string) $search, 'p', $params, $fulltext);
+                $where[] = $this->searchCondition((string) $search, $params, $fulltext, (string) $type);
             }
             $whereSql = implode(' AND ', $where);
             $select = "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes, u.username AS author_username,
@@ -460,10 +517,9 @@ class PostRepository
             $params['s_title'] = $like;
             return "{$alias}.title LIKE :s_title";
         }
-        $params['s_1'] = $like;
-        $params['s_2'] = $like;
-        $params['s_3'] = $like;
-        return "({$alias}.title LIKE :s_1 OR {$alias}.content LIKE :s_2 OR {$alias}.excerpt LIKE :s_3)";
+        // Every word, in any order (1.2.92), as BH Search does.
+        return \App\Core\Search\LikeMatcher::condition(\App\Core\Search\SearchQuery::parse($q),
+            ["{$alias}.title", "{$alias}.content", "{$alias}.excerpt"], $params);
     }
 
     /** Escape %, _ and the escape character itself for a LIKE pattern. */
@@ -601,6 +657,7 @@ class PostRepository
     {
         $id = (int)$this->db->insert('posts', $data);
         $this->listsChanged();
+        $this->indexed($id);
         return $id;
     }
 
@@ -608,6 +665,7 @@ class PostRepository
     {
         $n = $this->db->update('posts', $data, ['id' => $id]);
         $this->listsChanged();
+        $this->indexed($id);
         return $n;
     }
 
@@ -660,7 +718,7 @@ class PostRepository
                 AND published_at IS NOT NULL AND published_at <= :now",
             ['id' => $id, 'now' => $nowUtc]
         ) === 1;
-        if ($won) $this->listsChanged();
+        if ($won) { $this->listsChanged(); $this->indexed($id); }
         return $won;
     }
 
@@ -668,6 +726,7 @@ class PostRepository
     {
         $n = $this->db->update('posts', ['deleted_at' => date('Y-m-d H:i:s')], ['id' => $id]);
         $this->listsChanged();
+        $this->indexed($id);
         return $n;
     }
 
@@ -675,6 +734,7 @@ class PostRepository
     {
         $n = $this->db->update('posts', ['deleted_at' => null], ['id' => $id]);
         $this->listsChanged();
+        $this->indexed($id);
         return $n;
     }
 
@@ -689,6 +749,7 @@ class PostRepository
         $this->releaseTermCounts('p.id = :id', ['id' => $id]);
         $n = $this->db->delete('posts', ['id' => $id]);
         $this->listsChanged();
+        $this->searchIndex()?->remove('content', $id);
         return $n;
     }
 
@@ -740,11 +801,14 @@ class PostRepository
     public function emptyTrash(string $type = 'post'): int
     {
         $this->releaseTermCounts('p.type = :type AND p.deleted_at IS NOT NULL', ['type' => $type]);
+        $gone = array_map('intval', array_column($this->db->select(
+            'SELECT id FROM {posts} WHERE type = :type AND deleted_at IS NOT NULL', ['type' => $type]), 'id'));
         $n = $this->db->execute(
             'DELETE FROM {posts} WHERE type = :type AND deleted_at IS NOT NULL',
             ['type' => $type]
         );
         $this->listsChanged();
+        if ($gone) $this->searchIndex()?->remove('content', ...$gone);
         return $n;
     }
 
@@ -834,7 +898,7 @@ class PostRepository
         }
 
         $this->recountTerms(array_merge($toRemove, $toAdd));
-        if ($toRemove || $toAdd) $this->listsChanged();
+        if ($toRemove || $toAdd) { $this->listsChanged(); $this->indexed($postId); }
     }
 
     /** Recompute terms.count from post_term for these term ids. */
@@ -922,7 +986,7 @@ class PostRepository
         $limit = max(1, min(200, $limit));
         return $this->withSearchFallback($term, function (bool $fulltext) use ($term, $limit): array {
             $params = [];
-            $cond = $this->searchClause($term, 'p', $params, $fulltext);
+            $cond = $this->searchCondition($term, $params, $fulltext, null);
             return $this->db->select(
                 "SELECT p.id, p.uuid, p.type, p.title, p.slug, p.excerpt, p.published_at
                  FROM {posts} p

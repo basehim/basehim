@@ -1265,6 +1265,7 @@ class AppService
         try { $removed['ajax'] = $app->make(\App\Core\Ajax\AjaxRegistry::class)->forgetOwner($slug); } catch (\Throwable) {}
         try { $removed['widgets'] = $app->make(\App\Core\WidgetRegistry::class)->forgetOwner('app:' . $slug); } catch (\Throwable) {}
         try { $removed['post_types'] = $app->make(\App\Services\PostTypeRegistry::class)->forgetOwner($slug); } catch (\Throwable) {}
+        try { $removed['search_sources'] = $app->make(\App\Core\Search\SearchManager::class)->forgetOwner($slug); } catch (\Throwable) {}
         if (function_exists('bh_assets')) {
             $reg = &bh_assets();
             foreach (['styles', 'scripts'] as $k) {

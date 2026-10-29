@@ -51,10 +51,11 @@ final class AppTableProvider implements TableProvider
     {
         $rows = $this->rows();
 
-        $term = mb_strtolower(trim((string) $q->search));
-        if ($term !== '') {
+        // BH Search's query rules (1.2.92): every word, in any order, "phrases" and -exclusions.
+        $search = \App\Core\Search\SearchQuery::parse((string) $q->search);
+        if (!$search->isBlank()) {
             $rows = array_values(array_filter($rows, static fn(array $r) =>
-                str_contains(mb_strtolower($r['name'] . ' ' . $r['slug'] . ' ' . $r['description'] . ' ' . $r['developer']), $term)));
+                $search->matches($r['name'] . ' ' . $r['slug'] . ' ' . $r['description'] . ' ' . $r['developer'])));
         }
         $state = $q->filter('status');
         if (is_string($state) && isset(self::STATES[$state])) {

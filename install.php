@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // migrations and auth_remember_tokens were missing until 1.2.43:
                     // a retried install kept the first attempt's migration
                     // records and then added a second set.
-                    'migrations', 'auth_remember_tokens',
+                    'migrations', 'auth_remember_tokens', 'search_index',
                     'mcp_oauth_tokens', 'mcp_oauth_codes', 'mcp_oauth_clients',
                     'activity_log', 'user_activity_log', 'notifications', 'refresh_tokens',
                     'api_keys', 'password_resets', 'auth_login_attempts', 'scheduled_tasks',

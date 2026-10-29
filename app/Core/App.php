@@ -724,10 +724,26 @@ abstract class App
         // Versioned (1.2.90, BH-049): browsers and servers cache app assets
         // for days, so an update must change the URL to reach visitors. An
         // app that adds its own ?v= still works (the second one is ignored).
-        if (!str_contains($relativePath, '?')) {
+        // Only file paths get the tag (1.2.91, BH-070): apps take the folder
+        // URL from asset('') or asset('img') and append file names to it, so
+        // a folder must come back exactly as before 1.2.90.
+        if (self::isVersionableAsset($relativePath)) {
             $url .= '?v=' . rawurlencode((string) ($this->manifest['version'] ?? '0'));
         }
         return $url;
+    }
+
+    /**
+     * Whether asset() adds ?v= to a path: a file name with an extension, and
+     * no query string or fragment the app added itself. Private: the base
+     * class's public and protected names are reserved (AppBaseClassTest).
+     */
+    private static function isVersionableAsset(string $relativePath): bool
+    {
+        if ($relativePath === '' || strpbrk($relativePath, '?#') !== false) return false;
+        $name = basename(str_replace('\\', '/', $relativePath));
+        if ($name === '' || str_ends_with($relativePath, '/')) return false;
+        return (bool) preg_match('/^[^.].*\.[A-Za-z0-9]{1,10}$/', $name);
     }
 
     // ------------------------------------------------------------------

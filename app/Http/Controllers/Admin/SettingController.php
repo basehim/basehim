@@ -29,6 +29,7 @@ class SettingController extends Controller
     public function email(Request $request): Response     { return $this->renderTab('email'); }
     public function authorization(Request $request): Response { return $this->renderTab('authorization'); }
     public function security(Request $request): Response { return $this->renderTab('security'); }
+    public function search(Request $request): Response { return $this->renderTab('search'); }
 
     /**
      * POST /admin/settings/media/regenerate-batch — one batch of thumbnail
@@ -92,6 +93,7 @@ class SettingController extends Controller
     public function saveAuthorization(Request $request): Response { return $this->saveTab($request, 'authorization'); }
     public function saveAi(Request $request): Response            { return $this->saveTab($request, 'ai'); }
     public function saveSecurity(Request $request): Response      { return $this->saveTab($request, 'security'); }
+    public function saveSearch(Request $request): Response        { return $this->saveTab($request, 'search'); }
 
     /** POST /admin/settings/security/clear-reports */
     public function clearCspReports(Request $request): Response
@@ -220,6 +222,17 @@ class SettingController extends Controller
             $extra['reports'] = \App\Services\SecurityHeaders::reports();
             $extra['htaccessXss'] = (string) $settings->get(\App\Services\SecurityHeaders::GROUP, 'htaccess_xss', '');
             $extra['host'] = (string) ($_SERVER['HTTP_HOST'] ?? '');
+        }
+        if ($tab === 'search') {
+            /** @var \App\Core\Search\SearchManager $sm */
+            $sm = $this->app->make(\App\Core\Search\SearchManager::class);
+            $site = new \App\Core\Search\SiteSearch($this->app);
+            $extra['sources'] = array_values($sm->status());
+            $extra['engine'] = $sm->engine()->name();
+            $extra['building'] = (bool) array_filter($extra['sources'], fn($s) => $s['kind'] === 'indexed' && !$s['ready']);
+            $extra['site'] = $site->settings();
+            $extra['types'] = $site->availableTypes();
+            $extra['appSources'] = $site->appSources();
         }
         if ($tab === 'media') {
             /** @var \App\Services\MediaService $media */

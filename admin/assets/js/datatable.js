@@ -117,6 +117,27 @@
         // dropped (1.2.67), so a slow answer to an old search never replaces
         // the answer to the new one.
         var loadSeq = 0;
+
+        // The address bar keeps the search, page, sort and filters (1.2.92),
+        // which the server reads for the first page: a reload, Back from an
+        // edit screen or a shared link shows the same rows. Only for the one
+        // table of a page that has its own search box.
+        function syncUrl() {
+            // The media library drives its table from its own toolbar.
+            if (!r.search || cfg.table === 'media.library' || !window.history || !history.replaceState || document.querySelectorAll('.bh-dt').length !== 1) return;
+            try {
+                var u = new URL(window.location.href);
+                var set = function (k, v) { if (v === '' || v == null) u.searchParams.delete(k); else u.searchParams.set(k, String(v)); };
+                set('q', state.search || '');
+                set('page', state.page > 1 ? state.page : '');
+                set('sort', state.sort || '');
+                var f = toObj(state.filters);
+                set('status', typeof f.status === 'string' ? f.status : '');
+                ['category', 'tag'].forEach(function (k) { set(k, toArr(f[k]).join(',')); });
+                if (u.href !== window.location.href) history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+            } catch (e) { /* an old browser keeps the old behaviour */ }
+        }
+
         function load() {
             var my = ++loadSeq;
             root.classList.add('is-loading');
@@ -140,6 +161,7 @@
                     return;
                 }
                 renderHead(); renderBody(); renderFoot();
+                syncUrl();
                 emit('bh:dt-loaded', { table: cfg.table, meta: data.meta || {}, sort: state.sort, search: state.search, filters: toObj(state.filters) });
             }).catch(function (err) {
                 if (my !== loadSeq) return;

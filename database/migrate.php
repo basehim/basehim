@@ -121,7 +121,8 @@ foreach ($files as $file) {
         foreach ($statements as $stmt) {
             $pdo->exec($px($stmt));
         }
-        $pdo->prepare($px("INSERT INTO {migrations} (migration) VALUES (?)"))->execute([$name]);
+        // applied_at has no default in the table install.php creates (1.2.92, BH-072).
+        $pdo->prepare($px("INSERT INTO {migrations} (migration, applied_at) VALUES (?, ?)"))->execute([$name, gmdate('Y-m-d H:i:s')]);
         echo "OK\n";
         $pending++;
     } catch (PDOException $e) {

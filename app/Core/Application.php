@@ -343,6 +343,17 @@ final class Application
         $this->singleton(\App\Repositories\TaxonomyRepository::class, fn($app) =>
             new \App\Repositories\TaxonomyRepository($app->make(Database::class)));
 
+        // BH Search (1.2.92): one search framework for core and apps.
+        $this->singleton(\App\Core\Search\SearchManager::class, fn($app) =>
+            new \App\Core\Search\SearchManager(
+                $app->make(Database::class),
+                $app->make(\App\Services\SettingService::class),
+                $app->make(Cache::class),
+                $app->make(HookRegistry::class),
+                fn(\App\Core\Search\SearchManager $m) => \App\Core\Search\CoreSources::register($m, $app),
+                (defined('BASEHIM_ROOT') ? BASEHIM_ROOT : dirname(__DIR__, 2)) . '/storage/locks',
+            ));
+
         // Short aliases
         $this->alias('config', Config::class);
         $this->alias('db', Database::class);
@@ -428,6 +439,9 @@ final class Application
             $scheduler = $this->make(\App\Services\SchedulerService::class);
             $scheduler->core('post-views', 60, fn() => $this->make(\App\Services\PostViewCounter::class)->fold());
             $scheduler->core('cleanup', 86400, fn() => $this->make(\App\Services\RetentionService::class)->run());
+            // BH Search (1.2.92): build the search index in the background, a few
+            // seconds per sweep, and retry anything that failed to index.
+            $scheduler->core('search-index', 60, fn() => $this->make(\App\Core\Search\SearchManager::class)->build(8.0));
         } catch (\Throwable) {}
     }
 

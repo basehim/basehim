@@ -43,7 +43,7 @@ class PostTypeRegistry
      * Register a content type.
      *
      * @param string $slug Lowercase, e.g. "event". Becomes posts.type.
-     * @param array  $args label, singular, icon, public, supports, menu,
+     * @param array  $args label, singular, icon, public, searchable, supports, menu,
      *                     capability_type, taxonomies, description
      */
     public function register(string $slug, array $args = []): bool
@@ -65,6 +65,8 @@ class PostTypeRegistry
             'description' => (string) ($args['description'] ?? ''),
             'icon'        => (string) ($args['icon'] ?? 'document-text'),
             'public'      => (bool) ($args['public'] ?? true),
+            // BH Search (1.2.92): published items appear in site search unless false.
+            'searchable'  => (bool) ($args['searchable'] ?? ($args['public'] ?? true)),
             'supports'    => (array) ($args['supports'] ?? ['title', 'content', 'author']),
             'menu'        => $args['menu'] ?? true,
             'taxonomies'  => (array) ($args['taxonomies'] ?? []),

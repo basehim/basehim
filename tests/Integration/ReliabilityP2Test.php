@@ -119,7 +119,10 @@ test('search: words go to FULLTEXT; short queries and wildcards are matched lite
     assert_same('%ai%', $p['s_title']);
     $p = [];
     $repo->searchClause('100%_off', 'p', $p, false);
-    assert_same('%100\\%\\_off%', $p['s_1'], 'LIKE wildcards escaped');
+    // 1.2.92: punctuation separates words, so neither % nor _ reaches LIKE.
+    $likes = array_values(array_unique($p));
+    sort($likes);
+    assert_same(['%100%', '%off%'], $likes, 'every word, no wildcard from the query');
     assert_same(['اردو', 'خبریں'], \App\Repositories\PostRepository::fulltextWords('اردو کی خبریں'), 'Unicode words, 3+ letters');
 });
 

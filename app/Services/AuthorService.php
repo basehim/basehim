@@ -184,6 +184,7 @@ final class AuthorService
                 'UPDATE {users} SET public_slug = :s, meta = :m WHERE id = :id',
                 ['s' => $slug, 'm' => json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 'id' => $userId]
             );
+            \App\Repositories\UserRepository::searchIndex()?->touch('users', $userId);
         } catch (\PDOException $e) {
             if ((int) ($e->errorInfo[1] ?? 0) === 1062 || $e->getCode() === '23000') return false;
             throw $e;

@@ -50,12 +50,30 @@ class UserRepository
 
     public function create(array $data): int
     {
-        return (int)$this->db->insert('users', $data);
+        $id = (int)$this->db->insert('users', $data);
+        self::searchIndex()?->touch('users', $id);
+        return $id;
     }
 
     public function update(int $id, array $data): int
     {
-        return $this->db->update('users', $data, ['id' => $id]);
+        $n = $this->db->update('users', $data, ['id' => $id]);
+        // Sign-in times and similar bookkeeping change nothing searchable.
+        if (array_diff(array_keys($data), ['last_login_at', 'updated_at', 'meta', 'password_hash', 'email_verified_at']) !== []) {
+            self::searchIndex()?->touch('users', $id);
+        }
+        return $n;
+    }
+
+    /** BH Search (1.2.92), or null where it is not available. */
+    public static function searchIndex(): ?\App\Core\Search\SearchManager
+    {
+        try {
+            $app = \App\Core\Application::getInstance();
+            return $app->has(\App\Core\Search\SearchManager::class) ? $app->make(\App\Core\Search\SearchManager::class) : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -104,7 +122,9 @@ class UserRepository
 
     public function softDelete(int $id): int
     {
-        return $this->db->update('users', ['deleted_at' => date('Y-m-d H:i:s')], ['id' => $id]);
+        $n = $this->db->update('users', ['deleted_at' => date('Y-m-d H:i:s')], ['id' => $id]);
+        self::searchIndex()?->touch('users', $id);
+        return $n;
     }
 
     public function paginate(array $filters = [], int $page = 1, int $perPage = 20): array
@@ -117,11 +137,10 @@ class UserRepository
             $params['role'] = $filters['role'];
         }
         if (!empty($filters['search'])) {
-            $where[] = '(username LIKE :search1 OR email LIKE :search2 OR display_name LIKE :search3)';
-            // One placeholder per use: native prepared statements reject a repeated
-            // name (SQLSTATE HY093), which made every user search fail.
-            $like = '%' . addcslashes((string) $filters['search'], '\\%_') . '%';
-            $params['search1'] = $like; $params['search2'] = $like; $params['search3'] = $like;
+            // BH Search (1.2.92): every word, in any order; the index once built.
+            $where[] = self::searchIndex()?->constrain('users', (string) $filters['search'], '', $params)
+                ?? \App\Core\Search\LikeMatcher::condition(\App\Core\Search\SearchQuery::parse((string) $filters['search']),
+                    ['username', 'email', 'display_name'], $params);
         }
 
         $whereSql = implode(' AND ', $where);

@@ -353,6 +353,30 @@ $ajax->register('settings.section', [
 // ---------------------------------------------------------------------------
 use App\Http\Controllers\Ajax\TableActions;
 
+// BH Search (1.2.92): Settings → Search.
+$ajax->register('search.status', [
+    'handler'     => [\App\Http\Controllers\Ajax\SearchActions::class, 'status'],
+    'methods'     => ['GET'],
+    'capability'  => 'manage_options',
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'description' => 'How far each search source has been indexed.',
+]);
+$ajax->register('search.build', [
+    'handler'     => [\App\Http\Controllers\Ajax\SearchActions::class, 'build'],
+    'methods'     => ['POST'],
+    'capability'  => 'manage_options',
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'description' => 'Index for a few seconds and report progress; call again until nothing is building.',
+]);
+$ajax->register('search.rebuild', [
+    'handler'     => [\App\Http\Controllers\Ajax\SearchActions::class, 'rebuild'],
+    'methods'     => ['POST'],
+    'capability'  => 'manage_options',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => ['source' => ['type' => 'string', 'required' => true, 'max' => 100, 'regex' => '/^[a-z0-9][a-z0-9_.:-]*$/']],
+    'description' => 'Start indexing one source again from the beginning.',
+]);
+
 $ajax->register('content.table', [
     'handler'     => [TableActions::class, 'query'],
     'methods'     => ['GET'],
