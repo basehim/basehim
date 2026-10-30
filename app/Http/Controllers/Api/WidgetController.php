@@ -47,23 +47,24 @@ class WidgetController extends ApiController
         $def = $reg->get($area);
         if (!$def) return Response::json(['error' => 'Not found'], 404);
 
-        /** @var WidgetAreaService $svc */
-        $svc = $this->app->make(WidgetAreaService::class);
+        /** @var \App\Core\Widgets\FrontendWidgets $front */
+        $front = $this->app->make(\App\Core\Widgets\FrontendWidgets::class);
         /** @var \App\Core\WidgetRegistry $widgets */
         $widgets = $this->app->make(\App\Core\WidgetRegistry::class);
 
+        // Only what visitors see (1.2.93): hidden and unavailable widgets are
+        // left out, and so are settings a widget marks private and raw HTML
+        // fields, which until 1.2.93 this public endpoint returned as saved.
         $items = [];
-        foreach ($svc->assignmentsFor($area) as $inst) {
-            $key = (string) ($inst['widget'] ?? '');
-            $meta = $widgets->get($key);
-            if (!$meta || !in_array('frontend', $meta['surfaces'], true)) continue;
-            $settings = is_array($inst['settings'] ?? null) ? $inst['settings'] : [];
+        foreach ($front->placements()->area($def['key']) as $inst) {
+            if ($inst['disabled'] || $front->unavailable($inst['widget']) !== null) continue;
+            $meta = $widgets->get($inst['widget']);
             $items[] = [
-                'id'       => (string) ($inst['id'] ?? ''),
-                'widget'   => $key,
+                'id'       => $inst['id'],
+                'widget'   => $meta['key'],
                 'title'    => $meta['title'],
-                'settings' => $settings,
-                'html'     => $widgets->render($key, $settings, 'frontend'),
+                'settings' => $front->publicSettings($inst),
+                'html'     => $front->renderInstance($def, $inst),
             ];
         }
 
@@ -73,7 +74,7 @@ class WidgetController extends ApiController
                 'name'        => $def['name'],
                 'description' => $def['description'],
                 'items'       => $items,
-                'html'        => $svc->render($area),
+                'html'        => $front->renderArea($def['key']),
             ],
         ]);
     }

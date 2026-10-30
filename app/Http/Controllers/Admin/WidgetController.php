@@ -104,8 +104,21 @@ class WidgetController extends Controller
         $svc = $this->app->make(WidgetAreaService::class);
         $settings = $request->input('settings', []);
         if (!is_array($settings)) $settings = [];
-        $ok = $svc->updateWidget($area, $itemId, $settings);
-        $this->flash($ok ? 'success' : 'error', $ok ? 'Widget saved.' : 'Widget not found.');
+        // Through the schema (1.2.93), so this older form route reports what
+        // is wrong instead of saving it.
+        $front = $this->app->make(\App\Core\Widgets\FrontendWidgets::class);
+        $found = $front->placements()->find($itemId);
+        if (!$found || $found[0] !== $area) {
+            $this->flash('error', 'Widget not found.');
+            return $this->back();
+        }
+        $user = $this->user();
+        try {
+            $front->save($itemId, $settings, [], fn(string $cap) => $user !== null && \App\Http\Middleware\CheckCapability::userCan($user, $cap));
+            $this->flash('success', 'Widget saved.');
+        } catch (\App\Core\Widgets\WidgetError $e) {
+            $this->flash('error', $e->getMessage() . ' ' . implode(' ', array_map(fn($k, $m) => "{$k}: {$m}", array_keys($e->errors), $e->errors)));
+        }
         return $this->back();
     }
 

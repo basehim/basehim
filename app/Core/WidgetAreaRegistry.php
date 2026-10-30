@@ -41,6 +41,9 @@ final class WidgetAreaRegistry
      *   after_title:   string  markup after a widget's title,
      *   class:         string  class for the area wrapper element,
      *   source:        string  provenance ('theme:slug' / 'app:slug'), set automatically,
+     *   supports:      list    widget categories this area accepts (1.2.93; default: all),
+     *   widgets:       list    widget keys this area accepts, on top of supports (1.2.93),
+     *   max_widgets:   int     most instances the area holds (1.2.93; 0 = no limit),
      * }
      */
     public function register(string $key, array $def = []): void
@@ -63,6 +66,9 @@ final class WidgetAreaRegistry
             'after_title'   => (string) ($def['after_title'] ?? '</h3>'),
             'class'         => (string) ($def['class'] ?? ''),
             'source'        => (string) ($def['source'] ?? ''),
+            'supports'      => $this->list($def['supports'] ?? [], '/^[a-z]{1,30}$/'),
+            'widgets'       => $this->list($def['widgets'] ?? [], '/^[a-z0-9._-]{1,100}$/'),
+            'max_widgets'   => max(0, min(\App\Core\Widgets\Placements::MAX_PER_AREA, (int) ($def['max_widgets'] ?? 0))),
         ];
     }
 
@@ -86,6 +92,17 @@ final class WidgetAreaRegistry
     {
         $out = array_values($this->areas);
         usort($out, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+        return $out;
+    }
+
+    /** @return list<string> */
+    private function list(mixed $v, string $pattern): array
+    {
+        $out = [];
+        foreach ((array) $v as $item) {
+            $item = strtolower(trim((string) $item));
+            if (preg_match($pattern, $item) && !in_array($item, $out, true)) $out[] = $item;
+        }
         return $out;
     }
 

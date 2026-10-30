@@ -158,6 +158,23 @@ class PostRepository
                                      WHERE pt.post_id = p.id AND t.slug = :cat)";
             $params['cat'] = $cat;
         }
+        // 1.2.93: a tag, an author, posts to leave out.
+        $tag = trim((string) ($opts['tag'] ?? ''));
+        if ($tag !== '') {
+            $where .= " AND EXISTS (SELECT 1 FROM {post_term} pt2
+                                      JOIN {terms} t2 ON t2.id = pt2.term_id
+                                      JOIN {taxonomies} x2 ON x2.id = t2.taxonomy_id AND x2.slug = 'tag'
+                                     WHERE pt2.post_id = p.id AND t2.slug = :tag)";
+            $params['tag'] = $tag;
+        }
+        if ((int) ($opts['author'] ?? 0) > 0) {
+            $where .= ' AND p.author_id = :author';
+            $params['author'] = (int) $opts['author'];
+        }
+        $exclude = array_values(array_filter(array_map('intval', (array) ($opts['exclude'] ?? [])), fn($i) => $i > 0));
+        if ($exclude) {
+            $where .= ' AND p.id NOT IN (' . implode(',', array_slice($exclude, 0, 200)) . ')';
+        }
         $rows = $this->db->select(
             "SELECT p.*, u.display_name AS author_name, av.url AS author_avatar_src, av.sizes AS author_avatar_sizes,
                     m.url AS featured_url, m.alt_text AS featured_alt, m.sizes AS featured_sizes, m.width AS featured_width, m.height AS featured_height,

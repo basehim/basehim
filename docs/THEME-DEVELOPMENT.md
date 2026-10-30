@@ -97,7 +97,9 @@ which is confusing to debug. If both are missing, the visitor gets a bare
 `menu_locations` and `widget_areas` appear in the admin as soon as the theme is
 active. A widget area may be a plain string (the label) or an object with the
 wrapper markup above. The object form is worth using, so widgets inherit the
-theme's own styling instead of each inventing its own.
+theme's own styling instead of each inventing its own. Since 1.2.93 an area
+can also limit what it takes (`supports`, `widgets`, `max_widgets`); see
+[FRONTEND-WIDGETS.md](FRONTEND-WIDGETS.md).
 
 An optional `"seo"` key hands SEO tag groups to the theme. Leave it out unless
 the theme really must print a group itself; see
@@ -512,6 +514,12 @@ location needs `menu_at()`.
 Guard with `has_widget_area()`. An area with no widgets renders as an empty
 string, and reserving a column for it leaves a gap on the page.
 
+To restyle a widget's markup, copy its template into the theme (1.2.93):
+`templates/widgets/recent-posts.php` for every area, or
+`templates/widgets/sidebar/recent-posts.php` for one. Core's defaults are in
+`app/Core/Widgets/templates/`. Everything about widgets, settings schemas,
+caching and overrides: [FRONTEND-WIDGETS.md](FRONTEND-WIDGETS.md).
+
 A theme can provide its own widgets from `widgets.php`, which **returns an
 array**. Core reads it, namespaces the keys and registers them:
 
@@ -716,7 +724,7 @@ it don't reveal a login name. `$author` never contains an email address.
 | `menu_at($location)` | items for any declared location |
 | `menu_has_children($items)` | whether any item has children |
 | `menu_assets()` | dropdown CSS and behaviour, once per request |
-| `widget_area($key)`, `has_widget_area($key)` | widget areas |
+| `widget_area($key, $opts)`, `has_widget_area($key)` | widget areas ([FRONTEND-WIDGETS.md](FRONTEND-WIDGETS.md)) |
 | `bh_comment_form($post, $args)` | the standard comment form |
 | `bh_comment_count($post)` | approved comments on a post |
 | `bh_author_box($post, $args)` | the author box |

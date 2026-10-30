@@ -377,6 +377,38 @@ $ajax->register('search.rebuild', [
     'description' => 'Start indexing one source again from the beginning.',
 ]);
 
+// Frontend widgets (1.2.93): Appearance → Widgets. Same permission as the page.
+$widgetAction = function (string $name, string $method, array $input, string $what, int $rate = 120) use ($ajax): void {
+    $ajax->register('widgets.' . $name, [
+        'handler'     => [\App\Http\Controllers\Ajax\WidgetActions::class, $name],
+        'methods'     => [$method],
+        'capability'  => 'manage_apps',
+        'area'        => '/admin/widgets',
+        'rate_limit'  => ['max' => $rate, 'per' => 60],
+        'input'       => $input,
+        'description' => $what,
+    ]);
+};
+// Settings travel as a JSON object in a string: the fields are each widget's
+// own, so the widget's schema checks them (FrontendWidgets::save), not this.
+$wId   = ['type' => 'string', 'required' => true, 'max' => 40, 'regex' => '/^[A-Za-z0-9_-]+$/'];
+$wArea = ['type' => 'string', 'required' => true, 'max' => 100, 'regex' => '/^[a-z0-9._-]+$/'];
+$wOpts = ['class' => ['type' => 'string', 'max' => 500], 'hide_title' => ['type' => 'bool'], 'disabled' => ['type' => 'bool']];
+$widgetAction('state', 'GET', [], 'Widget areas, their widgets and the widgets that can be placed.');
+$widgetAction('add', 'POST', ['area' => $wArea, 'widget' => ['type' => 'string', 'required' => true, 'max' => 100, 'regex' => '/^[a-z0-9._-]+$/'],
+    'position' => ['type' => 'int', 'min' => 0, 'max' => 1000]], 'Place a widget in an area.');
+$widgetAction('save', 'POST', ['id' => $wId, 'settings' => ['type' => 'string', 'max' => 250000]] + $wOpts,
+    "Save a widget's settings; invalid fields come back as 422 with a message each.");
+$widgetAction('options', 'POST', ['id' => $wId] + $wOpts, 'Switch a widget on or off, hide its title, or set its CSS class.');
+$widgetAction('remove', 'POST', ['id' => $wId], 'Take a widget out of its area.');
+$widgetAction('move', 'POST', ['id' => $wId, 'area' => $wArea, 'position' => ['type' => 'int', 'required' => true, 'min' => 0, 'max' => 1000]],
+    'Move a widget to a position in the same or another area.');
+$widgetAction('order', 'POST', ['area' => $wArea, 'ids' => ['type' => 'array', 'required' => true, 'max' => 100, 'items' => 'string|max:40']],
+    "Set the order of an area's widgets.");
+$widgetAction('duplicate', 'POST', ['id' => $wId], 'Copy a widget, settings included, right below it.');
+$widgetAction('preview', 'POST', ['id' => $wId, 'settings' => ['type' => 'string', 'max' => 250000], 'hide_title' => ['type' => 'bool']],
+    'Render a widget with unsaved settings.', 240);
+
 $ajax->register('content.table', [
     'handler'     => [TableActions::class, 'query'],
     'methods'     => ['GET'],

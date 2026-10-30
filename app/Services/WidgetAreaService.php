@@ -26,8 +26,18 @@ class WidgetAreaService
         private SettingService $settings,
         private WidgetAreaRegistry $areas,
         private WidgetRegistry $widgets,
-        private ?\App\Core\Logger $logger = null
+        private ?\App\Core\Logger $logger = null,
+        private ?\App\Core\Widgets\FrontendWidgets $front = null
     ) {}
+
+    /*
+     * Since 1.2.93 this class is a thin front for App\Core\Widgets\FrontendWidgets,
+     * which validates settings against each widget's schema, saves under a row
+     * lock, renders through templates and caches. The methods keep their
+     * signatures and return values, so code written against them still works.
+     * Without the framework (a container that does not provide it), the
+     * pre-1.2.93 behaviour below is used unchanged.
+     */
 
     /** @return array<int,array> registered area definitions. */
     public function definitions(): array
@@ -38,6 +48,7 @@ class WidgetAreaService
     /** @return array<string,array<int,array>> all area→instances assignments. */
     public function assignments(): array
     {
+        if ($this->front) return $this->front->placements()->all();
         $raw = $this->settings->get(self::GROUP, self::KEY, []);
         if (is_string($raw)) {
             $decoded = json_decode($raw, true);
@@ -60,6 +71,9 @@ class WidgetAreaService
      */
     public function addWidget(string $area, string $widgetKey): ?array
     {
+        if ($this->front) {
+            try { return $this->front->add($area, $widgetKey); } catch (\App\Core\Widgets\WidgetError) { return null; }
+        }
         if (!$this->areas->has($area)) return null;
         $widget = $this->widgets->get($widgetKey);
         if (!$widget || !in_array('frontend', $widget['surfaces'], true)) return null;
@@ -80,6 +94,12 @@ class WidgetAreaService
 
     public function updateWidget(string $area, string $id, array $settings): bool
     {
+        if ($this->front) {
+            $found = $this->front->placements()->find($id);
+            if (!$found || $found[0] !== $area) return false;
+            try { $this->front->save($id, $this->cleanSettings($settings)); return true; }
+            catch (\App\Core\Widgets\WidgetError) { return false; }
+        }
         $all = $this->assignments();
         $list = $this->assignmentsFor($area);
         $changed = false;
@@ -99,6 +119,11 @@ class WidgetAreaService
 
     public function removeWidget(string $area, string $id): bool
     {
+        if ($this->front) {
+            $found = $this->front->placements()->find($id);
+            if (!$found || $found[0] !== $area) return false;
+            try { $this->front->remove($id); return true; } catch (\App\Core\Widgets\WidgetError) { return false; }
+        }
         $all = $this->assignments();
         $list = $this->assignmentsFor($area);
         $filtered = array_values(array_filter($list, fn($i) => ($i['id'] ?? '') !== $id));
@@ -111,6 +136,13 @@ class WidgetAreaService
     /** Move an instance one step up or down within its area. */
     public function moveWidget(string $area, string $id, string $dir): bool
     {
+        if ($this->front) {
+            $found = $this->front->placements()->find($id);
+            if (!$found || $found[0] !== $area) return false;
+            $to = $dir === 'up' ? $found[1] - 1 : $found[1] + 1;
+            if ($to < 0 || $to >= count($this->front->placements()->area($area))) return false;
+            try { $this->front->move($id, $area, $to); return true; } catch (\App\Core\Widgets\WidgetError) { return false; }
+        }
         $list = $this->assignmentsFor($area);
         $idx = null;
         foreach ($list as $i => $item) {
@@ -133,6 +165,7 @@ class WidgetAreaService
     {
         $list = $this->assignmentsFor($area);
         if (!$list) return false;
+        if ($this->front) { $this->front->order($area, $orderedIds); return true; }
         $byId = [];
         foreach ($list as $item) { $byId[$item['id'] ?? ''] = $item; }
 
@@ -157,6 +190,7 @@ class WidgetAreaService
      */
     public function render(string $area): string
     {
+        if ($this->front) return $this->front->renderArea($area);
         $def = $this->areas->get($area);
         if (!$def) return '';
 
@@ -206,6 +240,7 @@ class WidgetAreaService
     /** True when an area exists and has at least one placed widget. */
     public function isActive(string $area): bool
     {
+        if ($this->front) return $this->front->hasWidgets($area);
         return $this->areas->has($area) && count($this->assignmentsFor($area)) > 0;
     }
 

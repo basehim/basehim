@@ -267,7 +267,7 @@ $this->addFilter('html.iframe_hosts', fn(array $h) => [...$h, 'player.example.or
 **AJAX** `ajax` `useAjaxClient` — actions browsers call through `POST /ajax` (APP-AJAX.md)
 **Admin** `addAdminMenu` `addAdminStyle` `addAdminScript` `adminView`
 **Editor** `addEditorScript` `addEditorStyle` `addEditorConfig` `registerBlockRenderer`
-**Widgets** `registerWidget` — dashboard cards with `'surfaces' => ['dashboard']`: [DASHBOARD-WIDGETS.md](DASHBOARD-WIDGETS.md)
+**Widgets** `registerWidget` — dashboard cards with `'surfaces' => ['dashboard']`: [DASHBOARD-WIDGETS.md](DASHBOARD-WIDGETS.md); widgets for the public site's areas with `'surfaces' => ['frontend']`: [FRONTEND-WIDGETS.md](FRONTEND-WIDGETS.md)
 **Views/assets** `view` `asset`
 **Files** `appStorageDir` — a private folder under `storage/apps/{slug}` for uploads that aren't media (1.2.87, [MEDIA-EXTENSIONS.md](MEDIA-EXTENSIONS.md))
 **Settings** `getSetting` `setSetting` `deleteSetting` `allSettings`

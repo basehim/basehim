@@ -1,147 +1,121 @@
 <?php $this->extend('layouts.app'); ?>
 <?php $this->section('content'); ?>
-<?php $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : ''; ?>
+<?php
+/*
+ * Appearance → Widgets → Widget areas (1.2.93).
+ *
+ * The page is a shell: admin/assets/js/widget-areas.js reads the state from
+ * the widgets.* AJAX actions and draws the areas, their widgets and each
+ * widget's settings form (from the widget's schema). Every change is saved
+ * at once and answered with the new state.
+ *
+ * Without JavaScript the noscript note points to the plain list; the
+ * pre-1.2.93 form routes under /admin/widgets/areas/... still work.
+ */
+$base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
+// Icons the script draws, rendered here from the PHP set so none is missing.
+$iconNames = ['bars-2', 'chevron-up', 'chevron-down', 'pencil-square', 'document-duplicate', 'trash', 'plus', 'eye',
+    'exclamation-triangle', 'magnifying-glass', 'x-mark', 'arrow-uturn-left', 'puzzle-piece', 'view-columns', 'arrows-up-down'];
+foreach ($available as $w) $iconNames[] = (string) ($w['icon'] ?? 'puzzle-piece');
+foreach ($assignments as $list) foreach ((array) $list as $inst) {
+    $d = $registry->get((string) ($inst['widget'] ?? ''));
+    if ($d) $iconNames[] = (string) $d['icon'];
+}
+$icons = [];
+foreach (array_unique($iconNames) as $n) $icons[$n] = icon($n, 'w-4 h-4');
+$jsVer = @filemtime(BASEHIM_ROOT . '/admin/assets/js/widget-areas.js') ?: BASEHIM_VERSION;
+?>
+<style>
+/* Layout for this screen only; colours are the admin's slate and accent. */
+.bhw-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:20px}
+.bhw-grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));align-items:start}
+.bhw-area .bh-card__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.bhw-key{font:500 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#94a3b8;margin-left:6px}
+.bhw-count{font-size:12px;color:#64748b;white-space:nowrap}
+.bhw-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;min-height:48px;border-radius:10px}
+.bhw-list.is-over{outline:2px dashed #93c5fd;outline-offset:4px}
+.bhw-empty{border:1px dashed #cbd5e1;border-radius:10px;padding:14px;text-align:center;font-size:13px;color:#64748b}
+.bhw-item{border:1px solid #e2e8f0;border-radius:10px;background:#fff}
+.bhw-item.is-dragging{opacity:.45}
+.bhw-item.is-off .bhw-row__name{color:#94a3b8}
+.bhw-row{display:flex;align-items:center;gap:8px;padding:8px 10px;min-width:0}
+.bhw-handle{cursor:grab;color:#94a3b8}
+.bhw-handle:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+.bhw-row__icon{color:#64748b;flex:0 0 auto;display:inline-flex}
+.bhw-row__text{flex:1 1 auto;min-width:0}
+.bhw-row__name{font-size:14px;font-weight:600;color:#0f172a;overflow-wrap:anywhere}
+.bhw-row__label{font-size:12px;color:#64748b;overflow-wrap:anywhere}
+.bhw-row__badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.bhw-row__actions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.bhw-panel{border-top:1px solid #f1f5f9;padding:14px 12px 12px;display:grid;gap:14px}
+.bhw-field{display:grid;gap:4px}
+.bhw-field[hidden]{display:none}
+.bhw-field .bh-switch{justify-self:start}
+.bhw-inline{display:flex;align-items:center;gap:10px}
+.bhw-checks{display:grid;gap:4px;max-height:180px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px}
+.bhw-checks label{display:flex;gap:8px;align-items:center;font-size:13px;color:#334155}
+.bhw-error{font-size:12px;color:#dc2626}
+.bhw-locked{font-size:12px;color:#64748b}
+.bhw-options{border-top:1px dashed #e2e8f0;padding-top:12px;display:grid;gap:12px}
+.bhw-buttons{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bhw-preview{border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:#fff}
+.bhw-preview iframe{display:block;width:100%;border:0;min-height:120px;background:#fff}
+.bhw-preview__note{font-size:12px;color:#64748b;padding:8px 10px;border-top:1px solid #f1f5f9}
+.bhw-picker{width:min(640px,calc(100vw - 32px));max-height:min(80vh,720px);padding:0;border:0;border-radius:14px;box-shadow:0 20px 50px rgba(15,23,42,.25)}
+.bhw-picker::backdrop{background:rgba(15,23,42,.45)}
+.bhw-picker__head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #f1f5f9;position:sticky;top:0;background:#fff;z-index:1}
+.bhw-picker__body{padding:12px 16px 16px;display:grid;gap:16px}
+.bhw-picker__group h3{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin:0 0 6px}
+.bhw-picker__items{display:grid;gap:6px;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr))}
+.bhw-pick{display:flex;gap:10px;align-items:flex-start;text-align:left;border:1px solid #e2e8f0;border-radius:10px;padding:10px;background:#fff;cursor:pointer;width:100%}
+.bhw-pick:hover:not([aria-disabled=true]),.bhw-pick:focus-visible{border-color:#2563eb;background:#eff6ff;outline:none}
+.bhw-pick[aria-disabled=true]{cursor:not-allowed;opacity:.6}
+.bhw-pick__title{font-size:14px;font-weight:600;color:#0f172a}
+.bhw-pick__text{font-size:12px;color:#64748b}
+.bhw-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media (max-width:640px){
+  .bhw-row{flex-wrap:wrap}
+  .bhw-row__actions{width:100%;justify-content:flex-end}
+  .bhw-row .bh-btn--icon{width:44px;height:44px}
+  .bhw-panel .bh-input,.bhw-panel .bh-select,.bhw-panel .bh-textarea{font-size:16px}
+}
+</style>
 
-<div class="mb-5">
-    <h2 class="text-xl font-semibold text-slate-900">Widget Areas</h2>
-    <p class="text-sm text-slate-500">Place and order widgets inside the areas your active theme provides. Themes render these with <code class="px-1 py-0.5 bg-slate-100 rounded">widget_area('key')</code>.</p>
+<div class="bhw-head">
+    <div>
+        <h2 class="text-xl font-semibold text-slate-900">Widget areas</h2>
+        <p class="text-sm text-slate-500">Choose which widgets appear in each area of your theme, and in what order. Drag a widget by its handle, or focus the handle and use the arrow keys.</p>
+    </div>
 </div>
 
-<!-- Sub-nav -->
 <div class="flex items-center gap-1 mb-5 text-sm">
     <a href="<?= $base ?>/admin/widgets" class="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100">Registered widgets</a>
-    <a href="<?= $base ?>/admin/widgets/areas" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white font-medium">Widget areas</a>
+    <a href="<?= $base ?>/admin/widgets/areas" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white font-medium" aria-current="page">Widget areas</a>
 </div>
 
-<?php if (empty($areas)): ?>
-<div class="bg-white rounded-xl border border-slate-200 p-10 text-center">
-    <?= icon('view-columns', 'w-10 h-10 text-slate-300 mb-3 block mx-auto') ?>
-    <h3 class="text-slate-700 font-medium mb-1">Your theme declares no widget areas</h3>
-    <p class="text-sm text-slate-500 max-w-lg mx-auto">Add a <code class="px-1 py-0.5 bg-slate-100 rounded">"widget_areas"</code> map to the theme's <code class="px-1 py-0.5 bg-slate-100 rounded">theme.json</code>, or register one from a app with <code class="px-1 py-0.5 bg-slate-100 rounded">WidgetAreaRegistry::register()</code>.</p>
+<noscript>
+    <div class="bh-note bh-note--warn mb-5">This screen needs JavaScript. Turn it on to place and edit widgets.</div>
+</noscript>
+
+<div id="bhw-app" data-base="<?= htmlspecialchars($base, ENT_QUOTES) ?>" aria-live="polite">
+    <div class="bh-card bh-card--pad text-sm text-slate-500" id="bhw-loading">Loading widget areas…</div>
 </div>
-<?php else: ?>
+<p id="bhw-status" class="bhw-sr" role="status" aria-live="assertive"></p>
 
-<?php if (empty($available)): ?>
-<div class="mb-5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 text-sm">
-    No frontend widgets are registered yet, so there's nothing to place. Activate a app or theme that provides widgets.
-</div>
-<?php endif; ?>
-
-<div class="space-y-5">
-    <?php foreach ($areas as $area): ?>
-    <?php $items = $assignments[$area['key']] ?? []; $count = is_array($items) ? count($items) : 0; ?>
-    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div class="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-4">
-            <div>
-                <h3 class="text-sm font-semibold text-slate-900"><?= htmlspecialchars($area['name']) ?>
-                    <span class="ml-1 text-[11px] font-mono text-slate-400"><?= htmlspecialchars($area['key']) ?></span>
-                </h3>
-                <?php if (!empty($area['description'])): ?>
-                    <p class="text-xs text-slate-500 mt-0.5"><?= htmlspecialchars($area['description']) ?></p>
-                <?php endif; ?>
-            </div>
-            <span class="text-[11px] text-slate-400 shrink-0"><?= $count ?> widget<?= $count === 1 ? '' : 's' ?></span>
-        </div>
-
-        <div class="p-5 space-y-3">
-            <?php if ($count === 0): ?>
-                <p class="text-sm text-slate-400 italic">No widgets here yet.</p>
-            <?php else: ?>
-                <?php foreach (array_values($items) as $idx => $inst): ?>
-                <?php
-                    $def = $registry->get((string) ($inst['widget'] ?? ''));
-                    $iid = (string) ($inst['id'] ?? '');
-                    $settings = is_array($inst['settings'] ?? null) ? $inst['settings'] : [];
-                    $fields = $def['fields'] ?? [];
-                ?>
-                <div class="border border-slate-200 rounded-lg">
-                    <div class="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100">
-                        <?= icon($def['icon'] ?? 'puzzle-piece', 'w-4 h-4 text-slate-400') ?>
-                        <span class="text-sm font-medium text-slate-800 flex-1 truncate">
-                            <?= htmlspecialchars($def['title'] ?? ($inst['widget'] ?? 'Unknown widget')) ?>
-                            <?php if (!$def): ?><span class="text-[11px] text-red-500">(missing: <?= htmlspecialchars((string) ($inst['widget'] ?? '')) ?>)</span><?php endif; ?>
-                        </span>
-                        <!-- move up -->
-                        <form method="POST" action="<?= $base ?>/admin/widgets/areas/<?= urlencode($area['key']) ?>/<?= urlencode($iid) ?>/move" class="inline">
-                            <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                            <input type="hidden" name="dir" value="up">
-                            <button class="p-1.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30" title="Move up" <?= $idx === 0 ? 'disabled' : '' ?>><?= icon('chevron-up', 'w-4 h-4') ?></button>
-                        </form>
-                        <!-- move down -->
-                        <form method="POST" action="<?= $base ?>/admin/widgets/areas/<?= urlencode($area['key']) ?>/<?= urlencode($iid) ?>/move" class="inline">
-                            <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                            <input type="hidden" name="dir" value="down">
-                            <button class="p-1.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30" title="Move down" <?= $idx === $count - 1 ? 'disabled' : '' ?>><?= icon('chevron-down', 'w-4 h-4') ?></button>
-                        </form>
-                        <!-- remove -->
-                        <form method="POST" action="<?= $base ?>/admin/widgets/areas/<?= urlencode($area['key']) ?>/<?= urlencode($iid) ?>/remove" class="inline" onsubmit="return confirm('Remove this widget from the area?')">
-                            <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                            <button class="p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50" title="Remove"><?= icon('trash', 'w-4 h-4') ?></button>
-                        </form>
-                    </div>
-                    <?php if ($def && !empty($fields)): ?>
-                    <form method="POST" action="<?= $base ?>/admin/widgets/areas/<?= urlencode($area['key']) ?>/<?= urlencode($iid) ?>" class="p-3 space-y-2.5 text-sm">
-                        <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                        <?php foreach ($fields as $f): ?>
-                        <?php
-                            $fk = (string) ($f['key'] ?? '');
-                            if ($fk === '') continue;
-                            $flabel = (string) ($f['label'] ?? $fk);
-                            $ftype = (string) ($f['type'] ?? 'text');
-                            $val = $settings[$fk] ?? ($f['default'] ?? '');
-                            $inputName = 'settings[' . $fk . ']';
-                        ?>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1"><?= htmlspecialchars($flabel) ?></label>
-                            <?php
-                                // A widget may supply its choices as a function (a category list, say),
-                                // so they are only looked up when this form is shown.
-                                if ($ftype === 'select' && ($f['options'] ?? null) instanceof \Closure) {
-                                    try { $f['options'] = ($f['options'])(); } catch (\Throwable) { $f['options'] = []; }
-                                }
-                            ?>
-                            <?php if ($ftype === 'textarea'): ?>
-                                <textarea name="<?= htmlspecialchars($inputName) ?>" rows="3" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none"><?= htmlspecialchars((string) $val) ?></textarea>
-                            <?php elseif ($ftype === 'checkbox'): ?>
-                                <label class="inline-flex items-center gap-2">
-                                    <input type="hidden" name="<?= htmlspecialchars($inputName) ?>" value="0">
-                                    <input type="checkbox" name="<?= htmlspecialchars($inputName) ?>" value="1" <?= !empty($val) ? 'checked' : '' ?> class="rounded border-slate-300">
-                                    <span class="text-xs text-slate-500">Enabled</span>
-                                </label>
-                            <?php elseif ($ftype === 'select' && !empty($f['options']) && is_array($f['options'])): ?>
-                                <select name="<?= htmlspecialchars($inputName) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                                    <?php foreach ($f['options'] as $ov => $ol): ?>
-                                        <option value="<?= htmlspecialchars((string) $ov) ?>" <?= (string) $val === (string) $ov ? 'selected' : '' ?>><?= htmlspecialchars((string) $ol) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            <?php else: ?>
-                                <input type="<?= $ftype === 'number' ? 'number' : 'text' ?>" name="<?= htmlspecialchars($inputName) ?>" value="<?= htmlspecialchars((string) $val) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                            <?php endif; ?>
-                        </div>
-                        <?php endforeach; ?>
-                        <button type="submit" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium">Save</button>
-                    </form>
-                    <?php endif; ?>
-                </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-
-            <!-- Add widget -->
-            <?php if (!empty($available)): ?>
-            <form method="POST" action="<?= $base ?>/admin/widgets/areas/<?= urlencode($area['key']) ?>/add" class="flex items-center gap-2 pt-1">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                <select name="widget" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                    <?php foreach ($available as $w): ?>
-                        <option value="<?= htmlspecialchars($w['key']) ?>"><?= htmlspecialchars($w['title']) ?><?= $w['source'] ? ' — ' . htmlspecialchars($w['source']) : '' ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <button type="submit" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium flex items-center gap-1.5"><?= icon('plus', 'w-4 h-4') ?>Add</button>
-            </form>
-            <?php endif; ?>
-        </div>
+<dialog id="bhw-picker" class="bhw-picker" aria-labelledby="bhw-picker-title">
+    <div class="bhw-picker__head">
+        <h2 id="bhw-picker-title" class="text-base font-semibold text-slate-900" style="flex:1">Add a widget</h2>
+        <button type="button" class="bh-btn bh-btn--ghost bh-btn--sm bh-btn--icon" data-close aria-label="Close"><?= icon('x-mark', 'w-4 h-4') ?></button>
     </div>
-    <?php endforeach; ?>
-</div>
-<?php endif; ?>
+    <div class="bhw-picker__body">
+        <div>
+            <label class="bhw-sr" for="bhw-picker-search">Find a widget</label>
+            <input id="bhw-picker-search" type="search" class="bh-input" placeholder="Find a widget" autocomplete="off">
+        </div>
+        <div id="bhw-picker-list"></div>
+    </div>
+</dialog>
 
+<script>window.BH_WIDGET_ICONS = <?= json_encode($icons, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
+<script src="<?= $base ?>/admin/assets/js/widget-areas.js?v=<?= urlencode((string) $jsVer) ?>" defer></script>
 <?php $this->endSection(); ?>

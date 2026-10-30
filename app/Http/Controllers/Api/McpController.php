@@ -1109,21 +1109,23 @@ final class McpController
         $def = $reg->get($key);
         if (!$def) return $this->json(['error' => 'No widget area registered with key "' . $key . '".']);
 
-        $svc     = $this->app()->make(\App\Services\WidgetAreaService::class);
+        $front   = $this->app()->make(\App\Core\Widgets\FrontendWidgets::class);
         $widgets = $this->app()->make(\App\Core\WidgetRegistry::class);
 
+        // Every placed widget, hidden or unavailable ones included and marked,
+        // with its settings as the widget reads them (1.2.93).
         $items = [];
-        foreach ($svc->assignmentsFor($key) as $inst) {
-            $wk   = (string) ($inst['widget'] ?? '');
-            $meta = $widgets->get($wk);
-            if (!$meta || !in_array('frontend', $meta['surfaces'], true)) continue;
-            $settings = is_array($inst['settings'] ?? null) ? $inst['settings'] : [];
+        foreach ($front->placements()->area($def['key']) as $inst) {
+            $meta = $widgets->get($inst['widget']);
+            $why  = $front->unavailable($inst['widget']);
             $items[] = [
-                'id'       => (string) ($inst['id'] ?? ''),
-                'widget'   => $wk,
-                'title'    => $meta['title'],
-                'settings' => $settings,
-                'html'     => $widgets->render($wk, $settings, 'frontend'),
+                'id'          => $inst['id'],
+                'widget'      => $meta['key'] ?? $inst['widget'],
+                'title'       => $meta['title'] ?? $inst['widget'],
+                'enabled'     => !$inst['disabled'],
+                'unavailable' => $why,
+                'settings'    => $meta && $why === null ? $front->settingsFor($meta, $inst) : $inst['settings'],
+                'html'        => $why === null && !$inst['disabled'] ? $front->renderInstance($def, $inst) : '',
             ];
         }
 

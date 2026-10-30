@@ -152,6 +152,11 @@ final class WidgetRegistry
             $dash = in_array('dashboard', $surfaces, true)
                 ? $this->normaliseDashboard(is_array($def['dashboard'] ?? null) ? $def['dashboard'] : [], $owner, $render !== null)
                 : (is_array($def['dashboard'] ?? null) ? $def['dashboard'] : []);
+            // Frontend framework options (1.2.93), only for the public site:
+            // the dashboard and editor surfaces are not affected.
+            $front = in_array('frontend', $surfaces, true)
+                ? \App\Core\Widgets\Definition::normalise(is_array($def['frontend'] ?? null) ? $def['frontend'] : [], $owner)
+                : [];
         } catch (\InvalidArgumentException $e) {
             return $fail($e->getMessage());
         }
@@ -159,13 +164,15 @@ final class WidgetRegistry
         // A render callable is needed everywhere except a dashboard-only widget
         // that brings its own data provider or endpoint.
         $dashOnlyData = $surfaces === ['dashboard'] && (isset($dash['data']) || isset($dash['endpoint']));
-        if ($render === null && !$dashOnlyData) {
-            return $fail("'render' is required (or, for a dashboard-only widget, 'dashboard.data' or 'dashboard.endpoint').");
+        // A frontend-only widget may render through a template instead (1.2.93).
+        $frontOnlyTemplate = $surfaces === ['frontend'] && isset($front['template']);
+        if ($render === null && !$dashOnlyData && !$frontOnlyTemplate) {
+            return $fail("'render' is required (or, for a dashboard-only widget, 'dashboard.data' or 'dashboard.endpoint'; for a frontend-only widget, 'frontend.template').");
         }
 
         // Aliases (renamed keys) — refuse ones that would shadow a live key.
         $aliases = [];
-        foreach ((array) ($dash['aliases'] ?? []) as $alias) {
+        foreach (array_merge((array) ($dash['aliases'] ?? []), (array) ($front['aliases'] ?? [])) as $alias) {
             $a = $this->normaliseKey((string) $alias);
             if ($a === '' || $a === $key) continue;
             if (isset($this->widgets[$a]) || (isset($this->aliases[$a]) && $this->aliases[$a] !== $key)) {
@@ -197,6 +204,7 @@ final class WidgetRegistry
             'source'      => $owner,
             'capability'  => $caps,
             'dashboard'   => $dash,
+            'frontend'    => $front,
         ];
         return true;
     }
@@ -307,6 +315,9 @@ final class WidgetRegistry
     public static function publicDefinition(array $w): array
     {
         unset($w['render']);
+        if (isset($w['frontend']) && is_array($w['frontend'])) {
+            $w['frontend'] = \App\Core\Widgets\Definition::publicPart($w['frontend']);
+        }
         if (isset($w['dashboard']) && is_array($w['dashboard'])) {
             $d = $w['dashboard'];
             $d['has_data'] = isset($d['data']) || isset($d['endpoint']);

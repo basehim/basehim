@@ -132,8 +132,32 @@ final class Application
             new \App\Services\WidgetAreaService(
                 $app->make(\App\Services\SettingService::class),
                 $app->make(\App\Core\WidgetAreaRegistry::class),
-                $app->make(WidgetRegistry::class)
+                $app->make(WidgetRegistry::class),
+                null,
+                $app->make(\App\Core\Widgets\FrontendWidgets::class)
             ));
+
+        // The public site's widget framework (1.2.93): placements, rendering,
+        // templates, caching. The admin dashboard's widgets are separate.
+        $this->singleton(\App\Core\Widgets\Placements::class, fn($app) =>
+            new \App\Core\Widgets\Placements($app->make(\App\Services\SettingService::class)));
+        $this->singleton(\App\Core\Widgets\FrontendWidgets::class, fn($app) =>
+            new \App\Core\Widgets\FrontendWidgets(
+                $app->make(WidgetRegistry::class),
+                $app->make(\App\Core\WidgetAreaRegistry::class),
+                $app->make(\App\Core\Widgets\Placements::class),
+                $app->make(Cache::class),
+                $app->make(Logger::class),
+                $app->make(HookRegistry::class),
+                [
+                    'user' => fn() => $app->make(\App\Services\AuthService::class)->currentUser(),
+                    'theme' => fn() => $app->make(\App\Services\ThemeService::class)->activeSlug(),
+                    'theme_path' => fn() => $app->make(\App\Services\ThemeService::class)->activePath(),
+                    'app_active' => fn(string $slug) => $app->make(\App\Services\AppService::class)->isBooted($slug),
+                    'preview' => fn() => $app->make(\App\Services\CustomizerService::class)->isPreview(),
+                ]
+            ));
+
 
 
         // Logger
@@ -394,6 +418,18 @@ final class Application
             try { $this->make(Logger::class)->error('Core widget boot failure: ' . $e->getMessage()); } catch (\Throwable) {}
         }
 
+        // Cached widget output (1.2.93) is cleared when what it shows changes.
+        try {
+            $hooks = $this->make(HookRegistry::class);
+            $flush = fn() => $this->make(\App\Core\Widgets\FrontendWidgets::class)->flush();
+            foreach (['post.created', 'post.updated', 'post.published', 'post.deleted', 'post.restored',
+                      'term.created', 'term.updated', 'term.deleted',
+                      'comment.created', 'comment.status_changed', 'comment.deleted',
+                      'media.updated', 'media.deleted', 'media.file_replaced', 'user.updated', 'user.deleted'] as $tag) {
+                $hooks->addAction($tag, $flush, 90, 0);
+            }
+        } catch (\Throwable) {}
+
         try {
             $this->make(\App\Services\AppService::class)->bootActive($this);
         } catch (\Throwable $e) {
@@ -449,378 +485,14 @@ final class Application
      * A small set of always-available frontend widgets so a fresh install can
      * populate its sidebars immediately. Apps/themes add more via the registry.
      */
-    /**
-     * Default styling (and, for the dropdown, the script) for the category
-     * and tag widgets, once per page.
-     *
-     * Every rule is wrapped in :where(), so it has zero specificity: any
-     * theme rule for the same element wins, and a theme that already styles
-     * these widgets is unaffected.
-     */
-    /**
-     * Default styles for the Recent Posts widget's richer layouts, once per
-     * page. Every rule is inside :where(), so it has no specificity and any
-     * rule a theme writes for the same element wins.
-     */
-    private static function recentPostsAssets(): string
-    {
-        static $done = false;
-        if ($done) return '';
-        $done = true;
-        return '<style id="bh-recent-posts-css">'
-            . ':where(.widget-recent-posts--rich){list-style:none;margin:0;padding:0;display:grid;gap:14px}'
-            . ':where(.widget-recent-posts__item){display:flex;gap:12px;align-items:flex-start;margin:0;min-width:0}'
-            . ':where(.widget-recent-posts__thumb){flex:0 0 auto;display:block;overflow:hidden;border-radius:8px;background:#e8edf3}'
-            . ':where(.widget-recent-posts__noimg){display:block;width:100%;height:100%;min-height:48px}'
-            . ':where(.widget-recent-posts__body){min-width:0;display:flex;flex-direction:column;gap:3px}'
-            . ':where(.widget-recent-posts__title){font-weight:600;line-height:1.35;text-decoration:none}'
-            . ':where(.widget-recent-posts__date){font-size:.8em;opacity:.7}'
-            . ':where(.widget-recent-posts__excerpt){margin:0;font-size:.85em;line-height:1.45;opacity:.8}'
-            // Small: a fixed-size box beside the title.
-            . ':where(.widget-recent-posts--thumbnail.widget-recent-posts--shape-square .widget-recent-posts__thumb){width:64px;height:64px}'
-            . ':where(.widget-recent-posts--thumbnail.widget-recent-posts--shape-wide .widget-recent-posts__thumb){width:96px;aspect-ratio:16/9}'
-            . ':where(.widget-recent-posts--thumbnail.widget-recent-posts--shape-original .widget-recent-posts__thumb){width:88px}'
-            // Medium: a full-width image above the title.
-            . ':where(.widget-recent-posts--medium .widget-recent-posts__item){flex-direction:column;gap:8px}'
-            . ':where(.widget-recent-posts--medium .widget-recent-posts__thumb){width:100%}'
-            . ':where(.widget-recent-posts--medium.widget-recent-posts--shape-square .widget-recent-posts__thumb){aspect-ratio:1/1}'
-            . ':where(.widget-recent-posts--medium.widget-recent-posts--shape-wide .widget-recent-posts__thumb){aspect-ratio:16/9}'
-            // The image itself: fill the box and crop (cover), or keep its own shape.
-            // Not in :where(), so a theme reset such as img{height:auto} cannot undo it.
-            . '.widget-recent-posts__thumb img{display:block;width:100%;height:100%;max-width:none;object-fit:cover}'
-            . '.widget-recent-posts--shape-original .widget-recent-posts__thumb img{height:auto;object-fit:contain}'
-            . '</style>';
-    }
-
-    private static function termWidgetAssets(bool $withScript): string
-    {
-        static $styled = false, $scripted = false;
-        $out = '';
-        if (!$styled) {
-            $styled = true;
-            $out .= '<style id="bh-term-widget-css">'
-                . ':where(.widget-terms){list-style:none;margin:0;padding:0}'
-                . ':where(.widget-terms > li){display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;margin:0;padding:.2rem 0}'
-                . ':where(.widget-terms > li > a){min-width:0;overflow-wrap:anywhere}'
-                . ':where(.widget-count){flex:0 0 auto;min-width:1.9em;padding:.05em .55em;border-radius:999px;'
-                .   'font-size:.8em;line-height:1.6;text-align:center;font-variant-numeric:tabular-nums;background:rgba(127,127,127,.14)}'
-                . ':where(.widget-terms-select select){box-sizing:border-box;width:100%;padding:.5em .6em;font:inherit;color:inherit;'
-                .   'background-color:transparent;border:1px solid rgba(127,127,127,.4);border-radius:.5rem}'
-                . ':where(.bh-visually-hidden){position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}'
-                . '</style>';
-        }
-        if ($withScript && !$scripted) {
-            $scripted = true;
-            $out .= '<script id="bh-term-widget-js">document.addEventListener("change",function(e){'
-                . 'var s=e.target;if(!s||!s.matches||!s.matches("select[data-bh-term-nav]"))return;'
-                . 'if(s.value)window.location.href=s.value;});</script>';
-        }
-        return $out;
-    }
-
     private function registerCoreWidgets(): void
     {
         /** @var WidgetRegistry $reg */
         $reg = $this->make(WidgetRegistry::class);
 
-        $title = static function (array $s): string {
-            $t = trim((string) ($s['title'] ?? ''));
-            if ($t === '') return '';
-            $before = (string) ($s['__before_title'] ?? '<h3 class="widget-title">');
-            $after  = (string) ($s['__after_title'] ?? '</h3>');
-            return $before . htmlspecialchars($t, ENT_QUOTES) . $after;
-        };
-
-        // Custom HTML / text block. Frontend-only on purpose: the block editor
-        // already has a native 'html' block for raw markup, so we don't add a
-        // second raw-HTML path here. Placement into areas is manage_apps-gated.
-        $reg->register('core.html', [
-            'title'       => 'HTML / Text',
-            'description' => 'A block of custom HTML or text.',
-            'icon'        => 'code-bracket',
-            'source'      => 'core',
-            'surfaces'    => ['frontend'],
-            'fields'      => [
-                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
-                ['key' => 'html',  'label' => 'Content (HTML allowed)', 'type' => 'textarea'],
-            ],
-            'render' => static function (array $s) use ($title): string {
-                return $title($s) . '<div class="widget-html">' . ((string) ($s['html'] ?? '')) . '</div>';
-            },
-        ]);
-
-        // Search form.
-        $reg->register('core.search', [
-            'title'       => 'Search',
-            'description' => 'A site search form.',
-            'icon'        => 'magnifying-glass',
-            'source'      => 'core',
-            'surfaces'    => ['frontend'],
-            'fields'      => [
-                ['key' => 'title',       'label' => 'Title', 'type' => 'text'],
-                ['key' => 'placeholder', 'label' => 'Placeholder', 'type' => 'text'],
-            ],
-            'render' => static function (array $s) use ($title): string {
-                $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
-                $ph = htmlspecialchars((string) ($s['placeholder'] ?? 'Search…'), ENT_QUOTES);
-                return $title($s)
-                    . '<form class="widget-search" method="get" action="' . htmlspecialchars($base . '/search', ENT_QUOTES) . '">'
-                    . '<input type="search" name="q" placeholder="' . $ph . '" aria-label="Search">'
-                    . '<button type="submit">Search</button>'
-                    . '</form>';
-            },
-        ]);
-
-        // Recent posts.
-        $reg->register('core.recent-posts', [
-            'title'       => 'Recent Posts',
-            'description' => 'Your latest, most viewed or most discussed posts, with optional thumbnails, dates and excerpts.',
-            'icon'        => 'newspaper',
-            'source'      => 'core',
-            'surfaces'    => ['frontend'],
-            'fields'      => [
-                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
-                ['key' => 'count', 'label' => 'Number of posts', 'type' => 'number', 'default' => 5],
-                ['key' => 'order', 'label' => 'Show', 'type' => 'select', 'default' => 'latest',
-                 'options' => ['latest' => 'Latest posts', 'popular' => 'Most viewed', 'commented' => 'Most commented']],
-                ['key' => 'category', 'label' => 'From category', 'type' => 'select', 'default' => '',
-                 // Looked up only when the widget form is shown, not on every page.
-                 'options' => function (): array {
-                     $opts = ['' => 'All categories'];
-                     try {
-                         $rows = $this->make(\App\Core\Database::class)->select(
-                             "SELECT t.slug, t.name FROM {terms} t JOIN {taxonomies} x ON x.id = t.taxonomy_id AND x.slug = 'category' ORDER BY t.name"
-                         );
-                         foreach ($rows as $r) $opts[(string) $r['slug']] = html_entity_decode((string) $r['name'], ENT_QUOTES);
-                     } catch (\Throwable) {}
-                     return $opts;
-                 }],
-                ['key' => 'show_thumbnail', 'label' => 'Show thumbnails', 'type' => 'checkbox', 'default' => '0'],
-                ['key' => 'thumbnail_size', 'label' => 'Thumbnail size', 'type' => 'select', 'default' => 'thumbnail',
-                 'options' => ['thumbnail' => 'Small — beside the title', 'medium' => 'Medium — above the title']],
-                ['key' => 'thumbnail_shape', 'label' => 'Thumbnail shape', 'type' => 'select', 'default' => 'square',
-                 'options' => [
-                     'square'   => 'Square — cropped to fill',
-                     'original' => 'Original shape — the whole image, nothing cropped',
-                     'wide'     => 'Wide 16:9 — cropped to fill',
-                 ]],
-                ['key' => 'show_date', 'label' => 'Show the date', 'type' => 'checkbox', 'default' => '0'],
-                ['key' => 'show_excerpt', 'label' => 'Show a short excerpt', 'type' => 'checkbox', 'default' => '0'],
-                ['key' => 'hide_current', 'label' => 'Leave out the post being read', 'type' => 'checkbox', 'default' => '1'],
-            ],
-            'render' => function (array $s) use ($title): string {
-                $count = (int) ($s['count'] ?? 5);
-                if ($count < 1) $count = 5;
-                if ($count > 20) $count = 20;
-                $thumbs  = !empty($s['show_thumbnail']);
-                $size    = ($s['thumbnail_size'] ?? 'thumbnail') === 'medium' ? 'medium' : 'thumbnail';
-                $shape   = in_array($s['thumbnail_shape'] ?? '', ['square', 'original', 'wide'], true) ? $s['thumbnail_shape'] : 'square';
-                // The "thumbnail" file is already cropped square, so it only suits a small
-                // square. Every other combination uses the uncropped medium image.
-                $file    = ($size === 'thumbnail' && $shape === 'square') ? 'thumbnail' : 'medium';
-                $date    = !empty($s['show_date']);
-                $excerpt = !empty($s['show_excerpt']);
-                $hideCur = (string) ($s['hide_current'] ?? '1') !== '0';
-                try {
-                    /** @var \App\Repositories\PostRepository $posts */
-                    $posts = $this->make(\App\Repositories\PostRepository::class);
-                    $rows = $posts->widgetList([
-                        'limit'    => $count + 1, // one spare, in case the post being read is among them
-                        'order'    => (string) ($s['order'] ?? 'latest'),
-                        'category' => (string) ($s['category'] ?? ''),
-                    ]);
-                } catch (\Throwable) {
-                    $rows = [];
-                }
-                $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
-                $here = rtrim((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH), '/');
-                // The plain list of links, exactly as before, unless an option asks for more.
-                $rich = $thumbs || $date || $excerpt;
-                $items = '';
-                $shown = 0;
-                foreach ($rows as $p) {
-                    $url = \App\Core\Helpers::postUrl($p, $base);
-                    if ($hideCur && $here !== '' && rtrim((string) parse_url($url, PHP_URL_PATH), '/') === $here) continue;
-                    $t = htmlspecialchars((string) ($p['title'] ?? 'Untitled'));
-                    $u = htmlspecialchars($url, ENT_QUOTES);
-                    if (!$rich) {
-                        $items .= '<li><a href="' . $u . '">' . $t . '</a></li>';
-                    } else {
-                        $img = '';
-                        if ($thumbs) {
-                            $tag = function_exists('bh_post_image') ? bh_post_image($p, $file, [
-                                'alt'   => '', // decorative: the title beside it says the same
-                                'sizes' => $size === 'medium' ? '(max-width: 600px) 100vw, 320px' : '96px',
-                            ]) : '';
-                            $img = '<a class="widget-recent-posts__thumb" href="' . $u . '" tabindex="-1" aria-hidden="true">'
-                                 . ($tag !== '' ? $tag : '<span class="widget-recent-posts__noimg"></span>') . '</a>';
-                        }
-                        $meta = '';
-                        if ($date && !empty($p['published_at'])) {
-                            $ts = strtotime((string) $p['published_at']);
-                            if ($ts) $meta = '<time class="widget-recent-posts__date" datetime="' . date('c', $ts) . '">' . date('j M Y', $ts) . '</time>';
-                        }
-                        $ex = '';
-                        if ($excerpt) {
-                            $text = trim((string) ($p['excerpt'] ?? ''));
-                            if ($text === '') {
-                                $body = ltrim((string) ($p['content'] ?? ''));
-                                if ($body !== '' && $body[0] !== '{' && $body[0] !== '[') $text = trim((string) preg_replace('/\s+/', ' ', html_entity_decode(strip_tags($body), ENT_QUOTES)));
-                            }
-                            if (mb_strlen($text) > 110) $text = rtrim(mb_substr($text, 0, 110), " ,.;:-") . '…';
-                            if ($text !== '') $ex = '<p class="widget-recent-posts__excerpt">' . htmlspecialchars($text) . '</p>';
-                        }
-                        $items .= '<li class="widget-recent-posts__item">' . $img
-                            . '<div class="widget-recent-posts__body"><a class="widget-recent-posts__title" href="' . $u . '">' . $t . '</a>' . $meta . $ex . '</div></li>';
-                    }
-                    if (++$shown >= $count) break;
-                }
-                if ($items === '') $items = '<li class="widget-empty">No posts yet.</li>';
-                $cls = 'widget-recent-posts';
-                if ($rich) $cls .= ' widget-recent-posts--rich' . ($thumbs ? ' widget-recent-posts--thumbs widget-recent-posts--' . $size . ' widget-recent-posts--shape-' . $shape : '');
-                return ($rich ? self::recentPostsAssets() : '') . $title($s) . '<ul class="' . $cls . '">' . $items . '</ul>';
-            },
-        ]);
-
-        /*
-         * Categories and tags.
-         *
-         * One registration for both: they differ only in which taxonomy they
-         * read and where they link, and two near-identical copies would drift
-         * the first time one of them was fixed.
-         *
-         * The post count comes from the term row, which core already keeps up
-         * to date. Counting posts per term here would be one query per term on
-         * every page render.
-         */
-        $termList = function (string $taxonomy, string $urlPrefix, string $noun) use ($title): callable {
-            return function (array $s) use ($taxonomy, $urlPrefix, $noun, $title): string {
-                $limit = (int) ($s['count'] ?? 10);
-                if ($limit < 1) $limit = 10;
-                if ($limit > 50) $limit = 50;
-
-                $showCounts = !empty($s['show_counts']);
-                $hideEmpty  = !empty($s['hide_empty']);
-                $order      = (string) ($s['order'] ?? 'count');
-                $dropdown   = ($s['display'] ?? 'list') === 'dropdown';
-
-                try {
-                    /** @var \App\Services\TaxonomyService $tax */
-                    $tax = $this->make(\App\Services\TaxonomyService::class);
-                    $terms = $tax->termsByTaxonomySlug($taxonomy);
-                } catch (\Throwable) {
-                    $terms = [];
-                }
-
-                /*
-                 * Counts are published posts only — what a visitor finds on
-                 * the archive page. The term row's own count includes
-                 * drafts, private and trashed posts, so a category could show
-                 * 4 and list 1. One grouped query for the whole taxonomy.
-                 */
-                try {
-                    $rows = $this->make(\App\Core\Database::class)->select(
-                        "SELECT pt.term_id, COUNT(*) AS c
-                           FROM {post_term} pt
-                           JOIN {posts} p ON p.id = pt.post_id
-                                         AND p.type = 'post' AND p.status = 'published' AND p.deleted_at IS NULL
-                           JOIN {terms} t ON t.id = pt.term_id
-                           JOIN {taxonomies} x ON x.id = t.taxonomy_id AND x.slug = :tax
-                          GROUP BY pt.term_id",
-                        ['tax' => $taxonomy]
-                    );
-                    $published = array_column($rows, 'c', 'term_id');
-                    foreach ($terms as &$t) $t['count'] = (int) ($published[$t['id']] ?? 0);
-                    unset($t);
-                } catch (\Throwable) {
-                    // Fall back to the stored count.
-                }
-
-                if ($hideEmpty) {
-                    $terms = array_values(array_filter($terms, fn($t) => (int) ($t['count'] ?? 0) > 0));
-                }
-
-                if ($order === 'name') {
-                    usort($terms, fn($a, $b) => strcasecmp((string) $a['name'], (string) $b['name']));
-                } else {
-                    // Busiest first, and alphabetical within a tie so the order
-                    // does not shuffle between requests.
-                    usort($terms, function ($a, $b) {
-                        $d = (int) ($b['count'] ?? 0) <=> (int) ($a['count'] ?? 0);
-                        return $d !== 0 ? $d : strcasecmp((string) $a['name'], (string) $b['name']);
-                    });
-                }
-                $terms = array_slice($terms, 0, $limit);
-
-                $e = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES);
-                $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
-                $url = fn(array $t): string => $base . $urlPrefix . rawurlencode((string) ($t['slug'] ?? ''));
-
-                // The list: name on the left, count on the right.
-                $items = '';
-                foreach ($terms as $t) {
-                    $items .= '<li><a href="' . $e($url($t)) . '">' . $e($t['name'] ?? '') . '</a>'
-                        . ($showCounts ? '<span class="widget-count">' . (int) ($t['count'] ?? 0) . '</span>' : '')
-                        . '</li>';
-                }
-                if ($items === '') {
-                    $items = '<li class="widget-empty">Nothing yet.</li>';
-                }
-                $list = '<ul class="widget-terms widget-terms--' . $taxonomy . ($showCounts ? ' widget-terms--counts' : '') . '">' . $items . '</ul>';
-
-                if (!$dropdown || !$terms) {
-                    return $title($s) . $list . self::termWidgetAssets(false);
-                }
-
-                // The dropdown: choosing an entry opens its archive. Without
-                // JavaScript the plain list is shown instead.
-                static $n = 0;
-                $id = 'bh-terms-' . $taxonomy . '-' . (++$n);
-                $opts = '<option value="">' . $e('Select ' . $noun) . '</option>';
-                foreach ($terms as $t) {
-                    $opts .= '<option value="' . $e($url($t)) . '">' . $e($t['name'] ?? '')
-                        . ($showCounts ? ' (' . (int) ($t['count'] ?? 0) . ')' : '') . '</option>';
-                }
-                return $title($s)
-                    . '<div class="widget-terms-select">'
-                    . '<label for="' . $id . '" class="bh-visually-hidden">' . $e('Select ' . $noun) . '</label>'
-                    . '<select id="' . $id . '" data-bh-term-nav>' . $opts . '</select>'
-                    . '<noscript>' . $list . '</noscript>'
-                    . '</div>'
-                    . self::termWidgetAssets(true);
-            };
-        };
-
-        $termFields = [
-            ['key' => 'title',       'label' => 'Title', 'type' => 'text'],
-            ['key' => 'display',     'label' => 'Display as', 'type' => 'select', 'default' => 'list',
-             'options' => ['list' => 'List', 'dropdown' => 'Dropdown']],
-            ['key' => 'count',       'label' => 'How many to show', 'type' => 'number'],
-            ['key' => 'order',       'label' => 'Order by', 'type' => 'select',
-             'options' => ['count' => 'Most used', 'name' => 'Name']],
-            ['key' => 'show_counts', 'label' => 'Show post counts', 'type' => 'checkbox'],
-            ['key' => 'hide_empty',  'label' => 'Hide ones with no posts', 'type' => 'checkbox'],
-        ];
-
-        $reg->register('core.categories', [
-            'title'       => 'Categories',
-            'description' => 'A list of your categories.',
-            'icon'        => 'folder',
-            'source'      => 'core',
-            'surfaces'    => ['frontend'],
-            'fields'      => $termFields,
-            'render'      => $termList('category', '/category/', 'category'),
-        ]);
-
-        $reg->register('core.tags', [
-            'title'       => 'Tags',
-            'description' => 'A list of your tags.',
-            'icon'        => 'tag',
-            'source'      => 'core',
-            'surfaces'    => ['frontend'],
-            'fields'      => $termFields,
-            'render'      => $termList('tag', '/tag/', 'tag'),
-        ]);
+        // HTML / Text, Search, Recent Posts, Categories, Tags: data providers
+        // and templates since 1.2.93 (app/Core/Widgets/templates).
+        \App\Core\Widgets\CoreWidgets::register($reg, $this);
 
         // The admin dashboard's own cards (1.2.68), registered like any app's.
         \App\Services\Dashboard\CoreDashboardWidgets::register($reg);

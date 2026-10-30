@@ -148,27 +148,33 @@ if (!function_exists('link_to')) {
 /**
  * Render a widget area ("sidebar") by key for use in theme templates:
  *   <?= widget_area('sidebar') ?>
- * Returns '' when the area is unknown or empty, so themes can call it freely.
+ *   <?= widget_area('footer', ['class' => 'footer-grid']) ?>   extra wrapper class
+ *   <?= widget_area('footer', ['wrapper' => false]) ?>         widgets only, no outer div
+ * Returns '' when the area is unknown or nothing in it renders, so themes can
+ * call it freely. See docs/FRONTEND-WIDGETS.md.
  */
 if (!function_exists('widget_area')) {
-    function widget_area(string $key): string {
+    function widget_area(string $key, array $opts = []): string {
         try {
             return \App\Core\Application::getInstance()
-                ->make(\App\Services\WidgetAreaService::class)
-                ->render($key);
+                ->make(\App\Core\Widgets\FrontendWidgets::class)
+                ->renderArea($key, $opts);
         } catch (\Throwable) {
             return '';
         }
     }
 }
 
-/** True when a widget area exists and has at least one widget placed in it. */
+/**
+ * True when a widget area exists and has at least one widget that will show
+ * (enabled, and its app or theme active). Use it to leave out an empty sidebar.
+ */
 if (!function_exists('has_widget_area')) {
     function has_widget_area(string $key): bool {
         try {
             return \App\Core\Application::getInstance()
-                ->make(\App\Services\WidgetAreaService::class)
-                ->isActive($key);
+                ->make(\App\Core\Widgets\FrontendWidgets::class)
+                ->hasWidgets($key);
         } catch (\Throwable) {
             return false;
         }
