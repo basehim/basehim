@@ -20,6 +20,22 @@ $app = \App\Core\Application::getInstance();
 $typeDef = null;
 try { $typeDef = $app->make(\App\Services\PostTypeRegistry::class)->get($type); } catch (\Throwable) {}
 $typeLabel  = (string) ($typeDef['singular'] ?? ucfirst($type));
+// What this type uses (1.2.94). Core's post keeps every panel; an app's type
+// shows the panels its `supports` lists, the taxonomies attached to it and
+// the custom fields registered for it.
+$isCustomType = $typeDef !== null;
+$typeHas = static fn(string $f): bool => !$isCustomType || in_array($f, (array) ($typeDef['supports'] ?? []), true);
+$showSeo = $type !== 'template' && (!$isCustomType || !empty($typeDef['public']));
+$taxReg = $app->make(\App\Services\TaxonomyRegistry::class);
+$typeTaxes = $type === 'template' ? [] : $taxReg->forType($type);
+$typeTaxSlugs = array_column($typeTaxes, 'slug');
+$showCats = $type === 'post' || in_array('category', $typeTaxSlugs, true);
+$showTags = $type === 'post' || in_array('tag', $typeTaxSlugs, true);
+$customTaxes = array_values(array_filter($typeTaxes, fn($t) => !in_array($t['slug'], ['category', 'tag'], true)));
+$fieldSvc = $app->make(\App\Services\Fields\FieldService::class);
+$fieldGroups = $type === 'template' ? [] : $fieldSvc->registry()->groups($type);
+$fieldValues = $fieldGroups === [] ? [] : ($post !== null ? $fieldSvc->values($post) : $fieldSvc->registry()->schema($type)->defaults());
+$fieldCan = static fn(string $cap): bool => isset($currentUser) && is_array($currentUser) && \App\Http\Middleware\CheckCapability::userCan($currentUser, $cap);
 $typePlural = (string) ($typeDef['label'] ?? (ucfirst($type) . 's'));
 $adminPath  = in_array($type, ['post', 'page', 'template'], true) ? "/admin/{$type}s" : "/admin/content/{$type}";
 $listUrl    = $base . $adminPath;
@@ -43,6 +59,16 @@ $isLive     = $statusVal === 'published';
 $viewUrl = '';
 if ($isEdit && !empty($post['slug']) && $type !== 'template') {
     try { $viewUrl = \App\Core\Helpers::postUrl($post, (string) $base); } catch (\Throwable) { $viewUrl = ''; }
+}
+// The address with the slug left open, for the permalink line under the title.
+$permalinkPrefix = '';
+$typeHasUrls = $type !== 'template' && $app->make(\App\Services\PostTypeRegistry::class)->hasUrls($type);
+if ($typeHasUrls) {
+    try {
+        $probe = \App\Core\Helpers::postUrl(['type' => $type, 'slug' => 'bh-slug-mark', 'id' => $isEdit ? (int) $post['id'] : 0], '');
+        $cut = strrpos($probe, 'bh-slug-mark');
+        if ($cut !== false) $permalinkPrefix = (string) ($_SERVER['HTTP_HOST'] ?? '') . $base . substr($probe, 0, $cut);
+    } catch (\Throwable) {}
 }
 $statusLabels = ['draft' => 'Draft', 'pending' => 'Pending review', 'published' => 'Published', 'scheduled' => 'Scheduled', 'private' => 'Private'];
 // "Scheduled" is reached through the Publish panel (a date is part of it), so
@@ -74,7 +100,7 @@ if ($type === 'template') {
 
 // ---- Block editor: app extension surface ----------------------------------
 // Apps enqueue their editor scripts/styles and extend the runtime config via
-// these hooks (see docs/BLOCK-EDITOR.md).
+// these hooks (see BLOCK-EDITOR.md at the root).
 $nbeHooks = $app->make(\App\Core\HookRegistry::class);
 $nbeSess  = $app->make(\App\Core\Session::class);
 $nbeHooks->doAction('editor.enqueue', $isEdit ? $post : null);
@@ -95,6 +121,10 @@ $nbeConfig  = (array) $nbeHooks->applyFilters('editor.config', [
     'widgets'         => $nbeWidgets,
     'widgetRenderUrl' => $base . '/admin/widgets/render',
     'flash'           => $flash ?? null,
+    // Preview / View and the permalink line (1.2.94).
+    'viewUrl'         => $viewUrl,
+    'isLive'          => $isLive,
+    'hasUrl'          => $typeHasUrls,
 ], $isEdit ? $post : null);
 // A Markdown post opens in the visual editor, converted to blocks (1.2.48).
 // The conversion is done here, by the same converter the site uses, so the
@@ -167,6 +197,19 @@ $v = urlencode(BASEHIM_VERSION);
                         <button type="button" class="bhe-btn bhe-btn--tertiary bhe-btn--small" id="bhe-exit-code">Exit code editor</button>
                     </div>
                     <textarea name="title" class="bhe-title" rows="1" placeholder="Add title" aria-label="Add title"><?= htmlspecialchars($titleVal) ?></textarea>
+                    <?php if ($permalinkPrefix !== ''): ?>
+                    <div class="bhe-permalink" id="bhe-permalink">
+                        <span class="bhe-permalink__label">Link</span>
+                        <span class="bhe-permalink__url"><span class="bhe-permalink__base"><?= htmlspecialchars($permalinkPrefix) ?></span><span class="bhe-permalink__slug" id="bhe-permalink-slug"><?= htmlspecialchars($slugVal !== '' ? $slugVal : '…') ?></span></span>
+                        <button type="button" class="bhe-permalink__btn" id="bhe-permalink-edit" aria-controls="bhe-permalink-form" aria-expanded="false">Edit</button>
+                        <button type="button" class="bhe-permalink__btn" id="bhe-permalink-preview"><?= $isLive ? 'View' : 'Preview' ?></button>
+                        <span class="bhe-permalink__form" id="bhe-permalink-form" hidden>
+                            <label class="bhe-sr" for="bhe-permalink-input">Slug</label>
+                            <input type="text" id="bhe-permalink-input" class="bhe-input" value="<?= htmlspecialchars($slugVal) ?>" placeholder="made from the title" autocomplete="off" autocapitalize="off" spellcheck="false">
+                            <button type="button" class="bhe-btn bhe-btn--secondary bhe-btn--small" id="bhe-permalink-done">Done</button>
+                        </span>
+                    </div>
+                    <?php endif; ?>
                     <div id="bh-block-editor" <?= $isBlocks ? '' : 'hidden' ?>></div>
                     <textarea name="content" id="nbe-raw" class="bhe-raw" spellcheck="false" placeholder="Write your content here…" aria-label="Content source" <?= $isBlocks ? 'hidden' : '' ?>><?= htmlspecialchars($contentVal) ?></textarea>
                 </div>
@@ -238,6 +281,7 @@ $v = urlencode(BASEHIM_VERSION);
                         </div>
                     </section>
 
+                    <?php if ($typeHas('thumbnail')): ?>
                     <section class="bhe-panel is-open" data-bhe-panel="featured">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Featured image</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body">
@@ -260,7 +304,9 @@ $v = urlencode(BASEHIM_VERSION);
                         </div>
                     </section>
 
-                    <?php if ($type === 'post'): ?>
+                    <?php endif; ?>
+
+                    <?php if ($showCats): ?>
                     <section class="bhe-panel is-open" data-bhe-panel="categories">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Categories</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body">
@@ -271,10 +317,12 @@ $v = urlencode(BASEHIM_VERSION);
                             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>"></div>
                         </div>
                     </section>
+                    <?php endif; ?>
 
                     <?php // Tags (1.2.47; shared with Quick Edit since 1.2.62): BasehimPostFields.tags().
                           // On a saved post, existing tags are added and removed at once over AJAX;
                           // new names wait as "pending" and become tags on publish. ?>
+                    <?php if ($showTags): ?>
                     <section class="bhe-panel is-open" data-bhe-panel="tags">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Tags</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body">
@@ -285,6 +333,21 @@ $v = urlencode(BASEHIM_VERSION);
                     </section>
                     <?php endif; ?>
 
+                    <?php // Taxonomies an app registered for this type (1.2.94): checkboxes named term_ids[]. ?>
+                    <?php foreach ($customTaxes as $__tax): ?>
+                    <section class="bhe-panel is-open" data-bhe-panel="tax-<?= htmlspecialchars($__tax['slug']) ?>">
+                        <button type="button" class="bhe-panel__head" aria-expanded="true"><span><?= htmlspecialchars($__tax['label']) ?></span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
+                        <div class="bhe-panel__body">
+                            <div data-bh-categories-mount data-config="<?= htmlspecialchars(json_encode([
+                                'options' => $pubEditor->termOptions($__tax['slug']),
+                                'selected' => $isEdit ? $pubEditor->termIdsIn((int) $post['id'], $__tax['slug']) : [],
+                                'name' => 'term_ids[]', 'label' => $__tax['label'], 'createUrl' => $base . '/admin/taxonomies/' . $__tax['slug'],
+                            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>"></div>
+                        </div>
+                    </section>
+                    <?php endforeach; ?>
+
+                    <?php if ($typeHas('excerpt')): ?>
                     <section class="bhe-panel is-open" data-bhe-panel="excerpt">
                         <button type="button" class="bhe-panel__head" aria-expanded="true"><span>Excerpt</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body">
@@ -294,7 +357,9 @@ $v = urlencode(BASEHIM_VERSION);
                             </div>
                         </div>
                     </section>
+                    <?php endif; ?>
 
+                    <?php if ($typeHas('comments')): ?>
                     <section class="bhe-panel" data-bhe-panel="discussion">
                         <button type="button" class="bhe-panel__head" aria-expanded="false"><span>Discussion</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body" hidden>
@@ -309,7 +374,9 @@ $v = urlencode(BASEHIM_VERSION);
                             </div>
                         </div>
                     </section>
+                    <?php endif; ?>
 
+                    <?php if ($showSeo): ?>
                     <section class="bhe-panel" data-bhe-panel="seo">
                         <button type="button" class="bhe-panel__head" aria-expanded="false"><span>SEO</span><?= icon('chevron-up', 'bhe-icon bhe-panel__chev') ?></button>
                         <div class="bhe-panel__body" hidden>
@@ -339,6 +406,16 @@ $v = urlencode(BASEHIM_VERSION);
                             </div>
                         </div>
                     </section>
+                    <?php endif; ?>
+
+                    <?php // Custom fields (1.2.94), one panel per group, from each field's schema. ?>
+                    <?= \App\Services\Fields\FieldForm::panels($fieldGroups, $fieldValues, $fieldCan, array_reduce($fieldGroups, function ($acc, $g) use ($pubEditor) {
+                        foreach ($g['fields'] as $f) if (($f['type'] ?? '') === 'terms') {
+                            $tx = (string) ($f['taxonomy'] ?? 'category');
+                            $acc[$tx] ??= array_column(array_map(fn($o) => [(string) $o['id'], $o['name']], $pubEditor->termOptions($tx)), 1, 0);
+                        }
+                        return $acc;
+                    }, [])) ?>
 
                     <div id="bhe-app-panels"></div>
                 </div><!-- /#bh-post-settings -->
@@ -355,7 +432,7 @@ $v = urlencode(BASEHIM_VERSION);
 <script>window.BasehimEditorConfig = <?= json_encode($nbeConfig, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="<?= $base ?>/admin/assets/js/block-editor.js?v=<?= $v ?>"></script>
 <script src="<?= $base ?>/admin/assets/js/post-fields.js?v=<?= $v ?>"></script>
-<?php if ($type === 'post'): ?><script src="<?= $base ?>/admin/assets/js/post-tags.js?v=<?= $v ?>"></script><?php endif; ?>
+<?php if ($showTags): ?><script src="<?= $base ?>/admin/assets/js/post-tags.js?v=<?= $v ?>"></script><?php endif; ?>
 <?php if ($pubShowPanel): ?><script src="<?= $base ?>/admin/assets/js/post-publish.js?v=<?= $v ?>"></script><?php endif; ?>
 <?php foreach ($nbeScripts as $nbeJs): ?>
 <script src="<?= htmlspecialchars((string) $nbeJs) ?>"></script>
@@ -581,6 +658,79 @@ $v = urlencode(BASEHIM_VERSION);
         btnSelect.classList.remove('hidden');
         window.BasehimEditorDirty = true;
     });
+})();
+</script>
+
+<script>
+(function () {
+    // Permalink line under the title (1.2.94): shows the address, edits the
+    // slug in place (kept in step with the Slug field in the sidebar), and
+    // Preview / View, which saves a draft first when needed.
+    var line = document.getElementById('bhe-permalink');
+    var slugField = document.getElementById('bhe-slug');
+    if (line && slugField) {
+        var shown = document.getElementById('bhe-permalink-slug');
+        var editBtn = document.getElementById('bhe-permalink-edit');
+        var formEl = document.getElementById('bhe-permalink-form');
+        var input = document.getElementById('bhe-permalink-input');
+        var done = document.getElementById('bhe-permalink-done');
+        var url = line.querySelector('.bhe-permalink__url');
+        function paint() { shown.textContent = slugField.value.trim() || '…'; }
+        function open(on) {
+            formEl.hidden = !on; url.hidden = on; editBtn.hidden = on;
+            editBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+            if (on) { input.value = slugField.value; input.focus(); input.select(); } else { editBtn.focus(); }
+        }
+        editBtn.addEventListener('click', function () { open(true); });
+        done.addEventListener('click', function () { open(false); });
+        input.addEventListener('input', function () { slugField.value = input.value; window.BasehimEditorDirty = true; paint(); });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); open(false); }
+            if (e.key === 'Escape') { e.preventDefault(); open(false); }
+        });
+        slugField.addEventListener('input', paint);
+        document.addEventListener('bh:post-saved', paint);
+        var pv = document.getElementById('bhe-permalink-preview');
+        if (pv) pv.addEventListener('click', function () { if (window.BasehimEditor && BasehimEditor.preview) BasehimEditor.preview(); });
+    }
+
+    // Custom fields (1.2.94): show_if, and the media picker for media fields.
+    var fieldsForm = document.getElementById('bh-post-settings');
+    function fieldValues() {
+        var vals = {};
+        Array.prototype.forEach.call(document.querySelectorAll('[name^="fields["]'), function (el) {
+            var m = /^fields\[([a-z0-9_]+)\](\[\])?$/.exec(el.name); if (!m) return;
+            if (m[2]) { vals[m[1]] = vals[m[1]] || []; if ((el.type !== 'checkbox' || el.checked) && el.value !== '') vals[m[1]].push(el.value); return; }
+            if (el.type === 'checkbox') { if (el.checked) vals[m[1]] = el.value; else if (!(m[1] in vals)) vals[m[1]] = '0'; return; }
+            if (el.type === 'hidden' && (m[1] in vals)) return;
+            vals[m[1]] = el.value;
+        });
+        return vals;
+    }
+    function applyShowIf() {
+        var vals = fieldValues();
+        Array.prototype.forEach.call(document.querySelectorAll('[data-field][data-show-if]'), function (w) {
+            var cond = {}; try { cond = JSON.parse(w.getAttribute('data-show-if')); } catch (e) {}
+            var ok = Object.keys(cond).every(function (k) {
+                var want = [].concat(cond[k]).map(String), have = vals[k];
+                return Array.isArray(have) ? have.some(function (h) { return want.indexOf(String(h)) >= 0; }) : want.indexOf(String(have == null ? '' : have)) >= 0;
+            });
+            w.hidden = !ok;
+        });
+    }
+    if (fieldsForm && document.querySelector('[data-bhe-fields]')) {
+        fieldsForm.addEventListener('input', applyShowIf);
+        fieldsForm.addEventListener('change', applyShowIf);
+        applyShowIf();
+        Array.prototype.forEach.call(document.querySelectorAll('[data-bhe-media-pick]'), function (b) {
+            b.addEventListener('click', function () {
+                var inp = document.getElementById(b.getAttribute('data-bhe-media-pick'));
+                if (!inp || !window.BasehimMedia) return;
+                BasehimMedia.openPicker({ title: 'Choose a file', confirmLabel: 'Use this file', selected: inp.value || null,
+                    onSelect: function (m) { inp.value = m.id; inp.dispatchEvent(new Event('change', { bubbles: true })); window.BasehimEditorDirty = true; } });
+            });
+        });
+    }
 })();
 </script>
 

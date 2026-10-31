@@ -38,6 +38,17 @@ final class Database
         $this->prefix = $raw;
     }
 
+    /**
+     * A short fingerprint of which database this is (host, port, name,
+     * prefix), for cache entries that describe rows in it (1.2.94): two
+     * sites, or a site and its tests, sharing a cache folder never mix them up.
+     */
+    public function identity(): string
+    {
+        $c = $this->config;
+        return substr(md5(($c['host'] ?? '') . '|' . ($c['port'] ?? '') . '|' . ($c['database'] ?? $c['name'] ?? '') . '|' . $this->prefix), 0, 12);
+    }
+
     /** The configured table prefix, or '' when there is none. */
     public function prefix(): string
     {

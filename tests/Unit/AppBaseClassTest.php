@@ -22,7 +22,7 @@ test('app base class: no public or protected method is added without review', fu
         'containerDir', 'db', 'deleteSetting', 'doAction', 'dropAllSettings', 'enqueueScript', 'enqueueStyle',
         'get', 'getSetting', 'icon', 'iconUrl', 'log', 'logger', 'make', 'manifest', 'onActivate',
         'onDeactivate', 'onInstall', 'onUninstall', 'onUpgrade', 'path', 'permissions', 'post',
-        'registerBlockRenderer', 'registerPostType', 'registerWidget', 'request', 'route', 'routeGroup',
+        'registerBlockRenderer', 'registerFields', 'registerPostType', 'registerTaxonomy', 'registerWidget', 'request', 'route', 'routeGroup',
         'router', 'schedule', 'schema', 'session', 'setSetting', 'settingGroup', 'settings', 'slug', 'table',
         'useAjaxClient', 'view', 'widgets', 'boot',
     ];

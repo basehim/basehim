@@ -60,8 +60,53 @@ class PostController extends ApiController
             'data' => array_merge($post, [
                 'terms' => $posts->terms((int)$post['id']),
                 'seo' => $seo->forPost((int)$post['id']),
+                // Custom fields (1.2.94), private ones left out.
+                'fields' => (object) $this->app->make(\App\Services\Fields\FieldService::class)->values($post, true),
             ]),
         ]);
+    }
+
+    /**
+     * GET /api/v1/content/{type} and /api/v1/content/{type}/{slug} (1.2.94):
+     * published items of an app-registered type that is public, with their
+     * public custom fields and URL. Read-only; write through the app.
+     */
+    public function contentIndex(Request $request, string $type): Response
+    {
+        $def = $this->publicType($type);
+        if ($def === null) return Response::json(['error' => 'Not found'], 404);
+        $this->type = $def['slug'];
+        $res = $this->index($request);
+        $body = json_decode((string) $res->getBody(), true);
+        if (!is_array($body) || !isset($body['data'])) return $res;
+        $fields = $this->app->make(\App\Services\Fields\FieldService::class);
+        $fields->prime(array_map(fn($r) => (int) ($r['id'] ?? 0), $body['data']));
+        foreach ($body['data'] as &$row) {
+            $row['url'] = \App\Core\Helpers::postUrl($row);
+            $row['fields'] = (object) $fields->values($row, true);
+        }
+        unset($row);
+        return Response::json($body);
+    }
+
+    public function contentShow(Request $request, string $type, string $slug): Response
+    {
+        $def = $this->publicType($type);
+        if ($def === null) return Response::json(['error' => 'Not found'], 404);
+        $posts = $this->app->make(PostService::class);
+        $post = $posts->findBySlug($slug, $def['slug']);
+        if (!$post || $post['type'] !== $def['slug'] || $post['status'] !== 'published') return Response::json(['error' => 'Not found'], 404);
+        return Response::json(['data' => array_merge($post, [
+            'url'    => \App\Core\Helpers::postUrl($post),
+            'terms'  => $posts->terms((int) $post['id']),
+            'fields' => (object) $this->app->make(\App\Services\Fields\FieldService::class)->values($post, true),
+        ])]);
+    }
+
+    private function publicType(string $type): ?array
+    {
+        $def = $this->app->make(\App\Services\PostTypeRegistry::class)->get($type);
+        return $def !== null && !empty($def['public']) ? $def : null;
     }
 
     /** Statuses a client may set. Anything else is refused rather than stored. */

@@ -28,7 +28,7 @@ so the facade absorbs it, logs the reason against your slug, and returns
 ```php
 $this->api()->posts()            // type = post
 $this->api()->pages()            // type = page
-$this->api()->content('event')   // any custom type
+$this->api()->content('event')   // any custom type; ->fields($id), ->saveFields($id, [...]) (1.2.94, CONTENT-TYPES.md)
 $this->api()->media()
 $this->api()->users()
 $this->api()->comments()

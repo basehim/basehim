@@ -802,3 +802,27 @@ body.bhe-is-resizing, body.bhe-is-resizing * { cursor: ns-resize !important; use
    Quick Edit since 1.2.62). Editor-specific spacing only: */
 .bhe-sidebar .bh-publish__seg { border-color: var(--bhe-line-strong); border-radius: var(--bhe-radius); }
 .bhe-sidebar .bh-publish__mode input:checked + span { background: var(--bhe-ink); }
+
+/* Permalink line under the title, custom fields (1.2.94) */
+.bhe-permalink { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; max-width: var(--bhe-content); margin: -22px auto 24px; font-size: 13px; color: var(--bhe-muted); min-width: 0; }
+.bhe-permalink__url[hidden], .bhe-permalink__btn[hidden] { display: none; }
+.bhe-permalink__label { font-weight: 600; color: var(--bhe-text, #1e1e1e); }
+.bhe-permalink__url { min-width: 0; overflow-wrap: anywhere; }
+.bhe-permalink__slug { color: var(--bhe-text, #1e1e1e); font-weight: 500; }
+.bhe-permalink__btn { background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--bhe-accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.bhe-permalink__btn:focus-visible { outline: 2px solid var(--bhe-accent); outline-offset: 2px; border-radius: 2px; }
+.bhe-permalink__form { display: flex; gap: 8px; align-items: center; flex: 1 1 260px; min-width: 0; order: 1; }
+.bhe-permalink__form[hidden] { display: none; }
+.bhe-permalink #bhe-permalink-preview { order: 2; }
+.bhe-permalink__form .bhe-input { flex: 1 1 auto; min-width: 0; }
+.bhe-sr { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.bhe-req { color: #cc1818; }
+.bhe-media-field { display: flex; gap: 8px; align-items: center; }
+.bhe-media-field .bhe-input { flex: 1 1 auto; min-width: 0; }
+.bhe-field[hidden] { display: none; }
+.bhe-field .bhe-help { margin-top: 2px; }
+.bhe-field.has-error .bhe-input { border-color: #cc1818; }
+@media (max-width: 781px) {
+  .bhe-permalink { font-size: 14px; }
+  .bhe-permalink__btn { padding: 10px 4px; }
+}

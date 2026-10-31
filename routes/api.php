@@ -20,6 +20,9 @@ $router->group(['prefix' => '/api/v1', 'middleware' => ['App\\Http\\Middleware\\
     $router->get('/posts/{slug}', ['App\\Http\\Controllers\\Api\\PostController', 'show']);
     $router->get('/pages', ['App\\Http\\Controllers\\Api\\PageController', 'index']);
     $router->get('/pages/{slug}', ['App\\Http\\Controllers\\Api\\PageController', 'show']);
+    // App-registered content types (1.2.94), read-only.
+    $router->get('/content/{type}', ['App\\Http\\Controllers\\Api\\PostController', 'contentIndex']);
+    $router->get('/content/{type}/{slug}', ['App\\Http\\Controllers\\Api\\PostController', 'contentShow']);
     $router->get('/taxonomies', ['App\\Http\\Controllers\\Api\\TaxonomyController', 'taxonomies']);
     $router->get('/taxonomies/{taxonomy}/terms', ['App\\Http\\Controllers\\Api\\TaxonomyController', 'terms']);
     $router->get('/menus/{slug}', ['App\\Http\\Controllers\\Api\\MenuController', 'show']);

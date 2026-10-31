@@ -87,6 +87,9 @@ $ajax->register('posts.save_draft', [
             'robots'           => ['type' => 'string', 'in' => ['index,follow', 'noindex,follow', 'index,nofollow', 'noindex,nofollow']],
             'canonical_url'    => 'string|max:2000',
         ]],
+        // Custom fields (1.2.94): a JSON object of field => value, checked
+        // against the type's field schema (Fields\FieldService::save()).
+        'fields'            => 'string|max:500000',
     ],
     'description' => 'Save the post being edited as a draft (or pending review), creating it on the first save.',
 ]);

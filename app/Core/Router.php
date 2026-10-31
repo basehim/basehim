@@ -68,6 +68,20 @@ final class Router
     }
 
     /**
+     * A core content route (1.2.94): a GET route for content that is tried
+     * after apps' own routes, just before the /{slug} catch-alls. Used for
+     * app-registered content types (/events/{slug}), so an app that already
+     * served those URLs itself keeps them, and its routes are not refused as
+     * clashing with core.
+     */
+    public function content(string $pattern, callable|array|string $handler): self
+    {
+        $this->add(['GET', 'HEAD'], $pattern, $handler);
+        $this->routes[count($this->routes) - 1]['content'] = true;
+        return $this;
+    }
+
+    /**
      * Register a route that is only tried after every other route has missed.
      *
      * For apps that need to claim URLs the site does not otherwise serve —
@@ -360,11 +374,13 @@ final class Router
 
         $core = [];
         $coreCatch = [];
+        $coreContent = [];
         $apps = [];
         foreach ($this->routes as $r) {
             if (($r['owner'] ?? null) === null) {
                 $first = explode('/', trim($r['pattern'], '/'))[0] ?? '';
-                if ($first !== '' && $first[0] === '{') $coreCatch[] = $r; else $core[] = $r;
+                if (!empty($r['content'])) $coreContent[] = $r;
+                elseif ($first !== '' && $first[0] === '{') $coreCatch[] = $r; else $core[] = $r;
             } else {
                 $apps[] = $r;
             }
@@ -502,7 +518,7 @@ final class Router
         });
 
         return $this->table = [
-            'routes' => array_merge(array_values($replacing), $core, $accepted, $coreCatch),
+            'routes' => array_merge(array_values($replacing), $core, $accepted, $coreContent, $coreCatch),
             'rejected' => $rejected,
         ];
     }

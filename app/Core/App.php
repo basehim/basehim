@@ -827,6 +827,38 @@ abstract class App
                     ->register($slug, $args);
     }
 
+    /**
+     * Register a taxonomy for content types (1.2.94), for example
+     * registerTaxonomy('event-type', ['label' => 'Event types', 'post_types' => ['event'],
+     * 'hierarchical' => true]). Terms are managed under the type's menu and
+     * public term pages live at /{rewrite}/{term} (default: the key).
+     * See docs/CONTENT-TYPES.md.
+     */
+    protected function registerTaxonomy(string $slug, array $args = []): bool
+    {
+        $args['app'] = $this->slug;
+        return $this->app->make(\App\Services\TaxonomyRegistry::class)->register($slug, $args);
+    }
+
+    /**
+     * Register custom fields for a content type (1.2.94): post, page, or a
+     * type from registerPostType(). Fields use the settings schema
+     * (docs/FRONTEND-WIDGETS.md#settings-schema); they appear as a panel in
+     * the editor, are checked when the post is saved, and are read with
+     * bh_field() in themes and api()->posts()->fields() in apps.
+     *
+     *     $this->registerFields('event', [
+     *         ['key' => 'starts_at', 'label' => 'Starts', 'type' => 'date', 'required' => true],
+     *         ['key' => 'venue', 'label' => 'Venue', 'type' => 'text'],
+     *     ], ['title' => 'Event details']);
+     *
+     * @return bool false when the group was refused (the reason is in the app's log)
+     */
+    protected function registerFields(string $type, array $fields, array $group = []): bool
+    {
+        return $this->app->make(\App\Services\Fields\FieldRegistry::class)->register($this->slug, $type, $fields, $group);
+    }
+
     // ------------------------------------------------------------------
     // Core API — everything an app needs from core, in one place.
     // ------------------------------------------------------------------

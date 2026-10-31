@@ -263,10 +263,12 @@ class PostController extends Controller
             $seo->savePostMeta($id, $seoFields);
         }
         $this->settleNewTags($request, $id, (string) ($data['status'] ?? 'draft'));
+        $fieldNote = $this->saveFields($request, $id);
 
         $report = $posts->htmlReport();
         $saved = $posts->find($id) ?? [];
         $this->flashSaved(ucfirst($this->type) . ' created.', $timing, $saved, $report);
+        if ($fieldNote) $this->flash($fieldNote[0], $fieldNote[1]);
         return $this->redirect($this->basePath() . "/{$id}/edit");
     }
 
@@ -311,10 +313,12 @@ class PostController extends Controller
             $saved = $posts->find((int) $id);
             $this->settleNewTags($request, (int) $id, (string) ($saved['status'] ?? $existing['status']));
         }
+        $fieldNote = $this->saveFields($request, (int) $id);
 
         \App\Services\ActivityLogService::record($this->userId(), $this->type . '.updated', $this->type, (int)$id,
             'Updated "' . mb_substr((string) ($data['title'] ?? $existing['title'] ?? ''), 0, 80) . '"');
         $this->flashSaved(ucfirst($this->type) . ' updated.', $timing, $posts->find((int) $id) ?? $existing, $report);
+        if ($fieldNote) $this->flash($fieldNote[0], $fieldNote[1]);
         return $this->redirect($this->basePath() . "/{$id}/edit");
     }
 
@@ -539,6 +543,35 @@ class PostController extends Controller
         if ($r['pending'] !== [] && in_array($status, \App\Services\PostEditorService::PUBLISHING, true)) {
             $this->flash('info', count($r['pending']) . ' new tag(s) will be created when someone who can publish saves this post.');
         }
+    }
+
+    /**
+     * Custom fields from the editor's field panels (1.2.94). Only when the
+     * panels were on the page (_fields), so a form without them never clears
+     * values. Invalid values are not saved; the post itself is, and the
+     * flash says which fields need attention.
+     */
+    /** @return null|array{0:string,1:string} a flash to show instead of "saved" */
+    private function saveFields(Request $request, int $id): ?array
+    {
+        if ($request->input('_fields') === null) return null;
+        $fields = $this->app->make(\App\Services\Fields\FieldService::class);
+        $post = $this->app->make(PostService::class)->find($id);
+        if (!$post) return null;
+        $input = $request->input('fields', []);
+        $user = $this->user();
+        $errors = $fields->save($post, is_array($input) ? $input : [], fn(string $cap) => $user !== null && \App\Http\Middleware\CheckCapability::userCan($user, $cap));
+        if ($errors) {
+            $labels = [];
+            foreach ($fields->registry()->fields((string) $post['type']) as $f) {
+                if (isset($errors[$f['key']])) $labels[] = $f['label'] . ': ' . $errors[$f['key']];
+            }
+            return ['error', 'Saved, but these fields kept their previous values: ' . implode(' · ', $labels)];
+        }
+        if (($post['status'] ?? '') === 'published' && ($missing = $fields->missingRequired($post))) {
+            return ['warning', 'Published without: ' . implode(', ', $missing) . '.'];
+        }
+        return null;
     }
 
     /** Only the SEO fields the form sent: the rest keep their stored values. */

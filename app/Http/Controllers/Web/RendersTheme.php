@@ -10,8 +10,23 @@ use App\Services\MenuService;
 
 trait RendersTheme
 {
-    protected function renderTheme(string $template, array $data, ?string $url = null): Response
+    /**
+     * @param string|list<string> $template a template name, or candidates from
+     *        the most specific to the general one (1.2.94): ['single-event',
+     *        'single']. The first the theme has is rendered; the last decides
+     *        what kind of page it is for SEO.
+     */
+    protected function renderTheme(string|array $template, array $data, ?string $url = null): Response
     {
+        $candidates = is_array($template) ? array_values($template) : [$template];
+        $template = (string) end($candidates);
+        $file = $template;
+        try {
+            $themesForLookup = $this->app->make(ThemeService::class);
+            foreach ($candidates as $c) {
+                if ($themesForLookup->templatePath((string) $c) !== null) { $file = (string) $c; break; }
+            }
+        } catch (\Throwable) {}
         /** @var ThemeService $themes */
         $themes = $this->app->make(ThemeService::class);
         /** @var SettingService $settings */
@@ -47,6 +62,15 @@ trait RendersTheme
         $data['primary_menu'] = $menus->itemsByLocation('primary') ?? [];
         $data['footer_menu'] = $menus->itemsByLocation('footer') ?? [];
         $data['current_url'] = $url ?? ($_SERVER['REQUEST_URI'] ?? '/');
+        // The post being shown, for bh_field() / bh_fields() without an
+        // argument, and its custom fields as $fields (1.2.94).
+        if (is_array($data['post'] ?? null)) {
+            $GLOBALS['__bh_current_post'] = $data['post'];
+            if (!isset($data['fields'])) {
+                try { $data['fields'] = $this->app->make(\App\Services\Fields\FieldService::class)->values($data['post'], true); }
+                catch (\Throwable) { $data['fields'] = []; }
+            }
+        }
         if (empty($data['seo'])) {
             $data['seo'] = [
                 'title' => $data['site_title'],
@@ -89,9 +113,9 @@ trait RendersTheme
         } catch (\Throwable) { $seoSvc = null; }
 
         try {
-            $html = $themes->render($template, $data);
+            $html = $themes->render($file, $data);
         } catch (\Throwable $e) {
-            return $this->themeFailure($template, $e, $data);
+            return $this->themeFailure($file, $e, $data);
         }
 
         if ($seoSvc) {
@@ -121,7 +145,8 @@ trait RendersTheme
             if (!$user) return false;
             $uid = (int) $user['id'];
 
-            $cap = ($post['type'] ?? 'post') === 'page' ? 'edit_pages' : 'edit_posts';
+            $cap = ($post['type'] ?? 'post') === 'page' ? 'edit_pages'
+                : $this->app->make(\App\Services\PostTypeRegistry::class)->capability((string) ($post['type'] ?? 'post'), 'edit');
             if (!\App\Http\Middleware\CheckCapability::userCan($user, $cap)) return false;
 
             // Everyone who can edit may preview their OWN unpublished work.

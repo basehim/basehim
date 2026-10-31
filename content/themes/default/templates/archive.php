@@ -9,6 +9,8 @@
                 <?= icon('tag', 'w-4 h-4 mr-1') ?> Tag
             <?php elseif ($archive_type === 'author'): ?>
                 <?= icon('user', 'w-4 h-4 mr-1') ?> Author
+            <?php elseif (!empty($taxonomy)): ?>
+                <?= icon('tag', 'w-4 h-4 mr-1') ?> <?= htmlspecialchars($taxonomy['singular']) ?>
             <?php endif; ?>
         </p>
         <?php if ($archive_type === 'author' && !empty($author)): ?>
@@ -25,6 +27,8 @@
                 <?= htmlspecialchars($author['display_name'] ?? $author['username']) ?>
             <?php elseif (!empty($term)): ?>
                 <?= htmlspecialchars($term['name']) ?>
+            <?php elseif (!empty($post_type)): ?>
+                <?= htmlspecialchars($post_type['label']) ?>
             <?php else: ?>
                 Archive
             <?php endif; ?>
@@ -38,6 +42,8 @@
             <?php endif; ?>
         <?php elseif (!empty($term['description'])): ?>
             <p class="text-slate-600 max-w-2xl mx-auto"><?= htmlspecialchars($term['description']) ?></p>
+        <?php elseif (empty($term) && !empty($post_type['description'])): ?>
+            <p class="text-slate-600 max-w-2xl mx-auto"><?= htmlspecialchars($post_type['description']) ?></p>
         <?php endif; ?>
     </div>
 </div>

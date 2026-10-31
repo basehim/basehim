@@ -175,6 +175,14 @@ $this->registerPostType('event', [
 Gives you a sidebar entry and the full list / create / edit / trash screens at
 `/admin/content/event`, plus `$this->api()->content('event')` for CRUD.
 
+Since 1.2.94 a public type also gets public pages (`/events/{slug}` and the
+archive `/events`; set `rewrite` for another prefix, or `false` for none), the
+sitemap, site search and `GET /api/v1/content/event`; the editor follows
+`supports` and `taxonomies`. Add taxonomies with
+`$this->registerTaxonomy('event-type', [...])` and custom fields with
+`$this->registerFields('event', [...])`. Everything about them:
+[CONTENT-TYPES.md](CONTENT-TYPES.md).
+
 Registration is per-request and nothing is persisted — deactivating your app
 removes the screens, the content stays in the database, and reactivating brings
 them back.
@@ -267,6 +275,7 @@ $this->addFilter('html.iframe_hosts', fn(array $h) => [...$h, 'player.example.or
 **AJAX** `ajax` `useAjaxClient` — actions browsers call through `POST /ajax` (APP-AJAX.md)
 **Admin** `addAdminMenu` `addAdminStyle` `addAdminScript` `adminView`
 **Editor** `addEditorScript` `addEditorStyle` `addEditorConfig` `registerBlockRenderer`
+**Content** `registerPostType` `registerTaxonomy` `registerFields` — [CONTENT-TYPES.md](CONTENT-TYPES.md)
 **Widgets** `registerWidget` — dashboard cards with `'surfaces' => ['dashboard']`: [DASHBOARD-WIDGETS.md](DASHBOARD-WIDGETS.md); widgets for the public site's areas with `'surfaces' => ['frontend']`: [FRONTEND-WIDGETS.md](FRONTEND-WIDGETS.md)
 **Views/assets** `view` `asset`
 **Files** `appStorageDir` — a private folder under `storage/apps/{slug}` for uploads that aren't media (1.2.87, [MEDIA-EXTENSIONS.md](MEDIA-EXTENSIONS.md))

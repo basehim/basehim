@@ -129,6 +129,13 @@ passes the template's own data automatically, so only an override needs listing.
 `$this` inside a template is the ThemeService, not a view engine. There is no
 `$this->include()`; use `$partial()`.
 
+Apps' content types (1.2.94) look for the most specific template first:
+`single-{type}.php` then `single.php` for an item, `archive-{type}.php` then
+`archive.php` for its archive, `taxonomy-{key}.php` then `archive.php` for a
+term of an app's taxonomy. Item templates also get `$fields` and `$post_type`.
+Read custom fields with `bh_field('venue')`, list content with
+`bh_query(['type' => 'event'])`: [CONTENT-TYPES.md](CONTENT-TYPES.md#in-themes).
+
 A partial cannot include another partial, because `$partial` is only defined in
 the top-level template. Keep partials flat.
 

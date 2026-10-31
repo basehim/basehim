@@ -42,6 +42,14 @@ class CommentController extends Controller
         if (!$post || $post['comment_status'] !== 'open' || $post['status'] !== 'published') {
             return $this->respond($isAjax, 'error', 'Comments are closed on this post.', '/', 403);
         }
+        // An app's content type takes comments only when it says so in
+        // `supports` (1.2.94); its rows default to comment_status 'open',
+        // so without this a crafted form could comment on any of them.
+        $types = $this->app->make(\App\Services\PostTypeRegistry::class);
+        if (!in_array($post['type'], ['post', 'page'], true)
+            && (!$types->has((string) $post['type']) || !$types->supports((string) $post['type'], 'comments'))) {
+            return $this->respond($isAjax, 'error', 'Comments are closed on this post.', '/', 403);
+        }
 
         $content = trim((string)$request->input('content', ''));
 

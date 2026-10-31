@@ -41,7 +41,8 @@ $csrf = $session->csrfToken();
 // ?view=classic keep the original server-rendered table as a fallback.
 $__useDataTable = empty($trashed) && (($_GET['view'] ?? '') !== 'classic');
 if ($__useDataTable):
-    $__tableKey = ['page' => 'content.pages', 'template' => 'content.templates'][$type] ?? 'content.posts';
+    // App-registered types have their own list (1.2.94); until then they all showed posts.
+    $__tableKey = ['post' => 'content.posts', 'page' => 'content.pages', 'template' => 'content.templates'][$type] ?? \App\Services\Table\TypeTableProvider::keyFor($type);
     $this->include('partials.datatable', [
         'tableKey'     => $__tableKey,
         'bulkEndpoint' => $base . '/admin/' . $type . 's/bulk',

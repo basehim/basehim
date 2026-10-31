@@ -274,6 +274,20 @@ final class Application
             );
         });
 
+        // Taxonomies and custom fields for content types (1.2.94).
+        $this->singleton(\App\Services\TaxonomyRegistry::class, fn($app) => new \App\Services\TaxonomyRegistry(
+            $app->make(Config::class),
+            $app->make(\App\Services\PostTypeRegistry::class),
+            $app->make(Database::class),
+            $app->make(Cache::class),
+            $app->make(HookRegistry::class),
+        ));
+        $this->singleton(\App\Services\Fields\FieldRegistry::class, fn() => new \App\Services\Fields\FieldRegistry());
+        $this->singleton(\App\Services\Fields\FieldService::class, fn($app) => new \App\Services\Fields\FieldService(
+            $app->make(Database::class),
+            $app->make(\App\Services\Fields\FieldRegistry::class),
+        ));
+
         // App permission broker, per-app logger, and static scanner.
         $this->singleton(\App\Services\PermissionBroker::class, function ($app) {
             return new \App\Services\PermissionBroker($app->make(Database::class));

@@ -96,6 +96,8 @@ Container blocks set `container: true` and render their children with `ctx.inner
 
 The 1.x signatures (`edit(el, block, api)`, `inspector(el, block, api)`, Font Awesome icon names) still work.
 
+Since 1.2.94: `BasehimEditor.saveDraft()` saves a draft over AJAX and resolves with the saved post (or null), and `BasehimEditor.preview()` opens the preview, saving first when needed. Custom fields have their own panels: declare them with `registerFields()` ([docs/CONTENT-TYPES.md](docs/CONTENT-TYPES.md)) instead of drawing a panel with `addSidebarPanel()` and saving it yourself.
+
 Other entry points: `addToolbarButton`, `addBlockAction`, `addSidebarPanel`, `on('init' | 'change' | 'select' | 'save' | 'block:add' | 'block:remove')`, `addFilter('save.data' | 'load.data')`, `getBlocks`, `setBlocks`, `insertBlock(type, data, index, parentId)`, `insertBlocks`, `updateBlock`, `removeBlock`, `moveBlock`, `duplicateBlock`, `getSelected`, `select`, `deselect`, `serialize`, `htmlToBlocks`, `undo`, `redo`.
 
 ### PHP

@@ -51,7 +51,7 @@ class SitemapController extends Controller
             if ($this->authorsOn()) $files[] = $o . '/sitemap-authors.xml';
             $files = array_merge($files, $appSitemaps);
             $lastmod = $this->db()->selectOne(
-                "SELECT MAX(updated_at) AS m FROM {posts} WHERE status = 'published' AND deleted_at IS NULL"
+                "SELECT MAX(updated_at) AS m FROM {posts} WHERE status = 'published' AND deleted_at IS NULL AND " . $this->typeSql()
             )['m'] ?? null;
 
             $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
@@ -113,6 +113,24 @@ class SitemapController extends Controller
     // ------------------------------------------------------------------
 
     /**
+     * Only content with a public address (1.2.94): posts, pages and app
+     * types that are public and have a URL prefix. Before 1.2.94 every
+     * published row was listed, templates and non-public types included,
+     * each at an address that answered 404.
+     */
+    private function typeSql(): string
+    {
+        $types = ['post', 'page'];
+        try {
+            $reg = $this->app->make(\App\Services\PostTypeRegistry::class);
+            foreach ($reg->custom() as $slug => $_) if ($reg->hasUrls($slug)) $types[] = $slug;
+        } catch (\Throwable) {}
+        // Type keys are [a-z0-9_-] (PostTypeRegistry), so they can be quoted inline.
+        $types = array_filter($types, fn($t) => (bool) preg_match('/^[a-z0-9_-]+$/', $t));
+        return "type IN ('" . implode("','", $types) . "')";
+    }
+
+    /**
      * The id each content file starts after: [0, id₁, id₂, …]. File n holds
      * the next PAGE_SIZE published items after starts[n-1]. One indexed step
      * per file, cached with the index.
@@ -121,7 +139,7 @@ class SitemapController extends Controller
      */
     private function contentStarts(): array
     {
-        $key = $this->cacheKey('starts');
+        $key = $this->cacheKey('starts-' . md5($this->typeSql()));
         $hit = $this->cache()->get($key);
         if (is_array($hit)) return $hit;
         $starts = [0];
@@ -129,7 +147,7 @@ class SitemapController extends Controller
         for ($i = 0; $i < 5000; $i++) {
             $row = $this->db()->selectOne(
                 "SELECT id FROM {posts}
-                  WHERE status = 'published' AND deleted_at IS NULL AND id > :a
+                  WHERE status = 'published' AND deleted_at IS NULL AND id > :a AND " . $this->typeSql() . "
                   ORDER BY id LIMIT 1 OFFSET " . (self::PAGE_SIZE - 1),
                 ['a' => $after]
             );
@@ -137,7 +155,7 @@ class SitemapController extends Controller
             $after = (int) $row['id'];
             // Another file only if something follows this one's last item.
             $more = $this->db()->selectOne(
-                "SELECT id FROM {posts} WHERE status = 'published' AND deleted_at IS NULL AND id > :a LIMIT 1",
+                "SELECT id FROM {posts} WHERE status = 'published' AND deleted_at IS NULL AND id > :a AND " . $this->typeSql() . " LIMIT 1",
                 ['a' => $after]
             );
             if (!$more) break;
@@ -152,7 +170,7 @@ class SitemapController extends Controller
         $after = (int) $starts[$n - 1];
         $upTo = $starts[$n] ?? null;
         $sql = "SELECT id, slug, type, updated_at FROM {posts}
-                 WHERE status = 'published' AND deleted_at IS NULL AND id > :a";
+                 WHERE status = 'published' AND deleted_at IS NULL AND id > :a AND " . $this->typeSql();
         $params = ['a' => $after];
         if ($upTo !== null) { $sql .= ' AND id <= :b'; $params['b'] = (int) $upTo; }
         $rows = $this->db()->select($sql . ' ORDER BY id LIMIT ' . self::PAGE_SIZE, $params);

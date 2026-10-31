@@ -182,6 +182,148 @@ if (!function_exists('has_widget_area')) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Content types, custom fields and queries for themes (1.2.94).
+   See docs/CONTENT-TYPES.md.
+
+     <?= $e(bh_field('venue', $post)) ?>                 one field of a post
+     <?php foreach (bh_fields($post) as $k => $v) … ?>   every field (private ones left out)
+     <?php foreach (bh_query(['type' => 'event', 'limit' => 3]) as $ev): ?>
+         <a href="<?= $e(bh_url($ev)) ?>"><?= $e($ev['title']) ?></a> <?= $e(bh_field('starts_at', $ev)) ?>
+     <?php endforeach; ?>
+     <?php foreach (bh_terms($post, 'event-type') as $t): ?> <a href="<?= $e($t['url']) ?>">…
+   ═══════════════════════════════════════════════════════════════════════════ */
+if (!function_exists('bh_field')) {
+    /**
+     * One custom field of a post (the current post when $post is null), as
+     * its schema reads it: of its declared type, its default when unset.
+     */
+    function bh_field(string $key, ?array $post = null, mixed $default = null): mixed {
+        $post ??= $GLOBALS['__bh_current_post'] ?? null;
+        if (!is_array($post)) return $default;
+        try {
+            $f = \App\Core\Application::getInstance()->make(\App\Services\Fields\FieldService::class);
+            foreach ($f->registry()->fields((string) ($post['type'] ?? '')) as $def) {
+                if ($def['key'] === $key) return !empty($def['private']) ? $default : $f->get($post, $key, $default);
+            }
+        } catch (\Throwable) {}
+        return $default;
+    }
+}
+if (!function_exists('bh_fields')) {
+    /** Every custom field of a post, private fields left out. */
+    function bh_fields(?array $post = null): array {
+        $post ??= $GLOBALS['__bh_current_post'] ?? null;
+        if (!is_array($post)) return [];
+        try {
+            return \App\Core\Application::getInstance()->make(\App\Services\Fields\FieldService::class)->values($post, true);
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+}
+if (!function_exists('bh_field_rows')) {
+    /**
+     * A post's custom fields ready to print as a list: label and value as
+     * text (option labels, Yes/No, dates in the site's format, lists joined).
+     * Private, empty and HTML fields are left out.
+     * @return list<array{key:string,label:string,value:string,type:string}>
+     */
+    function bh_field_rows(?array $post = null): array {
+        $post ??= $GLOBALS['__bh_current_post'] ?? null;
+        if (!is_array($post)) return [];
+        try {
+            $svc = \App\Core\Application::getInstance()->make(\App\Services\Fields\FieldService::class);
+            $values = $svc->values($post, true);
+            $out = [];
+            foreach ($svc->registry()->fields((string) ($post['type'] ?? '')) as $f) {
+                if (!empty($f['private']) || $f['type'] === 'html' || !array_key_exists($f['key'], $values)) continue;
+                $v = $values[$f['key']];
+                $opts = in_array($f['type'], ['select', 'radio', 'multiselect'], true) ? \App\Core\Widgets\Schema::options($f) : [];
+                $text = match (true) {
+                    $f['type'] === 'checkbox' => $v === '1' ? 'Yes' : '',
+                    $f['type'] === 'date' && $v !== '' => bh_date($v),
+                    is_array($v) => implode(', ', array_map(fn($x) => $opts[(string) $x] ?? (string) $x, $v)),
+                    $opts !== [] => $opts[(string) $v] ?? (string) $v,
+                    in_array($f['type'], ['media', 'terms', 'posts'], true) && (int) $v === 0 => '',
+                    default => (string) $v,
+                };
+                if (trim($text) === '') continue;
+                $out[] = ['key' => $f['key'], 'label' => (string) $f['label'], 'value' => $text, 'type' => $f['type']];
+            }
+            return $out;
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+}
+if (!function_exists('bh_url')) {
+    /** The public address of a post, page or content-type item ('' when it has none). */
+    function bh_url(array $post): string {
+        try {
+            return \App\Core\Helpers::postUrl($post, defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '');
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+}
+if (!function_exists('bh_query')) {
+    /**
+     * Published content for a theme to list:
+     *   type     'post' (default), 'page' or a registered type
+     *   limit    1–50 (default 10)
+     *   page     page number (default 1)
+     *   order    'newest' (default), 'oldest', 'title_az', 'title_za', 'views_desc'
+     *   term     a term id, or ['taxonomy' => 'event-type', 'slug' => 'workshops']
+     *   author   a user id
+     *   search   words to match
+     * Rows come with their custom fields loaded (read them with bh_field()).
+     */
+    function bh_query(array $args = []): array {
+        try {
+            $app = \App\Core\Application::getInstance();
+            $type = strtolower((string) ($args['type'] ?? 'post'));
+            if (!in_array($type, $app->make(\App\Services\PostTypeRegistry::class)->slugs(), true)) return [];
+            $filters = ['type' => $type, 'status' => 'published'];
+            $order = (string) ($args['order'] ?? 'newest');
+            if (in_array($order, ['newest', 'oldest', 'title_az', 'title_za', 'views_desc', 'views_asc'], true)) $filters['sort'] = $order;
+            if ((int) ($args['author'] ?? 0) > 0) $filters['author_id'] = (int) $args['author'];
+            if (is_string($args['search'] ?? null) && trim($args['search']) !== '') $filters['search'] = trim($args['search']);
+            $term = $args['term'] ?? null;
+            if (is_array($term)) {
+                $row = $app->make(\App\Services\TaxonomyService::class)->findTermBySlug((string) ($term['taxonomy'] ?? ''), (string) ($term['slug'] ?? ''));
+                if (!$row) return [];
+                $term = (int) $row['id'];
+            }
+            if ((int) $term > 0) $filters['category'] = (int) $term;   // any term id, whatever its taxonomy
+            $limit = max(1, min(50, (int) ($args['limit'] ?? 10)));
+            $page = max(1, (int) ($args['page'] ?? 1));
+            $rows = $app->make(\App\Services\PostService::class)->paginate($filters, $page, $limit)['data'] ?? [];
+            $app->make(\App\Services\Fields\FieldService::class)->prime(array_map(fn($r) => (int) $r['id'], $rows));
+            return $rows;
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+}
+if (!function_exists('bh_terms')) {
+    /** A post's terms in one taxonomy, each with name, slug and url. */
+    function bh_terms(array $post, string $taxonomy): array {
+        try {
+            $app = \App\Core\Application::getInstance();
+            $rows = $app->make(\App\Core\Database::class)->select(
+                "SELECT t.id, t.name, t.slug FROM {post_term} pt JOIN {terms} t ON t.id = pt.term_id JOIN {taxonomies} x ON x.id = t.taxonomy_id
+                  WHERE pt.post_id = :p AND x.slug = :tax ORDER BY pt.term_order, t.name", ['p' => (int) ($post['id'] ?? 0), 'tax' => $taxonomy]);
+            $reg = $app->make(\App\Services\TaxonomyRegistry::class);
+            $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
+            return array_map(fn($r) => ['id' => (int) $r['id'], 'name' => (string) $r['name'], 'slug' => (string) $r['slug'],
+                'url' => $reg->termUrl($taxonomy, (string) $r['slug'], $base)], $rows);
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    The front-end contract between core, themes and apps.
 
    Before these existed, core fired thirty-four hooks and not one of them was on

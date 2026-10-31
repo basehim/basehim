@@ -24,7 +24,22 @@ class TaxonomyController extends Controller
         return $this->renderArchive('tag', $slug, $request);
     }
 
-    private function renderArchive(string $taxonomy, string $slug, Request $request): Response
+    /**
+     * A term of an app-registered taxonomy (1.2.94): /{prefix}/{term}. The
+     * taxonomy comes from the first path segment. Theme: taxonomy-{key}.php,
+     * else archive.php.
+     */
+    public function custom(Request $request, string $slug): Response
+    {
+        $path = trim($request->path(), '/');
+        $base = defined('BASEHIM_BASE') ? trim((string) BASEHIM_BASE, '/') : '';
+        if ($base !== '' && str_starts_with($path, $base . '/')) $path = substr($path, strlen($base) + 1);
+        $tax = $this->app->make(\App\Services\TaxonomyRegistry::class)->byPrefix(rawurldecode(explode('/', $path)[0] ?? ''));
+        if ($tax === null || empty($tax['public'])) return $this->notFound('Page not found');
+        return $this->renderArchive($tax['slug'], $slug, $request, $tax);
+    }
+
+    private function renderArchive(string $taxonomy, string $slug, Request $request, ?array $def = null): Response
     {
         /** @var TaxonomyService $tax */
         $tax = $this->app->make(TaxonomyService::class);
@@ -39,6 +54,19 @@ class TaxonomyController extends Controller
         $perPage = (int)$settings->get('reading', 'posts_per_page', 10);
         $page = max(1, (int)$request->query('page', 1));
         $result = $posts->byTermId((int)$term['id'], $page, $perPage);
+
+        if ($def !== null) {
+            $label = $def['singular'] . ': ' . $term['name'];
+            return $this->renderTheme(['taxonomy-' . $taxonomy, 'archive'], [
+                'archive_type' => 'taxonomy',
+                'taxonomy' => $def,
+                'term' => $term,
+                'posts' => $result['data'],
+                'meta' => $result['meta'],
+                'title' => $label,
+                'seo' => ['title' => $label, 'description' => $term['description'] ?? ''],
+            ]);
+        }
 
         return $this->renderTheme('archive', [
             'archive_type' => $taxonomy,

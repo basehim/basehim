@@ -95,7 +95,8 @@ final class CoreSources
         } catch (\Throwable) {
             return false;
         }
-        return $def !== null && !empty($def['public']) && ($def['searchable'] ?? true) !== false;
+        // Only types whose items have a page to link to (1.2.94).
+        return $def !== null && !empty($def['public']) && ($def['rewrite'] ?? '') !== '' && ($def['searchable'] ?? true) !== false;
     }
 
     /** @param list<array> $rows posts rows */

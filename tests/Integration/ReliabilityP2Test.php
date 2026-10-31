@@ -231,7 +231,11 @@ test('sitemap: an index of paged files with every published item, on APP_URL, ca
     assert_contains('/sitemap-content-1.xml', $index->body);
     assert_contains('/sitemap-terms.xml', $index->body);
 
-    $published = (int) bh_db()->selectOne("SELECT COUNT(*) c FROM {posts} WHERE status = 'published' AND deleted_at IS NULL")['c'];
+    // Since 1.2.94 only content with a public address is listed: posts,
+    // pages and public app types (the content-types fixture's events, when
+    // that test has installed it). Templates and other types are left out.
+    $types = "'post','page'" . (bh_app_status('ct-fixture') === 'active' ? ",'event'" : '');
+    $published = (int) bh_db()->selectOne("SELECT COUNT(*) c FROM {posts} WHERE status = 'published' AND deleted_at IS NULL AND type IN ({$types})")['c'];
     $urls = 0;
     preg_match_all('#<loc>[^<]*/sitemap-content-(\d+)\.xml</loc>#', $index->body, $m);
     foreach ($m[1] as $n) {

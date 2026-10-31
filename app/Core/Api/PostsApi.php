@@ -40,8 +40,8 @@ class PostsApi extends Resource
 
         $action = match ($operation) {
             'find', 'findBySlug', 'paginate', 'search',
-            'terms', 'byTerm', 'seo', 'counts'      => 'read',
-            'create', 'update', 'restore'           => 'write',
+            'terms', 'byTerm', 'seo', 'counts', 'fields' => 'read',
+            'create', 'update', 'restore', 'saveFields'  => 'write',
             'delete', 'forceDelete'                 => 'delete',
             default                                 => null,
         };
@@ -128,6 +128,35 @@ class PostsApi extends Resource
             $this->log("Created {$this->type} #{$id}", ['title' => $data['title'] ?? '']);
         }
         return $id;
+    }
+
+    /**
+     * A record's custom fields (1.2.94), as the type's field schema reads
+     * them: every registered field, of its type, its default when unset.
+     * Private fields are included: this is the app's own access.
+     */
+    public function fields(int $id): array
+    {
+        $row = $this->find($id);
+        if ($row === null) return [];
+        return (array) $this->attempt(fn() => $this->make(\App\Services\Fields\FieldService::class)->values($row), [], 'fields');
+    }
+
+    /**
+     * Save some custom fields of a record (1.2.94). Fields not given keep
+     * their values. Returns the errors by field key ([] when all were saved);
+     * an invalid value is not saved.
+     *
+     *     $errors = $this->api()->content('event')->saveFields($id, ['venue' => 'Hall 2']);
+     */
+    public function saveFields(int $id, array $values): array
+    {
+        $row = $this->find($id);
+        if ($row === null) return ['_' => 'Not found.'];
+        $errors = $this->attempt(fn() => $this->make(\App\Services\Fields\FieldService::class)
+            ->save($row, $values, fn() => true, false), ['_' => 'Not allowed.'], 'saveFields');
+        if (is_array($errors) && $errors === []) $this->log("Saved fields of {$this->type} #{$id}", ['fields' => array_keys($values)]);
+        return is_array($errors) ? $errors : [];
     }
 
     /** Update a record. Returns true on success. */

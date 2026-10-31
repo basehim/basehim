@@ -102,6 +102,16 @@ final class PostActions
             $this->seo->savePostMeta($id, $this->seoFields((array) $ctx->input('seo')));
         }
 
+        $fieldErrors = [];
+        if ($ctx->has('fields')) {
+            $raw = json_decode((string) $ctx->input('fields'), true);
+            $saved = $this->posts->find($id);
+            if (is_array($raw) && $saved) {
+                $fieldErrors = \App\Core\Application::getInstance()->make(\App\Services\Fields\FieldService::class)
+                    ->save($saved, $raw, fn(string $cap) => \App\Http\Middleware\CheckCapability::userCan($user, $cap));
+            }
+        }
+
         $pending = [];
         if ($ctx->has('new_tags') && $this->editor->hasTags($type)) {
             $pending = $this->editor->settleNewTags($id, (array) $ctx->input('new_tags'), $data['status'], $user, $type)['pending'];
@@ -132,6 +142,8 @@ final class PostActions
             'pending_tags' => $pending,
             // Set when the content was filtered (no unfiltered_html, 1.2.52).
             'html_notice'  => $htmlReport['message'] ?? null,
+            // Custom fields that were not saved, with why (1.2.94).
+            'field_errors' => (object) $fieldErrors,
         ];
     }
 

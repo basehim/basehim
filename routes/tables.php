@@ -48,7 +48,9 @@ $titleCell = static function (array $row): string {
     $type = (string) ($row['type'] ?? 'post');
     $id   = (int) ($row['id'] ?? 0);
     $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
-    $url  = $base . '/admin/' . rawurlencode($type) . 's/' . $id . '/edit';
+    // App-registered types are edited under /admin/content/{type} (1.2.94).
+    $area = in_array($type, ['post', 'page', 'template'], true) ? '/admin/' . rawurlencode($type) . 's' : '/admin/content/' . rawurlencode($type);
+    $url  = $base . $area . '/' . $id . '/edit';
     $title = htmlspecialchars((string) ($row['title'] ?? '(no title)'), ENT_QUOTES);
     $slug  = htmlspecialchars((string) ($row['slug'] ?? ''), ENT_QUOTES);
     return '<a class="bh-dt-title" href="' . htmlspecialchars($url, ENT_QUOTES) . '">' . $title . '</a>'
@@ -179,8 +181,10 @@ $postLinks = static function (array $rows) use ($db): array {
     foreach ($rows as $row) {
         $id = (int) ($row['id'] ?? 0);
         if ($id <= 0 || (string) ($row['slug'] ?? '') === '' || ($row['type'] ?? '') === 'template') continue;
+        $url = \App\Core\Helpers::postUrl($row + ['primary_category_slug' => $cats[$id] ?? ''], $base, $cats[$id] ?? '');
+        if ($url === '') continue;   // a type with no public pages
         $out[$id] = [
-            'url'  => \App\Core\Helpers::postUrl($row + ['primary_category_slug' => $cats[$id] ?? ''], $base, $cats[$id] ?? ''),
+            'url'  => $url,
             'live' => ($row['status'] ?? '') === 'published',
         ];
     }
@@ -238,6 +242,38 @@ $tables->register('content.pages', [
     'bulk_actions' => ['publish', 'draft', 'delete'],
     'search_placeholder' => 'Search pages…',
 ]);
+
+// App-registered content types (1.2.94): one list each, content.type.{slug},
+// with the columns the type uses. Before 1.2.94 they all used content.posts
+// and listed posts.
+foreach ($app->make(\App\Services\PostTypeRegistry::class)->custom() as $__t) {
+    $__tax = $app->make(\App\Services\TaxonomyRegistry::class);
+    $__cols = array_values(array_filter($postColumns, static function (array $c) use ($__t, $__tax): bool {
+        return match ($c['id']) {
+            'thumb'    => in_array('thumbnail', $__t['supports'], true),
+            'category' => $__tax->appliesTo('category', $__t['slug']),
+            'tags'     => $__tax->appliesTo('tag', $__t['slug']),
+            'views'    => !empty($__t['public']),
+            default    => true,
+        };
+    }));
+    $__family = (string) ($__t['capability_type'] ?: 'post');
+    try { $tables->register(\App\Services\Table\TypeTableProvider::keyFor($__t['slug']), [
+        'label'        => $__t['label'],
+        'capability'   => 'edit_' . $__family . 's',
+        'area'         => '/admin/content/' . $__t['slug'],
+        'provider'     => \App\Services\Table\TypeTableProvider::class,
+        'quick_edit'   => \App\Services\Table\TypeQuickEdit::class,
+        'row_links'    => $postLinks,
+        'default_sort' => 'newest',
+        'page_sizes'   => [8, 20, 50, 100],
+        'columns'      => $__cols,
+        'row_actions'  => ['edit', 'trash'],
+        'bulk_actions' => ['publish', 'draft', 'delete'],
+        'search_placeholder' => 'Search ' . strtolower($__t['label']) . '…',
+    ]); } catch (\Throwable) {}
+}
+unset($__t, $__tax, $__cols, $__family);
 
 // Templates — posts of type 'template'. A leaner column set (no categories or
 // views, which templates do not use).

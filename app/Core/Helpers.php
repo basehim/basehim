@@ -191,9 +191,19 @@ final class Helpers
             return $base . (in_array($slug, static::reservedSlugs(), true) ? '/page/' : '/') . $slug;
         }
 
-        // Other non-post types are /{slug}.
+        // App-registered types live under their URL prefix (1.2.94):
+        // /events/summer-meetup. A type with no public URLs (public => false,
+        // rewrite => false, or its app switched off) has no address, so ''
+        // is returned and callers leave the link out. Templates keep /{slug}.
         if ($type !== 'post') {
-            return $base . '/' . $slug;
+            if ($type === 'template') return $base . '/' . $slug;
+            try {
+                $def = Application::getInstance()->make(\App\Services\PostTypeRegistry::class)->get((string) $type);
+            } catch (\Throwable) {
+                $def = null;
+            }
+            if ($def === null || empty($def['public']) || ($def['rewrite'] ?? '') === '') return '';
+            return $base . '/' . $def['rewrite'] . '/' . $slug;
         }
 
         if ($structure === 'flat') {

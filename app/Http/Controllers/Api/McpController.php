@@ -790,6 +790,8 @@ final class McpController
             'content' => $item['content'] ?? '',
             'excerpt' => $item['excerpt'] ?? '',
             'date'    => $item['published_at'] ?? $item['created_at'] ?? null,
+            // Custom fields (1.2.94), private ones left out.
+            'fields'  => (object) $this->app()->make(\App\Services\Fields\FieldService::class)->values($item, true),
         ]);
     }
 

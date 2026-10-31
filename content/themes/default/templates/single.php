@@ -49,6 +49,16 @@
     </figure>
     <?php endif; ?>
 
+    <?php // Custom fields (1.2.94): a details list when the post's type has any. ?>
+    <?php $__rows = function_exists('bh_field_rows') ? bh_field_rows($post) : []; if ($__rows): ?>
+    <dl class="mb-8 grid gap-x-6 gap-y-2 sm:grid-cols-2 rounded-2xl border border-slate-200 p-5 text-sm">
+        <?php foreach ($__rows as $__r): ?>
+        <div><dt class="font-semibold text-slate-500"><?= htmlspecialchars($__r['label']) ?></dt>
+             <dd class="text-slate-900"><?php if ($__r['type'] === 'url'): ?><a class="text-brand-600" href="<?= htmlspecialchars($__r['value']) ?>" rel="nofollow noopener"><?= htmlspecialchars($__r['value']) ?></a><?php else: ?><?= htmlspecialchars($__r['value']) ?><?php endif; ?></dd></div>
+        <?php endforeach; ?>
+    </dl>
+    <?php endif; ?>
+
     <!-- Content -->
     <div class="prose prose-slate prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-a:text-brand-600 prose-a:no-underline hover:prose-a:underline prose-code:bg-slate-100 prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-sm prose-code:font-mono">
         <?php

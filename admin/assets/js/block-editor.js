@@ -542,6 +542,8 @@ function insertDefaultAt(parentId, index, select) {
 
 var api = {
   registerBlock: registerBlock,
+  saveDraft: function () { return saveDraftAjax($id('bhe-save-draft')); },
+  preview: function () { openPreview(); },
   addToolbarButton: function (d) { toolbarButtons.push(d || {}); renderHeaderPlugins(); },
   addBlockAction: function (d) { blockActions.push(d || {}); },
   addSidebarPanel: function (d) { sidebarPanels.push(d || {}); renderAppPanels(); },
@@ -4485,6 +4487,10 @@ function openMoreMenu(btn) {
     items.push('sep');
   }
   items.push({ icon: 'squares-2x2', label: 'Top toolbar', active: document.body.classList.contains('bhe-top-toolbar'), onClick: function () { var on = !document.body.classList.contains('bhe-top-toolbar'); document.body.classList.toggle('bhe-top-toolbar', on); try { localStorage.setItem('bhe-top-toolbar', on ? '1' : '0'); } catch (e) {} scheduleChrome(); } });
+  if (CONFIG.hasUrl) {
+    items.push({ icon: 'arrow-top-right-on-square', label: CONFIG.isLive ? 'View ' + String(CONFIG.typeLabel || 'post').toLowerCase() : 'Preview', onClick: openPreview });
+    items.push('sep');
+  }
   items.push({ icon: 'command-line', label: 'Keyboard shortcuts', shortcut: 'Shift+Alt+H', onClick: showShortcuts });
   items.push({ icon: 'clipboard-document', label: 'Copy all blocks', onClick: function () { copyBlocksToClipboard(state.blocks); } });
   if (CONFIG.listUrl) { items.push('sep'); items.push({ icon: 'arrow-left', label: 'Back to ' + (CONFIG.typePlural || 'list'), onClick: function () { location.href = CONFIG.listUrl; } }); }
@@ -4660,12 +4666,21 @@ var SEO_FIELDS = { seo_meta_title: 'meta_title', seo_meta_description: 'meta_des
 var draftSaving = false;
 
 function draftPayload() {
-  var p = { type: CONFIG.postType || 'post' }, seo = {}, terms = [], tags = [], foreign = false;
+  var p = { type: CONFIG.postType || 'post' }, seo = {}, terms = [], tags = [], foreign = false, fields = null;
   if (CONFIG.postId) p.id = CONFIG.postId;
   Array.prototype.forEach.call(form.elements, function (el) {
     var k = el.name;
     if (!k || el.disabled || /^(button|submit|reset|file)$/.test(el.type)) return;
     if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+    // Custom fields (1.2.94): fields[key] and fields[key][] travel as one JSON object.
+    if (k === '_fields') { fields = fields || {}; return; }
+    var fm = /^fields\[([a-z][a-z0-9_]*)\](\[\])?$/.exec(k);
+    if (fm) {
+      fields = fields || {};
+      if (fm[2]) { if (!Array.isArray(fields[fm[1]])) fields[fm[1]] = []; if (el.value !== '') fields[fm[1]].push(el.value); }
+      else fields[fm[1]] = el.value;
+      return;
+    }
     if (!DRAFT_FIELDS[k]) { foreign = true; return; }
     var v = el.value;
     if (k === 'term_ids[]') { var n = parseInt(v, 10); if (n > 0 && terms.indexOf(n) < 0) terms.push(n); return; }
@@ -4679,49 +4694,85 @@ function draftPayload() {
   if (foreign) return null;
   // The term panels are there: send the list even when empty, so unticking
   // the last category or removing the last tag is saved too.
-  if (form.querySelector('[data-bhe-panel="categories"], [data-bhe-panel="tags"]')) { p.term_ids = terms; p.new_tags = tags; }
+  if (form.querySelector('[data-bhe-panel="categories"], [data-bhe-panel="tags"], [data-bhe-panel^="tax-"]')) { p.term_ids = terms; p.new_tags = tags; }
+  if (fields) p.fields = JSON.stringify(fields);
   if (Object.keys(seo).length) p.seo = seo;
   return p;
 }
 
 function saveDraftAjax(btn) {
-  if (draftSaving) return;
-  if (!window.Basehim || !window.Basehim.ajax) { submitForm(); return; }
+  if (draftSaving) return Promise.resolve(null);
+  if (!window.Basehim || !window.Basehim.ajax) { submitForm(); return Promise.resolve(null); }
   if (isBlocksMode()) { emit('save', getBlocks()); syncField(); }
   var t = form.querySelector('[name="title"]');
   if (t && t.value.trim() === '') t.value = 'Untitled';
   var payload = draftPayload();
-  if (!payload) { submitForm(); return; }
+  if (!payload) { submitForm(); return Promise.resolve(null); }
 
   draftSaving = true;
-  btn.disabled = true; btn.setAttribute('aria-busy', 'true');
+  if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
   // The spinner goes inside the button (bhLoader on a button, 1.2.50).
-  var loader = window.bhLoader ? window.bhLoader(btn, 'Saving…') : null;
+  var loader = btn && window.bhLoader ? window.bhLoader(btn, 'Saving…') : null;
   var st = $id('bhe-save-state'); if (st) st.textContent = '';
 
-  window.Basehim.ajax.request('posts.save_draft', payload, { idempotencyKey: true, timeout: 60000 })
+  return window.Basehim.ajax.request('posts.save_draft', payload, { idempotencyKey: true, timeout: 60000 })
     .then(function (d) {
       applySavedDraft(d);
       if (loader) loader.done('Saved');
       // Content filtered for a role without unfiltered_html (1.2.52).
       if (d && d.html_notice) toast(d.html_notice, 'warning');
+      // Custom fields that kept their previous value (1.2.94).
+      var fe = d && d.field_errors ? Object.keys(d.field_errors) : [];
+      if (fe.length) {
+        toast('Saved, but some fields kept their previous values: ' + fe.map(function (k) { return k + ' (' + d.field_errors[k] + ')'; }).join(', '), 'error');
+        fe.forEach(function (k) { var w = form.querySelector('[data-field="' + k + '"]'); if (w) w.classList.add('has-error'); });
+      } else {
+        Array.prototype.forEach.call(form.querySelectorAll('[data-field].has-error'), function (w) { w.classList.remove('has-error'); });
+      }
       if (st) st.textContent = 'Saved ' + (d.saved_at_text || '');
       emit('saved', d);
       document.dispatchEvent(new CustomEvent('bh:post-saved', { detail: d }));
+      return d;
     })
     .catch(function (err) {
       // Too big for one AJAX request (over 1 MB): the form has no such limit.
-      if (err && err.code === 'PAYLOAD_TOO_LARGE') { if (loader) loader.remove(); submitForm(); return; }
+      if (err && err.code === 'PAYLOAD_TOO_LARGE') { if (loader) loader.remove(); submitForm(); return null; }
       var msg = (err && err.message) || 'Could not save the draft.';
       if (loader) loader.fail('Not saved'); else if (st) st.textContent = 'Not saved';
       toast(msg, 'error');
+      return null;
     })
-    .then(function () { draftSaving = false; btn.disabled = false; btn.removeAttribute('aria-busy'); });
+    .then(function (d) { draftSaving = false; if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); } return d; });
+}
+
+// -- Preview / View (1.2.94) -------------------------------------------------
+// Published: opens the live page. Otherwise the draft is saved first (a new
+// post gets its id and address that way), then its preview opens. The tab is
+// opened inside the click, before the save, so no popup blocker stops it.
+function openPreview() {
+  if (!CONFIG.hasUrl) { toast('This content type has no public page.', 'info'); return; }
+  var live = !!CONFIG.isLive;
+  var dirty = !!window.BasehimEditorDirty || !CONFIG.postId;
+  if (live || (!dirty && CONFIG.viewUrl)) {
+    if (live && window.BasehimEditorDirty) toast('Showing the published version. Update to publish your changes.', 'info');
+    if (CONFIG.viewUrl) window.open(CONFIG.viewUrl, '_blank', 'noopener');
+    return;
+  }
+  var tab = window.open('', '_blank');
+  if (tab) { try { tab.document.title = 'Preparing preview…'; tab.document.body.textContent = 'Saving the draft…'; } catch (e) {} }
+  saveDraftAjax($id('bhe-save-draft')).then(function (d) {
+    var url = (d && d.view_url) || CONFIG.viewUrl;
+    if (!url) { if (tab) tab.close(); if (d) toast('Saved. This content has no public page to preview.', 'info'); return; }
+    if (tab) { try { tab.opener = null; } catch (e) {} tab.location.href = url; } else window.location.href = url;
+  });
 }
 
 function applySavedDraft(d) {
   if (!d || !d.id) return;
   CONFIG.postId = d.id;
+  if (d.view_url) CONFIG.viewUrl = d.view_url;
+  var pl = $id('bhe-permalink-slug'); if (pl && d.slug) pl.textContent = d.slug;
+  var pli = $id('bhe-permalink-input'); if (pli && d.slug && document.activeElement !== pli) pli.value = d.slug;
   if (d.created) {
     // The page now edits this post: later saves (and Publish) go to it.
     if (d.action_url) form.setAttribute('action', d.action_url);

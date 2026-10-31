@@ -180,6 +180,8 @@ final class TableActions
         }
         /** @var \App\Core\Table\QuickEditor $editor */
         $editor = \App\Core\Application::getInstance()->make($table->quickEdit);
+        // One editor class serving several tables learns which one (1.2.94).
+        if (method_exists($editor, 'forTable')) $editor->forTable($table->key);
         return [$table, $editor];
     }
 

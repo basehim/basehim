@@ -120,15 +120,37 @@ final class PostEditorService
         return $user !== null && CheckCapability::userCan($user, $this->capability($type, 'edit_others'));
     }
 
-    /** Whether the category taxonomy applies to this type (config/cms.php). */
+    /** Whether the category taxonomy applies to this type (config/cms.php, or the type's own `taxonomies`, 1.2.94). */
     public function hasCategories(string $type): bool
     {
+        return $this->taxonomyApplies('category', $type);
+    }
+
+    private function taxonomyApplies(string $taxonomy, string $type): bool
+    {
         try {
-            $types = (array) ($this->app->make(\App\Core\Config::class)->get('cms.taxonomies.category.post_types', ['post']));
+            return $this->app->make(TaxonomyRegistry::class)->appliesTo($taxonomy, $type);
         } catch (\Throwable) {
-            $types = ['post'];
+            return $type === 'post';
         }
-        return in_array($type, $types, true);
+    }
+
+    /** A taxonomy's terms for a picker, by name (1.2.94). @return list<array{id:int,name:string}> */
+    public function termOptions(string $taxonomy): array
+    {
+        $rows = $this->db->select(
+            "SELECT t.id, t.name FROM {terms} t JOIN {taxonomies} x ON x.id = t.taxonomy_id
+              WHERE x.slug = :tax ORDER BY t.name LIMIT 1000", ['tax' => $taxonomy]
+        );
+        return array_map(fn($r) => ['id' => (int) $r['id'], 'name' => (string) $r['name']], $rows);
+    }
+
+    /** The ids of a post's terms in one taxonomy (1.2.94). @return int[] */
+    public function termIdsIn(int $postId, string $taxonomy): array
+    {
+        return array_map('intval', array_column($this->db->select(
+            "SELECT t.id FROM {post_term} pt JOIN {terms} t ON t.id = pt.term_id JOIN {taxonomies} x ON x.id = t.taxonomy_id
+              WHERE pt.post_id = :p AND x.slug = :tax ORDER BY pt.term_order, t.name", ['p' => $postId, 'tax' => $taxonomy]), 'id'));
     }
 
     /**
@@ -160,15 +182,10 @@ final class PostEditorService
         return !empty($this->typeDefinition($type)['hierarchical']);
     }
 
-    /** Whether the tag taxonomy applies to this type (config/cms.php). */
+    /** Whether the tag taxonomy applies to this type (config/cms.php, or the type's own `taxonomies`, 1.2.94). */
     public function hasTags(string $type): bool
     {
-        try {
-            $types = (array) ($this->app->make(\App\Core\Config::class)->get('cms.taxonomies.tag.post_types', ['post']));
-        } catch (\Throwable) {
-            $types = ['post'];
-        }
-        return in_array($type, $types, true);
+        return $this->taxonomyApplies('tag', $type);
     }
 
     // ------------------------------------------------------------------
