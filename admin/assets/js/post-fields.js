@@ -68,7 +68,7 @@
     host.appendChild(list);
 
     if (!opts.length) {
-      var empty = el('p', 'bh-terms__empty', 'No categories yet. ');
+      var empty = el('p', 'bh-terms__empty', 'No ' + lower(cfg.label || 'categories') + ' yet. ');
       if (cfg.createUrl) { var a = el('a', '', 'Create one'); a.href = cfg.createUrl; empty.appendChild(a); empty.appendChild(document.createTextNode('.')); }
       list.appendChild(empty);
     }

@@ -212,6 +212,20 @@ final class TaxonomyRegistry
         }
     }
 
+    /**
+     * Store an app taxonomy's row now, whatever the cache says: for a row that
+     * went missing (restored backup, removed by hand). Returns whether the
+     * taxonomy is registered.
+     */
+    public function ensureStored(string $slug): bool
+    {
+        $t = $this->taxonomies[$slug] ?? null;
+        if ($t === null) return false;
+        try { $this->cache?->delete('taxonomies.stored-' . ($this->db?->identity() ?? '')); } catch (\Throwable) {}
+        $this->store($t);
+        return true;
+    }
+
     /** Sidebar: a custom taxonomy's terms under each content type it applies to. */
     private function hookMenu(): void
     {

@@ -51,9 +51,9 @@
 
     <?php // Custom fields (1.2.94): a details list when the post's type has any. ?>
     <?php $__rows = function_exists('bh_field_rows') ? bh_field_rows($post) : []; if ($__rows): ?>
-    <dl class="mb-8 grid gap-x-6 gap-y-2 sm:grid-cols-2 rounded-2xl border border-slate-200 p-5 text-sm">
+    <dl class="mb-8 rounded-2xl border border-slate-200 p-5 text-sm" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px 24px;margin-top:0">
         <?php foreach ($__rows as $__r): ?>
-        <div><dt class="font-semibold text-slate-500"><?= htmlspecialchars($__r['label']) ?></dt>
+        <div style="min-width:0;overflow-wrap:anywhere"><dt class="text-xs font-semibold uppercase tracking-wider text-slate-500" style="margin-bottom:2px"><?= htmlspecialchars($__r['label']) ?></dt>
              <dd class="text-slate-900"><?php if ($__r['type'] === 'url'): ?><a class="text-brand-600" href="<?= htmlspecialchars($__r['value']) ?>" rel="nofollow noopener"><?= htmlspecialchars($__r['value']) ?></a><?php else: ?><?= htmlspecialchars($__r['value']) ?><?php endif; ?></dd></div>
         <?php endforeach; ?>
     </dl>

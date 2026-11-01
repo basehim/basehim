@@ -432,7 +432,8 @@ $v = urlencode(BASEHIM_VERSION);
 <script>window.BasehimEditorConfig = <?= json_encode($nbeConfig, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="<?= $base ?>/admin/assets/js/block-editor.js?v=<?= $v ?>"></script>
 <script src="<?= $base ?>/admin/assets/js/post-fields.js?v=<?= $v ?>"></script>
-<?php if ($showTags): ?><script src="<?= $base ?>/admin/assets/js/post-tags.js?v=<?= $v ?>"></script><?php endif; ?>
+<?php // Draws the category, tag and app taxonomy panels: needed whenever the type has any. ?>
+<?php if ($showCats || $showTags || $customTaxes): ?><script src="<?= $base ?>/admin/assets/js/post-tags.js?v=<?= $v ?>"></script><?php endif; ?>
 <?php if ($pubShowPanel): ?><script src="<?= $base ?>/admin/assets/js/post-publish.js?v=<?= $v ?>"></script><?php endif; ?>
 <?php foreach ($nbeScripts as $nbeJs): ?>
 <script src="<?= htmlspecialchars((string) $nbeJs) ?>"></script>

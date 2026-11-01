@@ -18,11 +18,13 @@
     function cfgOf(el) { try { return JSON.parse(el.getAttribute('data-config') || '{}'); } catch (e) { return {}; } }
     function markDirty() { try { window.BasehimEditorDirty = true; } catch (e) {} }
 
-    var catMount = document.querySelector('[data-bh-categories-mount]');
-    if (catMount) {
-        var cats = F.categories(catMount, Object.assign(cfgOf(catMount), { skin: 'editor' }));
-        cats.onChange(markDirty);
-    }
+    // Every taxonomy panel (1.2.94): categories, and each taxonomy an app
+    // registered for the type. Until 1.2.95 only the first was drawn, so a
+    // second panel stayed empty and saving dropped its terms.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-bh-categories-mount]'), function (mount) {
+        var picker = F.categories(mount, Object.assign(cfgOf(mount), { skin: 'editor' }));
+        picker.onChange(markDirty);
+    });
 
     var tagMount = document.querySelector('[data-bh-tags-mount]');
     if (!tagMount) return;

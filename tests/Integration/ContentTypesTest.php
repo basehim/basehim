@@ -125,6 +125,9 @@ test('content types e2e: the editor follows supports, taxonomies and fields', fu
     foreach (['summary', 'categories', 'tax-event-type', 'excerpt', 'seo'] as $p) assert_contains('data-bhe-panel="' . $p . '"', $html, $p);
     foreach (['featured', 'discussion', 'tags'] as $p) assert_not_contains('data-bhe-panel="' . $p . '"', $html, "{$p} is not in supports");
     assert_contains('name="fields[starts_at]"', $html);
+    // The script that draws the taxonomy panels is loaded even without tags (1.2.95).
+    assert_contains('post-tags.js', $html);
+    assert_same(2, substr_count($html, 'data-bh-categories-mount'), 'category and event-type panels');
     assert_contains('id="bhe-permalink"', $html);
     assert_contains('/events/', $html);
     // Posts keep every panel.
@@ -192,6 +195,15 @@ test('content types e2e: AJAX draft save and the app API save fields through the
     assert_same(['Dock', 12, 'pro'], [$r['fields']['venue'], $r['fields']['seats'], $r['fields']['level']], 'a partial save keeps the rest');
     $r = $admin->ajax('ct-fixture.fields', ['id' => $id, 'set' => json_encode(['level' => 'nope'])])->json()['data'];
     assert_true(isset(((array) $r['errors'])['level']));
+});
+
+test('content types e2e: an app taxonomy whose row went missing is stored again by its term screen', function () {
+    ct_setup();
+    bh_browser('admin')->request('GET', '/admin/content/event/create');     // registers and stores it
+    bh_db()->execute("DELETE FROM {taxonomies} WHERE slug = 'event-type'");  // removed behind core's back
+    $r = bh_browser('admin')->request('GET', '/admin/taxonomies/event-type');
+    assert_same(200, $r->status, 'the term screen opens');
+    assert_true((bool) bh_db()->selectOne("SELECT id FROM {taxonomies} WHERE slug = 'event-type'"), 'and the row is back');
 });
 
 test('content types e2e: comments only on types that support them', function () {

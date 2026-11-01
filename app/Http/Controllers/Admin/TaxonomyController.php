@@ -16,6 +16,10 @@ class TaxonomyController extends Controller
         /** @var TaxonomyService $tax */
         $tax = $this->app->make(TaxonomyService::class);
         $taxData = $tax->findTaxonomyBySlug($taxonomy);
+        // An app's taxonomy whose row went missing is stored again (1.2.94).
+        if (!$taxData && $this->app->make(\App\Services\TaxonomyRegistry::class)->ensureStored($taxonomy)) {
+            $taxData = $tax->findTaxonomyBySlug($taxonomy);
+        }
         if (!$taxData) return $this->abort(404, 'Taxonomy not found');
 
         $terms = $tax->termsByTaxonomySlug($taxonomy);
@@ -35,6 +39,7 @@ class TaxonomyController extends Controller
         if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }
         /** @var TaxonomyService $tax */
         $tax = $this->app->make(TaxonomyService::class);
+        if (!$tax->findTaxonomyBySlug($taxonomy)) $this->app->make(\App\Services\TaxonomyRegistry::class)->ensureStored($taxonomy);
         $id = $tax->createTerm($taxonomy, [
             'name' => $request->input('name'),
             'slug' => $request->input('slug'),
