@@ -1,0 +1,12 @@
+{
+    "name": "Site Health (admin bar example)",
+    "slug": "site-health",
+    "version": "1.0.0",
+    "description": "Example app: a Security menu at the right of the admin bar with a status badge, checks in a panel, a notice in the bell and a quick-search source. Copy into content/apps/ to try it.",
+    "author": "Basehim",
+    "namespace": "Example\\SiteHealth",
+    "src": "src",
+    "entry": "App",
+    "icon": "heroicon:shield-check",
+    "requires": { "php": ">=8.1", "basehim": ">=1.2.96" }
+}

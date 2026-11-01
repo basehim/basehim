@@ -64,6 +64,7 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->post('/profile/two-factor/disable', ['App\\Http\\Controllers\\Admin\\ProfileController', 'twoFactorDisable']);
         $router->post('/profile/sessions/revoke', ['App\\Http\\Controllers\\Admin\\ProfileController', 'signOutOthers']);
         $router->post('/profile/email/confirm', ['App\\Http\\Controllers\\Admin\\ProfileController', 'confirmEmail']);
+        $router->post('/profile/admin-bar', ['App\\Http\\Controllers\\Admin\\ProfileController', 'saveAdminBar']);
     // Profile photo — saved at once, without the page's Save button.
     $router->post('/profile/avatar', ['App\\Http\\Controllers\\Admin\\ProfileController', 'avatar']);
     $router->post('/profile/avatar/delete', ['App\\Http\\Controllers\\Admin\\ProfileController', 'avatarDelete']);
@@ -219,6 +220,8 @@ $router->group(['prefix' => '/admin'], function ($router) {
         $router->post('/settings/security/clear-reports', ['App\\Http\\Controllers\\Admin\\SettingController', 'clearCspReports']);
         $router->get('/settings/search', ['App\\Http\\Controllers\\Admin\\SettingController', 'search']);
         $router->post('/settings/search', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveSearch']);
+        $router->get('/settings/toolbar', ['App\\Http\\Controllers\\Admin\\SettingController', 'toolbar']);
+        $router->post('/settings/toolbar', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveToolbar']);
         $router->post('/settings/email', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveEmail']);
         $router->post('/settings/email/test', ['App\\Http\\Controllers\\Admin\\SettingController', 'testEmail']);
         $router->post('/settings/appearance', ['App\\Http\\Controllers\\Admin\\SettingController', 'saveAppearance']);

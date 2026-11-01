@@ -854,3 +854,13 @@ Report-only mode, the default, lists these in Settings → Security without
 blocking anything. App pages can be laid out per app with
 `templates/app-{app-slug}.php` (receives `$content`, `$title`, `$app_slug`).
 
+
+## The admin bar (1.2.96)
+
+Signed-in people who manage the site get the admin bar on public pages. Core
+adds it to the finished page, so themes need nothing. In top-bar mode
+`<html>` gets the class `has-bh-admin-bar` and the custom property
+`--bhab-push` (the bar's height), and a fixed or sticky header at the very
+top is moved down by that height automatically. From `boot.php`,
+`bh_admin_bar()` adds theme items (for example a "Customize the hero" link
+on the home page). See [ADMIN-BAR.md](ADMIN-BAR.md).

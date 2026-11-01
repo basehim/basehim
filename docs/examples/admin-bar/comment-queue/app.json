@@ -1,0 +1,13 @@
+{
+    "name": "Comment Queue (admin bar example)",
+    "slug": "comment-queue",
+    "version": "1.0.0",
+    "description": "Example app: a Discussion menu with the pending-comment count as a badge, the latest pending comments, and a notice in the bell. Copy into content/apps/ to try it.",
+    "author": "Basehim",
+    "namespace": "Example\\CommentQueue",
+    "src": "src",
+    "entry": "App",
+    "icon": "heroicon:chat-bubble-left-right",
+    "permissions": ["comments.read"],
+    "requires": { "php": ">=8.1", "basehim": ">=1.2.96" }
+}

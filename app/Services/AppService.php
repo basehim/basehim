@@ -1268,6 +1268,7 @@ class AppService
         try { $removed['taxonomies'] = $app->make(\App\Services\TaxonomyRegistry::class)->forgetOwner($slug); } catch (\Throwable) {}
         try { $removed['fields'] = $app->make(\App\Services\Fields\FieldRegistry::class)->forgetOwner($slug); } catch (\Throwable) {}
         try { $removed['search_sources'] = $app->make(\App\Core\Search\SearchManager::class)->forgetOwner($slug); } catch (\Throwable) {}
+        try { $removed['admin_bar'] = $app->make(\App\Core\AdminBar\AdminBar::class)->forgetOwner($slug); } catch (\Throwable) {}
         if (function_exists('bh_assets')) {
             $reg = &bh_assets();
             foreach (['styles', 'scripts'] as $k) {

@@ -64,6 +64,15 @@ final class Response
         return $this;
     }
 
+    /** Remove a header, whatever its case (1.2.96). */
+    public function removeHeader(string $name): self
+    {
+        foreach (array_keys($this->headers) as $k) {
+            if (strcasecmp((string) $k, $name) === 0) unset($this->headers[$k]);
+        }
+        return $this;
+    }
+
     public function body(string $body): self
     {
         $this->body = $body;

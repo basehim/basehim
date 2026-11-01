@@ -107,6 +107,23 @@
     </div>
 </form>
 
+<?php if (!empty($adminBar)): ?>
+<form method="POST" action="<?= $base ?>/admin/profile/admin-bar" id="admin-bar" class="max-w-5xl mt-5 bg-white rounded-xl border border-slate-200 p-5">
+    <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
+    <h3 class="text-sm font-semibold text-slate-900"><?= icon('window', 'w-4 h-4 text-blue-500 mr-2') ?>Admin bar on the site</h3>
+    <p class="text-xs text-slate-500 mt-1">The bar you see on the public site while signed in. Visitors never see it.</p>
+    <div class="flex flex-wrap items-center gap-2 mt-3">
+        <label for="admin_bar_mode" class="sr-only">Admin bar</label>
+        <select id="admin_bar_mode" name="admin_bar_mode" class="bh-select max-w-xs">
+            <?php foreach (['default' => 'The site\'s default (' . (\App\Core\AdminBar\AdminBarSettings::MODES[$adminBar['site']] ?? 'Top bar') . ')', 'horizontal' => 'Top bar', 'floating' => 'Floating button', 'off' => 'Off'] as $v => $l): ?>
+            <option value="<?= $v ?>" <?= $adminBar['mode'] === $v ? 'selected' : '' ?>><?= htmlspecialchars($l) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <button type="submit" class="bh-btn bh-btn--secondary">Save</button>
+    </div>
+</form>
+<?php endif; ?>
+
 <?php
 $tfa = $twoFactor ?? ['policy' => 'optional', 'enabled' => false, 'required' => false, 'active' => false, 'emergency' => false, 'setup' => false, 'email' => '', 'since' => ''];
 $tfaOn = !empty($tfa['enabled']) || !empty($tfa['required']);

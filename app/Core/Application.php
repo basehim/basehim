@@ -150,7 +150,12 @@ final class Application
                 $app->make(Logger::class),
                 $app->make(HookRegistry::class),
                 [
-                    'user' => fn() => $app->make(\App\Services\AuthService::class)->currentUser(),
+                    // Only someone with a session can be signed in: asking
+                    // AuthService otherwise started a session (and sent a
+                    // cookie) for every visitor on every page with a widget
+                    // area (1.2.96, BH-082).
+                    'user' => fn() => session_status() === PHP_SESSION_ACTIVE || isset($_COOKIE[session_name()])
+                        ? $app->make(\App\Services\AuthService::class)->currentUser() : null,
                     'theme' => fn() => $app->make(\App\Services\ThemeService::class)->activeSlug(),
                     'theme_path' => fn() => $app->make(\App\Services\ThemeService::class)->activePath(),
                     'app_active' => fn(string $slug) => $app->make(\App\Services\AppService::class)->isBooted($slug),
@@ -391,6 +396,12 @@ final class Application
                 fn(\App\Core\Search\SearchManager $m) => \App\Core\Search\CoreSources::register($m, $app),
                 (defined('BASEHIM_ROOT') ? BASEHIM_ROOT : dirname(__DIR__, 2)) . '/storage/locks',
             ));
+
+        // The frontend admin bar (1.2.96): one registry per request, which
+        // core and apps add to; the settings are read once.
+        $this->singleton(\App\Core\AdminBar\AdminBar::class, fn($app) => new \App\Core\AdminBar\AdminBar($app));
+        $this->singleton(\App\Core\AdminBar\AdminBarSettings::class, fn($app) =>
+            new \App\Core\AdminBar\AdminBarSettings($app->make(\App\Services\SettingService::class)));
 
         // Short aliases
         $this->alias('config', Config::class);

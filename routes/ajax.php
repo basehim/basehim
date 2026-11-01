@@ -688,3 +688,65 @@ $ajax->register('apps.bulk', [
     'description' => 'Activate, deactivate, check again or delete installed apps, each reported on its own.',
 ]);
 unset($appSlug);
+
+// ---------------------------------------------------------------------------
+// 1.2.96 — the frontend admin bar (docs/ADMIN-BAR.md). 'read' is only the
+// floor: every handler checks that the user gets the bar, verifies the page's
+// signed context, and checks each component's own rules again.
+// ---------------------------------------------------------------------------
+use App\Http\Controllers\Ajax\AdminBarActions;
+
+$__barCtx = ['type' => 'string', 'required' => true, 'max' => 4000, 'regex' => '/^[A-Za-z0-9_-]+\.[a-f0-9]{32}$/'];
+$ajax->register('admin.bar_panel', [
+    'handler'     => [AdminBarActions::class, 'panel'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'input'       => ['ctx' => $__barCtx, 'id' => ['type' => 'string', 'required' => true, 'max' => 250, 'regex' => '/^[a-z0-9][a-z0-9_.-]*$/']],
+    'description' => "One admin bar panel's contents, for the page it was shown on.",
+]);
+$ajax->register('admin.bar_indicators', [
+    'handler'     => [AdminBarActions::class, 'indicators'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'input'       => ['ctx' => $__barCtx, 'ids' => ['type' => 'string', 'required' => true, 'max' => 4000, 'regex' => '/^[a-z0-9_.,-]*$/']],
+    'description' => "The admin bar's badges (counts and statuses) for the page it was shown on.",
+]);
+$ajax->register('admin.bar_notifications', [
+    'handler'     => [AdminBarActions::class, 'notifications'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => ['ctx' => $__barCtx],
+    'description' => "The admin bar's notices for the signed-in user.",
+]);
+$ajax->register('admin.bar_search', [
+    'handler'     => [AdminBarActions::class, 'search'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 90, 'per' => 60],
+    'input'       => ['ctx' => $__barCtx, 'q' => 'string|max:100'],
+    'description' => 'Quick search from the admin bar, across what the user may edit.',
+]);
+$ajax->register('admin.bar_url', [
+    'handler'     => [AdminBarActions::class, 'url'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => ['ctx' => $__barCtx],
+    'description' => "The shown post's current address, after Quick edit.",
+]);
+$ajax->register('admin.bar_prefs', [
+    'handler'     => [AdminBarActions::class, 'prefs'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => [
+        'mode'      => 'string|in:horizontal,floating,off',
+        'position'  => 'string|in:top-left,top-right,bottom-left,bottom-right',
+        'collapsed' => 'bool',
+        'hidden'    => 'string|max:2000',
+    ],
+    'description' => "Save the user's own admin bar choices.",
+]);
+unset($__barCtx);

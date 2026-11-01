@@ -41,6 +41,7 @@ $this->api()->schedule()
 $this->api()->http()
 $this->api()->rateLimit()        // counting limits (1.2.90)
 $this->api()->search()           // BH Search: index and search your records (1.2.92)
+$this->api()->adminBar()         // the frontend admin bar: menus, items, panels, badges, notices (1.2.96)
 ```
 
 ## Examples
@@ -207,6 +208,9 @@ arbitrary code execution, so a task whose app isn't booted is skipped, not fired
   index, gives `constrain()` for queries on your own tables (every word, any
   order, fast at any size), ranked `query()` results, and a place in the
   site's search page. See [SEARCH.md](SEARCH.md).
+- **`adminBar()`** (1.2.96) adds your menus, items (also in core's page
+  menu), live panels, badges, notices and quick-search results to the bar
+  signed-in managers see on the site. See [ADMIN-BAR.md](ADMIN-BAR.md).
 - **`users()` strips password hashes** from every return value.
 - **`all()` is capped** (500 by default) so a large table can't exhaust memory
   on shared hosting. Raise it deliberately or use `paginate()`.

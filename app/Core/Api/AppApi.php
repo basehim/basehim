@@ -118,6 +118,12 @@ class AppApi
         return $this->resources['search'] ??= new SearchApi($this->app, $this->slug);
     }
 
+    /** The frontend admin bar (1.2.96): menus, items, panels, badges, notices and search. */
+    public function adminBar(): AdminBarApi
+    {
+        return $this->resources['adminBar'] ??= new AdminBarApi($this->app, $this->slug);
+    }
+
     /** Counting limits (1.2.90): per visitor, per target, site-wide. */
     public function rateLimit(): RateLimitApi
     {

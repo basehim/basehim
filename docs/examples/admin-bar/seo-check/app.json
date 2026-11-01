@@ -1,0 +1,13 @@
+{
+    "name": "SEO Check (admin bar example)",
+    "slug": "seo-check",
+    "version": "1.0.0",
+    "description": "Example app: adds an SEO score panel and an Edit SEO item to the admin bar's page menu on posts and pages. Copy into content/apps/ to try it.",
+    "author": "Basehim",
+    "namespace": "Example\\SeoCheck",
+    "src": "src",
+    "entry": "App",
+    "icon": "heroicon:document-magnifying-glass",
+    "permissions": ["posts.read"],
+    "requires": { "php": ">=8.1", "basehim": ">=1.2.96" }
+}

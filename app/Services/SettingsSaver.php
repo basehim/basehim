@@ -35,6 +35,7 @@ final class SettingsSaver
         'authorization' => 'Authentication',
         'security'      => 'Security',
         'search'        => 'Search',
+        'toolbar'       => 'Admin bar',
     ];
 
     private Application $app;
@@ -67,6 +68,7 @@ final class SettingsSaver
             'reading'       => $this->reading($in),
             'security'      => $this->security($in),
             'search'        => $this->search($in),
+            'toolbar'       => $this->toolbar($in),
             default         => isset(self::TABS[$tab]) ? $this->generic($tab, $in) : self::result(false, 'error', 'Unknown settings screen.'),
         };
     }
@@ -125,6 +127,29 @@ final class SettingsSaver
         $this->settings->set($g, 'site_sort', $sort);
         return self::result(true, $types === [] ? 'error' : 'success',
             'Search settings saved.' . ($types === [] ? ' No content type is searched now: the search page finds only what apps add.' : ''));
+    }
+
+    /**
+     * Admin bar (1.2.96): every value is checked against its list of options
+     * (AdminBarSettings::clean()); roles must exist. Nothing else is stored.
+     */
+    private function toolbar(array $in): array
+    {
+        $known = array_keys($this->app->make(AccessControl::class)->roles());
+        $roles = array_values(array_intersect(array_keys(array_filter((array) ($in['roles'] ?? []))), $known));
+        $options = array_keys(array_filter((array) ($in['user_options'] ?? [])));
+        foreach (['mode' => \App\Core\AdminBar\AdminBarSettings::MODES, 'position' => \App\Core\AdminBar\AdminBarSettings::POSITIONS,
+                  'mobile' => \App\Core\AdminBar\AdminBarSettings::MOBILE, 'color' => \App\Core\AdminBar\AdminBarSettings::COLORS] as $k => $opts) {
+            if (isset($in[$k]) && !isset($opts[(string) $in[$k]])) return self::result(false, 'error', 'Choose one of the listed options.');
+        }
+        $clean = \App\Core\AdminBar\AdminBarSettings::clean(['roles' => $roles, 'user_options' => $options] + array_diff_key($in, ['roles' => 1, 'user_options' => 1]));
+        foreach ($clean as $k => $v) {
+            $this->settings->set(\App\Core\AdminBar\AdminBarSettings::GROUP, $k, is_bool($v) ? ($v ? '1' : '0') : (is_array($v) ? $v : (string) $v));
+        }
+        try { $this->app->make(\App\Core\AdminBar\AdminBarSettings::class)->flush(); } catch (\Throwable) {}
+        $note = !$clean['enabled'] ? ' The admin bar is now off for everyone.'
+            : ($clean['roles'] === [] ? '' : ' Only the chosen roles see it.');
+        return self::result(true, 'success', 'Admin bar settings saved.' . $note);
     }
 
     /** Reading: the search and view-count options (1.2.76) are checked first. */

@@ -62,6 +62,9 @@ trait RendersTheme
         $data['primary_menu'] = $menus->itemsByLocation('primary') ?? [];
         $data['footer_menu'] = $menus->itemsByLocation('footer') ?? [];
         $data['current_url'] = $url ?? ($_SERVER['REQUEST_URI'] ?? '/');
+        // What the page shows, for the frontend admin bar (1.2.96): the post,
+        // term or search core actually loaded, not a guess from the address.
+        \App\Core\AdminBar\AdminBarContext::capture($template, $data);
         // The post being shown, for bh_field() / bh_fields() without an
         // argument, and its custom fields as $fields (1.2.94).
         if (is_array($data['post'] ?? null)) {
@@ -305,6 +308,7 @@ trait RendersTheme
             'current_url' => $_SERVER['REQUEST_URI'] ?? '/',
             'seo' => ['title' => 'Page Not Found - ' . $settings->get('general', 'site_title', 'Basehim')],
         ];
+        \App\Core\AdminBar\AdminBarContext::capture('404', $data);
 
         /*
          * The 404 template can throw too, and that is the worst case: the page

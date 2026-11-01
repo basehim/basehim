@@ -30,6 +30,7 @@ class SettingController extends Controller
     public function authorization(Request $request): Response { return $this->renderTab('authorization'); }
     public function security(Request $request): Response { return $this->renderTab('security'); }
     public function search(Request $request): Response { return $this->renderTab('search'); }
+    public function toolbar(Request $request): Response { return $this->renderTab('toolbar'); }
 
     /**
      * POST /admin/settings/media/regenerate-batch — one batch of thumbnail
@@ -94,6 +95,7 @@ class SettingController extends Controller
     public function saveAi(Request $request): Response            { return $this->saveTab($request, 'ai'); }
     public function saveSecurity(Request $request): Response      { return $this->saveTab($request, 'security'); }
     public function saveSearch(Request $request): Response        { return $this->saveTab($request, 'search'); }
+    public function saveToolbar(Request $request): Response       { return $this->saveTab($request, 'toolbar'); }
 
     /** POST /admin/settings/security/clear-reports */
     public function clearCspReports(Request $request): Response
@@ -233,6 +235,10 @@ class SettingController extends Controller
             $extra['site'] = $site->settings();
             $extra['types'] = $site->availableTypes();
             $extra['appSources'] = $site->appSources();
+        }
+        if ($tab === 'toolbar') {
+            $extra['bar'] = $this->app->make(\App\Core\AdminBar\AdminBarSettings::class)->site();
+            $extra['roles'] = $this->app->make(\App\Services\AccessControl::class)->roles();
         }
         if ($tab === 'media') {
             /** @var \App\Services\MediaService $media */

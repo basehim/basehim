@@ -29,6 +29,11 @@ class ProfileController extends Controller
                 $p = $session->get('email_change');
                 return is_array($p) && (int) ($p['uid'] ?? 0) === (int) $user['id'] && (int) ($p['at'] ?? 0) > time() - 900 ? (string) $p['email'] : '';
             })(),
+            'adminBar' => (function () use ($user) {
+                $s = $this->app->make(\App\Core\AdminBar\AdminBarSettings::class);
+                if (!$s->allows($user) || !in_array('mode', $s->site()['user_options'], true)) return null;
+                return ['mode' => (string) ($s->userPrefs($user)['mode'] ?? 'default'), 'site' => $s->site()['mode']];
+            })(),
             'twoFactor' => [
                 'policy'    => $tf->policy(),
                 'enabled'   => $tf->isEnabled($user),
@@ -40,6 +45,35 @@ class ProfileController extends Controller
                 'since'     => (string) (\App\Services\TwoFactorService::security($user)['two_factor_at'] ?? ''),
             ],
         ]);
+    }
+
+    /**
+     * POST /admin/profile/admin-bar (1.2.96): how this user sees the admin
+     * bar on the site, when the site lets users choose. "Default" removes
+     * the choice, so the site's setting applies again.
+     */
+    public function saveAdminBar(Request $request): Response
+    {
+        if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->redirect('/admin/profile'); }
+        $user = $this->user();
+        if (!$user) return $this->redirect('/admin/login');
+        /** @var \App\Core\AdminBar\AdminBarSettings $s */
+        $s = $this->app->make(\App\Core\AdminBar\AdminBarSettings::class);
+        if (!$s->allows($user) || !in_array('mode', $s->site()['user_options'], true)) {
+            $this->flash('error', 'Your site does not let users change the admin bar.');
+            return $this->redirect('/admin/profile');
+        }
+        $mode = (string) $request->input('admin_bar_mode', 'default');
+        if (!in_array($mode, ['default', 'horizontal', 'floating', 'off'], true)) {
+            $this->flash('error', 'Choose one of the listed options.');
+            return $this->redirect('/admin/profile');
+        }
+        $prefs = $s->userPrefs($user);
+        unset($prefs['mode']);
+        if ($mode !== 'default') $prefs['mode'] = $mode;
+        $this->app->make(UserService::class)->setMeta((int) $user['id'], \App\Core\AdminBar\AdminBarSettings::META_KEY, $prefs ?: null);
+        $this->flash('success', $mode === 'off' ? 'The admin bar is off for you on the site.' : 'Admin bar choice saved.');
+        return $this->redirect('/admin/profile#admin-bar');
     }
 
     public function update(Request $request): Response

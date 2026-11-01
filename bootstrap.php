@@ -390,6 +390,20 @@ if (!function_exists('bh_enqueue_script')) {
     }
 }
 
+/**
+ * The frontend admin bar for themes (1.2.96), from boot.php: the same API
+ * apps get from $this->api()->adminBar(), with ids under "theme.".
+ *
+ *     bh_admin_bar()->item(['id' => 'hero', 'parent' => 'context', 'label' => 'Edit the hero',
+ *                           'context' => ['home'], 'capability' => 'manage_themes', 'href' => '/admin/customize']);
+ */
+if (!function_exists('bh_admin_bar')) {
+    function bh_admin_bar(): \App\Core\Api\AdminBarApi {
+        static $api = null;
+        return $api ??= new \App\Core\Api\AdminBarApi(\App\Core\Application::getInstance(), 'theme');
+    }
+}
+
 if (!function_exists('bh_ajax_client')) {
     /**
      * Load the AJAX client (Basehim.ajax.request) on the public site — call it

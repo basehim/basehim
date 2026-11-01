@@ -18,4 +18,5 @@ return [
     'authorization' => ['label' => 'Authentication', 'icon' => 'shield-check',              'sub' => 'Two-step verification, registration and sign-in protection.'],
     'security'      => ['label' => 'Security',       'icon' => 'lock-closed',               'sub' => 'HTTPS and the security headers sent with every page.'],
     'search'        => ['label' => 'Search',         'icon' => 'magnifying-glass',          'sub' => 'The search index, and what the site\'s search page finds.'],
+    'toolbar'       => ['label' => 'Admin bar',      'icon' => 'window',                    'sub' => 'The bar signed-in editors and administrators see on the site.'],
 ];
