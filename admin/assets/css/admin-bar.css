@@ -304,8 +304,18 @@ html.bhab-push { margin-top: var(--bhab-push, 40px) !important; scroll-padding-t
 /* --- Phones and small tablets ------------------------------------------------ */
 @media (max-width: 782px) {
     #bh-admin-bar.bhab--horizontal .bhab-bar { height: 46px; }
-    #bh-admin-bar.bhab--horizontal .bhab-menus--main { overflow-x: auto; scrollbar-width: none; }
-    #bh-admin-bar.bhab--horizontal .bhab-menus--main::-webkit-scrollbar { display: none; }
+    /* The whole row scrolls when it is wider than the phone (BH-085: only the
+       left group scrolled, and the right one, with Display and the account,
+       was pushed off the screen). */
+    #bh-admin-bar.bhab--horizontal .bhab-bar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+    #bh-admin-bar.bhab--horizontal .bhab-bar::-webkit-scrollbar { display: none; }
+    #bh-admin-bar.bhab--horizontal .bhab-menus { flex: none; }
+    /* Status and text badges become a coloured dot; counts stay. */
+    #bh-admin-bar.bhab--horizontal .bhab-top .bhab-badge[data-type="status"], #bh-admin-bar.bhab--horizontal .bhab-top .bhab-badge[data-type="text"] {
+        min-width: 10px; width: 10px; height: 10px; padding: 0; font-size: 0; position: absolute; top: 9px; right: 6px; margin: 0; box-shadow: 0 0 0 2px var(--bhab-bg);
+    }
+    #bh-admin-bar.bhab--horizontal .bhab-top .bhab-badge[data-type="status"] > *, #bh-admin-bar.bhab--horizontal .bhab-top .bhab-badge[data-type="text"] > [aria-hidden] { display: none; }
+    #bh-admin-bar.bhab--horizontal .bhab-top { position: relative; }
     #bh-admin-bar.bhab--horizontal .bhab-menu { position: static; }
     #bh-admin-bar.bhab--horizontal .bhab-top { min-width: 44px; padding: 0 10px; justify-content: center; }
     #bh-admin-bar.bhab--horizontal .bhab-top .bhab-label, #bh-admin-bar.bhab--horizontal .bhab-top .bhab-caret {

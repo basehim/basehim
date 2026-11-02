@@ -1462,7 +1462,7 @@ final class McpController
 
     private function siteUrl(): string
     {
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
         return $scheme . '://' . $host . $base;

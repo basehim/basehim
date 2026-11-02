@@ -62,7 +62,7 @@ class AuthorController extends Controller
             'seo' => [
                 'title' => 'Posts by ' . $name,
                 'description' => $bio !== '' ? mb_substr($bio, 0, 160) : 'Posts by ' . $name . '.',
-                'canonical' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
+                'canonical' => (\App\Core\Request::serverIsSecure() ? 'https' : 'http')
                     . '://' . ($_SERVER['HTTP_HOST'] ?? '')
                     . rtrim((defined('BASEHIM_BASE') ? BASEHIM_BASE : ''), '/')
                     . $author['url'] . ($page > 1 ? '?page=' . $page : ''),

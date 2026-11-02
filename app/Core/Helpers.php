@@ -104,7 +104,7 @@ final class Helpers
     {
         $base = Env::get('APP_URL', null);
         if (!$base) {
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
             $base = "{$scheme}://{$host}";
         }

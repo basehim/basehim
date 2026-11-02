@@ -104,7 +104,7 @@ class PostController extends Controller
                  */
                 'canonical' => !empty($seoMeta['canonical_url'])
                     ? $seoMeta['canonical_url']
-                    : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
+                    : (\App\Core\Request::serverIsSecure() ? 'https' : 'http')
                         . '://' . ($_SERVER['HTTP_HOST'] ?? '')
                         . rtrim((defined('BASEHIM_BASE') ? BASEHIM_BASE : ''), '/')
                         . \App\Core\Helpers::postUrl($post),

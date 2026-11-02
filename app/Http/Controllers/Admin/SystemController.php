@@ -62,7 +62,7 @@ class SystemController extends Controller
         try {
             /** @var \App\Services\SchedulerService $scheduler */
             $scheduler = $this->app->make(\App\Services\SchedulerService::class);
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
             $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
             $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
             $out['url'] = $scheme . '://' . $host . $base . '/api/v1/schedule/run?token=' . rawurlencode($scheduler->cronToken());

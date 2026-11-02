@@ -861,7 +861,7 @@ class UpdateService
 
     private function siteUrl(): string
     {
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
         $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
         $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
         return $scheme . '://' . $host . $base;

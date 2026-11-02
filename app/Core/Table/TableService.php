@@ -53,6 +53,8 @@ final class TableService
         // The provider and its whitelists.
         /** @var TableProvider $provider */
         $provider = Application::getInstance()->make($table->provider);
+        // A provider serving several tables learns which one (1.2.97).
+        if (method_exists($provider, 'forTable')) $provider->forTable($table->key);
         $sortKeys = $provider->sortKeys();
         $filterKeys = array_flip($provider->filterKeys());
 

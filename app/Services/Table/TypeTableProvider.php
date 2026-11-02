@@ -21,9 +21,28 @@ final class TypeTableProvider extends PostTableProvider
         return $this->current;
     }
 
+    /**
+     * Category and tag filters only for a type that uses them (1.2.97,
+     * BH-080: a type without tags showed an empty Tags filter). Before the
+     * table is known, both, as before.
+     */
     public function filterKeys(): array
     {
-        return ['status', 'author_id', 'trashed', 'category', 'tag'];
+        $keys = ['status', 'author_id', 'trashed'];
+        if ($this->current === '') return array_merge($keys, ['category', 'tag']);
+        try {
+            $tax = \App\Core\Application::getInstance()->make(\App\Services\TaxonomyRegistry::class);
+            foreach (['category', 'tag'] as $t) {
+                if ($tax->appliesTo($t, $this->current)) $keys[] = $t;
+            }
+        } catch (\Throwable) {}
+        return $keys;
+    }
+
+    /** Which table (and so which type) this provider serves. */
+    public function forTable(string $key): void
+    {
+        $this->current = self::typeFromKey($key);
     }
 
     /** The table key for a type: dashes become underscores (table keys allow no dashes). */

@@ -40,7 +40,7 @@ class App extends \App\Core\App
             ['key' => 'https', 'label' => 'HTTPS', 'ok' => Request::serverIsSecure(), 'help' => 'Pages are served without encryption.'],
             ['key' => 'debug', 'label' => 'Debug mode', 'ok' => !filter_var(\App\Core\Env::get('APP_DEBUG', 'false'), FILTER_VALIDATE_BOOLEAN),
              'help' => 'Error details are shown to visitors.'],
-            ['key' => 'install', 'label' => 'Installer removed', 'ok' => !is_file(BASEHIM_ROOT . '/install.php'), 'help' => 'install.php is still on the server.'],
+            ['key' => 'install', 'label' => 'Installer file', 'ok' => !is_file(BASEHIM_ROOT . '/install.php'), 'help' => 'install.php is still on the server.'],
         ];
     }
 

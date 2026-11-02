@@ -125,7 +125,7 @@ ini_set('session.save_path', $sessionPath);
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
 ini_set('session.cookie_samesite', 'Lax');
-if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+if (\App\Core\Request::serverIsSecure()) {
     ini_set('session.cookie_secure', '1');
 }
 session_name('BASEHIMSESS');

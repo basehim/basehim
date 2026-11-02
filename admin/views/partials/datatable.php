@@ -32,6 +32,7 @@ $__user = $__app->make(AuthService::class)->sessionUser();
 $__csrf = $__app->make(\App\Core\Session::class)->csrfToken();
 $__svc  = $__app->make(TableService::class);
 $__provider = $__app->make($__def->provider);
+if (method_exists($__provider, 'forTable')) $__provider->forTable($__def->key);
 $__filterKeys = $__provider instanceof TableProvider ? $__provider->filterKeys() : [];
 
 // First page from the current request (GET) — a bookmarked, filtered URL and a

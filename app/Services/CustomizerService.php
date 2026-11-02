@@ -590,7 +590,7 @@ HTML;
     {
         $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
         if ($host === '' || !preg_match('/^[A-Za-z0-9.:-]+$/', $host)) return '';
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
         return $scheme . '://' . $host;
     }
 

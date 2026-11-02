@@ -65,11 +65,11 @@ final class SettingsSaver
             'authorization' => $this->authorization($in, $user),
             'permalinks'    => $this->permalinks($in),
             'ai'            => $this->ai($in),
-            'reading'       => $this->reading($in),
+            'reading'       => $this->reading($in, $user),
             'security'      => $this->security($in),
             'search'        => $this->search($in),
             'toolbar'       => $this->toolbar($in),
-            default         => isset(self::TABS[$tab]) ? $this->generic($tab, $in) : self::result(false, 'error', 'Unknown settings screen.'),
+            default         => isset(self::TABS[$tab]) ? $this->generic($tab, $in, $user) : self::result(false, 'error', 'Unknown settings screen.'),
         };
     }
 
@@ -78,14 +78,49 @@ final class SettingsSaver
         return ['ok' => $ok, 'type' => $type, 'message' => $message];
     }
 
-    /** Reading, Writing, Discussion, SEO, Appearance, Media: every posted key is stored. */
-    private function generic(string $tab, array $in): array
+    /**
+     * Reading, Writing, Discussion, SEO, Appearance, Media: the screen's own
+     * fields are stored, and nothing else (1.2.97, BH-029: every posted key
+     * used to be written into the group, so a crafted POST could add any
+     * key). The fields are the ones the screen's form actually has.
+     */
+    private function generic(string $tab, array $in, ?array $user = null): array
     {
+        $allowed = $this->fieldsOf($tab, $user);
         foreach ($in as $key => $val) {
+            $key = (string) $key;
+            if (!isset($allowed[$key])) continue;
             // booleans arrive as "1"/"0" (each checkbox has a hidden "0" before it)
-            $this->settings->set($tab, (string) $key, $val);
+            $this->settings->set($tab, $key, $val);
         }
         return self::result(true, 'success', self::label($tab) . ' settings saved.');
+    }
+
+    /**
+     * The names of the fields a settings screen's form has, from the screen
+     * as it renders now. If it can't be rendered, only keys the group
+     * already has may be changed.
+     *
+     * @return array<string,true>
+     */
+    private function fieldsOf(string $tab, ?array $user): array
+    {
+        try {
+            if ($user !== null && !$this->app->has('auth.user')) $this->app->instance('auth.user', $user);
+            $page = (new \App\Http\Controllers\Admin\SettingController())->sectionPage($tab);
+            $base = preg_quote('/admin/settings/' . $tab, '#');
+            if (preg_match('#<form\b[^>]*action="[^"]*' . $base . '"[^>]*>(.*?)</form>#s', $page, $m)
+                && preg_match_all('#\bname="([A-Za-z0-9_]+)(?:\[[^"]*\])?"#', $m[1], $names)) {
+                $out = array_fill_keys($names[1], true);
+                unset($out['_csrf']);
+                if ($out !== []) return $out;
+            }
+        } catch (\Throwable) {}
+        try {
+            return array_fill_keys(array_map('strval', array_keys((array) $this->settings->getGroup($tab))), true);
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /** Security (1.2.90): HSTS and the Content-Security-Policy mode; nothing else is stored. */
@@ -153,7 +188,7 @@ final class SettingsSaver
     }
 
     /** Reading: the search and view-count options (1.2.76) are checked first. */
-    private function reading(array $in): array
+    private function reading(array $in, ?array $user = null): array
     {
         if (isset($in['search_mode']) && !in_array((string) $in['search_mode'], ['auto', 'like'], true)) {
             return self::result(false, 'error', 'Choose a search method from the list.');
@@ -168,7 +203,7 @@ final class SettingsSaver
         if (isset($in['view_counting']) && !in_array((string) $in['view_counting'], ['buffered', 'direct', 'off'], true)) {
             return self::result(false, 'error', 'Choose how page views are counted from the list.');
         }
-        return $this->generic('reading', $in);
+        return $this->generic('reading', $in, $user);
     }
 
     private function general(array $in, ?array $user = null): array
@@ -220,7 +255,7 @@ final class SettingsSaver
             }
             $accountNote = $r['message'];
         }
-        $res = $this->generic('general', $in);
+        $res = $this->generic('general', $in, $user);
         \App\Core\Time::reset();
         // .env follows the setting; this also repairs a site whose setting was
         // changed before 1.2.66, the next time General is saved.
@@ -345,7 +380,7 @@ final class SettingsSaver
         // The URL to check afterwards. Redirect rules are exactly the kind of
         // change that can take a site down, so it is fetched before the
         // operator is told everything went well.
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
         $verify = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? '') . (defined('BASEHIM_BASE') ? BASEHIM_BASE : '') . '/';
 
         $result = $ht->apply($host, $https, filter_var($verify, FILTER_VALIDATE_URL) ? $verify : null);

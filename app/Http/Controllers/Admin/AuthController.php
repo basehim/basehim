@@ -895,7 +895,7 @@ class AuthController extends Controller
     private function setCookie(string $name, string $value, int $days): void
     {
         $expires = $days < 0 ? time() - 3600 : time() + $days * 86400;
-        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        $secure = \App\Core\Request::serverIsSecure();
         $basePath = defined('BASEHIM_BASE') ? (rtrim((string) BASEHIM_BASE, '/') ?: '/') : '/';
         setcookie($name, $value, [
             'expires'  => $expires,

@@ -131,7 +131,7 @@ class SystemInfoService
             'Basehim root'      => BASEHIM_ROOT,
             'Install base'      => defined('BASEHIM_BASE') && BASEHIM_BASE !== '' ? BASEHIM_BASE : '/ (root)',
             'Server protocol'   => $_SERVER['SERVER_PROTOCOL'] ?? 'unknown',
-            'HTTPS'             => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'Yes' : 'No',
+            'HTTPS'             => \App\Core\Request::serverIsSecure() ? 'Yes' : 'No',
         ];
     }
 
