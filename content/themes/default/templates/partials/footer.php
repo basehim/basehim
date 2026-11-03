@@ -32,17 +32,21 @@
                     <?php endforeach; ?>
                     <?php if (empty($footer_menu)): ?>
                         <li><a href="<?= $base ?>/" class="text-slate-600 hover:text-brand-600">Home</a></li>
-                        <li><a href="<?= $base ?>/feed" class="text-slate-600 hover:text-brand-600">RSS Feed</a></li>
+                        <?php foreach (($primary_menu ?? []) as $__item): if (($__item['url'] ?? '') === '/' ) continue; ?>
+                        <li><a href="<?= htmlspecialchars(link_to($__item['url'])) ?>" class="text-slate-600 hover:text-brand-600"><?= htmlspecialchars($__item['title']) ?></a></li>
+                        <?php endforeach; ?>
                     <?php endif; ?>
                 </ul>
             </div>
             <div>
-                <h4 class="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Connect</h4>
-                <div class="flex items-center gap-3">
-                    <a href="<?= $base ?>/feed" title="RSS" class="w-9 h-9 rounded-lg bg-white border border-slate-200 grid place-items-center text-slate-600 hover:text-brand-600 hover:border-brand-300">
-                        <?= icon('rss', 'w-4 h-4') ?>
-                    </a>
-                </div>
+                <h4 class="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Follow</h4>
+                <?php // 1.2.98: one square RSS icon under "Connect" read as unfinished. ?>
+                <a href="<?= $base ?>/feed" class="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-brand-600">
+                    <?= icon('rss', 'w-4 h-4') ?> Subscribe by RSS
+                </a>
+                <form action="<?= $base ?>/search" method="GET" role="search" class="mt-4 bht-foot-search">
+                    <input type="search" name="q" placeholder="Search…" aria-label="Search this site" class="bht-input-touch">
+                </form>
             </div>
         </div>
         <div class="pt-6 border-t border-slate-200 flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs text-slate-500">

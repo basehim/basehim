@@ -1232,6 +1232,8 @@ if (!function_exists('bh_author_box')) {
             'show_bio'     => true,
             'show_link'    => true,
             'link_text'    => 'View all %d posts',
+            // 1.2.98: one post read "View all 1 posts".
+            'link_text_one' => 'View their post',
             'avatar_size'  => 64,
             'class'        => '',
             'avatar_class' => '',
@@ -1275,7 +1277,7 @@ if (!function_exists('bh_author_box')) {
         }
         if ($args['show_link'] && $url) {
             $h .= '<a class="' . $e($cls('bh-author-box__link', $args['link_class'])) . '" href="' . $e($url) . '">'
-                . $e(str_replace('%d', (string) $a['post_count'], (string) $args['link_text'])) . '</a>';
+                . $e(str_replace('%d', (string) $a['post_count'], (string) ((int) $a['post_count'] === 1 ? $args['link_text_one'] : $args['link_text']))) . '</a>';
         }
         $h .= '</div></div></aside>';
 

@@ -1,13 +1,11 @@
 <?php $partial('header'); ?>
 
 <!-- Hero -->
-<section class="bg-gradient-to-br from-brand-50 via-white to-brand-50 border-b border-slate-100">
-    <div class="max-w-6xl mx-auto px-4 lg:px-6 py-16 lg:py-24 text-center">
-        <h1 class="text-4xl md:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
-            <?= htmlspecialchars($site_title) ?>
-        </h1>
+<section class="bht-hero">
+    <div class="max-w-6xl mx-auto px-4 lg:px-6 bht-hero__inner">
+        <h1 class="bht-hero__title"><?= htmlspecialchars($site_title) ?></h1>
         <?php if (!empty($tagline)): ?>
-            <p class="text-lg text-slate-600 max-w-2xl mx-auto"><?= htmlspecialchars($tagline) ?></p>
+            <p class="bht-hero__tagline"><?= htmlspecialchars($tagline) ?></p>
         <?php endif; ?>
     </div>
 </section>
@@ -15,53 +13,53 @@
 <!-- Posts -->
 <div class="max-w-6xl mx-auto px-4 lg:px-6 py-12">
     <?php if (empty($posts)): ?>
-        <div class="text-center py-20 text-slate-500">
-            <?= icon('newspaper', 'w-16 h-16 text-slate-200 mb-4 mx-auto') ?>
-            <h2 class="text-xl font-semibold text-slate-700 mb-2">No posts yet</h2>
-            <p>Check back soon for new content.</p>
+        <div class="bht-empty">
+            <span class="bht-empty__icon"><?= icon('newspaper', 'w-7 h-7') ?></span>
+            <h2 class="text-xl font-semibold text-slate-900 mb-2">Nothing here yet</h2>
+            <p class="text-slate-600">New posts will appear here. Check back soon.</p>
         </div>
     <?php else: ?>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <?php foreach ($posts as $p): ?>
-            <article class="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg hover:shadow-brand-100/40 hover:border-brand-200 transition group">
-                <?php if (!empty($p['featured_url'])): ?>
-                <a href="<?= $base ?><?= htmlspecialchars(\App\Core\Helpers::postUrl($p)) ?>" class="block aspect-video overflow-hidden bg-slate-100">
-                    <img src="<?= htmlspecialchars($p['featured_url']) ?>" alt="<?= htmlspecialchars($p['title']) ?>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+        <?php
+        // The newest post on the first page leads, wide (1.2.98). A new site
+        // with one post looks finished instead of showing a lone card.
+        $__lead = ((int) ($meta['page'] ?? 1)) <= 1 ? array_shift($posts) : null;
+        $__card = function (array $p, bool $lead) use ($base): void {
+            $url = $base . \App\Core\Helpers::postUrl($p);
+            $initial = function_exists('mb_substr') ? mb_strtoupper(mb_substr(trim((string) $p['title']), 0, 1)) : strtoupper(substr(trim((string) $p['title']), 0, 1));
+            ?>
+            <article class="<?= $lead ? 'bht-lead' : 'bht-card' ?> group">
+                <a href="<?= htmlspecialchars($url) ?>" class="bht-media" tabindex="-1" aria-hidden="true">
+                    <?php if (!empty($p['featured_url'])): ?>
+                        <img src="<?= htmlspecialchars($p['featured_url']) ?>" alt="" loading="<?= $lead ? 'eager' : 'lazy' ?>" class="bht-media__img">
+                    <?php else: ?>
+                        <span class="bht-media__ph"><span><?= htmlspecialchars($initial !== '' ? $initial : '·') ?></span></span>
+                    <?php endif; ?>
                 </a>
-                <?php else: ?>
-                <a href="<?= $base ?><?= htmlspecialchars(\App\Core\Helpers::postUrl($p)) ?>" class="block aspect-video bg-gradient-to-br from-brand-100 to-brand-200 grid place-items-center">
-                    <?= icon('newspaper', 'w-10 h-10 text-brand-400') ?>
-                </a>
-                <?php endif; ?>
-                <div class="p-5">
-                    <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                        <?= icon('calendar', 'w-4 h-4') ?>
+                <div class="bht-body">
+                    <div class="bht-meta">
                         <?= bh_time_tag($p['published_at'] ?? $p['created_at'], 'M j, Y') ?>
                         <?php if (!empty($p['author_name'])): ?>
-                            <span class="text-slate-300">·</span>
-                            <?php if (!empty($p['author_avatar_url'])): ?>
-                            <img src="<?= htmlspecialchars($p['author_avatar_url']) ?>" alt="" width="20" height="20" loading="lazy" class="w-5 h-5 rounded-full object-cover">
-                            <?php else: ?>
-                            <?= icon('user', 'w-4 h-4') ?>
-                            <?php endif; ?>
+                            <span class="text-slate-300" aria-hidden="true">·</span>
                             <span><?= htmlspecialchars($p['author_name']) ?></span>
                         <?php endif; ?>
                     </div>
-                    <h2 class="text-lg font-semibold text-slate-900 mb-2 leading-tight">
-                        <a href="<?= $base ?><?= htmlspecialchars(\App\Core\Helpers::postUrl($p)) ?>" class="hover:text-brand-600">
-                            <?= htmlspecialchars($p['title']) ?>
-                        </a>
-                    </h2>
+                    <h2 class="bht-title"><a href="<?= htmlspecialchars($url) ?>"><?= htmlspecialchars($p['title']) ?></a></h2>
                     <?php if (!empty($p['excerpt'])): ?>
-                        <p class="text-sm text-slate-600 line-clamp-3"><?= htmlspecialchars($p['excerpt']) ?></p>
+                        <p class="bht-excerpt"><?= htmlspecialchars($p['excerpt']) ?></p>
                     <?php endif; ?>
-                    <a href="<?= $base ?><?= htmlspecialchars(\App\Core\Helpers::postUrl($p)) ?>" class="inline-flex items-center gap-1 mt-3 text-sm font-medium text-brand-600 hover:text-brand-700">
-                        Read more <?= icon('arrow-right', 'w-3.5 h-3.5') ?>
-                    </a>
+                    <a href="<?= htmlspecialchars($url) ?>" class="bht-more" aria-hidden="true" tabindex="-1">Read <?= $lead ? 'the post' : 'more' ?> <?= icon('arrow-right', 'w-4 h-4') ?></a>
                 </div>
             </article>
-            <?php endforeach; ?>
+            <?php
+        };
+        ?>
+        <?php if ($__lead) $__card($__lead, true); ?>
+        <?php if ($posts): ?>
+        <?php if ($__lead): ?><h2 class="bht-section-title">More posts</h2><?php endif; ?>
+        <div class="bht-grid">
+            <?php foreach ($posts as $p) $__card($p, false); ?>
         </div>
+        <?php endif; ?>
 
         <!-- Pagination -->
         <?php if (($meta['last_page'] ?? 1) > 1): ?>

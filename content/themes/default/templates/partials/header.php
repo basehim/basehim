@@ -19,6 +19,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= $base ?>/content/themes/default/assets/tailwind.min.css?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>">
+    <link rel="stylesheet" href="<?= $base ?>/content/themes/default/assets/theme.css?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>">
     <?= menu_assets() ?>
     <?php
     /* Everything core and any installed app needs in <head>: the theme's options
@@ -43,10 +44,11 @@
                         <?= icon('bolt', 'w-4 h-4') ?>
                     </div>
                 <?php endif; ?>
-                <div class="hidden sm:block">
+                <?php // The name shows on phones too (1.2.98); only the tagline waits for wider screens. ?>
+                <div class="bht-brand-text">
                     <div class="font-semibold text-slate-900 leading-tight"><?= htmlspecialchars($site_title) ?></div>
                     <?php if (!empty($tagline)): ?>
-                    <div class="text-xs text-slate-500"><?= htmlspecialchars($tagline) ?></div>
+                    <div class="text-xs text-slate-500 hidden sm:block"><?= htmlspecialchars($tagline) ?></div>
                     <?php endif; ?>
                 </div>
             </a>
@@ -60,14 +62,16 @@
 
             <!-- Search button -->
             <div class="flex items-center gap-2">
-                <form action="<?= $base ?>/search" method="GET" class="hidden md:flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-100">
-                    <?= icon('magnifying-glass', 'w-4 h-4 text-slate-400 pl-3') ?>
-                    <input type="text" name="q" placeholder="Search..." value="<?= htmlspecialchars($query ?? '') ?>"
+                <form action="<?= $base ?>/search" method="GET" role="search" class="hidden md:flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-100">
+                    <?php // Padding on the svg itself squeezed the icon to a dot; the span holds the space. ?>
+                    <span class="bht-search-ico" aria-hidden="true"><?= icon('magnifying-glass', 'w-4 h-4') ?></span>
+                    <input type="search" name="q" placeholder="Search…" aria-label="Search" value="<?= htmlspecialchars($query ?? '') ?>"
                            class="bg-transparent border-0 px-2.5 py-1.5 text-sm w-40 focus:w-56 focus:outline-none transition-all">
                 </form>
-                <button type="button" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')"
-                        class="md:hidden p-2 text-slate-600 hover:bg-slate-50 rounded-lg">
-                    <?= icon('bars-3', 'w-4 h-4') ?>
+                <button type="button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Menu"
+                        onclick="var m=document.getElementById('mobile-menu');m.classList.toggle('hidden');this.setAttribute('aria-expanded',m.classList.contains('hidden')?'false':'true')"
+                        class="md:hidden bht-menu-btn text-slate-600 hover:bg-slate-50 rounded-lg">
+                    <?= icon('bars-3', 'w-5 h-5') ?>
                 </button>
             </div>
         </div>
@@ -77,7 +81,7 @@
             <?php // Stacked rather than hovering: a dropdown needs a pointer. ?>
             <?= menu_html($primary_menu ?? [], ['class' => 'bh-menu bh-menu--stack text-slate-700']) ?>
             <form action="<?= $base ?>/search" method="GET" class="pt-2">
-                <input type="text" name="q" placeholder="Search..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                <input type="search" name="q" placeholder="Search…" aria-label="Search" class="w-full px-3 py-2 border border-slate-300 rounded-lg bht-input-touch">
             </form>
         </div>
     </div>

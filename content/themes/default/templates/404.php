@@ -1,20 +1,22 @@
 <?php $partial('header'); ?>
 
-<div class="max-w-2xl mx-auto px-4 lg:px-6 py-20 text-center">
-    <div class="inline-flex w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-100 to-brand-200 grid place-items-center text-brand-500 text-3xl mb-6">
-        <?= icon('map', 'w-4 h-4') ?>
-    </div>
-    <h1 class="text-6xl font-bold text-slate-900 mb-2">404</h1>
-    <p class="text-xl text-slate-700 mb-2">Page not found</p>
-    <p class="text-slate-500 mb-8 max-w-md mx-auto"><?= htmlspecialchars($message ?? "We couldn't find what you were looking for.") ?></p>
-    <div class="flex items-center justify-center gap-3">
-        <a href="<?= $base ?>/" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-medium shadow-sm">
-            <?= icon('home', 'w-4 h-4 mr-1') ?> Home
-        </a>
-        <a href="<?= $base ?>/search" class="px-5 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg font-medium">
-            <?= icon('magnifying-glass', 'w-4 h-4 mr-1') ?> Search
-        </a>
-    </div>
+<?php
+// 1.2.98: the icon sat off-centre at a quarter of its box, and the message
+// repeated the heading ("Page not found" twice). The search form is here now,
+// so a visitor can look for the page without another click.
+$__msg = trim((string) ($message ?? ''));
+if ($__msg === '' || strcasecmp($__msg, 'Page not found') === 0) $__msg = "The page you were looking for isn't here. It may have moved, or the address may be mistyped.";
+?>
+<div class="bht-404">
+    <span class="bht-404__icon"><?= icon('map', 'w-8 h-8') ?></span>
+    <p class="bht-404__code">404</p>
+    <h1 class="bht-404__title">Page not found</h1>
+    <p class="bht-404__text"><?= htmlspecialchars($__msg) ?></p>
+    <form action="<?= $base ?>/search" method="GET" role="search" class="bht-404__search">
+        <input type="search" name="q" placeholder="Search this site" aria-label="Search this site" class="bht-input-touch">
+        <button type="submit" class="bht-btn"><?= icon('magnifying-glass', 'w-4 h-4') ?><span>Search</span></button>
+    </form>
+    <a href="<?= $base ?>/" class="bht-404__home"><?= icon('arrow-left', 'w-4 h-4') ?> Back to the home page</a>
 </div>
 
 <?php $partial('footer'); ?>

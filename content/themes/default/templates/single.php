@@ -92,8 +92,8 @@
 
     <!-- Comments -->
     <section id="comments" class="mt-12 pt-8 border-t border-slate-200">
-        <h2 class="text-2xl font-bold text-slate-900 mb-6">
-            <?= icon('chat-bubble-left-right', 'w-4 h-4 text-brand-500 mr-2') ?>
+        <h2 class="text-2xl font-bold text-slate-900 mb-6 bht-comments-title">
+            <?= icon('chat-bubble-left-right', 'w-6 h-6 text-brand-500') ?>
             Comments <span class="text-slate-400 font-medium" data-bh-comment-count="<?= (int) $post['id'] ?>"><?= (int) $comments_count ?></span>
         </h2>
 

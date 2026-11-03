@@ -196,8 +196,9 @@ and mirrored in the admin at `/admin/api/reference`.
    (or of this repository) to your document root, e.g. `public_html/`.
 2. **Create a MySQL database** and grant a user full privileges.
 3. **Visit your domain** — you'll be redirected to `/install.php`.
-4. Work through the wizard: database, site details, admin account, optional
-   starter content.
+4. Work through the installer's four screens: a server check, the database
+   connection, your site and account (name, tagline, address, timezone and
+   optional starter content), and a confirmation with first steps.
 5. That's it. The installer locks itself when it finishes (`INSTALLED=true` in
    `.env`); deleting `install.php` afterwards is optional.
 
