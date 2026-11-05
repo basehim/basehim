@@ -263,6 +263,22 @@ server-rendered table.
 The CSS and JS are versioned by their file modification time, so a changed
 asset is picked up by browsers immediately — no release bump or hard refresh.
 
+### Row actions and density (1.2.99)
+
+A row's actions (View or Preview, Edit, Quick Edit, declared actions,
+Publish or Move to Draft, Move to Trash) come from one list and are shown
+in one of two ways, chosen by the **Density** in Screen Options:
+
+- **Comfortable** (the default): plain text links under the row's title
+  (the column whose `card` slot is `title`, else the first column), shown
+  while the row is hovered or has keyboard focus, and always on touch
+  screens. There is no ⋮ column.
+- **Compact**: the ⋮ menu at the end of the row, with icons.
+
+Cards (List and Grid views, and phones) always use the ⋮ menu. Actions a
+table declares (see *Declared actions*) appear in both forms; nothing extra
+is needed.
+
 ## Reusable cell components
 
 `App\Core\Admin\Components` renders the things that recur across admin

@@ -34,23 +34,33 @@
 <!-- Header -->
 <header class="border-b border-slate-100 bg-white/95 backdrop-blur sticky top-0 z-40">
     <div class="max-w-6xl mx-auto px-4 lg:px-6">
-        <div class="flex items-center justify-between h-16">
+        <div class="flex items-center justify-between bht-header-row">
             <!-- Brand -->
-            <a href="<?= $base ?>/" class="flex items-center gap-3 group">
+            <?php
+            // Customize → Site identity (1.2.99): the name and the tagline can each
+            // be hidden; the logo's size is var(--bh-logo-width) in theme.css.
+            $__showName = $show_site_title ?? true;
+            $__showTag = ($show_tagline ?? true) && !empty($tagline);
+            ?>
+            <a href="<?= $base ?>/" class="flex items-center gap-3 group min-w-0"<?= !$__showName && empty($logo_url) ? ' aria-label="' . htmlspecialchars($site_title) . '"' : '' ?>>
                 <?php if (!empty($logo_url)): ?>
-                    <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($site_title) ?>" class="h-9 w-auto">
+                    <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($site_title) ?>" class="bht-logo">
                 <?php else: ?>
                     <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 grid place-items-center text-white shadow-md shadow-brand-200 group-hover:shadow-lg group-hover:shadow-brand-300 transition">
                         <?= icon('bolt', 'w-4 h-4') ?>
                     </div>
                 <?php endif; ?>
                 <?php // The name shows on phones too (1.2.98); only the tagline waits for wider screens. ?>
+                <?php if ($__showName || $__showTag): ?>
                 <div class="bht-brand-text">
+                    <?php if ($__showName): ?>
                     <div class="font-semibold text-slate-900 leading-tight"><?= htmlspecialchars($site_title) ?></div>
-                    <?php if (!empty($tagline)): ?>
+                    <?php endif; ?>
+                    <?php if ($__showTag): ?>
                     <div class="text-xs text-slate-500 hidden sm:block"><?= htmlspecialchars($tagline) ?></div>
                     <?php endif; ?>
                 </div>
+                <?php endif; ?>
             </a>
 
             <!-- Nav -->

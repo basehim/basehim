@@ -49,7 +49,10 @@ const POST_FIELDS = (over = {}) => {
 function page(opts = {}) {
   const doc = createDocument();
   doc.hiddenSelectors = ['.bh-dt[data-view="list"] .bh-dt-table', '.bh-dt[data-view="grid"] .bh-dt-table',
-                         '.bh-dt[data-view="table"] .bh-dt-cards'];
+                         '.bh-dt[data-view="table"] .bh-dt-cards',
+                         // datatable.css (1.2.99): row links in Comfortable, the ⋮ column in Compact.
+                         '.bh-dt[data-density="compact"] .bh-dt-actrow',
+                         '.bh-dt:not([data-density="compact"]) .bh-dt-table .bh-dt-rowactions'];
   const rows = opts.rows || [row(1, 'First post', 'draft'), row(2, 'Second post', 'published')];
   const COLS = opts.columns || [{ id: 'title', label: 'Title', align: 'left', sortable: ['title_az', 'title_za'], can_hide: false }, { id: 'status', label: 'Status', align: 'center' }];
   const cfg = {
@@ -57,7 +60,7 @@ function page(opts = {}) {
     initial: {
       table: opts.table || 'content.posts', rows, meta: { page: 2, per_page: 2, total: 9, last_page: 5 },
       columns: COLS, catalog: COLS, label: opts.label,
-      prefs: { visible: COLS.map((c) => c.id), order: COLS.map((c) => c.id), page_size: 2, density: 'comfortable', view: opts.view || 'table' },
+      prefs: { visible: COLS.map((c) => c.id), order: COLS.map((c) => c.id), page_size: 2, density: opts.density || 'comfortable', view: opts.view || 'table' },
       sort: 'newest', search: 'abc', filters: { status: 'draft' }, page_sizes: [2, 20], bulk_actions: ['publish', 'draft', 'delete'],
       row_actions: ['edit', 'trash'], quick_edit: opts.quickEdit !== false,
     },
@@ -159,6 +162,73 @@ function ok(c, msg) { if (!c) throw new Error(msg || 'expected true'); }
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
+
+/** A row's text link (Comfortable density, 1.2.99). */
+function rowLink(p, id, label) {
+  return p.root.querySelectorAll('tr[data-dt-actrow="' + id + '"] .bh-dt-rowlink').find((n) => n.textContent === label) || null;
+}
+const shown = (n) => !!n && n.offsetParent !== null;
+
+test('Comfortable: the row\'s actions are text links on a line under the whole row, in the menu\'s order, with no ⋮', async () => {
+  const p = page();
+  const links = (id) => p.root.querySelectorAll('tr[data-dt-actrow="' + id + '"] .bh-dt-rowlink').map((n) => n.textContent);
+  // A draft offers Publish; a live post Move to Draft. View/Preview needs a link (rows here have none).
+  eq(links(1), ['Edit', 'Quick Edit', 'Publish', 'Move to Trash']);
+  eq(links(2), ['Edit', 'Quick Edit', 'Move to Draft', 'Move to Trash']);
+  const main = p.root.querySelector('tr[data-dt-row="1"]');
+  const line = p.root.querySelector('tr[data-dt-actrow="1"]');
+  ok(main.nextSibling === line, 'the line follows its row');
+  ok(!main.querySelector('.bh-dt-rowlinks'), 'not inside a cell of the row');
+  const tds = line.querySelectorAll('td');
+  eq([tds.length, tds[1].getAttribute('colspan')], [2, '3'], 'after the checkbox, across every other column');
+  ok(!line.querySelector('.bh-dt-rowlinks svg'), 'no icons');
+  eq(line.querySelectorAll('a.bh-dt-rowlink').map((n) => n.getAttribute('href')), ['/admin/posts/1/edit'], 'Edit is a real link');
+  // Selecting the row marks both lines.
+  const cb = main.querySelector('.bh-dt-rowcheck'); cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true }));
+  ok(main.classList.contains('is-selected') && line.classList.contains('is-selected'), 'selected together');
+  ok(rowLink(p, 1, 'Move to Trash').classList.contains('bh-dt-rowlink--danger'), 'Trash marked as destructive');
+  ok(shown(rowLink(p, 1, 'Edit')), 'links shown');
+  ok(!shown(p.root.querySelector('tr[data-dt-row="1"] .bh-dt-actbtn')), 'no ⋮ in the table');
+});
+
+test('Comfortable: View or Preview follows the post\'s status', async () => {
+  const p = page({ rows: [row(1, 'Draft', 'draft', { link: { url: '/?p=1', live: false } }), row(2, 'Live', 'published', { link: { url: '/live', live: true } })] });
+  eq(rowLink(p, 1, 'Preview').getAttribute('href'), '/?p=1');
+  eq(rowLink(p, 2, 'View').getAttribute('target'), '_blank');
+  ok(!rowLink(p, 1, 'View') && !rowLink(p, 2, 'Preview'));
+});
+
+test('Comfortable: the Quick Edit link opens Quick Edit; Publish and Move to Trash run like the menu', async () => {
+  const p = page();
+  rowLink(p, 1, 'Quick Edit').click();
+  await p.settle();
+  ok(p.doc.querySelector('dialog[open] .bh-dt-qe'), 'Quick Edit open');
+  p.doc.querySelector('dialog[open] .bh-dt-qe .bh-btn--secondary').click();
+  await p.settle();
+  rowLink(p, 1, 'Publish').click();
+  await p.settle();
+  rowLink(p, 2, 'Move to Trash').click();
+  await p.settle();
+  eq(p.confirms.length, 1, 'Trash asks first');
+  // The same bulk form the menu posts, one row each.
+  const sent = p.doc.querySelectorAll('form').filter((f) => f.getAttribute('action') === '/admin/posts/bulk' || f.action === '/admin/posts/bulk')
+    .map((f) => [f.querySelector('[name="bulk_action"]').value, f.querySelectorAll('[name="ids[]"]').map((i) => String(i.value))]);
+  eq(sent, [['publish', ['1']], ['delete', ['2']]]);
+});
+
+test('Compact: the ⋮ menu instead of links, with the same actions', async () => {
+  const p = page({ density: 'compact' });
+  ok(!shown(rowLink(p, 1, 'Edit')), 'links hidden');
+  const btn = p.root.querySelector('tr[data-dt-row="1"] .bh-dt-actbtn');
+  ok(shown(btn), '⋮ shown');
+  btn.click();
+  eq(p.doc.querySelectorAll('.bh-dt-menu__item').map((n) => n.textContent), ['Edit', 'Quick Edit', 'Publish', 'Move to Trash']);
+  ok(p.doc.querySelectorAll('.bh-dt-menu__item svg').length === 4, 'the menu keeps its icons');
+  await p.openQuick(1);
+  p.doc.querySelector('dialog[open] .bh-dt-qe .bh-btn--secondary').click();
+  await p.settle();
+  ok(p.doc.activeElement === btn || p.doc.activeElement === p.root.querySelector('tr[data-dt-row="1"] .bh-dt-actbtn'), 'focus back on the ⋮');
+});
 
 test('the row menu offers Quick Edit only on tables that have it', async () => {
   const p = page();
@@ -309,7 +379,7 @@ test('Cancel closes without saving; with changes it asks first', async () => {
   await p.settle();
   ok(!p.doc.querySelector('dialog[open] .bh-dt-qe'), 'closed');
   eq(p.saves().length, 0);
-  ok(p.doc.activeElement === p.root.querySelector('tr[data-dt-row="1"] .bh-dt-actbtn'), 'focus back on the row');
+  ok(p.doc.activeElement === rowLink(p, 1, 'Quick Edit'), 'focus back on the row (its Quick Edit link in Comfortable)');
 
   await p.openQuick(1);
   p.set('title', 'Unsaved');

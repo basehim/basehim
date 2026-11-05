@@ -148,6 +148,8 @@ Every template:
 | `$base` | URL prefix: `''` at a domain root, `/sub` in a subdirectory |
 | `$site_title`, `$tagline` | from the Customizer |
 | `$logo_url`, `$favicon_url`, `$footer_text` | from the Customizer |
+| `$show_site_title`, `$show_tagline` | whether to print the name and the tagline beside the logo (Customize → Site identity → Show in the header; both on by default) |
+| `$logo_width` | the chosen logo width in pixels, `0` for the theme's own size. Size the logo in CSS with `width: var(--bh-logo-width, auto); height: var(--bh-logo-height, 36px)`: both variables are set only once a width is chosen |
 | `$primary_menu`, `$footer_menu` | menu trees, ready for `menu_html()` |
 | `$seo` | the page's final `title`, `description`, `canonical`, `robots`, `og_title`, `og_description`, `og_image`, for **showing** (a breadcrumb, a share button). Core prints the tags itself |
 | `$current_url` | the request path |

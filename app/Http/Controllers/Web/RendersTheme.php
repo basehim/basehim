@@ -47,6 +47,11 @@ trait RendersTheme
         $data['tagline']     = $cz->coreValue('identity', 'tagline', '');
         $data['logo_url']    = $cz->coreValue('identity', 'logo_url', '');
         $data['favicon_url'] = $cz->coreValue('identity', 'favicon_url', '');
+        // 1.2.99: Customize → Site identity. The width is also on the page as
+        // var(--bh-logo-width), which is what a theme's CSS should use.
+        $data['logo_width']      = (int) $cz->coreValue('identity', 'logo_width', 0);
+        $data['show_site_title'] = (bool) $cz->coreValue('identity', 'show_site_title', true);
+        $data['show_tagline']    = (bool) $cz->coreValue('identity', 'show_tagline', true);
         $data['footer_text'] = $cz->coreValue('footer', 'footer_text', '');
         $data['custom_css']  = $settings->get('appearance', 'custom_css', '');
 
@@ -299,6 +304,9 @@ trait RendersTheme
             'footer_text' => $settings->get('appearance', 'footer_text', ''),
             'logo_url' => $settings->get('appearance', 'logo_url', ''),
             'favicon_url' => $settings->get('appearance', 'favicon_url', ''),
+            'logo_width' => (int) $settings->get('appearance', 'logo_width', 0),
+            'show_site_title' => (bool) $settings->get('appearance', 'show_site_title', true),
+            'show_tagline' => (bool) $settings->get('appearance', 'show_tagline', true),
             'custom_css' => $settings->get('appearance', 'custom_css', ''),
             // The 404 page is styled by the theme like any other, so it needs
             // the same variables — otherwise a preview of it loses its colours.

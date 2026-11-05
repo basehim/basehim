@@ -46,11 +46,20 @@
     function pushVars() {
         var decls = [];
         document.querySelectorAll('.bh-cz__field[data-preview="css"]').forEach(function (f) {
+            // Custom CSS is a stylesheet, sent by pushCss(); inside :root{} it
+            // would break every declaration after it.
+            if (f.getAttribute('data-type') === 'textarea') return;
             var v = readField(f);
             if (v === '' || v === null) return;
+            // 1.2.99: a range whose 0 means "the theme's own" (data-zero) adds nothing.
+            if (f.hasAttribute('data-zero') && Number(v) === 0) return;
             var name = f.getAttribute('data-var') ||
                        ('--bh-' + f.getAttribute('data-path').split('.').pop().replace(/_/g, '-'));
             decls.push(name + ': ' + v + (f.getAttribute('data-unit') || ''));
+            // Variables that go with a set value (the logo's height follows its width).
+            var also = {};
+            try { also = JSON.parse(f.getAttribute('data-also') || '{}') || {}; } catch (e) { also = {}; }
+            Object.keys(also).forEach(function (k) { decls.push(k + ': ' + also[k]); });
         });
         post({ type: 'vars', css: decls.length ? ':root{' + decls.join(';') + '}' : '' });
     }
@@ -154,8 +163,9 @@
         if (type === 'range') {
             var out = field.querySelector('[data-output]');
             var unit = field.getAttribute('data-unit') || '';
+            var zero = field.getAttribute('data-zero');
             input.addEventListener('input', function () {
-                if (out) out.textContent = input.value + unit;
+                if (out) out.textContent = (zero !== null && Number(input.value) === 0) ? zero : input.value + unit;
                 changed();
             });
             return;

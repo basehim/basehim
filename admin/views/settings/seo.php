@@ -74,7 +74,7 @@ if ($themeSeo === false) {
         <?= bh_set_card_close() ?>
 
         <?= bh_set_card_open('Home page') ?>
-            <?= bh_set_row('Title', '<input id="seo-home-title" type="text" name="home_title" maxlength="200" class="bh-input" value="' . $e($v['home_title'] ?? '') . '" placeholder="' . $e($cfg['title_format'] === '%title%' ? 'Your site title' : '') . '">', 'Empty: the site title. <code>%site%</code>, <code>%tagline%</code> and <code>%sep%</code> work here too.', ['for' => 'seo-home-title']) ?>
+            <?= bh_set_row('Title', '<input id="seo-home-title" type="text" name="home_title" maxlength="200" class="bh-input" value="' . $e($v['home_title'] ?? '') . '" placeholder="%site% %sep% %tagline%">', 'Empty: the site name, the separator and the tagline. <code>%site%</code>, <code>%tagline%</code> and <code>%sep%</code> work here too.', ['for' => 'seo-home-title']) ?>
             <?= bh_set_row('Description', '<textarea id="seo-home-desc" name="home_description" rows="2" maxlength="400" class="bh-textarea">' . $e($v['home_description'] ?? '') . '</textarea>', 'Empty: the site tagline.', ['for' => 'seo-home-desc']) ?>
         <?= bh_set_card_close() ?>
 

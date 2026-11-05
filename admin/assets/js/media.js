@@ -411,8 +411,12 @@
         var uid = 'nm-' + Math.random().toString(36).slice(2, 8);
 
         var typeChoices = allowed.length ? allowed : TYPE_KEYS;
+        // "All types" when everything may be picked; a narrowed picker says what
+        // it holds (1.2.99, BH-103): a logo field's list is images only.
+        var allLabel = allowed.length && allowed.every(function (k) { return k === 'image' || k === 'svg'; })
+            ? 'All images' : (allowed.length ? 'All allowed types' : TYPE_LABELS.all);
         var typeSelect = typeChoices.length > 1
-            ? '<select class="nm-select nm-type" aria-label="File type"><option value="all">' + escapeHtml(TYPE_LABELS.all) + '</option>' +
+            ? '<select class="nm-select nm-type" aria-label="File type"><option value="all">' + escapeHtml(allLabel) + '</option>' +
                 typeChoices.map(function (k) { return '<option value="' + k + '">' + escapeHtml(TYPE_LABELS[k]) + '</option>'; }).join('') + '</select>'
             : '';
 

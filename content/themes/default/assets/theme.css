@@ -11,6 +11,11 @@
 
 /* Header */
 .bht-brand-text { min-width: 0; }
+/* Header row and logo (1.2.99). The row grows for a large logo instead of
+   letting it spill out. Customize → Logo width sets --bh-logo-width (and
+   --bh-logo-height: auto); without it the logo is 36px tall, as before. */
+.bht-header-row { min-height: 4rem; padding-block: .5rem; gap: 1rem; }
+.bht-logo { display: block; flex: none; width: var(--bh-logo-width, auto); height: var(--bh-logo-height, 2.25rem); max-width: min(100%, 60vw); object-fit: contain; }
 .bht-brand-text > div:first-child { overflow-wrap: anywhere; }
 .bht-search-ico { display: grid; place-items: center; padding-left: 12px; color: #94a3b8; }
 .bht-menu-btn { display: grid; place-items: center; width: 44px; height: 44px; }

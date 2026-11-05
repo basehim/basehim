@@ -215,10 +215,13 @@ final class SeoHeadService
         $explicit = trim((string) ($meta['meta_title'] ?? ''));
         if ($type === 'home' && $s['home_title'] !== '') {
             $title = $this->fillTitle($s['home_title'], $site, $site, $tagline, $s['separator'], $pageNo);
-        } elseif ($type === 'home' && !$post) {
-            $title = $tagline !== '' && $s['title_format'] !== '%title%'
-                ? $this->fillTitle($s['title_format'], $site, $site, $tagline, $s['separator'], $pageNo)
-                : $site;
+        } elseif ($type === 'home' && $explicit === '') {
+            // 1.2.99: the home page is "Site name – Tagline", with the separator
+            // chosen under Settings → SEO; just the name when there's no tagline
+            // (fillTitle drops a dangling separator). Also for a static home page
+            // without its own SEO title. Settings → SEO → Home page → Title
+            // (above) and a page's own SEO title still win.
+            $title = $this->fillTitle('%site% %sep% %tagline%', $site, $site, $tagline, $s['separator'], $pageNo);
         } elseif ($explicit !== '') {
             $title = $explicit;
         } else {

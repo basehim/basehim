@@ -38,18 +38,27 @@
 <header class="dn-header">
     <div class="dn-container">
         <div class="dn-header-in">
-            <a href="<?= $base ?>/" class="dn-brand">
+            <?php
+            // Customize → Site identity (1.2.99): name and tagline can each be hidden.
+            $__showName = $show_site_title ?? true;
+            $__showTag = ($show_tagline ?? true) && !empty($tagline);
+            ?>
+            <a href="<?= $base ?>/" class="dn-brand"<?= !$__showName && empty($logo_url) ? ' aria-label="' . htmlspecialchars($site_title) . '"' : '' ?>>
                 <?php if (!empty($logo_url)): ?>
                     <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($site_title) ?>">
                 <?php else: ?>
                     <div class="dn-moon"><i class="fa-solid fa-moon"></i></div>
                 <?php endif; ?>
+                <?php if ($__showName || $__showTag): ?>
                 <div>
+                    <?php if ($__showName): ?>
                     <div class="dn-brand-name"><?= htmlspecialchars($site_title) ?></div>
-                    <?php if (!empty($tagline)): ?>
+                    <?php endif; ?>
+                    <?php if ($__showTag): ?>
                     <div class="dn-brand-tag"><?= htmlspecialchars($tagline) ?></div>
                     <?php endif; ?>
                 </div>
+                <?php endif; ?>
             </a>
 
             <nav class="dn-nav">

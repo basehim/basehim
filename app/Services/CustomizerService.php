@@ -82,15 +82,17 @@ final class CustomizerService
         return array_merge([
             'identity' => [
                 'label' => 'Site identity',
-                'description' => 'The name, description and marks that identify this site.',
+                'description' => 'The name, tagline and marks that identify this site.',
                 'options' => [
                     'site_title' => [
                         'type' => 'text', 'label' => 'Site name',
                         'group' => 'general', 'default' => 'Basehim',
                         'preview' => 'reload',
                     ],
+                    // "Tagline" everywhere (1.2.99, BH-098): Settings → General
+                    // and the installer already called it that.
                     'tagline' => [
-                        'type' => 'text', 'label' => 'Site description',
+                        'type' => 'text', 'label' => 'Site tagline',
                         'group' => 'general', 'default' => '',
                         'help' => 'A short line describing the site. Themes may show it beside the name.',
                         'preview' => 'reload',
@@ -98,6 +100,36 @@ final class CustomizerService
                     'logo_url' => [
                         'type' => 'image', 'label' => 'Logo',
                         'group' => 'appearance', 'default' => '',
+                        'preview' => 'reload',
+                    ],
+                    /*
+                     * 1.2.99. 0 means the theme's own size, so a site that never
+                     * moves the slider looks exactly as before. A theme sizes its
+                     * logo with var(--bh-logo-width) and var(--bh-logo-height):
+                     * once a width is chosen the height follows it (auto).
+                     */
+                    'logo_width' => [
+                        'type' => 'range', 'label' => 'Logo width',
+                        'group' => 'appearance', 'default' => 0,
+                        'min' => 0, 'max' => 400, 'step' => 2, 'unit' => 'px',
+                        'zero_label' => 'Auto',
+                        'css_var' => '--bh-logo-width',
+                        'css_also' => ['--bh-logo-height' => 'auto'],
+                        'help' => 'Auto uses the theme\'s size.',
+                        'preview' => 'css',
+                    ],
+                    // 1.2.99: each can be hidden on its own, e.g. when the logo
+                    // already spells out the name. Themes read $show_site_title
+                    // and $show_tagline; the name stays in the logo's alt text.
+                    'show_site_title' => [
+                        'type' => 'toggle', 'label' => 'Site name',
+                        'heading' => 'Show in the header',
+                        'group' => 'appearance', 'default' => true,
+                        'preview' => 'reload',
+                    ],
+                    'show_tagline' => [
+                        'type' => 'toggle', 'label' => 'Site tagline',
+                        'group' => 'appearance', 'default' => true,
                         'preview' => 'reload',
                     ],
                     'favicon_url' => [
@@ -272,7 +304,7 @@ final class CustomizerService
             'group'   => 'theme:' . $slug,
         ];
 
-        foreach (['help', 'css_var', 'unit', 'placeholder'] as $k) {
+        foreach (['help', 'css_var', 'unit', 'placeholder', 'heading', 'zero_label'] as $k) {
             if (isset($opt[$k]) && is_scalar($opt[$k])) $clean[$k] = (string) $opt[$k];
         }
         foreach (['min', 'max', 'step', 'rows'] as $k) {
@@ -468,18 +500,7 @@ final class CustomizerService
      */
     public function cssVariables(): string
     {
-        $decls = [];
-        foreach ($this->themeSections() as $section) {
-            foreach ($section['options'] as $key => $opt) {
-                if (($opt['preview'] ?? '') !== 'css') continue;
-                $value = $this->settings->get($opt['group'], $key, $opt['default']);
-                if ($value === '' || $value === null) continue;
-                $var = $opt['css_var'] ?? ('--bh-' . str_replace('_', '-', $key));
-                $unit = $opt['unit'] ?? '';
-                $decls[] = $var . ': ' . $this->cssSafe((string) $value . $unit);
-            }
-        }
-        return $decls ? ':root{' . implode(';', $decls) . '}' : '';
+        return $this->cssVariablesFor([]);
     }
 
     /** Last line of defence for anything reaching a stylesheet. */
@@ -603,16 +624,23 @@ HTML;
     public function cssVariablesFor(array $pending): string
     {
         $decls = [];
-        foreach ($this->themeSections() as $sKey => $section) {
+        // Core options first (1.2.99: the logo width), then the theme's. Custom
+        // CSS is a stylesheet of its own, never a variable.
+        foreach ($this->sections() as $sKey => $section) {
             foreach ($section['options'] as $key => $opt) {
-                if (($opt['preview'] ?? '') !== 'css') continue;
+                if (($opt['preview'] ?? '') !== 'css' || ($opt['type'] ?? '') === 'textarea') continue;
                 $path = $sKey . '.' . $key;
                 $value = array_key_exists($path, $pending)
                     ? $this->coerce($pending[$path], $opt)
                     : $this->settings->get($opt['group'], $key, $opt['default']);
                 if ($value === null || $value === '') continue;
+                // A range whose 0 means "not set" (zero_label) adds nothing.
+                if (isset($opt['zero_label']) && is_numeric($value) && (float) $value == 0.0) continue;
                 $var = $opt['css_var'] ?? ('--bh-' . str_replace('_', '-', $key));
                 $decls[] = $var . ': ' . $this->cssSafe((string) $value . ($opt['unit'] ?? ''));
+                foreach ((array) ($opt['css_also'] ?? []) as $alsoVar => $alsoValue) {
+                    $decls[] = $alsoVar . ': ' . $this->cssSafe((string) $alsoValue);
+                }
             }
         }
         return $decls ? ':root{' . implode(';', $decls) . '}' : '';

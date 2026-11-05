@@ -45,12 +45,18 @@ $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
                             $path = $sKey . '.' . $oKey;
                             $val  = $values[$path] ?? ($opt['default'] ?? '');
                             $id   = 'cz-' . preg_replace('/[^a-z0-9]/i', '-', $path);
+                            $isToggle = $opt['type'] === 'toggle';
                         ?>
-                        <div class="bh-cz__field" data-path="<?= htmlspecialchars($path) ?>"
+                        <?php if (!empty($opt['heading'])): ?>
+                            <h3 class="bh-cz__subhead"><?= htmlspecialchars((string) $opt['heading']) ?></h3>
+                        <?php endif; ?>
+                        <div class="bh-cz__field<?= $isToggle ? ' bh-cz__field--switch' : '' ?>" data-path="<?= htmlspecialchars($path) ?>"
                              data-type="<?= htmlspecialchars($opt['type']) ?>"
                              data-preview="<?= htmlspecialchars($opt['preview'] ?? 'reload') ?>"
                              <?php if (!empty($opt['css_var'])): ?>data-var="<?= htmlspecialchars($opt['css_var']) ?>"<?php endif; ?>
-                             <?php if (!empty($opt['unit'])): ?>data-unit="<?= htmlspecialchars($opt['unit']) ?>"<?php endif; ?>>
+                             <?php if (!empty($opt['unit'])): ?>data-unit="<?= htmlspecialchars($opt['unit']) ?>"<?php endif; ?>
+                             <?php if (isset($opt['zero_label'])): ?>data-zero="<?= htmlspecialchars((string) $opt['zero_label']) ?>"<?php endif; ?>
+                             <?php if (!empty($opt['css_also'])): ?>data-also="<?= htmlspecialchars((string) json_encode($opt['css_also'])) ?>"<?php endif; ?>>
 
                             <label class="bh-cz__label" for="<?= $id ?>"><?= htmlspecialchars($opt['label']) ?></label>
 
@@ -81,10 +87,12 @@ $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
                                 <?php break;
 
                                 case 'toggle': ?>
-                                    <label class="bh-cz__toggle">
-                                        <input type="checkbox" id="<?= $id ?>" <?= $val ? 'checked' : '' ?> data-input>
-                                        <span>Enabled</span>
-                                    </label>
+                                    <?php /* Core's switch (the one Settings uses), at the
+                                            right of its label (1.2.99). */ ?>
+                                    <span class="bh-switch">
+                                        <input type="checkbox" role="switch" class="bh-switch__input" id="<?= $id ?>" <?= $val ? 'checked' : '' ?> data-input>
+                                        <span class="bh-switch__track" aria-hidden="true"></span>
+                                    </span>
                                 <?php break;
 
                                 case 'range': ?>
@@ -94,7 +102,9 @@ $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
                                                max="<?= (int) ($opt['max'] ?? 100) ?>"
                                                step="<?= htmlspecialchars((string) ($opt['step'] ?? 1)) ?>"
                                                value="<?= htmlspecialchars((string) $val) ?>">
-                                        <output data-output><?= htmlspecialchars((string) $val) ?><?= htmlspecialchars((string) ($opt['unit'] ?? '')) ?></output>
+                                        <output data-output><?= isset($opt['zero_label']) && is_numeric($val) && (float) $val == 0.0
+                                            ? htmlspecialchars((string) $opt['zero_label'])
+                                            : htmlspecialchars((string) $val) . htmlspecialchars((string) ($opt['unit'] ?? '')) ?></output>
                                     </div>
                                 <?php break;
 

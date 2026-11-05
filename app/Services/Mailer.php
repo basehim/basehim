@@ -301,32 +301,81 @@ class Mailer
     private function buildMime(array $mail, bool $forPhpMail): array
     {
         $boundary = 'basehim_' . bin2hex(random_bytes(12));
-        $fromName = $this->encodeHeader((string) $mail['from_name']);
 
         $headers = [];
         if (!$forPhpMail) {
-            $headers[] = 'To: ' . implode(', ', $mail['to']);
-            $headers[] = 'Subject: ' . $this->encodeHeader($mail['subject']);
+            $headers[] = 'To: ' . implode(', ', array_map(fn($a) => $this->formatAddress((string) $a), $mail['to']));
+            $headers[] = 'Subject: ' . $this->encodeHeader($this->oneLine((string) $mail['subject']));
         }
-        $headers[] = "From: {$fromName} <{$mail['from']}>";
-        if (!empty($mail['reply_to'])) $headers[] = 'Reply-To: ' . $mail['reply_to'];
+        $headers[] = 'From: ' . $this->formatAddress((string) $mail['from'], (string) ($mail['from_name'] ?? ''));
+        if (!empty($mail['reply_to'])) $headers[] = 'Reply-To: ' . $this->formatAddress((string) $mail['reply_to']);
         $headers[] = 'Date: ' . date('r');
+        // BH-092: some sendmail setups and SMTP services don't add one, and
+        // spam filters score its absence. An app may pass its own.
+        $custom = array_map('strval', (array) $mail['headers']);
+        $hasId = (bool) array_filter($custom, static fn($h) => stripos(ltrim($h), 'message-id:') === 0);
+        if (!$hasId) $headers[] = 'Message-ID: <' . bin2hex(random_bytes(16)) . '@' . self::siteDomain() . '>';
         $headers[] = 'MIME-Version: 1.0';
         $headers[] = 'X-Mailer: Basehim';
         $headers[] = "Content-Type: multipart/alternative; boundary=\"{$boundary}\"";
-        foreach ((array) $mail['headers'] as $h) $headers[] = $h;
+        foreach ($custom as $h) $headers[] = $h;
 
+        // BH-091: quoted-printable keeps every line under 76 characters, so a
+        // long HTML body (the template is one line) never passes RFC 5322's
+        // 998-character limit and gets broken mid-tag by a relay.
         $body = "--{$boundary}\r\n"
             . "Content-Type: text/plain; charset=UTF-8\r\n"
-            . "Content-Transfer-Encoding: 8bit\r\n\r\n"
-            . $mail['text'] . "\r\n\r\n"
+            . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
+            . self::qp((string) $mail['text']) . "\r\n\r\n"
             . "--{$boundary}\r\n"
             . "Content-Type: text/html; charset=UTF-8\r\n"
-            . "Content-Transfer-Encoding: 8bit\r\n\r\n"
-            . $mail['html'] . "\r\n\r\n"
+            . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
+            . self::qp((string) $mail['html']) . "\r\n\r\n"
             . "--{$boundary}--";
 
         return [$headers, $body];
+    }
+
+    /** Quoted-printable with CRLF line ends and no line starting with a lone dot. */
+    private static function qp(string $text): string
+    {
+        $text = preg_replace('/\r\n?|\n/', "\r\n", $text) ?? $text;
+        $out = quoted_printable_encode($text);
+        // A "." alone on a line ends the message for some sendmail setups.
+        return preg_replace('/^\.(?=\r\n|$)/m', '=2E', $out) ?? $out;
+    }
+
+    /**
+     * BH-093: an address with its display name, as RFC 5322 wants it. Names
+     * with special characters ("Smith, Jones & Co") are quoted, names with
+     * non-ASCII characters encoded. Accepts "Name <addr>" as $address too.
+     */
+    private function formatAddress(string $address, string $name = ''): string
+    {
+        $address = $this->oneLine($address);
+        $name = $this->oneLine($name);
+        if ($name === '' && preg_match('/^(.*?)\s*<([^<>]+)>$/', $address, $m)) {
+            $name = trim($m[1]);
+            $address = trim($m[2]);
+            if (strlen($name) >= 2 && $name[0] === '"' && substr($name, -1) === '"') {
+                $name = preg_replace('/\\\\(.)/', '$1', substr($name, 1, -1)) ?? '';
+            }
+        }
+        if ($name === '') return $address;
+        if (preg_match('/[^\x20-\x7e]/', $name)) {
+            $phrase = $this->encodeHeader($name);
+        } elseif (preg_match('/[()<>\[\]:;@\\\\,."]/', $name)) {
+            $phrase = '"' . addcslashes($name, '\\"') . '"';
+        } else {
+            $phrase = $name;
+        }
+        return $phrase . ' <' . $address . '>';
+    }
+
+    /** Header values can't contain line breaks (they would start new headers). */
+    private function oneLine(string $value): string
+    {
+        return trim(preg_replace('/[\r\n\t]+/', ' ', $value) ?? '');
     }
 
     private function encodeHeader(string $value): string

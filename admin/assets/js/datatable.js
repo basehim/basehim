@@ -38,7 +38,7 @@
     var VDOTS = 'M12 6h.01M12 12h.01M12 18h.01';
     function icon(name) {
         if (name === 'bars-3') return svg(DOTS, 3);
-        if (name === 'ellipsis-vertical') return svg(VDOTS, 2.6);
+        if (name === 'ellipsis-vertical') return svg(VDOTS, 3);
         if (name === 'cog-6-tooth') name = 'cog';
         var d = SVG[name];
         if (!d) return window.BasehimIcon ? window.BasehimIcon(name, 'w-4 h-4') : '';
@@ -247,7 +247,11 @@
             r.body.innerHTML = ''; r.cards.innerHTML = '';
             if (r.cardsHead) r.cardsHead.hidden = !rows.length;
             if (!rows.length) { renderEmpty(); syncBulk(); syncSelectAll(); return; }
-            rows.forEach(function (row) { r.body.appendChild(buildRow(row)); r.cards.appendChild(buildCard(row)); });
+            rows.forEach(function (row) {
+                r.body.appendChild(buildRow(row));
+                var lr = buildLinksRow(row); if (lr) r.body.appendChild(lr);
+                r.cards.appendChild(buildCard(row));
+            });
             syncBulk(); syncSelectAll();
         }
         function rowCheckbox(row) {
@@ -281,6 +285,38 @@
             var tda = el('td', 'bh-dt-rowactions'); tda.appendChild(actionsButton(row)); tr.appendChild(tda);
             if (selected[row.id] !== undefined) tr.classList.add('is-selected');
             return tr;
+        }
+        /**
+         * Comfortable density (1.2.99): the row's actions on a line of their own
+         * under it, across every column after the checkbox. The two rows are
+         * one item: hovering or focusing either shows the links and highlights
+         * both. Compact density hides this line (CSS) and shows the ⋮ instead.
+         */
+        function buildLinksRow(row) {
+            var links = rowLinks(row);
+            if (!links) return null;
+            var tr = el('tr', 'bh-dt-actrow'); tr.setAttribute('data-dt-actrow', row.id); tr.setAttribute('data-dt-rowid', row.id);
+            tr.appendChild(el('td', 'bh-dt-check'));
+            var td = el('td'); td.setAttribute('colspan', String(columns.length + 1)); td.appendChild(links); tr.appendChild(td);
+            if (selected[row.id] !== undefined) tr.classList.add('is-selected');
+            return tr;
+        }
+        function pairOf(tr) {
+            var id = tr.getAttribute('data-dt-row') || tr.getAttribute('data-dt-actrow');
+            return r.body.querySelectorAll('tr[data-dt-row="' + id + '"], tr[data-dt-actrow="' + id + '"]');
+        }
+        function hoverPair(e, on) {
+            var tr = e.target && e.target.closest ? e.target.closest('tr[data-dt-row], tr[data-dt-actrow]') : null;
+            if (!tr) return;
+            var rel = e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('tr') : null;
+            if (rel && Array.prototype.indexOf.call(pairOf(tr), rel) !== -1) return;   // moving within the item
+            Array.prototype.forEach.call(pairOf(tr), function (n) { n.classList.toggle('is-hover', on); });
+        }
+        if (r.body) {
+            r.body.addEventListener('mouseover', function (e) { hoverPair(e, true); });
+            r.body.addEventListener('mouseout', function (e) { hoverPair(e, false); });
+            r.body.addEventListener('focusin', function (e) { hoverPair(e, true); });
+            r.body.addEventListener('focusout', function (e) { hoverPair(e, false); });
         }
         // Cards. Wide screens (List and Grid views) keep the 1.2.64 card; at
         // 820px and below, where cards are the only view, a compact card puts
@@ -418,7 +454,11 @@
         }
 
         // --- per-row action menu ---------------------------------------------
-        function openMenu(btn, row) {
+        /**
+         * A row's actions, in the order both forms show them: the links under
+         * the title (Comfortable density) and the ⋮ menu (Compact, and cards).
+         */
+        function rowItems(row) {
             var items = [];
             // The row on the site first (1.2.62; first since 1.2.63): View when it
             // is live, Preview otherwise (only shown to people who may edit it).
@@ -438,6 +478,41 @@
             if (bulk.indexOf('pending') !== -1 && row.status === 'approved') items.push({ label: 'Unapprove', icon: 'arrow-down-tray', action: 'pending', id: row.id });
             if (bulk.indexOf('spam') !== -1 && row.status !== 'spam') items.push({ label: 'Spam', icon: 'no-symbol', action: 'spam', danger: true, id: row.id });
             if (bulk.indexOf('delete') !== -1) items.push({ label: (cfg.deleteConfirm ? 'Delete' : 'Move to Trash'), icon: 'trash', action: 'delete', danger: true, id: row.id });
+            return items;
+        }
+        /** Carry out one of rowItems(); `opener` gets focus back afterwards. */
+        function runItem(it, row, opener) {
+            if (it.href) return;
+            if (it.quick) quickEdit.open(row, opener);
+            else if (it.declared && it.declared.event) emit('bh:dt-action', { table: cfg.table, action: it.declared.id, id: it.id, key: row.key || null, row: row });
+            else if (it.declared) runBulk(it.declared.id, [it.id], [row]);
+            else runBulk(it.action, [it.id]);
+        }
+        /**
+         * Comfortable density (1.2.99): the row's actions as plain text links,
+         * shown while the row is hovered or has focus, in place of the ⋮ menu.
+         */
+        function rowLinks(row) {
+            var items = rowItems(row);
+            if (!items.length) return null;
+            var wrap = el('div', 'bh-dt-rowlinks');
+            items.forEach(function (it) {
+                var node = it.href ? el('a', 'bh-dt-rowlink') : el('button', 'bh-dt-rowlink');
+                if (!it.href) node.type = 'button';
+                if (it.danger) node.classList.add('bh-dt-rowlink--danger');
+                node.textContent = it.label;
+                if (it.href) {
+                    node.href = it.href;
+                    if (it.newTab) { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener'); }
+                } else {
+                    node.addEventListener('click', function (e) { e.stopPropagation(); runItem(it, row, node); });
+                }
+                wrap.appendChild(node);
+            });
+            return wrap;
+        }
+        function openMenu(btn, row) {
+            var items = rowItems(row);
             if (!items.length) return;
             // The same ⋮ again closes its menu (1.2.65); another ⋮ moves it.
             if (menuOpener === btn && menu.style.display !== 'none') { closeMenu(); return; }
@@ -451,10 +526,7 @@
                     node.href = it.href;
                     if (it.newTab) { node.target = '_blank'; node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener'); node.addEventListener('click', closeMenu); }
                 }
-                else if (it.quick) node.addEventListener('click', function () { closeMenu(); quickEdit.open(row, btn); });
-                else if (it.declared && it.declared.event) node.addEventListener('click', function () { closeMenu(); emit('bh:dt-action', { table: cfg.table, action: it.declared.id, id: it.id, key: row.key || null, row: row }); });
-                else if (it.declared) node.addEventListener('click', function () { closeMenu(); runBulk(it.declared.id, [it.id], [row]); });
-                else node.addEventListener('click', function () { closeMenu(); runBulk(it.action, [it.id]); });
+                else node.addEventListener('click', function () { closeMenu(); runItem(it, row, btn); });
                 menu.appendChild(node);
             });
             var b = btn.getBoundingClientRect();
@@ -495,6 +567,7 @@
             function rowEls(id) {
                 return {
                     tr: r.body.querySelector('tr[data-dt-row="' + id + '"]'),
+                    links: r.body.querySelector('tr[data-dt-actrow="' + id + '"]'),
                     card: r.cards.querySelector('[data-dt-rowid="' + id + '"]')
                 };
             }
@@ -891,7 +964,13 @@
                 for (var i = 0; i < rows.length; i++) if (rows[i].id === row.id) rows[i] = row;
                 if (selected[row.id] !== undefined) selected[row.id] = row.status || '';
                 var els = rowEls(row.id);
-                if (els.tr) { var tr = buildRow(row); els.tr.parentNode.replaceChild(tr, els.tr); tr.classList.add('is-updated'); }
+                if (els.tr) {
+                    var tr = buildRow(row); els.tr.parentNode.replaceChild(tr, els.tr); tr.classList.add('is-updated');
+                    var lr = buildLinksRow(row);
+                    if (els.links && lr) els.links.parentNode.replaceChild(lr, els.links);
+                    else if (els.links) els.links.parentNode.removeChild(els.links);
+                    else if (lr) tr.parentNode.insertBefore(lr, tr.nextSibling);
+                }
                 if (els.card) { var c = buildCard(row); els.card.parentNode.replaceChild(c, els.card); c.classList.add('is-updated'); }
                 syncBulk();
             }
@@ -907,9 +986,12 @@
                 var c = cur; cur = null; seq++;
                 if (c.panel.parentNode) c.panel.parentNode.removeChild(c.panel);
                 if (dlg) { if (typeof dlg.close === 'function' && dlg.open) dlg.close(); else dlg.removeAttribute('open'); }
-                // Back to where the user was: the row's actions button.
+                // Back to where the user was: the row's Quick Edit link or its
+                // actions button, whichever this density shows.
                 var els = rowEls(c.id);
-                var back = (els.tr && els.tr.querySelector('.bh-dt-actbtn')) || (els.card && els.card.querySelector('.bh-dt-actbtn')) || c.opener;
+                var shown = function (n) { return n && n.offsetParent !== null ? n : null; };
+                var qlink = els.links ? Array.prototype.filter.call(els.links.querySelectorAll('.bh-dt-rowlink'), function (n) { return n.textContent === 'Quick Edit'; })[0] : null;
+                var back = shown(qlink) || shown(els.tr && els.tr.querySelector('.bh-dt-actbtn')) || shown(els.card && els.card.querySelector('.bh-dt-actbtn')) || c.opener;
                 if (back && back.focus) back.focus();
             }
 
