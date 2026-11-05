@@ -130,7 +130,8 @@ function installerConnect(array $cfg): PDO
     return new PDO($dsn, $cfg['DB_USERNAME'], $cfg['DB_PASSWORD'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_TIMEOUT => 10,
-        PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+00:00'",
+        // Pdo\Mysql::ATTR_INIT_COMMAND on PHP 8.4+; the old name is deprecated in 8.5 (BH-106).
+        (defined('Pdo\\Mysql::ATTR_INIT_COMMAND') ? (int) constant('Pdo\\Mysql::ATTR_INIT_COMMAND') : (int) PDO::MYSQL_ATTR_INIT_COMMAND) => "SET time_zone = '+00:00'",
     ]);
 }
 

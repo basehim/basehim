@@ -2275,7 +2275,7 @@ class AppService
         $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        curl_close($ch);
+        unset($ch);   // frees the handle; the old explicit close is a no-op since PHP 8.0 and deprecated in 8.5 (BH-106)
 
         $headers = [];
         $body = '';

@@ -1146,6 +1146,10 @@
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: left;
     font: inherit; color: inherit; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
 }
+/* On cards (phones, List and Grid views) the title wraps to two lines inside
+   its column like other tables' titles; one unbroken line ran over the size
+   and date beside it (1.2.100). */
+.bh-dt-card .bh-media-open { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 .bh-media-open:hover { color: #2563eb; text-decoration: underline; }
 .bh-media-open:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 4px; }
 .bh-media-acts { display: inline-flex; gap: 2px; justify-content: flex-end; }

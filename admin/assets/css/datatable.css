@@ -303,30 +303,21 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-actbtn:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
 
 /* Row links (1.2.99). Comfortable density shows a row's actions as text links
-   on a line under the row, across every column after the checkbox, while the
-   row (either line) is hovered or focused; there is no ⋮ column. Compact
-   density shows the ⋮ menu instead. Cards always keep the ⋮. The line keeps
-   its space when hidden, so rows don't jump on hover. */
-.bh-dt:not([data-density="compact"]) .bh-dt-table tbody tr[data-dt-row] { border-bottom: 0; }
-.bh-dt:not([data-density="compact"]) .bh-dt-table tbody tr[data-dt-row] td { padding-bottom: .3rem; }
-.bh-dt-table tbody tr.bh-dt-actrow td { padding-top: 0; padding-bottom: .6rem; }
-.bh-dt-table tbody tr.is-hover { background: #f8fafc; }
-.bh-dt-table tbody tr.is-selected.is-hover { background: #f5f9ff; }
-.bh-dt[data-density="compact"] .bh-dt-table tbody tr.bh-dt-actrow { display: none; }
-.bh-dt-rowlinks { display: flex; flex-wrap: wrap; align-items: center; row-gap: .15rem; margin-left: -1rem;
-    font-size: .8rem; line-height: 1.4; visibility: hidden;
-    /* Each link has a divider in the 1rem before it; this strip is cut off, so
-       a line never starts with one when the links wrap. */
-    clip-path: inset(-3px -3px -3px calc(1rem - 3px)); }
-.bh-dt-table tbody tr.is-hover .bh-dt-rowlinks,
-.bh-dt-table tbody tr.bh-dt-actrow:hover .bh-dt-rowlinks,
-.bh-dt-table tbody tr.bh-dt-actrow:focus-within .bh-dt-rowlinks,
-.bh-dt-table tbody tr[data-dt-row]:hover + tr.bh-dt-actrow .bh-dt-rowlinks,
-.bh-dt-table tbody tr[data-dt-row]:focus-within + tr.bh-dt-actrow .bh-dt-rowlinks { visibility: visible; }
-@media (hover: none) { .bh-dt-rowlinks { visibility: visible; } }
+   along the bottom of the row, across its full width, while the row is
+   hovered or focused; there is no ⋮ column. They live inside the row (laid
+   over its cells' bottom padding from the first cell), so the row's own hover
+   colours them and nothing moves when they appear. Compact density shows the
+   ⋮ menu instead. Cards always keep the ⋮. */
+.bh-dt:not([data-density="compact"]) .bh-dt-table tbody tr.has-rowlinks > td { padding-bottom: 2.1rem; }
+.bh-dt-table td.bh-dt-linkcell { position: relative; }
+.bh-dt-rowlinks { position: absolute; left: 0; bottom: .55rem; display: flex; align-items: center; white-space: nowrap;
+    padding-left: 0; font-size: .8rem; line-height: 1.4; visibility: hidden; z-index: 1; }
+.bh-dt-table tbody tr:hover .bh-dt-rowlinks,
+.bh-dt-table tbody tr:focus-within .bh-dt-rowlinks { visibility: visible; }
+.bh-dt[data-density="compact"] .bh-dt-rowlinks { display: none; }
 .bh-dt-rowlink { position: relative; margin-left: 1rem; padding: 0; border: 0; background: none; font: inherit; color: #2563eb; cursor: pointer;
     text-decoration: none; white-space: nowrap; }
-.bh-dt-rowlink::before { content: ""; position: absolute; left: -.55rem; top: .25em; height: .9em; width: 1px; background: #cbd5e1; }
+.bh-dt-rowlink + .bh-dt-rowlink::before { content: ""; position: absolute; left: -.55rem; top: .25em; height: .9em; width: 1px; background: #cbd5e1; }
 .bh-dt-rowlink:hover { color: #1d4ed8; text-decoration: underline; }
 .bh-dt-rowlink:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; border-radius: 2px; }
 .bh-dt-rowlink--danger { color: #b91c1c; }

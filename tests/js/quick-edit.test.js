@@ -51,7 +51,7 @@ function page(opts = {}) {
   doc.hiddenSelectors = ['.bh-dt[data-view="list"] .bh-dt-table', '.bh-dt[data-view="grid"] .bh-dt-table',
                          '.bh-dt[data-view="table"] .bh-dt-cards',
                          // datatable.css (1.2.99): row links in Comfortable, the ⋮ column in Compact.
-                         '.bh-dt[data-density="compact"] .bh-dt-actrow',
+                         '.bh-dt[data-density="compact"] .bh-dt-rowlinks',
                          '.bh-dt:not([data-density="compact"]) .bh-dt-table .bh-dt-rowactions'];
   const rows = opts.rows || [row(1, 'First post', 'draft'), row(2, 'Second post', 'published')];
   const COLS = opts.columns || [{ id: 'title', label: 'Title', align: 'left', sortable: ['title_az', 'title_za'], can_hide: false }, { id: 'status', label: 'Status', align: 'center' }];
@@ -165,27 +165,23 @@ const test = (name, fn) => tests.push([name, fn]);
 
 /** A row's text link (Comfortable density, 1.2.99). */
 function rowLink(p, id, label) {
-  return p.root.querySelectorAll('tr[data-dt-actrow="' + id + '"] .bh-dt-rowlink').find((n) => n.textContent === label) || null;
+  return p.root.querySelectorAll('tr[data-dt-row="' + id + '"] .bh-dt-rowlink').find((n) => n.textContent === label) || null;
 }
 const shown = (n) => !!n && n.offsetParent !== null;
 
-test('Comfortable: the row\'s actions are text links on a line under the whole row, in the menu\'s order, with no ⋮', async () => {
+test('Comfortable: the row\'s actions are text links inside the row, in the menu\'s order, with no ⋮', async () => {
   const p = page();
-  const links = (id) => p.root.querySelectorAll('tr[data-dt-actrow="' + id + '"] .bh-dt-rowlink').map((n) => n.textContent);
+  const links = (id) => p.root.querySelectorAll('tr[data-dt-row="' + id + '"] .bh-dt-rowlink').map((n) => n.textContent);
   // A draft offers Publish; a live post Move to Draft. View/Preview needs a link (rows here have none).
   eq(links(1), ['Edit', 'Quick Edit', 'Publish', 'Move to Trash']);
   eq(links(2), ['Edit', 'Quick Edit', 'Move to Draft', 'Move to Trash']);
   const main = p.root.querySelector('tr[data-dt-row="1"]');
-  const line = p.root.querySelector('tr[data-dt-actrow="1"]');
-  ok(main.nextSibling === line, 'the line follows its row');
-  ok(!main.querySelector('.bh-dt-rowlinks'), 'not inside a cell of the row');
-  const tds = line.querySelectorAll('td');
-  eq([tds.length, tds[1].getAttribute('colspan')], [2, '3'], 'after the checkbox, across every other column');
-  ok(!line.querySelector('.bh-dt-rowlinks svg'), 'no icons');
-  eq(line.querySelectorAll('a.bh-dt-rowlink').map((n) => n.getAttribute('href')), ['/admin/posts/1/edit'], 'Edit is a real link');
-  // Selecting the row marks both lines.
-  const cb = main.querySelector('.bh-dt-rowcheck'); cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true }));
-  ok(main.classList.contains('is-selected') && line.classList.contains('is-selected'), 'selected together');
+  eq(p.root.querySelectorAll('tbody tr').length, 2, 'one table row per item');
+  ok(main.classList.contains('has-rowlinks'), 'the row reserves room for them');
+  const cell = main.querySelectorAll('td')[1];
+  ok(cell.classList.contains('bh-dt-linkcell') && cell.querySelector('.bh-dt-rowlinks'), 'drawn from the first cell after the checkbox');
+  ok(!main.querySelector('.bh-dt-rowlinks svg'), 'no icons');
+  eq(main.querySelectorAll('a.bh-dt-rowlink').map((n) => n.getAttribute('href')), ['/admin/posts/1/edit'], 'Edit is a real link');
   ok(rowLink(p, 1, 'Move to Trash').classList.contains('bh-dt-rowlink--danger'), 'Trash marked as destructive');
   ok(shown(rowLink(p, 1, 'Edit')), 'links shown');
   ok(!shown(p.root.querySelector('tr[data-dt-row="1"] .bh-dt-actbtn')), 'no ⋮ in the table');

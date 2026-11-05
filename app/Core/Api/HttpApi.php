@@ -230,7 +230,7 @@ class HttpApi extends Resource
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
         $primary = (string) curl_getinfo($ch, CURLINFO_PRIMARY_IP);
-        curl_close($ch);
+        unset($ch);   // frees the handle; the old explicit close is a no-op since PHP 8.0 and deprecated in 8.5 (BH-106)
 
         if ($tooBig) {
             $error = 'The response is larger than ' . $this->maxBytes . ' bytes (see maxBytes()).';

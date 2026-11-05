@@ -82,16 +82,16 @@ test('BH-093: a line break in a name or subject cannot add a header', function (
 });
 
 /** A CustomizerService with saved values and no theme options. */
-function r99_customizer(array $saved = []): CustomizerService
+function r99_customizer(array $saved = [], array $supports = ['custom-logo', 'logo-width', 'header-text']): CustomizerService
 {
     $settings = new class($saved) extends \App\Services\SettingService {
         public function __construct(private array $saved) {}
         public function getGroup(string $group): array { return []; }
         public function get(string $group, string $key, $default = null) { return $this->saved[$group . '.' . $key] ?? $default; }
     };
-    $themes = new class($settings) extends \App\Services\ThemeService {
-        public function __construct($s) {}
-        public function activeManifest(): array { return []; }
+    $themes = new class($supports) extends \App\Services\ThemeService {
+        public function __construct(private array $sup) {}
+        public function activeManifest(): array { return ['supports' => $this->sup]; }
         public function activeSlug(): string { return 'default'; }
     };
     return new CustomizerService($settings, $themes);
@@ -138,12 +138,13 @@ test('default and Dark Night themes honour the switches and size the logo with t
     assert_contains('width: var(--bh-logo-width, auto); height: var(--bh-logo-height, 36px)', (string) file_get_contents($root . '/content/themes/dark-night/assets/dark-night.css'));
 });
 
-test('data table: Comfortable hides the ⋮ column and shows the row links on their own line; Compact the reverse; the ⋮ is darker and larger', function () {
+test('data table: Comfortable hides the ⋮ column and shows the row links inside each row; Compact the reverse; the ⋮ is darker and larger', function () {
     $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/datatable.css');
-    assert_contains('.bh-dt[data-density="compact"] .bh-dt-table tbody tr.bh-dt-actrow { display: none; }', $css);
+    assert_contains('.bh-dt[data-density="compact"] .bh-dt-rowlinks { display: none; }', $css);
+    assert_contains('.bh-dt-table tbody tr:hover .bh-dt-rowlinks', $css, 'the row\'s own hover shows them');
+    assert_false(str_contains($css, '(hover: none) { .bh-dt-rowlinks'), 'never shown on every row at once');
     assert_contains('.bh-dt:not([data-density="compact"]) .bh-dt-table .bh-dt-rowactions { display: none; }', $css);
-    assert_contains('.bh-dt-table tbody tr[data-dt-row]:focus-within + tr.bh-dt-actrow .bh-dt-rowlinks', $css, 'keyboard users see them too');
-    assert_contains('@media (hover: none) { .bh-dt-rowlinks { visibility: visible; } }', $css, 'and touch screens');
+    assert_contains('.bh-dt-table tbody tr:focus-within .bh-dt-rowlinks', $css, 'keyboard users see them too');
     assert_contains('.bh-dt-actbtn { color: #475569;', $css);
     assert_contains('.bh-dt-actbtn svg { width: 1.25rem; height: 1.25rem; }', $css);
 });

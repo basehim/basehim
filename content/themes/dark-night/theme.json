@@ -5,7 +5,9 @@
     "description": "A deep-midnight theme with moon-gold accents, a starfield hero, and serif article typography. Easy on the eyes, elegant after dark.",
     "author": "Circuits-DIY",
     "screenshot": "",
-    "supports": ["menus", "featured-image", "post-thumbnails", "custom-logo"],
+    "supports": ["menus", "featured-image", "post-thumbnails", "custom-logo",
+        "logo-width",
+        "header-text"],
     "menu_locations": {
         "primary": "Primary Menu",
         "footer": "Footer Menu"

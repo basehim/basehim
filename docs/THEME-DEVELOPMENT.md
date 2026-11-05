@@ -63,6 +63,7 @@ which is confusing to debug. If both are missing, the visitor gets a bare
   "author": "You",
   "description": "One sentence about what this theme is for.",
   "requires": { "basehim": ">=1.2.45" },
+  "supports": ["menus", "custom-logo", "logo-width", "header-text"],
 
   "menu_locations": {
     "primary": "Main menu",
@@ -93,6 +94,16 @@ which is confusing to debug. If both are missing, the visitor gets a bare
 ```
 
 `slug` must match the directory name.
+
+`supports` (1.2.100) tells Customize → Site identity which controls the theme
+actually uses, so nobody is offered a control that does nothing:
+
+| Value | Offers | The theme must |
+|---|---|---|
+| `logo-width` | **Logo width** (Auto to 400 px) | size its logo with `width: var(--bh-logo-width, auto); height: var(--bh-logo-height, 36px)` (both variables are set once a width is chosen) |
+| `header-text` | **Show in the header: Site name, Site tagline** | print the name only when `$show_site_title`, and the tagline only when `$show_tagline` is true |
+
+Without them, Site identity shows the name, tagline, logo and site icon only.
 
 `menu_locations` and `widget_areas` appear in the admin as soon as the theme is
 active. A widget area may be a plain string (the label) or an object with the
@@ -148,8 +159,8 @@ Every template:
 | `$base` | URL prefix: `''` at a domain root, `/sub` in a subdirectory |
 | `$site_title`, `$tagline` | from the Customizer |
 | `$logo_url`, `$favicon_url`, `$footer_text` | from the Customizer |
-| `$show_site_title`, `$show_tagline` | whether to print the name and the tagline beside the logo (Customize → Site identity → Show in the header; both on by default) |
-| `$logo_width` | the chosen logo width in pixels, `0` for the theme's own size. Size the logo in CSS with `width: var(--bh-logo-width, auto); height: var(--bh-logo-height, 36px)`: both variables are set only once a width is chosen |
+| `$show_site_title`, `$show_tagline` | whether to print the name and the tagline beside the logo (Customize → Site identity → Show in the header; both on by default). Offered when `supports` has `header-text` |
+| `$logo_width` | the chosen logo width in pixels, `0` for the theme's own size. Size the logo in CSS with `width: var(--bh-logo-width, auto); height: var(--bh-logo-height, 36px)`: both variables are set only once a width is chosen. Offered when `supports` has `logo-width` |
 | `$primary_menu`, `$footer_menu` | menu trees, ready for `menu_html()` |
 | `$seo` | the page's final `title`, `description`, `canonical`, `robots`, `og_title`, `og_description`, `og_image`, for **showing** (a breadcrumb, a share button). Core prints the tags itself |
 | `$current_url` | the request path |

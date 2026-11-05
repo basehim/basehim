@@ -242,7 +242,7 @@ final class HtaccessService
         ]);
         curl_exec($c);
         $code = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
-        curl_close($c);
+        unset($c);   // frees the handle; the old explicit close is a no-op since PHP 8.0 and deprecated in 8.5 (BH-106)
         return $code;
     }
 

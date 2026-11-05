@@ -79,7 +79,7 @@ final class CustomizerService
     /** The sections core always provides. */
     private function coreSections(): array
     {
-        return array_merge([
+        return array_merge($this->filterBySupport([
             'identity' => [
                 'label' => 'Site identity',
                 'description' => 'The name, tagline and marks that identify this site.',
@@ -163,7 +163,42 @@ final class CustomizerService
                     ],
                 ],
             ],
-        ], $this->widgetSections());
+        ]), $this->widgetSections());
+    }
+
+    /**
+     * Options a theme has to build in (1.2.100, BH-105). Core can only hand a
+     * theme the logo width and the header switches; a theme that never reads
+     * them would show controls that do nothing. So they are offered only when
+     * the active theme says it uses them, in theme.json:
+     *
+     *     "supports": ["custom-logo", "logo-width", "header-text"]
+     *
+     *   logo-width   sizes the logo with var(--bh-logo-width) / --bh-logo-height
+     *   header-text  honours $show_site_title and $show_tagline
+     */
+    private const NEEDS_SUPPORT = [
+        'identity.logo_width'      => 'logo-width',
+        'identity.show_site_title' => 'header-text',
+        'identity.show_tagline'    => 'header-text',
+    ];
+
+    private function filterBySupport(array $sections): array
+    {
+        $supports = [];
+        try {
+            $supports = array_map('strval', (array) ($this->themes->activeManifest()['supports'] ?? []));
+        } catch (\Throwable) {}
+        foreach (self::NEEDS_SUPPORT as $path => $feature) {
+            if (in_array($feature, $supports, true)) continue;
+            [$sKey, $oKey] = explode('.', $path, 2);
+            unset($sections[$sKey]['options'][$oKey]);
+        }
+        // The heading belongs to the first switch that is still offered.
+        if (!isset($sections['identity']['options']['show_site_title']) && isset($sections['identity']['options']['show_tagline'])) {
+            $sections['identity']['options']['show_tagline']['heading'] = 'Show in the header';
+        }
+        return $sections;
     }
 
     /**

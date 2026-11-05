@@ -855,7 +855,7 @@ class UpdateService
         $body = \App\Core\Tls::exec($ch);
         $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
+        unset($ch);   // frees the handle; the old explicit close is a no-op since PHP 8.0 and deprecated in 8.5 (BH-106)
         return ['body' => (string) $body, 'status' => $status, 'error' => $err];
     }
 

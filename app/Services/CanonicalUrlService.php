@@ -272,7 +272,7 @@ final class CanonicalUrlService
         curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err    = curl_error($ch);
-        curl_close($ch);
+        unset($ch);   // frees the handle; the old explicit close is a no-op since PHP 8.0 and deprecated in 8.5 (BH-106)
 
         if ($err !== '')       return ['reachable' => false, 'status' => 0, 'detail' => $err];
         if ($status === 0)     return ['reachable' => false, 'status' => 0, 'detail' => 'no response'];

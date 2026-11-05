@@ -152,7 +152,7 @@ final class Database
                     // wrote UTC, so one table could hold both and comparisons like
                     // expires_at > NOW() were off by the server's offset. Times are
                     // shown in the site timezone by App\Core\Time.
-                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$charset} COLLATE {$this->config['collation']}, time_zone = '+00:00'",
+                    self::initCommandAttribute() => "SET NAMES {$charset} COLLATE {$this->config['collation']}, time_zone = '+00:00'",
                 ]
             );
         } catch (PDOException $e) {
@@ -160,6 +160,19 @@ final class Database
         }
 
         return $this->pdo;
+    }
+
+    /**
+     * The MySQL "init command" connection option. PHP 8.4 added
+     * Pdo\Mysql::ATTR_INIT_COMMAND and 8.5 deprecates PDO::MYSQL_ATTR_INIT_COMMAND,
+     * which logged a notice on every request (1.2.100, BH-106). Same value on
+     * every version; the old name is only read where the new one is missing.
+     */
+    public static function initCommandAttribute(): int
+    {
+        return defined('Pdo\\Mysql::ATTR_INIT_COMMAND')
+            ? (int) constant('Pdo\\Mysql::ATTR_INIT_COMMAND')
+            : (int) PDO::MYSQL_ATTR_INIT_COMMAND;
     }
 
     public function query(string $sql, array $params = []): PDOStatement

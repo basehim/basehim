@@ -247,11 +247,7 @@
             r.body.innerHTML = ''; r.cards.innerHTML = '';
             if (r.cardsHead) r.cardsHead.hidden = !rows.length;
             if (!rows.length) { renderEmpty(); syncBulk(); syncSelectAll(); return; }
-            rows.forEach(function (row) {
-                r.body.appendChild(buildRow(row));
-                var lr = buildLinksRow(row); if (lr) r.body.appendChild(lr);
-                r.cards.appendChild(buildCard(row));
-            });
+            rows.forEach(function (row) { r.body.appendChild(buildRow(row)); r.cards.appendChild(buildCard(row)); });
             syncBulk(); syncSelectAll();
         }
         function rowCheckbox(row) {
@@ -278,45 +274,19 @@
         function buildRow(row) {
             var tr = el('tr'); tr.setAttribute('data-dt-row', row.id); tr.setAttribute('data-dt-rowid', row.id);
             var td0 = el('td', 'bh-dt-check'); td0.appendChild(rowCheckbox(row)); tr.appendChild(td0);
-            columns.forEach(function (col) {
+            // Comfortable density (1.2.99): the row's links, drawn across the
+            // bottom of the whole row from its first cell (CSS positions them).
+            var links = rowLinks(row);
+            columns.forEach(function (col, i) {
                 var cls = alignCls(col); if (col.id === 'views') cls += ' bh-dt-views';
-                var td = el('td', cls.trim()); td.innerHTML = (row.cells && row.cells[col.id]) || ''; tr.appendChild(td);
+                var td = el('td', cls.trim()); td.innerHTML = (row.cells && row.cells[col.id]) || '';
+                if (i === 0 && links) { td.classList.add('bh-dt-linkcell'); td.appendChild(links); }
+                tr.appendChild(td);
             });
+            if (links) tr.classList.add('has-rowlinks');
             var tda = el('td', 'bh-dt-rowactions'); tda.appendChild(actionsButton(row)); tr.appendChild(tda);
             if (selected[row.id] !== undefined) tr.classList.add('is-selected');
             return tr;
-        }
-        /**
-         * Comfortable density (1.2.99): the row's actions on a line of their own
-         * under it, across every column after the checkbox. The two rows are
-         * one item: hovering or focusing either shows the links and highlights
-         * both. Compact density hides this line (CSS) and shows the ⋮ instead.
-         */
-        function buildLinksRow(row) {
-            var links = rowLinks(row);
-            if (!links) return null;
-            var tr = el('tr', 'bh-dt-actrow'); tr.setAttribute('data-dt-actrow', row.id); tr.setAttribute('data-dt-rowid', row.id);
-            tr.appendChild(el('td', 'bh-dt-check'));
-            var td = el('td'); td.setAttribute('colspan', String(columns.length + 1)); td.appendChild(links); tr.appendChild(td);
-            if (selected[row.id] !== undefined) tr.classList.add('is-selected');
-            return tr;
-        }
-        function pairOf(tr) {
-            var id = tr.getAttribute('data-dt-row') || tr.getAttribute('data-dt-actrow');
-            return r.body.querySelectorAll('tr[data-dt-row="' + id + '"], tr[data-dt-actrow="' + id + '"]');
-        }
-        function hoverPair(e, on) {
-            var tr = e.target && e.target.closest ? e.target.closest('tr[data-dt-row], tr[data-dt-actrow]') : null;
-            if (!tr) return;
-            var rel = e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('tr') : null;
-            if (rel && Array.prototype.indexOf.call(pairOf(tr), rel) !== -1) return;   // moving within the item
-            Array.prototype.forEach.call(pairOf(tr), function (n) { n.classList.toggle('is-hover', on); });
-        }
-        if (r.body) {
-            r.body.addEventListener('mouseover', function (e) { hoverPair(e, true); });
-            r.body.addEventListener('mouseout', function (e) { hoverPair(e, false); });
-            r.body.addEventListener('focusin', function (e) { hoverPair(e, true); });
-            r.body.addEventListener('focusout', function (e) { hoverPair(e, false); });
         }
         // Cards. Wide screens (List and Grid views) keep the 1.2.64 card; at
         // 820px and below, where cards are the only view, a compact card puts
@@ -567,7 +537,6 @@
             function rowEls(id) {
                 return {
                     tr: r.body.querySelector('tr[data-dt-row="' + id + '"]'),
-                    links: r.body.querySelector('tr[data-dt-actrow="' + id + '"]'),
                     card: r.cards.querySelector('[data-dt-rowid="' + id + '"]')
                 };
             }
@@ -964,13 +933,7 @@
                 for (var i = 0; i < rows.length; i++) if (rows[i].id === row.id) rows[i] = row;
                 if (selected[row.id] !== undefined) selected[row.id] = row.status || '';
                 var els = rowEls(row.id);
-                if (els.tr) {
-                    var tr = buildRow(row); els.tr.parentNode.replaceChild(tr, els.tr); tr.classList.add('is-updated');
-                    var lr = buildLinksRow(row);
-                    if (els.links && lr) els.links.parentNode.replaceChild(lr, els.links);
-                    else if (els.links) els.links.parentNode.removeChild(els.links);
-                    else if (lr) tr.parentNode.insertBefore(lr, tr.nextSibling);
-                }
+                if (els.tr) { var tr = buildRow(row); els.tr.parentNode.replaceChild(tr, els.tr); tr.classList.add('is-updated'); }
                 if (els.card) { var c = buildCard(row); els.card.parentNode.replaceChild(c, els.card); c.classList.add('is-updated'); }
                 syncBulk();
             }
@@ -990,7 +953,7 @@
                 // actions button, whichever this density shows.
                 var els = rowEls(c.id);
                 var shown = function (n) { return n && n.offsetParent !== null ? n : null; };
-                var qlink = els.links ? Array.prototype.filter.call(els.links.querySelectorAll('.bh-dt-rowlink'), function (n) { return n.textContent === 'Quick Edit'; })[0] : null;
+                var qlink = els.tr ? Array.prototype.filter.call(els.tr.querySelectorAll('.bh-dt-rowlink'), function (n) { return n.textContent === 'Quick Edit'; })[0] : null;
                 var back = shown(qlink) || shown(els.tr && els.tr.querySelector('.bh-dt-actbtn')) || shown(els.card && els.card.querySelector('.bh-dt-actbtn')) || c.opener;
                 if (back && back.focus) back.focus();
             }

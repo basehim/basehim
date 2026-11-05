@@ -9,7 +9,9 @@
     "menus",
     "featured-image",
     "post-thumbnails",
-    "custom-logo"
+    "custom-logo",
+        "logo-width",
+        "header-text"
   ],
   "menu_locations": {
     "primary": "Primary Menu",
