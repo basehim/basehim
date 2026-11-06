@@ -51,6 +51,12 @@ final class TableDefinition
          * @var array<int,array<string,mixed>>
          */
         public readonly array $actions = [],
+        /**
+         * Quick View (1.2.101): callable(int $id, ?array $user): ?array, the
+         * details of one row for a read-only dialog. See docs/DATA-TABLE.md
+         * and TableActions::quickView() for the shape.
+         */
+        public readonly mixed $quickView = null,
     ) {
     }
 

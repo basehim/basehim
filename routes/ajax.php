@@ -458,6 +458,21 @@ $ajax->register('content.quick_edit', [
     'description' => 'The Quick Edit form for one row of a data table.',
 ]);
 
+// Quick View (1.2.101): the details of one row, read-only, for tables that
+// declare `quick_view`. The table's capability and area are checked in the
+// handler, the record by the table's callable.
+$ajax->register('content.quick_view', [
+    'handler'     => [TableActions::class, 'quickView'],
+    'methods'     => ['GET'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'input'       => [
+        'table' => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-z0-9_.]+$/'],
+        'id'    => 'required|int|min:1',
+    ],
+    'description' => 'The Quick View details for one row of a data table.',
+]);
+
 $ajax->register('content.quick_edit_save', [
     'handler'     => [TableActions::class, 'quickEditSave'],
     'capability'  => 'read',

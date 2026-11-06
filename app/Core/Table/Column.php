@@ -86,7 +86,45 @@ final class Column
         /** One of CARD_SLOTS, or '' to let the client choose (thumb, title, status by id; otherwise row). */
         public readonly string $card = '',
         public readonly ?string $cardIcon = null,
+        /**
+         * Options worked out when the table is shown (1.2.101): a callable
+         * returning [value => label], for a filter whose values depend on the
+         * data (the PHP versions a list holds, say). Only called when needed.
+         * @var null|callable
+         */
+        public readonly mixed $filterOptions = null,
     ) {
+    }
+
+    /** @var array|null|false The resolved filter; false until resolved. */
+    private array|null|false $resolvedFilter = false;
+
+    /**
+     * The filter as the client and the request check see it: `field`, and
+     * `in` / `labels` when the values are a fixed set, from the column's own
+     * list or its options callable. A callable that fails leaves the filter
+     * without a fixed set rather than breaking the table.
+     */
+    public function filterSpec(): ?array
+    {
+        if ($this->resolvedFilter !== false) return $this->resolvedFilter;
+        $f = $this->filter;
+        if ($f !== null && $this->filterOptions !== null) {
+            try {
+                $opts = ($this->filterOptions)();
+                if (is_array($opts)) {
+                    $in = []; $labels = [];
+                    foreach ($opts as $v => $l) {
+                        $v = (string) $v;
+                        if ($v === '') continue;
+                        $in[] = $v; $labels[$v] = (string) $l;
+                    }
+                    $f['in'] = $in;
+                    $f['labels'] = $labels;
+                }
+            } catch (\Throwable) {}
+        }
+        return $this->resolvedFilter = $f;
     }
 
     public function isSortable(): bool
@@ -106,7 +144,7 @@ final class Column
             'id'              => $this->id,
             'label'           => $this->label,
             'sortable'        => $this->sortable,
-            'filter'          => $this->filter,
+            'filter'          => $this->filterSpec(),
             'default_visible' => $this->defaultVisible,
             'can_hide'        => $this->canHide,
             'responsive'      => $this->responsive,

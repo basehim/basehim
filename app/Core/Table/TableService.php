@@ -211,6 +211,7 @@ final class TableService
             'row_actions'  => $table->rowActions,
             'actions'      => $table->actions,
             'quick_edit'   => $table->quickEdit !== null,
+            'quick_view'   => $table->quickView !== null,
         ];
     }
 
@@ -304,8 +305,9 @@ final class TableService
     {
         $out = [];
         foreach ($permitted as $c) {
-            if ($c->filter !== null && isset($c->filter['field'], $c->filter['in'])) {
-                $out[$c->filter['field']] = $c->filter['in'];
+            $f = $c->filterSpec();
+            if ($f !== null && isset($f['field'], $f['in'])) {
+                $out[$f['field']] = $f['in'];
             }
         }
         return $out;

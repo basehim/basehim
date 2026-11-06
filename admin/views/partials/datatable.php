@@ -39,8 +39,18 @@ $__filterKeys = $__provider instanceof TableProvider ? $__provider->filterKeys()
 // no-JS browser both get the right data. Status is a single value; category and
 // tag accept a comma list of term ids (multi-select).
 $__filters = [];
-if (in_array('status', $__filterKeys, true) && isset($_GET['status']) && $_GET['status'] !== '') {
-    $__filters['status'] = (string) $_GET['status'];
+// Every single-value filter a column declares (1.2.101, BH-109; only
+// `status` before), read from the address so a reload or a shared link keeps
+// it. The table service still checks each value against the column's set.
+$__scalarFilters = ['status'];
+foreach ($__reg->columnsFor($__def->key, $__user) as $__col) {
+    $__f = $__col->filterSpec();
+    if ($__f !== null && !in_array($__f['field'], ['category', 'tag'], true)) $__scalarFilters[] = $__f['field'];
+}
+foreach (array_unique($__scalarFilters) as $__sf) {
+    if (in_array($__sf, $__filterKeys, true) && isset($_GET[$__sf]) && is_string($_GET[$__sf]) && $_GET[$__sf] !== '') {
+        $__filters[$__sf] = (string) $_GET[$__sf];
+    }
 }
 foreach (['category', 'tag'] as $__tf) {
     if (!in_array($__tf, $__filterKeys, true) || !isset($_GET[$__tf]) || $_GET[$__tf] === '') {
@@ -93,11 +103,16 @@ $__cfg = [
     'initial'      => $__payload,
 ];
 
-// Status filter from a catalog column that declares an `in` set.
-$__statusCol = null;
+// A menu for each catalog column whose filter has a fixed set of values
+// (1.2.101, BH-109): status first, as before, then the others in column order.
+$__menus = [];
 foreach ($__payload['catalog'] as $__c) {
-    if (!empty($__c['filter']['in']) && ($__c['filter']['field'] ?? '') === 'status') { $__statusCol = $__c; break; }
+    $__f = $__c['filter'] ?? null;
+    if (empty($__f['in']) || in_array($__f['field'] ?? '', ['category', 'tag'], true) || isset($__menus[$__f['field']])) continue;
+    $__menus[$__f['field']] = $__c;
 }
+if (isset($__menus['status'])) $__menus = ['status' => $__menus['status']] + $__menus;
+$__statusCol = $__menus['status'] ?? null;   // kept for anything that read it
 
 $__bulkMeta = [
     'publish' => ['Publish', 'publish'], 'draft' => ['Unpublish', 'neutral'], 'delete' => ['Delete', 'danger'],
@@ -131,14 +146,14 @@ $__bulkMeta = [
             <div data-dt-termfilter="<?= $__tf ?>" data-dt-label="<?= htmlspecialchars($__termFilters[$__tf]['label']) ?>"></div>
             <?php endif; ?>
             <?php endforeach; ?>
-            <?php if ($__statusCol): ?>
-            <select class="bh-select bh-select--auto" data-dt-filter="status">
-                <option value="">All status</option>
-                <?php foreach ($__statusCol['filter']['in'] as $__opt): ?>
-                <option value="<?= htmlspecialchars($__opt) ?>" <?= (($__filters['status'] ?? '') === $__opt) ? 'selected' : '' ?>><?= htmlspecialchars($__statusCol['filter']['labels'][$__opt] ?? ucfirst($__opt)) ?></option>
+            <?php foreach ($__menus as $__field => $__mc): $__mf = $__mc['filter']; ?>
+            <select class="bh-select bh-select--auto" data-dt-filter="<?= htmlspecialchars((string) $__field) ?>" aria-label="<?= htmlspecialchars($__mc['label']) ?>">
+                <option value=""><?= htmlspecialchars($__mf['all'] ?? ($__field === 'status' ? 'All status' : 'All: ' . $__mc['label'])) ?></option>
+                <?php foreach ($__mf['in'] as $__opt): ?>
+                <option value="<?= htmlspecialchars($__opt) ?>" <?= (($__filters[$__field] ?? '') === $__opt) ? 'selected' : '' ?>><?= htmlspecialchars($__mf['labels'][$__opt] ?? ucfirst($__opt)) ?></option>
                 <?php endforeach; ?>
             </select>
-            <?php endif; ?>
+            <?php endforeach; ?>
             <div class="bh-dt-tools">
                 <div class="bh-dt-views" role="group" aria-label="View">
                     <button type="button" class="bh-dt-viewbtn" data-dt-view="table" title="Table view"><?= icon('table-cells', 'w-4 h-4') ?></button>

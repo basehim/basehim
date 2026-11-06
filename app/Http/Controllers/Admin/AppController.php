@@ -183,7 +183,7 @@ class AppController extends Controller
                     . 'Fix the cause, then activate it to try again.');
                 return $this->redirect('/admin/apps');
             }
-            $note = $r['was_active'] ? ' Migrations ran and the app was reactivated.' : '';
+            $note = $r['was_active'] ? ' Migrations ran and the app was reactivated.' : '';   // a deferred upgrade (BH-110) has finished by the time this redirect loads
             $this->flash('success', "Upgraded '{$r['slug']}' from v{$r['from']} to v{$r['to']}.{$note}");
         } catch (\Throwable $e) {
             $this->flash('error', 'Upgrade failed: ' . $e->getMessage());

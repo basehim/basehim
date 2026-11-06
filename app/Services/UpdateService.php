@@ -67,7 +67,10 @@ class UpdateService
         return [
             'url' => $this->hubUrl(),
             'key' => (string) $this->settings->get('updates', 'cloudhim_key', ''),
-            'site_name' => (string) $this->settings->get('updates', 'site_name', ''),
+            // What the hub lists this site as: the Site title (1.2.101,
+            // BH-108). The old `updates.site_name` held the host name from
+            // the first registration and is no longer read.
+            'site_name' => $this->siteIdentity()['name'],
         ];
     }
 
@@ -97,11 +100,10 @@ class UpdateService
         $c = $this->config();
         $payload = [
             'network_key' => self::DEFAULT_NETWORK_KEY,
-            'name'        => $c['site_name'] !== '' ? $c['site_name'] : $this->siteHost(),
             'url'         => $this->siteUrl(),
             'version'     => BASEHIM_VERSION,
             'php'         => PHP_VERSION,
-        ];
+        ] + $this->siteIdentity();
         $res = $this->httpPost($c['url'] . '/api/v1/cloudhim/register', $payload, 12);
         if ($res['error'] !== null) {
             $this->rememberConnectError('Cannot reach ' . $c['url'] . ' — ' . $res['error']);
@@ -123,7 +125,6 @@ class UpdateService
 
         $this->settings->set('updates', 'cloudhim_url', $c['url']);
         $this->settings->set('updates', 'cloudhim_key', (string) $json['site_key']);
-        if ($c['site_name'] === '') $this->settings->set('updates', 'site_name', $this->siteHost());
         $this->settings->set('updates', 'last_connect_error', '');
         return true;
     }
@@ -159,7 +160,10 @@ class UpdateService
     {
         try {
             $last = (string) $this->settings->get('updates', 'last_auto_sync', '');
-            if ($last !== '' && (time() - (int) strtotime($last)) < $successTtl) return false;
+            // A changed name, tagline, icon or address is sent at once rather
+            // than after the hourly wait (1.2.101, BH-108).
+            $identityChanged = $this->identityHash() !== (string) $this->settings->get('updates', 'identity_sent', '');
+            if (!$identityChanged && $last !== '' && (time() - (int) strtotime($last)) < $successTtl) return false;
             $lastFail = (string) $this->settings->get('updates', 'last_auto_fail', '');
             if ($lastFail !== '' && (time() - (int) strtotime($lastFail)) < $failTtl) return false;
 
@@ -378,21 +382,30 @@ class UpdateService
         return stripos((string) ($res['error'] ?? ''), 'invalid site key') !== false;
     }
 
-    /** @return array{ok: bool, updates?: array, error?: string} */
-    private function doCheck(): array
+    /**
+     * The check itself, which is also the heartbeat: it tells the hub this
+     * site's version, PHP, address, name, tagline and icon.
+     *
+     * @param string|null $version The installed version to report. Right
+     *        after an update the BASEHIM_VERSION constant still holds the old
+     *        one for the rest of that request, so apply() passes the new one.
+     * @return array{ok: bool, updates?: array, error?: string}
+     */
+    private function doCheck(?string $version = null, int $timeout = 30): array
     {
         if (!$this->isConfigured()) {
             return ['ok' => false, 'error' => 'Not connected to the Basehim update service yet.'];
         }
         $c = $this->config();
+        $version = $version ?? BASEHIM_VERSION;
+        $identity = $this->siteIdentity();
         $query = http_build_query([
             'key'     => $c['key'],
-            'version' => BASEHIM_VERSION,
+            'version' => $version,
             'php'     => PHP_VERSION,
             'url'     => $this->siteUrl(),
-            'name'    => $c['site_name'] !== '' ? $c['site_name'] : $this->siteHost(),
-        ]);
-        $res = $this->httpGet($c['url'] . '/api/v1/cloudhim/updates?' . $query);
+        ] + $identity);
+        $res = $this->httpGet($c['url'] . '/api/v1/cloudhim/updates?' . $query, $timeout);
         if ($res['error'] !== null) {
             return ['ok' => false, 'error' => 'Could not reach the Basehim update service: ' . $res['error']];
         }
@@ -401,16 +414,87 @@ class UpdateService
             return ['ok' => false, 'error' => (string) ($json['error'] ?? ('The Basehim update service returned HTTP ' . $res['status']))];
         }
 
-        $updates = array_values(array_filter((array) ($json['updates'] ?? []), function ($u) {
-            return isset($u['version']) && version_compare((string) $u['version'], BASEHIM_VERSION, '>');
+        $updates = array_values(array_filter((array) ($json['updates'] ?? []), function ($u) use ($version) {
+            return isset($u['version']) && version_compare((string) $u['version'], $version, '>');
         }));
         usort($updates, fn($a, $b) => version_compare((string) $b['version'], (string) $a['version']));
 
         $this->settings->set('updates', 'available', json_encode($updates, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         $this->settings->set('updates', 'available_count', count($updates));
         $this->settings->set('updates', 'last_check', date('Y-m-d H:i:s'));
+        $this->settings->set('updates', 'identity_sent', $this->identityHash($identity));
 
         return ['ok' => true, 'updates' => $updates];
+    }
+
+    /**
+     * Report to the hub now, best effort: after an update (with the version
+     * just installed, BH-107) and after the site's name, tagline or icon
+     * changes (BH-108). A short timeout, and never an error: the next
+     * regular check sends the same thing.
+     */
+    public function heartbeat(?string $version = null): bool
+    {
+        try {
+            if (!$this->isConfigured()) return false;
+            $ok = (bool) ($this->doCheck($version, 8)['ok'] ?? false);
+            if ($ok) {
+                $this->settings->set('updates', 'last_auto_sync', date('Y-m-d H:i:s'));
+                $this->settings->set('updates', 'last_auto_fail', '');
+            }
+            return $ok;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Send the heartbeat after the response has gone out, once per request.
+     * SettingService calls this when the site title, tagline, favicon or
+     * address changes, so the hub shows the change without waiting for the
+     * hourly check, and the person saving never waits for the hub.
+     */
+    public static function heartbeatAfterResponse(): void
+    {
+        static $armed = false;
+        if ($armed || PHP_SAPI === 'cli') return;
+        $armed = true;
+        register_shutdown_function(static function (): void {
+            try {
+                if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+                $svc = \App\Core\Application::getInstance()->make(self::class);
+                if ($svc->identityHash() !== (string) $svc->settings->get('updates', 'identity_sent', '')) $svc->heartbeat();
+            } catch (\Throwable) {}
+        });
+    }
+
+    /**
+     * How this site introduces itself to the hub (1.2.101, BH-108): its Site
+     * title (the host name when there is none), tagline and site icon as a
+     * full URL. Read fresh on every check, so a change is never stuck.
+     *
+     * @return array{name:string, tagline:string, icon:string}
+     */
+    public function siteIdentity(): array
+    {
+        $name = trim((string) $this->settings->get('general', 'site_title', ''));
+        $icon = trim((string) $this->settings->get('appearance', 'favicon_url', ''));
+        if ($icon !== '' && !preg_match('#^https?://#i', $icon)) {
+            $icon = preg_match('#^//#', $icon)
+                ? (\App\Core\Request::serverIsSecure() ? 'https:' : 'http:') . $icon
+                : $this->siteOrigin() . \App\Core\Helpers::link($icon);
+        }
+        return [
+            'name'    => mb_substr($name !== '' ? $name : $this->siteHost(), 0, 190),
+            'tagline' => mb_substr(trim((string) $this->settings->get('general', 'tagline', '')), 0, 300),
+            'icon'    => mb_substr($icon, 0, 500),
+        ];
+    }
+
+    /** A fingerprint of what the hub was last told about this site. */
+    private function identityHash(?array $identity = null): string
+    {
+        return sha1(json_encode([$identity ?? $this->siteIdentity(), $this->siteUrl()], JSON_UNESCAPED_SLASHES) ?: '');
     }
 
     /** Cached list from the last check (used by the page render). */
@@ -702,6 +786,13 @@ class UpdateService
         $this->settings->set('updates', 'available', json_encode($remaining, JSON_UNESCAPED_SLASHES));
         $this->settings->set('updates', 'available_count', count($remaining));
 
+        // Tell the hub now (BH-107): before 1.2.101 it kept listing the old
+        // version until the next hourly check. If this fails, the next
+        // admin visit checks in, since the wait is cleared.
+        if (!$this->heartbeat($newVersion)) {
+            $this->settings->set('updates', 'last_auto_sync', '');
+        }
+
         // A migration that failed is reported, never folded into "ok" (1.2.75,
         // CR-05). The files are installed and stay (re-running migrations is
         // safer than reverting code under a changed schema), so ok stays true,
@@ -865,6 +956,12 @@ class UpdateService
         $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
         $base = defined('BASEHIM_BASE') ? (string) BASEHIM_BASE : '';
         return $scheme . '://' . $host . $base;
+    }
+
+    private function siteOrigin(): string
+    {
+        $scheme = \App\Core\Request::serverIsSecure() ? 'https' : 'http';
+        return $scheme . '://' . (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
     }
 
     private function siteHost(): string

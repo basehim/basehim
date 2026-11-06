@@ -167,11 +167,18 @@ return Response::json(['items' => $items]);                                     
 return Response::json(['errors' => $errors], 422);                                     // JSON with a status
 return Response::redirect($this->router()->url('shop.index'), 303);                    // redirect
 return Response::make($csv, 200, ['Content-Type' => 'text/csv; charset=utf-8']);       // anything else
+return Response::file($zipPath, 'shop-export.zip', 'application/zip');                   // a file, streamed (1.2.101)
 return SitePage::notFound();                                                           // the theme's 404
 return SitePage::error(409, 'Conflict', 'That item was changed meanwhile.');           // a short error page
 ```
 
 A returned string is sent as HTML, and an array as JSON.
+
+`Response::file($path, $downloadName = null, $contentType = 'application/octet-stream', $headers = [])`
+(1.2.101) sends a file from disk without reading it into memory, so a large
+download works within a small memory limit. It sets `Content-Length`, and
+`Content-Disposition: attachment` when you give a download name; a `HEAD`
+request gets the headers only, and a missing file is a 404.
 
 ### Pages in the active theme
 

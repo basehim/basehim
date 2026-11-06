@@ -96,6 +96,11 @@ final class TableRegistry
             throw new \InvalidArgumentException("Table '{$key}' quick_edit must be a class implementing QuickEditor.");
         }
 
+        $quickView = $def['quick_view'] ?? null;
+        if ($quickView !== null && (!is_callable($quickView) || is_string($quickView))) {
+            throw new \InvalidArgumentException("Table '{$key}' quick_view must be a callable.");
+        }
+
         $table = new TableDefinition(
             key: $key,
             label: (string) ($def['label'] ?? $key),
@@ -111,6 +116,7 @@ final class TableRegistry
             quickEdit: $quickEdit,
             rowLinks: $rowLinks,
             actions: $this->buildActions($key, (array) ($def['actions'] ?? [])),
+            quickView: $quickView,
         );
 
         return $this->tables[$key] = $table;
@@ -287,6 +293,10 @@ final class TableRegistry
         $filter = null;
         if (isset($raw['filter']) && is_array($raw['filter']) && isset($raw['filter']['field']) && is_string($raw['filter']['field'])) {
             $filter = ['field' => $raw['filter']['field']];
+            // The empty choice of its toolbar menu (1.2.101): "Any version".
+            if (isset($raw['filter']['all']) && is_string($raw['filter']['all']) && $raw['filter']['all'] !== '') {
+                $filter['all'] = mb_substr($raw['filter']['all'], 0, 60);
+            }
             if (isset($raw['filter']['in']) && is_array($raw['filter']['in'])) {
                 $filter['in'] = array_values(array_map('strval', $raw['filter']['in']));
                 // Words for the status menu (1.2.85), by value; ucfirst otherwise.
@@ -294,6 +304,14 @@ final class TableRegistry
                     $filter['labels'] = array_map('strval', array_intersect_key($raw['filter']['labels'], array_flip($filter['in'])));
                 }
             }
+        }
+
+        // Options known only when the table is shown (1.2.101): a callable
+        // returning [value => label]. A string is refused, as for render.
+        $filterOptions = null;
+        if ($filter !== null && isset($raw['filter']['options'])) {
+            if (!is_callable($raw['filter']['options']) || is_string($raw['filter']['options'])) return null;
+            $filterOptions = $raw['filter']['options'];
         }
 
         $capability = isset($raw['capability']) && is_string($raw['capability']) && $raw['capability'] !== ''
@@ -324,6 +342,7 @@ final class TableRegistry
             owner: $owner,
             card: $card,
             cardIcon: $cardIcon,
+            filterOptions: $filterOptions,
         );
     }
 

@@ -180,7 +180,14 @@ class SettingService
         );
 
         $this->invalidate($autoload, $group, $key);
+
+        // The update hub lists this site by its title, tagline and icon; a
+        // change reaches it after this response (1.2.101, BH-108).
+        if (isset(self::HUB_IDENTITY[$group . '.' . $key])) UpdateService::heartbeatAfterResponse();
     }
+
+    /** Settings the update hub shows for this site. */
+    private const HUB_IDENTITY = ['general.site_title' => true, 'general.tagline' => true, 'appearance.favicon_url' => true];
 
     /**
      * Change one setting from its current value, safely when requests overlap

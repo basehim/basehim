@@ -171,6 +171,77 @@ final class TableActions
         ];
     }
 
+    /**
+     * GET content.quick_view — the details of one row for the Quick View
+     * dialog (1.2.101). The table's capability and area are checked first,
+     * then its quick_view callable answers for the record (null: not found).
+     *
+     * The callable returns:
+     *   title, subtitle      text
+     *   image                an http(s) or root-relative URL (a logo, an icon)
+     *   icon                 a Heroicon name shown when there is no image
+     *   badges               [{label, tone: gray|blue|green|amber|red|violet}]
+     *   sections             [{title?, items: [{label, value, url?, mono?}]}]
+     *   links                [{label, url, new_tab?}]
+     * Everything is text: the dialog never renders HTML from it, and a URL
+     * that is not http(s) or root-relative is dropped.
+     */
+    public function quickView(AjaxContext $ctx): array
+    {
+        $table = $this->authorizedTable($ctx);
+        if ($table->quickView === null) {
+            throw AjaxException::notFound('This table has no Quick View.');
+        }
+        $raw = ($table->quickView)((int) $ctx->input('id'), $ctx->user());
+        if (!is_array($raw)) {
+            throw AjaxException::notFound('That item was not found. It may have been deleted.');
+        }
+        return ['view' => self::cleanView($raw)];
+    }
+
+    /** The Quick View shape, as text and safe URLs only. */
+    private static function cleanView(array $v): array
+    {
+        $str = static fn($x, int $max = 500): string => is_scalar($x) ? mb_substr(trim((string) $x), 0, $max) : '';
+        $url = static function ($x): string {
+            $u = is_string($x) ? trim($x) : '';
+            return preg_match('#^(https?://[^\s"<>]+|/(?!/)[^\s"<>]*)$#i', $u) ? $u : '';
+        };
+        $tones = ['gray', 'blue', 'green', 'amber', 'red', 'violet'];
+        $out = [
+            'title'    => $str($v['title'] ?? '', 200),
+            'subtitle' => $str($v['subtitle'] ?? '', 300),
+            'image'    => $url($v['image'] ?? ''),
+            'icon'     => preg_match('/^[a-z0-9-]{1,40}$/', (string) ($v['icon'] ?? '')) ? (string) $v['icon'] : 'document-text',
+            'badges'   => [],
+            'sections' => [],
+            'links'    => [],
+        ];
+        foreach (array_slice((array) ($v['badges'] ?? []), 0, 8) as $b) {
+            if (!is_array($b) || $str($b['label'] ?? '') === '') continue;
+            $out['badges'][] = ['label' => $str($b['label'], 60), 'tone' => in_array($b['tone'] ?? '', $tones, true) ? $b['tone'] : 'gray'];
+        }
+        foreach (array_slice((array) ($v['sections'] ?? []), 0, 12) as $sec) {
+            if (!is_array($sec)) continue;
+            $items = [];
+            foreach (array_slice((array) ($sec['items'] ?? []), 0, 40) as $it) {
+                if (!is_array($it) || $str($it['label'] ?? '') === '') continue;
+                $items[] = [
+                    'label' => $str($it['label'], 80),
+                    'value' => $str($it['value'] ?? '', 2000),
+                    'url'   => $url($it['url'] ?? ''),
+                    'mono'  => !empty($it['mono']),
+                ];
+            }
+            if ($items) $out['sections'][] = ['title' => $str($sec['title'] ?? '', 80), 'items' => $items];
+        }
+        foreach (array_slice((array) ($v['links'] ?? []), 0, 6) as $l) {
+            if (!is_array($l) || $str($l['label'] ?? '') === '' || $url($l['url'] ?? '') === '') continue;
+            $out['links'][] = ['label' => $str($l['label'], 60), 'url' => $url($l['url']), 'new_tab' => !empty($l['new_tab'])];
+        }
+        return $out;
+    }
+
     /** @return array{0:TableDefinition,1:\App\Core\Table\QuickEditor} */
     private function quickEditor(AjaxContext $ctx): array
     {

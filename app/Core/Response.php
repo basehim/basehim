@@ -9,6 +9,8 @@ final class Response
     private int $status = 200;
     private array $headers = [];
     private string $body = '';
+    /** A file sent from disk in send() (1.2.101): never read into memory. */
+    private ?string $file = null;
 
     public function __construct(string $body = '', int $status = 200, array $headers = [])
     {
@@ -52,6 +54,39 @@ final class Response
         return new self($html, $status, ['Content-Type' => 'text/html; charset=utf-8']);
     }
 
+    /**
+     * Send a file from disk, streamed rather than read into memory (1.2.101,
+     * BH-111), so a large download works within a small memory limit.
+     *
+     *     return Response::file($zip, 'basehim-1.2.101.zip', 'application/zip');
+     *
+     * $downloadName sets Content-Disposition: attachment (null sends the file
+     * inline). A HEAD request gets the headers only. A missing or unreadable
+     * file is a 404 with no body.
+     */
+    public static function file(string $path, ?string $downloadName = null, string $contentType = 'application/octet-stream', array $headers = []): self
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            return new self('', 404, ['Content-Type' => 'text/plain; charset=utf-8']);
+        }
+        $headers += [
+            'Content-Type'           => $contentType,
+            'Content-Length'         => (string) filesize($path),
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+        if ($downloadName !== null) {
+            // A plain ASCII name plus the UTF-8 one (RFC 6266).
+            $ascii = preg_replace('/[^A-Za-z0-9._-]+/', '_', $downloadName) ?: 'download';
+            $headers['Content-Disposition'] = 'attachment; filename="' . $ascii . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName);
+        }
+        $r = new self('', 200, $headers);
+        $r->file = $path;
+        return $r;
+    }
+
+    /** The file this response streams, or null (1.2.101). */
+    public function getFile(): ?string { return $this->file; }
+
     public function status(int $status): self
     {
         $this->status = $status;
@@ -86,6 +121,14 @@ final class Response
             foreach ($this->headers as $name => $value) {
                 header("{$name}: {$value}");
             }
+        }
+        if ($this->file !== null) {
+            if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'HEAD') return;
+            // An output buffer would hold the whole file again, and anything
+            // already in one would corrupt the download: drop them.
+            while (ob_get_level() > 0) { @ob_end_clean(); }
+            readfile($this->file);
+            return;
         }
         echo $this->body;
     }

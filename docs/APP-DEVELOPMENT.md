@@ -149,6 +149,12 @@ after `onUpgrade()` returns:
   while it runs, and the versions are re-read inside it.
 - **Make it idempotent anyway** (`CREATE TABLE IF NOT EXISTS`, check a column
   before adding it): a retry starts from the top of your handler.
+- **It always runs your new code** (1.2.101). An app that is active when it
+  is upgraded from the Apps screen had its previous version loaded in that
+  request, and PHP cannot unload a class, so core finishes the upgrade on the
+  next request, before the app boots: `onUpgrade($from, $to)`, then
+  `onActivate()`. Before 1.2.101 they ran the previous version's code with
+  the new manifest, so a migration added in the new version was skipped.
 
 The other lifecycle methods report truthfully too (1.2.73):
 

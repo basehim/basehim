@@ -214,6 +214,54 @@ Everything else runs through `bh:dt-bulk` (with `bulkEvents`) or the
 `bulkEndpoint` form, as before. A status filter can name its options:
 `'filter' => ['field' => 'status', 'in' => [...], 'labels' => ['consent' => 'Needs approval']]`.
 
+### Filter menus (1.2.101)
+
+Every column filter with a set of values gets its own menu in the toolbar
+(before 1.2.101 only `status` did), in column order after Status, and its
+value is kept in the address like the search. Two keys help:
+
+```php
+['id' => 'version', 'label' => 'Version', 'filter' => [
+    'field' => 'version', 'in' => ['current', 'behind'], 'labels' => [...],
+    'all' => 'Any version',                       // the empty choice; default "All: {label}"
+]],
+['id' => 'php', 'label' => 'PHP', 'filter' => [
+    'field' => 'php', 'all' => 'Any PHP',
+    // Values known only from the data: called when the table is shown,
+    // once per request, never from a string. Returns [value => label].
+    'options' => fn(): array => ['8.3' => 'PHP 8.3', '8.2' => 'PHP 8.2'],
+]],
+```
+
+A request value outside the set is ignored, as with `in`. A callable that
+fails leaves the filter without a menu rather than breaking the table.
+
+### Quick View (1.2.101)
+
+A table can show one row's details in a read-only dialog, opened by a
+**Quick View** row link (and menu item) next to Quick Edit:
+
+```php
+'quick_view' => fn(int $id, ?array $user): ?array => [
+    'title'    => 'Northwind Studio',
+    'subtitle' => 'Design and print',
+    'image'    => 'https://example.org/icon.png',   // or a Heroicon in 'icon'
+    'icon'     => 'globe-alt',
+    'badges'   => [['label' => 'Online', 'tone' => 'green']],   // gray, blue, green, amber, red, violet
+    'sections' => [
+        ['title' => 'Site', 'items' => [
+            ['label' => 'Address', 'value' => 'example.org', 'url' => 'https://example.org'],
+            ['label' => 'Server IP', 'value' => '203.0.113.7', 'mono' => true],
+        ]],
+    ],
+    'links'    => [['label' => 'Visit site', 'url' => 'https://example.org', 'new_tab' => true]],
+],
+```
+
+It is read through `content.quick_view` (GET), after the table's capability
+and area checks; return `null` for a record that doesn't exist. Everything is
+shown as text, and a URL that isn't `http(s)` or root-relative is dropped.
+
 A provider implements three methods and owns no SQL of its own:
 
 ```php

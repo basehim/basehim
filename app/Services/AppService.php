@@ -52,6 +52,14 @@ class AppService
     /** Upgrades already announced this request, keyed "slug:from:to". */
     private array $upgradesFired = [];
 
+    /**
+     * Apps whose upgrade must finish on the next request (1.2.101, BH-110):
+     * their previous version's classes are already loaded in this one, so
+     * onUpgrade() and onActivate() here would run the old code.
+     * @var array<string,true>
+     */
+    private array $deferredUpgrades = [];
+
     /** Whether apps.schema_version exists; null until checked this request. */
     private ?bool $schemaColumn = null;
 
@@ -979,6 +987,11 @@ class AppService
         $targetDir = $this->appPath . '/' . $slug;
         $backupDir = $this->stagingPath() . '/' . $slug . '__backup_' . bin2hex(random_bytes(4));
 
+        // Was the current version's code loaded in this request (an active
+        // app is booted on every admin page)? PHP cannot unload a class, so
+        // its lifecycle calls must wait for the next request (BH-110).
+        $staleCode = $this->entryClassLoaded($slug);
+
         // 1. Back up the current install (atomic rename).
         if (is_dir($targetDir)) {
             if (!@rename($targetDir, $backupDir)) {
@@ -998,6 +1011,13 @@ class AppService
         //     from the old one is stale. Evict before sync(), which is what
         //     fires the lifecycle hooks.
         $this->forgetInstance($slug);
+        if ($staleCode) $this->deferredUpgrades[$slug] = true;
+        // The new files sit at the old paths, so OPcache would go on serving
+        // the previous version's code until it next checks the files (two
+        // seconds by default, a minute on many hosts), and the request right
+        // after this one would run the old code with the new manifest
+        // (1.2.101, BH-110). The marketplace upgrade already resets it.
+        $this->forgetCompiled($targetDir);
 
         // 2c. Validate the new code before any of it runs (1.2.71). An active
         //     app that fails is switched off; its upgrade hooks are then not
@@ -1026,7 +1046,8 @@ class AppService
         // 4. Re-run onActivate if it was active, so any activation-only schema
         //    is applied. Not after a failed upgrade: the app is off then.
         $stillActive = ($this->find($slug)['status'] ?? '') === 'active';
-        if ($upgradeError === null && $wasActive && $stillActive) {
+        $deferred = isset($this->deferredUpgrades[$slug]) && $this->hasSchemaColumn();
+        if ($upgradeError === null && $wasActive && $stillActive && !$deferred) {
             $e = $this->fireLifecycle($slug, 'onActivate');
             if ($e !== null) {
                 $this->guard()?->failed($slug, $toVersion, 'lifecycle:onActivate', $e);
@@ -1039,7 +1060,7 @@ class AppService
         if (isset($backupDir) && is_dir($backupDir)) $this->rrmdir($backupDir);
 
         return ['slug' => $slug, 'from' => $fromVersion, 'to' => $toVersion, 'was_active' => $wasActive,
-                'error' => $upgradeError];
+                'error' => $upgradeError, 'deferred' => $upgradeError === null && $deferred];
     }
 
     /** Discard a staged upgrade (user cancelled). */
@@ -1176,6 +1197,9 @@ class AppService
         foreach ($rows as $row) {
             $slug = (string) $row['slug'];
             if (!isset($this->validatedForBoot[$slug])) continue;
+            // An upgrade that had to wait for fresh code (BH-110), or one
+            // that has not completed: finish it before the new code boots.
+            if (!$this->finishPendingUpgrade($slug, $row)) continue;
             if ($this->bootGuarded($app, $guard, $slug, (string) ($row['version'] ?? ''))) $booted[] = $slug;
         }
         $this->validatedForBoot = [];
@@ -1197,6 +1221,47 @@ class AppService
                 try { $guard->booted($slug, $byOwner[$slug] ?? []); } catch (\Throwable) {}
             }
         }
+    }
+
+    /**
+     * Run an active app's pending data upgrade before it boots (1.2.101,
+     * BH-110): onUpgrade(from, to), then onActivate(), both from the new
+     * code, as applyStagedUpgrade() does when it can. The check is free on a
+     * normal request: the row is already loaded.
+     *
+     * @return bool false when the upgrade failed (the app was switched off)
+     */
+    private function finishPendingUpgrade(string $slug, array $row): bool
+    {
+        if (!$this->hasSchemaColumn()) return true;
+        $schema = $row['schema_version'] ?? null;
+        $version = (string) ($row['version'] ?? '');
+        if ($schema === null || $schema === '' || $version === '' || (string) $schema === $version) return true;
+
+        $err = $this->runPendingUpgrade($slug);
+        if ($err !== null) {
+            $this->logSafe("App '{$slug}': {$err}");
+            return ($this->find($slug)['status'] ?? '') === 'active';
+        }
+        $e = $this->fireLifecycle($slug, 'onActivate');
+        if ($e !== null) {
+            $this->guard()?->failed($slug, $version, 'lifecycle:onActivate', $e);
+            return false;
+        }
+        $this->forgetInstance($slug);   // boot builds its own instance
+        return true;
+    }
+
+    /** Whether an app's entry class is already declared in this process. */
+    private function entryClassLoaded(string $slug): bool
+    {
+        $manifest = $this->readManifest($this->dirFor($slug));
+        if ($manifest === null || empty($manifest['namespace'])) return false;
+        $prefix = rtrim((string) $manifest['namespace'], '\\') . '\\';
+        foreach (!empty($manifest['entry']) ? [(string) $manifest['entry']] : ['App'] as $entry) {
+            if (class_exists($prefix . $entry, false)) return true;
+        }
+        return false;
     }
 
     /** Apps that passed validation for this boot (so loadAndBoot need not ask again). @var array<string,true> */
@@ -1750,6 +1815,9 @@ class AppService
     public function runPendingUpgrade(string $slug): ?string
     {
         if (!$this->hasSchemaColumn()) return null;
+        // The new code isn't loadable in this request; bootActive() runs it
+        // on the next one (BH-110).
+        if (isset($this->deferredUpgrades[$slug])) return null;
         $row = $this->find($slug);
         if (!$row) return null;
         $to = (string) ($row['version'] ?? '');

@@ -132,7 +132,10 @@
                 set('page', state.page > 1 ? state.page : '');
                 set('sort', state.sort || '');
                 var f = toObj(state.filters);
-                set('status', typeof f.status === 'string' ? f.status : '');
+                // Every single-value filter with a menu (1.2.101), status included.
+                var menus = ['status'];
+                root.querySelectorAll('[data-dt-filter]').forEach(function (sel) { menus.push(sel.getAttribute('data-dt-filter')); });
+                menus.forEach(function (k) { set(k, typeof f[k] === 'string' ? f[k] : ''); });
                 ['category', 'tag'].forEach(function (k) { set(k, toArr(f[k]).join(',')); });
                 if (u.href !== window.location.href) history.replaceState(history.state, '', u.pathname + u.search + u.hash);
             } catch (e) { /* an old browser keeps the old behaviour */ }
@@ -434,6 +437,7 @@
             // is live, Preview otherwise (only shown to people who may edit it).
             if (row.link && row.link.url) items.push({ label: row.link.live ? 'View' : 'Preview', icon: 'eye', href: row.link.url, newTab: true });
             if (cfg.editBase) items.push({ label: 'Edit', icon: 'pencil-square', href: cfg.editBase.replace('{id}', row.id) });
+            if (payload.quick_view) items.push({ label: 'Quick View', icon: 'document-magnifying-glass', view: true, id: row.id });
             if (payload.quick_edit) items.push({ label: 'Quick Edit', icon: 'bolt', quick: true, id: row.id });
             // Declared actions (1.2.85) replace the built-in ids below.
             declared().forEach(function (a) {
@@ -453,7 +457,8 @@
         /** Carry out one of rowItems(); `opener` gets focus back afterwards. */
         function runItem(it, row, opener) {
             if (it.href) return;
-            if (it.quick) quickEdit.open(row, opener);
+            if (it.view) quickView.open(row, opener);
+            else if (it.quick) quickEdit.open(row, opener);
             else if (it.declared && it.declared.event) emit('bh:dt-action', { table: cfg.table, action: it.declared.id, id: it.id, key: row.key || null, row: row });
             else if (it.declared) runBulk(it.declared.id, [it.id], [row]);
             else runBulk(it.action, [it.id]);
@@ -969,6 +974,108 @@
                 isDirty: isDirty
             };
         })();
+        // --- Quick View (1.2.101) ----------------------------------------------
+        // A read-only dialog with one row's details, from the table's
+        // quick_view callable (content.quick_view). Same dialog as Quick Edit;
+        // everything is drawn as text, links only from http(s) or root-relative
+        // addresses the server already checked.
+        var quickView = (function () {
+            var dlg = null, head = null, body = null, seq = 0, opener = null;
+            function text(tag, cls, t) { var n = el(tag, cls); n.textContent = t == null ? '' : String(t); return n; }
+            function dialog() {
+                if (dlg) return dlg;
+                var tid = 'bh-qv-title-' + cfg.table.replace(/\W/g, '-');
+                dlg = el('dialog', 'bh-qe bh-qv');
+                dlg.setAttribute('aria-labelledby', tid);
+                head = el('div', 'bh-qe__head bh-qv__head');
+                body = el('div', 'bh-qe__body bh-qv__body');
+                dlg.appendChild(head); dlg.appendChild(body);
+                dlg.__tid = tid;
+                dlg.addEventListener('close', function () { if (opener && opener.focus) { try { opener.focus(); } catch (e) {} } });
+                dlg.addEventListener('mousedown', function (e) { dlg.__downOnBackdrop = e.target === dlg; });
+                dlg.addEventListener('click', function (e) { if (e.target === dlg && dlg.__downOnBackdrop) dlg.close(); });
+                document.body.appendChild(dlg);
+                return dlg;
+            }
+            function header(v) {
+                head.textContent = '';
+                var media = el('span', 'bh-qv__media');
+                media.innerHTML = icon(v.icon || 'document-text');
+                if (v.image) {
+                    var img = el('img'); img.alt = ''; img.loading = 'lazy';
+                    img.addEventListener('load', function () { media.textContent = ''; media.appendChild(img); media.classList.add('has-image'); });
+                    img.src = v.image;
+                }
+                var titles = el('div', 'bh-qe__titles');
+                var h = text('h2', 'bh-qe__title', v.title || 'Quick View'); h.id = dlg.__tid; h.setAttribute('tabindex', '-1');
+                titles.appendChild(h);
+                if (v.subtitle) titles.appendChild(text('p', 'bh-qv__sub', v.subtitle));
+                if (v.badges && v.badges.length) {
+                    var bw = el('div', 'bh-qv__badges');
+                    v.badges.forEach(function (b) { bw.appendChild(text('span', 'bh-badge bh-badge--' + b.tone, b.label)); });
+                    titles.appendChild(bw);
+                }
+                var x = el('button', 'bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
+                x.addEventListener('click', function () { dlg.close(); });
+                head.appendChild(media); head.appendChild(titles); head.appendChild(x);
+            }
+            function render(v) {
+                header(v);
+                body.textContent = '';
+                (v.sections || []).forEach(function (sec) {
+                    var box = el('section', 'bh-qv__section');
+                    if (sec.title) box.appendChild(text('h3', 'bh-qv__heading', sec.title));
+                    var dl = el('dl', 'bh-qv__list');
+                    sec.items.forEach(function (it) {
+                        var row = el('div', 'bh-qv__item');
+                        row.appendChild(text('dt', '', it.label));
+                        var dd = el('dd', it.mono ? 'is-mono' : '');
+                        if (it.url) {
+                            var a = text('a', '', it.value || it.url); a.href = it.url;
+                            if (/^https?:/i.test(it.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+                            dd.appendChild(a);
+                        } else dd.textContent = it.value === '' ? '—' : it.value;
+                        row.appendChild(dd); dl.appendChild(row);
+                    });
+                    box.appendChild(dl); body.appendChild(box);
+                });
+                if (v.links && v.links.length) {
+                    var foot = el('div', 'bh-qv__foot');
+                    v.links.forEach(function (l, i) {
+                        var a = text('a', 'bh-btn bh-btn--sm ' + (i === 0 ? 'bh-btn--primary' : 'bh-btn--secondary'), l.label); a.href = l.url;
+                        if (l.new_tab) { a.target = '_blank'; a.rel = 'noopener'; }
+                        foot.appendChild(a);
+                    });
+                    body.appendChild(foot);
+                }
+            }
+            function open(row, from) {
+                var my = ++seq; opener = from || null;
+                var d = dialog();
+                head.textContent = ''; body.textContent = '';
+                var load = el('div', 'bh-dt-qe__loading bh-qv__loading', '<span class="bh-dt-spinner"></span>');
+                load.appendChild(text('span', '', 'Loading…'));
+                body.appendChild(load);
+                var x = el('button', 'bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
+                x.addEventListener('click', function () { d.close(); });
+                var t = el('div', 'bh-qe__titles'); var h = text('h2', 'bh-qe__title', 'Quick View'); h.id = d.__tid; t.appendChild(h);
+                head.appendChild(t); head.appendChild(x);
+                if (!d.open) { if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); }
+                window.Basehim.ajax.get('content.quick_view', { table: cfg.table, id: row.id }).then(function (res) {
+                    if (seq !== my) return;
+                    render(res.view || {});
+                    var ht = d.querySelector('.bh-qe__title'); if (ht) ht.focus();
+                }).catch(function (err) {
+                    if (seq !== my) return;
+                    body.textContent = '';
+                    var box = el('div', 'bh-dt-qe__msg bh-dt-qe__msg--error bh-qv__error'); box.setAttribute('role', 'alert');
+                    box.appendChild(text('span', '', (err && err.message) || 'The details could not be loaded.'));
+                    body.appendChild(box);
+                });
+            }
+            return { open: open };
+        })();
+
         // Leaving the page with unsaved Quick Edit changes asks first.
         window.addEventListener('beforeunload', function (e) { if (quickEdit.isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
