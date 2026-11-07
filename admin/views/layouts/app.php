@@ -149,7 +149,8 @@ try {
     /* Any wide data table becomes horizontally scrollable on small screens
        instead of clipping or forcing the whole page to scroll sideways. */
     @media (max-width: 767px) {
-        main table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+        /* Except a table marked to stack into labelled rows (.bh-table--stack, 1.2.102, ui.css). */
+        main table:not(.bh-table--stack) { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
         /* Let cards/panels use the full width and tighten oversized headings. */
         main h2 { font-size: 1.125rem; }
         main .grid { gap: 1rem; }
@@ -182,7 +183,9 @@ try {
     .nbtn-ghost { background: transparent; color: #475569; }
     .nbtn-ghost:hover { background: #f1f5f9; }
 
-    /* Consistent card + panel surface used across pages. */
+    /* Consistent card + panel surface used across pages.
+       .nbtn* and .ncard are deprecated (1.2.102): core no longer uses them;
+       kept for apps that do. Use .bh-btn and .bh-card. */
     .ncard { background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem; }
 
     /* ===== Mobile off-canvas sidebar (< lg) ===== */
@@ -589,7 +592,7 @@ try {
                 <div class="text-[11px] text-slate-400 leading-tight mt-0.5 truncate" title="<?= htmlspecialchars($__siteAddr) ?>"><?= htmlspecialchars($__siteAddr) ?></div>
                 <?php endif; ?>
             </div>
-            <button type="button" id="bh-mobile-close" class="lg:hidden p-2 -mr-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100" aria-label="Close menu">
+            <button type="button" id="bh-mobile-close" class="lg:hidden p-2.5 -mr-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100" aria-label="Close menu">
                 <?= icon('x-mark', 'w-4 h-4') ?>
             </button>
         </div>
@@ -769,7 +772,7 @@ try {
         <!-- Topbar -->
         <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-10">
             <div class="flex items-center gap-2 min-w-0">
-                <button type="button" id="bh-mobile-toggle" class="lg:hidden -ml-1 p-2 rounded-lg text-slate-600 hover:bg-slate-100" aria-label="Open menu">
+                <button type="button" id="bh-mobile-toggle" class="lg:hidden -ml-1 p-2.5 rounded-lg text-slate-600 hover:bg-slate-100" aria-label="Open menu" aria-controls="bh-sidebar" aria-expanded="false">
                     <?= icon('bars-3', 'w-5 h-5') ?>
                 </button>
                 <h1 class="text-base font-semibold text-slate-900 truncate"><?= htmlspecialchars($title ?? 'Dashboard') ?></h1>
@@ -1040,26 +1043,96 @@ try {
     var backdrop = document.getElementById('bh-backdrop');
     var mobileToggle = document.getElementById('bh-mobile-toggle');
     var mobileClose = document.getElementById('bh-mobile-close');
+    // Below 1024px the sidebar is a drawer (1.2.102: keyboard and screen
+    // readers). While closed it is inert, so Tab doesn't walk through links
+    // that are off-screen; open, focus moves into it and stays there until
+    // Escape, the ×, the backdrop or a link closes it, then returns to the
+    // menu button.
+    var drawerMq = window.matchMedia('(max-width: 1023px)');
+    var drawerOpen = false;
+    function setInert(on) {
+        if (on) sidebar.setAttribute('inert', ''); else sidebar.removeAttribute('inert');
+        sidebar.setAttribute('aria-hidden', on ? 'true' : 'false');
+        if (!on) sidebar.removeAttribute('aria-hidden');
+    }
+    function syncDrawer() {
+        if (drawerMq.matches) {
+            setInert(!drawerOpen);
+            if (drawerOpen) { sidebar.setAttribute('role', 'dialog'); sidebar.setAttribute('aria-modal', 'true'); sidebar.setAttribute('aria-label', 'Main menu'); }
+            else { sidebar.removeAttribute('role'); sidebar.removeAttribute('aria-modal'); }
+        } else {
+            setInert(false);
+            sidebar.removeAttribute('role'); sidebar.removeAttribute('aria-modal');
+        }
+        if (mobileToggle) mobileToggle.setAttribute('aria-expanded', drawerOpen ? 'true' : 'false');
+    }
     function openMobile() {
+        drawerOpen = true;
         sidebar.classList.add('is-open');
         if (backdrop) backdrop.classList.add('is-open');
         document.body.style.overflow = 'hidden';
+        syncDrawer();
+        var first = mobileClose || sidebar.querySelector('a, button, input');
+        if (first) { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }
     }
-    function closeMobile() {
+    function closeMobile(restoreFocus) {
+        var was = drawerOpen;
+        drawerOpen = false;
         sidebar.classList.remove('is-open');
         if (backdrop) backdrop.classList.remove('is-open');
         document.body.style.overflow = '';
+        syncDrawer();
+        if (was && restoreFocus !== false && mobileToggle && drawerMq.matches) mobileToggle.focus();
     }
     if (mobileToggle) mobileToggle.addEventListener('click', openMobile);
-    if (mobileClose) mobileClose.addEventListener('click', closeMobile);
-    if (backdrop) backdrop.addEventListener('click', closeMobile);
+    if (mobileClose) mobileClose.addEventListener('click', function () { closeMobile(); });
+    if (backdrop) backdrop.addEventListener('click', function () { closeMobile(); });
+    document.addEventListener('keydown', function (e) {
+        if (!drawerOpen || !drawerMq.matches) return;
+        if (e.key === 'Escape') { e.preventDefault(); closeMobile(); return; }
+        if (e.key !== 'Tab') return;
+        // Keep focus inside the open drawer.
+        var items = Array.prototype.filter.call(
+            sidebar.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'),
+            function (el) { return el.offsetParent !== null; });
+        if (!items.length) return;
+        var firstEl = items[0], lastEl = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+        else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+    });
     // Close the drawer after navigating (tapping a nav link).
     navMain && navMain.addEventListener('click', function (e) {
-        if (e.target.closest('a') && window.matchMedia('(max-width: 1023px)').matches) closeMobile();
+        if (e.target.closest('a') && drawerMq.matches) closeMobile(false);
     });
-    // Reset drawer state when crossing the breakpoint.
-    window.addEventListener('resize', function () {
-        if (window.matchMedia('(min-width: 1024px)').matches) closeMobile();
+    // Crossing the breakpoint: wide screens never have a drawer.
+    var onMq = function () { if (!drawerMq.matches) closeMobile(false); syncDrawer(); };
+    if (drawerMq.addEventListener) drawerMq.addEventListener('change', onMq); else if (drawerMq.addListener) drawerMq.addListener(onMq);
+    syncDrawer();
+
+    /* ===== Dialogs (1.2.102, .bh-dialog in ui.css) ===== */
+    // [data-bh-dialog-open="id"] opens <dialog id="id"> as a modal; the
+    // browser does Escape and focus. [data-bh-dialog-close] and a click on the
+    // backdrop close it. A dialog may set data-bh-dialog-focus="#field" for
+    // the first field to focus. window.bhDialog(id|el) opens one from script.
+    window.bhDialog = function (target) {
+        var d = typeof target === 'string' ? document.getElementById(target) : target;
+        if (!d || typeof d.showModal !== 'function') return null;
+        if (!d.open) d.showModal();
+        var f = d.getAttribute('data-bh-dialog-focus');
+        var el = f ? d.querySelector(f) : null;
+        if (el) { try { el.focus(); } catch (e) {} }
+        return d;
+    };
+    document.addEventListener('click', function (e) {
+        var opener = e.target.closest('[data-bh-dialog-open]');
+        if (opener) { e.preventDefault(); window.bhDialog(opener.getAttribute('data-bh-dialog-open')); return; }
+        var closer = e.target.closest('[data-bh-dialog-close]');
+        if (closer) { var cd = closer.closest('dialog'); if (cd) { e.preventDefault(); cd.close(); } return; }
+        // A click on the backdrop lands on the dialog element itself.
+        if (e.target.matches && e.target.matches('dialog.bh-dialog[open]')) {
+            var r = e.target.getBoundingClientRect();
+            if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) e.target.close();
+        }
     });
 
     /* ===== Section tabs ===== */

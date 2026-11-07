@@ -45,9 +45,9 @@ $choices = static function (string $name, array $opts, string $cur, string $labe
                 <div class="bh-set-row__text"><span class="bh-set-row__label" id="ab-roles-label">Who sees it</span>
                     <p class="bh-set-row__help">None ticked: everyone who can manage something (write posts, upload media, moderate comments, manage the site). Ticked: only these roles.</p></div>
                 <div class="bh-set-row__control">
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2" role="group" aria-labelledby="ab-roles-label">
+                    <div class="bh-checks" role="group" aria-labelledby="ab-roles-label">
                     <?php foreach ($roles as $slug => $r): ?>
-                        <label class="flex items-center gap-2 text-sm"><input type="checkbox" class="rounded border-slate-300" name="roles[<?= $e($slug) ?>]" value="1" <?= in_array($slug, $b['roles'], true) ? 'checked' : '' ?>> <?= $e($r['label']) ?></label>
+                        <label class="bh-check"><input type="checkbox" class="bh-check__input" name="roles[<?= $e($slug) ?>]" value="1" <?= in_array($slug, $b['roles'], true) ? 'checked' : '' ?>><span class="bh-check__text"><?= $e($r['label']) ?></span></label>
                     <?php endforeach; ?>
                     </div>
                 </div>
@@ -81,9 +81,9 @@ $choices = static function (string $name, array $opts, string $cur, string $labe
                 <div class="bh-set-row__text"><span class="bh-set-row__label" id="ab-user-label">Users may choose</span>
                     <p class="bh-set-row__help">From the bar's Display menu and their profile. Unticked: everyone gets the settings above.</p></div>
                 <div class="bh-set-row__control">
-                    <div class="flex flex-col gap-2" role="group" aria-labelledby="ab-user-label">
+                    <div class="flex flex-col" role="group" aria-labelledby="ab-user-label">
                     <?php foreach (S::USER_OPTIONS as $k => $label): ?>
-                        <label class="flex items-center gap-2 text-sm"><input type="checkbox" class="rounded border-slate-300" name="user_options[<?= $e($k) ?>]" value="1" <?= in_array($k, $b['user_options'], true) ? 'checked' : '' ?>> <?= $e($label) ?></label>
+                        <label class="bh-check"><input type="checkbox" class="bh-check__input" name="user_options[<?= $e($k) ?>]" value="1" <?= in_array($k, $b['user_options'], true) ? 'checked' : '' ?>><span class="bh-check__text"><?= $e($label) ?></span></label>
                     <?php endforeach; ?>
                     </div>
                 </div>

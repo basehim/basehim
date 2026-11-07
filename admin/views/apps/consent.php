@@ -96,7 +96,7 @@ $unknown = $unknown ?? [];
                        name="permissions[]"
                        value="<?= htmlspecialchars($perm['key']) ?>"
                        <?= $checked ? 'checked' : '' ?>
-                       class="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                       class="bh-check__input mt-1">
                 <span class="flex-1 min-w-0">
                     <span class="flex items-center gap-2 flex-wrap">
                         <span class="font-medium text-slate-900"><?= htmlspecialchars($perm['label']) ?></span>
@@ -129,7 +129,7 @@ $unknown = $unknown ?? [];
 
     <div class="mt-5 flex items-center gap-2 flex-wrap">
         <button type="submit" name="activate" value="1"
-                class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">
+                class="bh-btn bh-btn--primary">
             <?= icon('bolt', 'w-4 h-4 mr-1') ?> Approve &amp; activate
         </button>
         <button type="submit"

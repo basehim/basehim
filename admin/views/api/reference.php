@@ -315,10 +315,10 @@ $methodColors = [
                         </div>
                         <p class="text-xs text-slate-500 mt-0.5"><?= htmlspecialchars($desc) ?></p>
                     </div>
-                    <button onclick="copyEndpoint('<?= htmlspecialchars($method . ' ' . $endpointUrl($path, $full), ENT_QUOTES) ?>')"
+                    <button type="button" onclick="copyEndpoint('<?= htmlspecialchars($method . ' ' . $endpointUrl($path, $full), ENT_QUOTES) ?>')"
                             title="Copy"
-                            class="text-slate-300 hover:text-slate-600 transition mt-0.5 shrink-0">
-                        <?= icon('document-duplicate', 'w-3.5 h-3.5') ?>
+                            class="bh-btn bh-btn--ghost bh-btn--sm bh-btn--icon shrink-0" aria-label="Copy">
+                        <?= icon('document-duplicate', 'w-4 h-4') ?>
                     </button>
                 </div>
                 <?php endforeach; ?>
@@ -370,8 +370,8 @@ $methodColors = [
                             <?php endif; ?>
                         </div>
                         <button type="button" onclick="copyEndpoint(<?= htmlspecialchars(json_encode("Basehim.ajax.request('" . $a['name'] . "', {})"), ENT_QUOTES) ?>)"
-                                title="Copy a call" class="text-slate-300 hover:text-slate-600 transition mt-0.5 shrink-0">
-                            <?= icon('document-duplicate', 'w-3.5 h-3.5') ?>
+                                title="Copy a call" class="bh-btn bh-btn--ghost bh-btn--sm bh-btn--icon shrink-0" aria-label="Copy">
+                            <?= icon('document-duplicate', 'w-4 h-4') ?>
                         </button>
                     </div>
                     <?php endforeach; ?>
@@ -606,7 +606,7 @@ function copyEndpoint(text) {
     navigator.clipboard.writeText(text).then(() => {
         const el = event.currentTarget;
         el.innerHTML = '<?= icon('check', 'w-3.5 h-3.5 text-green-500') ?>';
-        setTimeout(() => el.innerHTML = '<?= icon('document-duplicate', 'w-3.5 h-3.5') ?>', 1500);
+        setTimeout(() => el.innerHTML = '<?= icon('document-duplicate', 'w-4 h-4') ?>', 1500);
     });
 }
 </script>

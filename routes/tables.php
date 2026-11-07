@@ -550,3 +550,75 @@ $tables->register('apps.installed', [
     'search_placeholder' => 'Search apps…',
 ]);
 unset($appStates, $appSources);
+
+// ---------------------------------------------------------------------------
+// Users (1.2.102). Was a hand-built table that scrolled sideways on phones
+// with its Edit and Delete off-screen; now cards there, with search, role and
+// status filters, sorting, column choices and density like every other list.
+// Delete is a row action (event) the Users screen runs through the existing
+// POST /admin/users/{id}/delete, offered only where the signed-in user may
+// manage that person (row flag `manage`). No bulk delete: one person at a time.
+// ---------------------------------------------------------------------------
+$userStatuses = ['active' => 'Active', 'inactive' => 'Inactive', 'suspended' => 'Suspended'];
+
+$tables->register('users.list', [
+    'label'        => 'Users',
+    'capability'   => 'manage_users',
+    'area'         => '/admin/users',
+    'provider'     => \App\Services\Table\UserTableProvider::class,
+    'default_sort' => 'newest',
+    'page_sizes'   => [25, 50, 100],
+    'columns'      => [
+        ['id' => 'user', 'label' => 'User', 'can_hide' => false, 'card' => 'title', 'sortable' => ['name_az', 'name_za'],
+         'render' => static function (array $row): string {
+            $name = trim((string) ($row['display_name'] ?? '')) ?: (string) $row['username'];
+            return '<span class="bh-usercell">' . bh_user_avatar($row, 'w-9 h-9 text-sm', (string) ($row['avatar_thumb'] ?? ''))
+                 . '<span class="bh-usercell__meta"><span class="bh-dt-title">' . htmlspecialchars($name, ENT_QUOTES) . '</span>'
+                 . '<span class="bh-dt-sub">@' . htmlspecialchars((string) $row['username'], ENT_QUOTES) . '</span></span></span>';
+         }],
+        ['id' => 'email', 'label' => 'Email', 'card' => 'sub', 'responsive' => 'tablet-up',
+         'render' => static fn(array $row): string => '<span class="bh-dt-sub">' . htmlspecialchars((string) $row['email'], ENT_QUOTES) . '</span>'],
+        ['id' => 'role', 'label' => 'Role', 'card' => 'under',
+         // Every role, custom ones included, by its own label. (The old
+         // screen listed the config's top-level key, "Roles", by mistake.)
+         'filter' => ['field' => 'role', 'all' => 'All roles', 'options' => static function (): array {
+             $out = [];
+             foreach (\App\Core\Application::getInstance()->make(\App\Services\AccessControl::class)->roles() as $slug => $r) {
+                 $out[(string) $slug] = (string) ($r['label'] ?? $slug);
+             }
+             return $out;
+         }],
+         'render' => static function (array $row): string {
+            $roles = \App\Core\Application::getInstance()->make(\App\Services\AccessControl::class)->roles();
+            $r = (string) $row['role'];
+            return '<span class="bh-badge bh-badge--blue">' . htmlspecialchars((string) ($roles[$r]['label'] ?? ucwords(str_replace('_', ' ', $r))), ENT_QUOTES) . '</span>';
+         }],
+        ['id' => 'status', 'label' => 'Status', 'card' => 'under',
+         'filter' => ['field' => 'status', 'in' => array_keys($userStatuses), 'labels' => $userStatuses],
+         'render' => static function (array $row) use ($userStatuses): string {
+            $s = (string) ($row['status'] ?? 'active');
+            $tone = ['active' => 'green', 'suspended' => 'red'][$s] ?? 'gray';
+            return '<span class="bh-badge bh-badge--' . $tone . '"' . ($s === 'active' ? ' data-card-quiet' : '') . '>'
+                 . htmlspecialchars($userStatuses[$s] ?? ucfirst($s), ENT_QUOTES) . '</span>';
+         }],
+        ['id' => 'last_login', 'label' => 'Last sign-in', 'align' => 'right', 'card' => 'meta', 'card_icon' => 'clock',
+         'sortable' => ['login_recent', 'login_oldest'],
+         'render' => static function (array $row): string {
+            $dt = Time::local($row['last_login_at'] ?? null);
+            return $dt === null ? '<span class="bh-dt-sub">Never</span>'
+                : '<span class="bh-dt-date">' . htmlspecialchars($dt->format(Time::dateFormat()), ENT_QUOTES) . '</span>';
+         }],
+        ['id' => 'registered', 'label' => 'Registered', 'align' => 'right', 'card' => 'hide', 'responsive' => 'desktop-only',
+         'default_visible' => false, 'sortable' => ['newest', 'oldest'],
+         'render' => static function (array $row): string {
+            $dt = Time::local($row['created_at'] ?? null);
+            return $dt === null ? '' : '<span class="bh-dt-date">' . htmlspecialchars($dt->format(Time::dateFormat()), ENT_QUOTES) . '</span>';
+         }],
+    ],
+    'actions' => [
+        ['id' => 'edit', 'label' => 'Edit', 'icon' => 'pencil-square', 'href' => '/admin/users/{id}/edit'],
+        ['id' => 'delete', 'label' => 'Delete', 'icon' => 'trash', 'danger' => true, 'flag' => 'manage', 'bulk' => false, 'event' => true],
+    ],
+    'search_placeholder' => 'Search people…',
+]);
+unset($userStatuses);

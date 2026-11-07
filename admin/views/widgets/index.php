@@ -7,11 +7,7 @@
     <p class="text-sm text-slate-500">Widgets are registered by your active apps and theme. They can appear in the block editor, on the public site, and on this dashboard.</p>
 </div>
 
-<!-- Sub-nav -->
-<div class="flex items-center gap-1 mb-5 text-sm">
-    <a href="<?= $base ?>/admin/widgets" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white font-medium">Registered widgets</a>
-    <a href="<?= $base ?>/admin/widgets/areas" class="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100">Widget areas</a>
-</div>
+<?php $this->include('widgets._nav', ['base' => $base, 'active' => 'widgets']); ?>
 
 <?php if (empty($widgets)): ?>
 <div class="bg-white rounded-xl border border-slate-200 p-10 text-center">

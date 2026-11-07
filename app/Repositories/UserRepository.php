@@ -127,6 +127,16 @@ class UserRepository
         return $n;
     }
 
+    /** Orders paginate() accepts as $filters['sort'] (1.2.102). */
+    public const SORTS = [
+        'newest'       => 'created_at DESC, id DESC',
+        'oldest'       => 'created_at ASC, id ASC',
+        'name_az'      => 'COALESCE(NULLIF(display_name, \'\'), username) ASC, id ASC',
+        'name_za'      => 'COALESCE(NULLIF(display_name, \'\'), username) DESC, id DESC',
+        'login_recent' => 'last_login_at IS NULL, last_login_at DESC, id DESC',
+        'login_oldest' => 'last_login_at IS NULL, last_login_at ASC, id ASC',
+    ];
+
     public function paginate(array $filters = [], int $page = 1, int $perPage = 20): array
     {
         $where = ['deleted_at IS NULL'];
@@ -135,6 +145,10 @@ class UserRepository
         if (!empty($filters['role'])) {
             $where[] = 'role = :role';
             $params['role'] = $filters['role'];
+        }
+        if (!empty($filters['status'])) {
+            $where[] = 'status = :status';
+            $params['status'] = $filters['status'];
         }
         if (!empty($filters['search'])) {
             // BH Search (1.2.92): every word, in any order; the index once built.
@@ -148,10 +162,12 @@ class UserRepository
         $total = (int)($countRow['c'] ?? 0);
 
         $offset = max(0, ($page - 1) * $perPage);
+        // Sorting (1.2.102, the Users table): a fixed list, never request text.
+        $order = self::SORTS[(string) ($filters['sort'] ?? '')] ?? self::SORTS['newest'];
         $rows = $this->db->select(
             "SELECT id, uuid, username, email, display_name, role, status, last_login_at, created_at
              FROM {users} WHERE {$whereSql}
-             ORDER BY created_at DESC
+             ORDER BY {$order}
              LIMIT {$perPage} OFFSET {$offset}",
             $params
         );

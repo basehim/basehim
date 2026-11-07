@@ -143,7 +143,7 @@ $allCount = count($updates) + count($appUpdates);
         <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
         <div class="min-w-0 flex-1">
             <div class="text-sm font-medium text-slate-800">Update service connected <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold align-middle">AUTO</span></div>
-            <div class="text-xs text-slate-500 truncate">This site checks for new Basehim releases automatically<?= $config['site_name'] !== '' ? ' · registered as "' . htmlspecialchars($config['site_name']) . '"' : '' ?><span class="bh-lastcheck-wrap<?= $lastCheck === '' ? ' hidden' : '' ?>"> · last check <span class="bh-lastcheck"><?= htmlspecialchars($lastCheck !== '' ? bh_datetime($lastCheck, 'M j, Y g:i a') : '') ?></span></span></div>
+            <div class="text-xs text-slate-500 break-words">This site checks for new Basehim releases automatically<?= $config['site_name'] !== '' ? ' · registered as "' . htmlspecialchars($config['site_name']) . '"' : '' ?><span class="bh-lastcheck-wrap<?= $lastCheck === '' ? ' hidden' : '' ?>"> · last check <span class="bh-lastcheck"><?= htmlspecialchars($lastCheck !== '' ? bh_datetime($lastCheck, 'M j, Y g:i a') : '') ?></span></span></div>
         </div>
     </div>
     <?php else: ?>

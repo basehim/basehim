@@ -214,6 +214,16 @@ Everything else runs through `bh:dt-bulk` (with `bulkEvents`) or the
 `bulkEndpoint` form, as before. A status filter can name its options:
 `'filter' => ['field' => 'status', 'in' => [...], 'labels' => ['consent' => 'Needs approval']]`.
 
+### Selection and phone cards (1.2.102)
+
+- A table with no bulk action shows no checkboxes. A bulk action is a
+  built-in `bulk_actions` id, or a declared action that isn't `href`,
+  `event` or `bulk: false`.
+- Phone cards: below 420px of card width, the author and the values
+  (`card: meta`) move to their own row under the title. The title keeps the
+  full width and a date reads on one line. This covers every phone, and the
+  two cards per row on a tablet.
+
 ### Filter menus (1.2.101)
 
 Every column filter with a set of values gets its own menu in the toolbar

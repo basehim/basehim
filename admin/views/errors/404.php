@@ -13,7 +13,7 @@
         <p class="text-xl text-slate-700 mb-2">Page Not Found</p>
         <p class="text-slate-500 mb-6 max-w-sm mx-auto"><?= htmlspecialchars($message ?? "The page you're looking for doesn't exist or has been moved.") ?></p>
         <div class="flex items-center justify-center gap-3">
-            <a href="<?= $base ?>/" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm">
+            <a href="<?= $base ?>/" class="bh-btn bh-btn--primary">
                 <?= icon('home', 'w-4 h-4 mr-1') ?> Home
             </a>
             <a href="javascript:history.back()" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg font-medium">

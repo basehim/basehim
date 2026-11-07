@@ -14,7 +14,7 @@
     </div>
     <div class="flex items-center gap-2 shrink-0">
         <span id="mb-dirty" class="hidden text-xs text-amber-600 font-medium">Unsaved changes</span>
-        <button type="button" id="mb-save" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium shadow-sm">
+        <button type="button" id="mb-save" class="bh-btn bh-btn--primary">
             <?= icon('check', 'w-4 h-4') ?> <span id="mb-save-txt">Save menu</span>
         </button>
     </div>
@@ -60,13 +60,13 @@
                 <?php if (count($p['items']) > 8): ?>
                 <div class="p-2 border-b border-slate-100">
                     <input type="search" placeholder="Filter&hellip;" data-filter
-                           class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-400">
+                           class="bh-input bh-input--sm">
                 </div>
                 <?php endif; ?>
                 <div class="max-h-56 overflow-y-auto p-2 space-y-0.5">
                     <?php foreach ($p['items'] as $it): ?>
                     <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer" data-row>
-                        <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                        <input type="checkbox" class="bh-check__input"
                                data-pick
                                data-type="<?= htmlspecialchars($p['type']) ?>"
                                data-object-id="<?= (int) $it['id'] ?>"
@@ -80,8 +80,8 @@
                     <?php endforeach; ?>
                 </div>
                 <div class="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 border-t border-slate-100">
-                    <button type="button" class="text-xs text-slate-500 hover:text-slate-700" data-select-all>Select all</button>
-                    <button type="button" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white rounded-lg text-xs font-medium" data-add disabled>
+                    <button type="button" class="bh-btn bh-btn--ghost bh-btn--sm" data-select-all>Select all</button>
+                    <button type="button" class="bh-btn bh-btn--secondary bh-btn--sm" data-add disabled>
                         Add to menu
                     </button>
                 </div>
@@ -99,19 +99,18 @@
             </button>
             <div class="hidden border-t border-slate-100 p-3 space-y-2" data-acc-body>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1">Label</label>
+                    <label class="bh-label">Label</label>
                     <input type="text" id="mb-custom-title" placeholder="About us"
-                           class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400">
+                           class="bh-input">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1">URL</label>
-                    <input type="text" id="mb-custom-url" placeholder="/about or https://example.com"
-                           class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400">
+                    <label class="bh-label">URL</label>
+                    <input type="text" id="mb-custom-url" placeholder="/about or https://example.com" class="bh-input">
                 </div>
-                <label class="flex items-center gap-2 text-xs text-slate-600">
-                    <input type="checkbox" id="mb-custom-blank" class="rounded border-slate-300 text-blue-600"> Open in a new tab
+                <label class="bh-check">
+                    <input type="checkbox" id="mb-custom-blank" class="bh-check__input"><span class="bh-check__text">Open in a new tab</span>
                 </label>
-                <button type="button" id="mb-custom-add" class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium">
+                <button type="button" id="mb-custom-add" class="bh-btn bh-btn--secondary w-full">
                     Add to menu
                 </button>
             </div>
@@ -123,19 +122,19 @@
             <form method="POST" action="<?= $base ?>/admin/menus/<?= (int) $menu['id'] ?>" class="space-y-3 text-sm">
                 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1">Name</label>
+                    <label class="bh-label">Name</label>
                     <input type="text" name="name" value="<?= htmlspecialchars($menu['name']) ?>"
                            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1">Location</label>
-                    <select name="location" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+                    <label class="bh-label">Location</label>
+                    <select name="location" class="bh-select">
                         <?php foreach (['' => '— None —', 'primary' => 'Primary', 'footer' => 'Footer', 'sidebar' => 'Sidebar'] as $val => $lbl): ?>
                             <option value="<?= $val ?>" <?= ($menu['location'] ?? '') === $val ? 'selected' : '' ?>><?= $lbl ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <button type="submit" class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">Save settings</button>
+                <button type="submit" class="bh-btn bh-btn--secondary w-full">Save settings</button>
             </form>
         </div>
 
@@ -146,7 +145,7 @@
             <form method="POST" action="<?= $base ?>/admin/menus/<?= (int) $menu['id'] ?>/delete"
                   onsubmit="return confirm('Delete the menu &quot;<?= htmlspecialchars(addslashes($menu['name']), ENT_QUOTES) ?>&quot;?\n\nAll of its items will be removed. This cannot be undone.')">
                 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                <button type="submit" class="w-full px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5">
+                <button type="submit" class="bh-btn bh-btn--danger w-full">
                     <?= icon('trash', 'w-4 h-4') ?> Delete this menu
                 </button>
             </form>
@@ -295,27 +294,27 @@
             +   '<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">' + (BADGE[it.type] || 'Link') + '</span>'
             +   (it.target === '_blank' ? '<span class="text-[10px] text-slate-400 shrink-0" title="Opens in a new tab">&#8599;</span>' : '')
             +   '<span class="ml-auto flex items-center gap-1 shrink-0">'
-            +     '<button type="button" class="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" data-edit title="Edit">' + BasehimIcon('pencil','w-3.5 h-3.5') + '</button>'
-            +     '<button type="button" class="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600" data-remove title="Remove">' + BasehimIcon('trash','w-3.5 h-3.5') + '</button>'
+            +     '<button type="button" class="bh-btn bh-btn--ghost bh-btn--sm bh-btn--icon" data-edit title="Edit" aria-label="Edit">' + BasehimIcon('pencil','w-4 h-4') + '</button>'
+            +     '<button type="button" class="bh-btn bh-btn--ghost bh-btn--sm bh-btn--icon" data-remove title="Remove" aria-label="Remove">' + BasehimIcon('trash','w-4 h-4') + '</button>'
             +   '</span>'
             + '</div>'
             + '<div class="mb-edit hidden" data-editor>'
             +   '<div class="grid gap-2 sm:grid-cols-2">'
             +     '<div><label class="block text-[11px] text-slate-500 mb-1">Label</label>'
-            +       '<input type="text" data-f="title" value="' + esc(it.title) + '" class="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400"></div>'
+            +       '<input type="text" data-f="title" value="' + esc(it.title) + '" class="bh-input bh-input--sm"></div>'
             +     '<div><label class="block text-[11px] text-slate-500 mb-1">URL</label>'
-            +       '<input type="text" data-f="url" value="' + esc(it.url || '') + '" class="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400"></div>'
+            +       '<input type="text" data-f="url" value="' + esc(it.url || '') + '" class="bh-input bh-input--sm"></div>'
             +     '<div><label class="block text-[11px] text-slate-500 mb-1">CSS classes</label>'
-            +       '<input type="text" data-f="classes" value="' + esc(it.classes || '') + '" class="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400"></div>'
+            +       '<input type="text" data-f="classes" value="' + esc(it.classes || '') + '" class="bh-input bh-input--sm"></div>'
             +     '<div><label class="block text-[11px] text-slate-500 mb-1">Opens in</label>'
-            +       '<select data-f="target" class="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400">'
+            +       '<select data-f="target" class="bh-select bh-select--sm">'
             +         '<option value="_self"' + (it.target !== '_blank' ? ' selected' : '') + '>Same tab</option>'
             +         '<option value="_blank"' + (it.target === '_blank' ? ' selected' : '') + '>New tab</option>'
             +       '</select></div>'
             +   '</div>'
             +   '<div class="flex justify-end gap-2 mt-2">'
-            +     '<button type="button" class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700" data-cancel>Close</button>'
-            +     '<button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium" data-apply>Apply</button>'
+            +     '<button type="button" class="bh-btn bh-btn--ghost bh-btn--sm" data-cancel>Close</button>'
+            +     '<button type="button" class="bh-btn bh-btn--primary bh-btn--sm" data-apply>Apply</button>'
             +   '</div>'
             + '</div>'
             + (kids ? '<div class="mb-kids">' + kids + '</div>' : '')

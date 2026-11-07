@@ -64,30 +64,30 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
             <?php endif; ?>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-                <label class="block text-xs text-slate-500 mb-1">Username <?= $isEdit ? '(read-only)' : '*' ?></label>
+                <label class="bh-label">Username <?= $isEdit ? '(read-only)' : '*' ?></label>
                 <input type="text" name="username" value="<?= htmlspecialchars($editUser['username'] ?? '') ?>"
                     <?= $isEdit ? 'readonly' : 'required' ?>
                     class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none <?= $isEdit ? 'bg-slate-50' : '' ?>">
             </div>
             <div>
-                <label class="block text-xs text-slate-500 mb-1">Email *</label>
+                <label class="bh-label">Email *</label>
                 <input type="email" name="email" value="<?= htmlspecialchars($editUser['email'] ?? '') ?>" required
                     class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
             </div>
             <div>
-                <label class="block text-xs text-slate-500 mb-1">Display Name</label>
+                <label class="bh-label">Display Name</label>
                 <input type="text" name="display_name" value="<?= htmlspecialchars($editUser['display_name'] ?? '') ?>"
                     class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
             </div>
             <div>
-                <label class="block text-xs text-slate-500 mb-1">Password <?= $isEdit ? '(leave blank to keep)' : '* (min 8 chars)' ?></label>
+                <label class="bh-label">Password <?= $isEdit ? '(leave blank to keep)' : '* (min 8 chars)' ?></label>
                 <input type="password" name="password" autocomplete="new-password" <?= $isEdit ? '' : 'required minlength="8"' ?>
                     class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
             </div>
         </div>
         <div>
-            <label class="block text-xs text-slate-500 mb-1">Bio</label>
-            <textarea name="bio" rows="3" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none"><?= htmlspecialchars($editUser['bio'] ?? '') ?></textarea>
+            <label class="bh-label">Bio</label>
+            <textarea name="bio" rows="3" class="bh-textarea"><?= htmlspecialchars($editUser['bio'] ?? '') ?></textarea>
         </div>
         <?php if ($isEdit): ?>
         <?php
@@ -96,7 +96,7 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
             $bhAuthorSlug = !empty($editUser['id']) ? $bhAuthorSvc->slugFor($editUser) : '';
         ?>
         <div class="">
-            <label class="block text-xs text-slate-500 mb-1">Author page address</label>
+            <label class="bh-label">Author page address</label>
             <div class="flex items-center rounded-lg border border-slate-300 focus-within:ring-2 focus-within:ring-blue-200 focus-within:border-blue-500 overflow-hidden">
                 <span class="px-3 py-2 text-sm text-slate-500 bg-slate-50 border-r border-slate-300 whitespace-nowrap">/author/</span>
                 <input type="text" name="author_slug" value="<?= htmlspecialchars($bhAuthorSlug) ?>" pattern="[a-z0-9-]+" maxlength="180"
@@ -108,7 +108,7 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
         <?php if (!$isEdit): ?>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-slate-100 pt-4">
             <div>
-                <label class="block text-xs text-slate-500 mb-1">Role</label>
+                <label class="bh-label">Role</label>
                 <select name="role" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500">
                     <?php foreach ($roles as $r): ?>
                         <option value="<?= $r ?>" <?= $r === 'subscriber' ? 'selected' : '' ?>><?= ucwords(str_replace('_', ' ', $r)) ?></option>
@@ -116,7 +116,7 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
                 </select>
             </div>
             <div>
-                <label class="block text-xs text-slate-500 mb-1">Status</label>
+                <label class="bh-label">Status</label>
                 <select name="status" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500">
                     <?php foreach (['active','inactive','suspended'] as $s): ?>
                         <option value="<?= $s ?>"><?= ucfirst($s) ?></option>
@@ -126,7 +126,7 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
         </div>
         <?php endif; ?>
         <div class="pt-1">
-            <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm text-sm">
+            <button type="submit" class="bh-btn bh-btn--primary">
                 <?= icon('document-check', 'w-4 h-4 mr-1') ?> <?= $isEdit ? 'Save Account' : 'Create User' ?>
             </button>
         </div>
@@ -268,7 +268,7 @@ $statusColors = ['active' => 'bg-emerald-100 text-emerald-700', 'inactive' => 'b
         <?php endforeach; ?>
     </div>
 
-    <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm text-sm">
+    <button type="submit" class="bh-btn bh-btn--primary">
         <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save Access Control
     </button>
 </form>

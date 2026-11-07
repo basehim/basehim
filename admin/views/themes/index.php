@@ -18,8 +18,8 @@
         <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
         <input type="file" name="theme_zip" accept=".zip" required
             class="text-sm text-slate-600 file:mr-3 file:px-3 file:py-2 file:border-0 file:rounded-lg file:bg-blue-50 file:text-blue-700 file:text-xs file:font-medium">
-        <label class="flex items-center gap-2 text-xs text-slate-600 select-none">
-            <input type="checkbox" name="overwrite" value="1"> Replace existing (update a theme in place)
+        <label class="bh-check">
+            <input type="checkbox" class="bh-check__input" name="overwrite" value="1"><span class="bh-check__text">Replace existing (update a theme in place)</span>
         </label>
         <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
             <?= icon('arrow-up-tray', 'w-4 h-4') ?> Install theme
@@ -62,7 +62,7 @@
                 <div class="flex items-center gap-2">
                     <form method="POST" action="<?= $base ?>/admin/themes/<?= urlencode($slug) ?>/activate" class="flex-1">
                         <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                        <button class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
+                        <button class="bh-btn bh-btn--primary w-full">
                             <?= icon('bolt', 'w-4 h-4 mr-1') ?> Activate
                         </button>
                     </form>

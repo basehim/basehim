@@ -30,7 +30,7 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
                     <?= icon('eye', 'w-4 h-4 mr-1') ?> View
                 </a>
             <?php endif; ?>
-            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm">
+            <button type="submit" class="bh-btn bh-btn--primary">
                 <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save
             </button>
         </div>

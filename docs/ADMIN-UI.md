@@ -150,6 +150,80 @@ to the `apps.market_*` / `themes.market_*` gateway actions through
 </div>
 ```
 
+## Dialog windows (1.2.102)
+
+For a form or details in a pop-up window, use the shared dialog (`ui.css`)
+rather than your own modal and stylesheet. It is a native `<dialog>`, so the
+browser handles Escape, focus and the page behind it. On phones it opens as
+a sheet from the bottom, with the body scrolling and the buttons in view.
+
+```html
+<button type="button" class="bh-btn bh-btn--primary" data-bh-dialog-open="key-dialog">New key</button>
+
+<dialog class="bh-dialog" id="key-dialog" aria-labelledby="key-dialog-title" data-bh-dialog-focus="#key-name">
+  <form method="POST" class="bh-dialog__form">
+    <header class="bh-dialog__head">
+      <div><h2 class="bh-dialog__title" id="key-dialog-title">New key</h2>
+           <p class="bh-dialog__sub">Shown once.</p></div>
+      <button type="button" class="bh-dialog__close" data-bh-dialog-close aria-label="Close"><?= icon('x-mark') ?></button>
+    </header>
+    <div class="bh-dialog__body"> fields </div>
+    <footer class="bh-dialog__foot">
+      <button type="button" class="bh-btn bh-btn--secondary" data-bh-dialog-close>Cancel</button>
+      <button type="submit" class="bh-btn bh-btn--primary">Create</button>
+    </footer>
+  </form>
+</dialog>
+```
+
+Sizes: `bh-dialog--sm` (24rem), default (32rem), `bh-dialog--lg` (44rem).
+`window.bhDialog(id)` opens one from script. A click on the backdrop closes
+it. For yes/no questions keep using `bhConfirm()`.
+
+## Checkboxes (1.2.102)
+
+A switch is for one on/off setting; a list of choices ("which roles",
+"which scopes") uses the checkbox:
+
+```html
+<div class="bh-checks">
+  <label class="bh-check">
+    <input type="checkbox" class="bh-check__input" name="roles[]" value="editor">
+    <span class="bh-check__text">Editor <span class="bh-check__help">Optional line.</span></span>
+  </label>
+</div>
+```
+
+The box is 18px in the accent colour. The whole row is the target, at least
+44px tall on touch screens. `bh-checks` lays several out in columns that fit
+the width.
+
+## Small tables (1.2.102)
+
+Lists that are long, searchable or need bulk actions belong in the
+[Data Table](DATA-TABLE.md). A short list (a site's menus, its API keys) can
+be a plain table:
+
+```html
+<table class="bh-table bh-table--stack">
+  <thead><tr><th>Name</th><th>Location</th><th><span class="sr-only">Actions</span></th></tr></thead>
+  <tbody><tr>
+    <td class="bh-table__primary">Main menu</td>
+    <td data-label="Location"><span class="bh-badge bh-badge--blue">primary</span></td>
+    <td class="bh-table__actions"><a class="bh-btn bh-btn--secondary bh-btn--sm" href="…">Edit</a></td>
+  </tr></tbody>
+</table>
+```
+
+On phones (under 640px) `--stack` turns each row into a block:
+- the primary cell leads;
+- each other cell sits under its `data-label`;
+- the actions run along the bottom.
+
+A cell with `colspan` (an inline editor) stays full width. Without `--stack`,
+a table scrolls sideways inside the page on phones, as every admin table
+always has.
+
 ## Dialogs and toasts (JavaScript)
 
 | | |

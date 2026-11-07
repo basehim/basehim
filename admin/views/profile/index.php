@@ -14,7 +14,7 @@
         <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
         <input type="text" name="code" required inputmode="numeric" maxlength="7" autocomplete="one-time-code" aria-label="Code"
             class="w-40 px-3 py-2 border border-slate-300 rounded-lg text-center font-mono text-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-        <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm">Confirm new email</button>
+        <button type="submit" class="bh-btn bh-btn--primary">Confirm new email</button>
         <button type="submit" name="cancel" value="1" formnovalidate class="px-3 py-2 text-sm text-slate-500 hover:text-slate-700">Keep the current address</button>
     </form>
 </div>
@@ -36,23 +36,23 @@
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1">Username (read-only)</label>
+                    <label class="bh-label">Username (read-only)</label>
                     <input type="text" value="<?= htmlspecialchars($currentUser['username']) ?>" readonly
                         class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1">Email</label>
+                    <label class="bh-label">Email</label>
                     <input type="email" name="email" value="<?= htmlspecialchars($currentUser['email']) ?>" required
                         class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
                 </div>
                 <div class="md:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">Display Name</label>
+                    <label class="bh-label">Display Name</label>
                     <input type="text" name="display_name" value="<?= htmlspecialchars($currentUser['display_name'] ?? '') ?>"
                         class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
                 </div>
                 <div class="md:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">Bio</label>
-                    <textarea name="bio" rows="3" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none"><?= htmlspecialchars($currentUser['bio'] ?? '') ?></textarea>
+                    <label class="bh-label">Bio</label>
+                    <textarea name="bio" rows="3" class="bh-textarea"><?= htmlspecialchars($currentUser['bio'] ?? '') ?></textarea>
                 </div>
 
                 <?php
@@ -61,7 +61,7 @@
                     $bhAuthorSlug = !empty($currentUser['id']) ? $bhAuthorSvc->slugFor($currentUser) : '';
                 ?>
                 <div class="md:col-span-2">
-                    <label class="block text-xs text-slate-500 mb-1">Author page address</label>
+                    <label class="bh-label">Author page address</label>
                     <div class="flex items-center rounded-lg border border-slate-300 focus-within:ring-2 focus-within:ring-blue-200 focus-within:border-blue-500 overflow-hidden">
                         <span class="px-3 py-2 text-sm text-slate-500 bg-slate-50 border-r border-slate-300 whitespace-nowrap">/author/</span>
                         <input type="text" name="author_slug" value="<?= htmlspecialchars($bhAuthorSlug) ?>" pattern="[a-z0-9-]+" maxlength="180"
@@ -77,12 +77,12 @@
             <p class="text-xs text-slate-500">Your current password is needed to change your password or your email address. Leave the new password blank to keep it. A new password signs out your other devices.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1">Current Password</label>
-                    <input type="password" name="current_password" autocomplete="current-password" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+                    <label class="bh-label">Current Password</label>
+                    <input type="password" name="current_password" autocomplete="current-password" class="bh-input">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1">New Password (8+ chars)</label>
-                    <input type="password" name="new_password" minlength="8" autocomplete="new-password" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
+                    <label class="bh-label">New Password (8+ chars)</label>
+                    <input type="password" name="new_password" minlength="8" autocomplete="new-password" class="bh-input">
                 </div>
             </div>
         </div>
@@ -101,7 +101,7 @@
             </div>
         </div>
 
-        <button type="submit" class="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm">
+        <button type="submit" class="bh-btn bh-btn--primary w-full">
             <?= icon('document-check', 'w-4 h-4 mr-1') ?> Save Profile
         </button>
     </div>
@@ -153,7 +153,7 @@ $tfaOn = !empty($tfa['enabled']) || !empty($tfa['required']);
                 <div class="flex flex-wrap items-center gap-2">
                     <input type="text" name="code" id="tfa-code" required inputmode="numeric" maxlength="7" autocomplete="one-time-code" autofocus
                         class="w-40 px-3 py-2 border border-slate-300 rounded-lg text-center font-mono text-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
-                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm">Turn on</button>
+                    <button type="submit" class="bh-btn bh-btn--primary">Turn on</button>
                 </div>
             </form>
             <div class="flex flex-wrap items-center gap-4 text-sm">
@@ -178,7 +178,7 @@ $tfaOn = !empty($tfa['enabled']) || !empty($tfa['required']);
             <form method="POST" action="<?= $base ?>/admin/profile/two-factor/disable" class="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1" for="tfa-pass">Current password</label>
+                    <label class="bh-label" for="tfa-pass">Current password</label>
                     <input type="password" name="current_password" id="tfa-pass" required autocomplete="current-password"
                         class="w-56 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
                 </div>
@@ -188,7 +188,7 @@ $tfaOn = !empty($tfa['enabled']) || !empty($tfa['required']);
         <?php else: ?>
             <form method="POST" action="<?= $base ?>/admin/profile/two-factor/start">
                 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm">Set up two-step verification</button>
+                <button type="submit" class="bh-btn bh-btn--primary">Set up two-step verification</button>
                 <p class="text-xs text-slate-500 mt-2">We'll email a code to confirm the address works before turning it on.</p>
             </form>
         <?php endif; ?>

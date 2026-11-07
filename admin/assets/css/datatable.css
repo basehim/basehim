@@ -264,19 +264,24 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-card--compact .bh-dt-card__metaval { max-width: none; }
     .bh-dt-card--compact .bh-dt-card__meta { flex-direction: row; gap: 1.1rem; }
 }
-/* A narrow card (phones under ~400px): the author as a picture only. The
-   sizes are the card's content width, inside its padding. */
-@container dtcard (min-width: 300px) and (max-width: 344px) {
-    .bh-dt-card--compact .bh-dt-card__side .bh-usercell__meta { display: none; }
-}
-/* Narrower still (the smallest phones): author and values move under the title. */
-@container dtcard (max-width: 299px) {
+/* A phone-width card (under 420px of content, 1.2.102): the author and the
+   values move to their own row under the title, so the title has the whole
+   width and a date reads on one line. Before 1.2.102 that happened only under
+   300px; at 345–519px the values were squeezed into a 3rem column beside the
+   title, which stacked a date four lines high (375px phones, and the two
+   cards per row at 768px). The sizes are the card's content width. */
+@container dtcard (max-width: 419px) {
     .bh-dt-card--compact .bh-dt-card__body { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "check main menu" ". aside aside"; align-items: start; row-gap: .6rem; }
     .bh-dt-card--compact.has-media .bh-dt-card__body { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "check media main menu" ". . aside aside"; }
     .bh-dt-card--compact .bh-dt-card__aside { flex-wrap: wrap; }
     .bh-dt-card--compact .bh-dt-card__meta { flex-direction: row; flex-wrap: wrap; gap: .3rem .9rem; }
     .bh-dt-card--compact .bh-dt-card__metaval, .bh-dt-card--compact .bh-dt-card__side .bh-usercell__name { max-width: none; }
+    .bh-dt-card--compact .bh-dt-card__metaval .bh-dt-date { display: inline; }
+    .bh-dt-card--compact .bh-dt-card__metaval .bh-dt-sub { display: inline; margin: 0 0 0 .3rem; }
 }
+
+/* No bulk action, no selection (1.2.102). */
+.bh-dt[data-select="none"] .bh-dt-check, .bh-dt[data-select="none"] .bh-dt-cardshead { display: none !important; }
 
 /* Select all for cards (1.2.65): the table header's checkbox, for the views
    that have no table header. Shown wherever the cards are. */

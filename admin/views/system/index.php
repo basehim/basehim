@@ -212,7 +212,7 @@ $dot = ['pass' => 'bg-emerald-400', 'warn' => 'bg-amber-400', 'fail' => 'bg-red-
             <p class="text-xs text-slate-500 mb-4">Currently <?= (int)$cacheInfo['app_files'] ?> file(s), <?= htmlspecialchars($cacheInfo['app_size']) ?>. Clearing removes compiled/cached files and resets OPcache <?= $cacheInfo['opcache'] ? '' : '(OPcache reset unavailable on this server)' ?>.</p>
             <form method="POST" action="<?= $base ?>/admin/system/cache/clear">
                 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-                <button class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
+                <button class="bh-btn bh-btn--primary">
                     <?= icon('sparkles', 'w-4 h-4 mr-1') ?>Clear Cache<?= $cacheInfo['opcache'] ? ' &amp; Reset OPcache' : '' ?>
                 </button>
             </form>

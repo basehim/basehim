@@ -88,10 +88,7 @@ $jsVer = @filemtime(BASEHIM_ROOT . '/admin/assets/js/widget-areas.js') ?: BASEHI
     </div>
 </div>
 
-<div class="flex items-center gap-1 mb-5 text-sm">
-    <a href="<?= $base ?>/admin/widgets" class="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100">Registered widgets</a>
-    <a href="<?= $base ?>/admin/widgets/areas" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white font-medium" aria-current="page">Widget areas</a>
-</div>
+<?php $this->include('widgets._nav', ['base' => $base, 'active' => 'areas']); ?>
 
 <noscript>
     <div class="bh-note bh-note--warn mb-5">This screen needs JavaScript. Turn it on to place and edit widgets.</div>
