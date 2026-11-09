@@ -62,10 +62,39 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-tools { display: flex; align-items: center; gap: .5rem; margin-left: auto; }
 
 /* Selection bar ------------------------------------------------------------ */
-.bh-dt-bulk { display: none; align-items: center; gap: .6rem; padding: .55rem .25rem .15rem; margin-top: .6rem; }
-.bh-dt-bulk.is-active { display: flex; }
+/* Floating bulk-action bar (1.2.104). Fixed to the viewport and moved to
+   <body> by the script, so ticking a row no longer pushes the table down —
+   the bar slides up over the content instead. Hidden and non-interactive
+   until a selection exists. */
+.bh-dt-bulk {
+    position: fixed;
+    left: 50%;
+    bottom: 1.25rem;
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    max-width: calc(100vw - 2rem);
+    padding: .5rem .55rem .5rem .95rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    box-shadow: 0 12px 32px -10px rgba(15, 23, 42, .4), 0 3px 8px -3px rgba(15, 23, 42, .22);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(1rem);
+    transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s;
+}
+.bh-dt-bulk.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+    transition: opacity .18s ease, transform .18s ease, visibility 0s;
+}
 .bh-dt-bulk__check { display: inline-flex; align-items: center; }
-.bh-dt-bulk__count { font-size: .82rem; color: #475569; font-weight: 500; margin-right: .25rem; }
+.bh-dt-bulk__count { font-size: .82rem; color: #475569; font-weight: 600; white-space: nowrap; margin: 0 .1rem; }
 .bh-dt-bulkbtn { display: inline-flex; align-items: center; gap: .3rem; padding: .35rem .8rem;
     border-radius: var(--dt-r); font-size: .8rem; font-weight: 600; border: 1px solid transparent; cursor: pointer; }
 .bh-dt-bulkbtn--publish { background: #dcfce7; color: #15803d; }
@@ -338,10 +367,29 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-menu__item--danger svg { color: #dc2626; }
 
 /* Bulk bar polish */
-.bh-dt-bulk__actions { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
-.bh-dt-bulkclear { background: none; border: 0; color: #64748b; font-size: .8rem; cursor: pointer; padding: .35rem .5rem; }
-.bh-dt-bulkclear:hover { color: #2563eb; text-decoration: underline; }
+.bh-dt-bulk__actions { display: flex; align-items: center; gap: .4rem; flex-wrap: nowrap; }
+.bh-dt-bulkclear { display: inline-flex; align-items: center; gap: .25rem; background: #f1f5f9; border: 0;
+    color: #475569; font-size: .8rem; font-weight: 600; cursor: pointer; padding: .35rem .7rem; border-radius: 999px; white-space: nowrap; }
+.bh-dt-bulkclear:hover { background: #e2e8f0; color: #1e293b; }
 .bh-dt-reset { font-size: .82rem; color: #2563eb; cursor: pointer; }
+
+/* The pill scrolls its buttons sideways rather than wrapping or overflowing
+   the viewport when a selection offers many actions on a narrow screen. */
+@media (max-width: 640px) {
+    /* Full width with side gutters; the count sits on its own line and the
+       actions wrap below, so nothing is clipped on a narrow screen. */
+    .bh-dt-bulk { left: .75rem; right: .75rem; max-width: none; border-radius: 16px;
+        flex-wrap: wrap; padding: .6rem .75rem; transform: translateY(1rem); }
+    .bh-dt-bulk.is-active { transform: translateY(0); }
+    .bh-dt-bulk__count { flex-basis: 100%; }
+    .bh-dt-bulk__actions { flex-wrap: wrap; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bh-dt-bulk, .bh-dt-bulk.is-active { transition: opacity .15s ease, visibility 0s; transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 640px) {
+    .bh-dt-bulk, .bh-dt-bulk.is-active { transform: none; }
+}
 
 /* List / Grid views (desktop) */
 .bh-dt[data-view="list"] .bh-dt-table,
@@ -389,9 +437,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-perpage { display: none; }   /* in Screen Options */
     .bh-list-actions { width: 100%; justify-content: space-between; }
     .bh-dt-toolbar { gap: .5rem; }
-    /* The count on its own line, the actions (and Clear) on the next. */
-    .bh-dt-bulk { flex-wrap: wrap; gap: .45rem; }
-    .bh-dt-bulk__count { flex-basis: 100%; white-space: nowrap; }
+    /* (The floating bulk bar has its own responsive rules above.) */
     /* Search and the Screen Options icon share the first line; filters below. */
     .bh-dt-options__label { display: none; }
     .bh-dt-search { flex: 1 1 calc(100% - 4rem); min-width: 0; order: 0; }
@@ -449,7 +495,12 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-qv__heading { margin: 0 0 .4rem; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #64748b; }
 .bh-qv__list { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem 1rem; }
 .bh-qv__item { min-width: 0; }
+/* A full-width item (1.2.105) for a notes or description block: spans both
+   columns and keeps the text's own line breaks. */
+.bh-qv__item--wide { grid-column: 1 / -1; }
+.bh-qv__item--wide dd { white-space: pre-wrap; }
 .bh-qv__item dt { font-size: .72rem; color: #64748b; }
+.bh-qv__item dt:empty { display: none; }
 .bh-qv__item dd { margin: .1rem 0 0; font-size: .875rem; color: #0f172a; overflow-wrap: anywhere; }
 .bh-qv__item dd.is-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; }
 .bh-qv__item dd a { color: #2563eb; text-decoration: none; }

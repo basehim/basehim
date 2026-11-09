@@ -173,9 +173,10 @@ $__selectable = $__declared
             <div class="bh-dt-panel" data-dt-panel></div>
         </div>
 
-        <!-- Selection / bulk bar (buttons are built by JS to match the selection) -->
-        <div class="bh-dt-bulk" data-dt-bulk>
-            <span class="bh-dt-bulk__count" data-dt-bulk-count>0 items selected</span>
+        <!-- Selection / bulk bar: floats over the content (1.2.104); the script
+             moves it to <body> and builds the buttons to match the selection. -->
+        <div class="bh-dt-bulk" data-dt-bulk role="region" aria-label="Bulk actions">
+            <span class="bh-dt-bulk__count" data-dt-bulk-count aria-live="polite">0 items selected</span>
             <div class="bh-dt-bulk__actions" data-dt-bulk-actions></div>
         </div>
     </div>

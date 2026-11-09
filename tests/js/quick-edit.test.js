@@ -609,7 +609,8 @@ test('a selected item looks selected, as a card and as a table row, and keeps th
   p.set('title', 'Renamed');
   await p.save();
   ok(card().classList.contains('is-selected') && tr().classList.contains('is-selected'), 'still selected after the save');
-  p.root.querySelector('.bh-dt-bulkclear').click();
+  // The bulk bar floats on <body> now (1.2.104), not inside the table.
+  p.doc.querySelector('.bh-dt-bulkclear').click();
   eq(p.root.querySelectorAll('.is-selected').length, 0, 'Clear removes it');
 });
 
@@ -743,7 +744,7 @@ test('cards have their own Select all, in step with the table header', async () 
   const all = head.querySelector('input');
   all.checked = true; all.dispatchEvent(new Event('change', { bubbles: true }));
   eq(p.root.querySelectorAll('.bh-dt-card.is-selected').length, 2, 'every card');
-  eq(p.root.querySelector('[data-dt-bulk-count]').textContent, '2 items selected', 'the bulk bar');
+  eq(p.doc.querySelector('[data-dt-bulk-count]').textContent, '2 items selected', 'the bulk bar');
   ok(p.root.querySelector('thead .bh-dt-check input').checked, 'the table header agrees');
   // One card off: both boxes show "some".
   const cb = p.root.querySelector('.bh-dt-card[data-dt-rowid="1"] .bh-dt-rowcheck');

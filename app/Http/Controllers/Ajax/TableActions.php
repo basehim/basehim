@@ -225,12 +225,19 @@ final class TableActions
             if (!is_array($sec)) continue;
             $items = [];
             foreach (array_slice((array) ($sec['items'] ?? []), 0, 40) as $it) {
-                if (!is_array($it) || $str($it['label'] ?? '') === '') continue;
+                if (!is_array($it)) continue;
+                // A "wide" item (1.2.105) spans the full width and keeps its line
+                // breaks — for a notes or description block — so it may have no
+                // label; an ordinary item still must (a value with no label is a
+                // stray cell).
+                $wide = !empty($it['wide']);
+                if ($str($it['label'] ?? '') === '' && !$wide) continue;
                 $items[] = [
                     'label' => $str($it['label'], 80),
-                    'value' => $str($it['value'] ?? '', 2000),
+                    'value' => $str($it['value'] ?? '', $wide ? 5000 : 2000),
                     'url'   => $url($it['url'] ?? ''),
                     'mono'  => !empty($it['mono']),
+                    'wide'  => $wide,
                 ];
             }
             if ($items) $out['sections'][] = ['title' => $str($sec['title'] ?? '', 80), 'items' => $items];

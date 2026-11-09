@@ -97,6 +97,16 @@
         root.setAttribute('data-density', state.density);
         root.setAttribute('data-view', state.view);
 
+        // The floating bulk bar lives on <body> (1.2.104), so position:fixed is
+        // relative to the viewport even when an ancestor is transformed, and
+        // ticking a row can never shift the table. Escape clears the selection.
+        if (r.bulk) {
+            document.body.appendChild(r.bulk);
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && selectedIds().length) { clearSelection(); }
+            });
+        }
+
         // Shared floating menus (row actions, and a safety net for z-index).
         var menu = el('div', 'bh-dt-menu'); menu.style.display = 'none'; document.body.appendChild(menu);
         // Cards have no table header, so they get their own Select all (1.2.65):
@@ -1027,8 +1037,10 @@
                     if (sec.title) box.appendChild(text('h3', 'bh-qv__heading', sec.title));
                     var dl = el('dl', 'bh-qv__list');
                     sec.items.forEach(function (it) {
-                        var row = el('div', 'bh-qv__item');
-                        row.appendChild(text('dt', '', it.label));
+                        var row = el('div', 'bh-qv__item' + (it.wide ? ' bh-qv__item--wide' : ''));
+                        // A wide item may carry no label (a notes block); an
+                        // ordinary one always shows its label.
+                        if (it.label || !it.wide) row.appendChild(text('dt', '', it.label));
                         var dd = el('dd', it.mono ? 'is-mono' : '');
                         if (it.url) {
                             var a = text('a', '', it.value || it.url); a.href = it.url;
