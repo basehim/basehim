@@ -41,7 +41,7 @@ test('BH-108: the hub is told the Site title, tagline and icon as a full address
 test('BH-107 / BH-108: checks send the identity and version; a save of the title, tagline or icon sends it after the response; an update reports the new version', function () {
     $root = dirname(__DIR__, 2);
     $u = (string) file_get_contents($root . '/app/Services/UpdateService.php');
-    assert_contains('] + $identity);', $u, 'check-in carries name, tagline, icon');
+    assert_contains('] + $identity, null, $timeout);', $u, 'check-in carries name, tagline, icon');
     assert_contains('if (!$this->heartbeat($newVersion)) {', $u, 'apply() reports the version just installed');
     assert_contains("'identity_sent'", $u);
     assert_false(str_contains($u, "set('updates', 'site_name'"), 'the host is no longer frozen as the name');

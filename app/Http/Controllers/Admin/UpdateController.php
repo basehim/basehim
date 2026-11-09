@@ -205,7 +205,7 @@ class UpdateController extends Controller
         /** @var \App\Services\AppService $apps */
         $apps = $this->app->make(\App\Services\AppService::class);
         try {
-            $res = $apps->marketplaceInstall($slug, (string) ($u['sha256'] ?? ''), (string) ($u['version'] ?? ''));
+            $res = $apps->marketplaceInstall($slug, (string) ($u['sha256'] ?? ''), (string) ($u['version'] ?? ''), (string) ($u['signature'] ?? ''));
         } catch (\Throwable $e) {
             $res = ['ok' => false, 'error' => $e->getMessage()];
         }

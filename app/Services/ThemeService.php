@@ -389,15 +389,13 @@ class ThemeService
         $conn = $this->cloudhimConn();
         if (!$conn) return ['ok' => false, 'error' => 'not_connected'];
 
-        $qs = http_build_query(array_merge(['key' => $conn['key']], array_filter([
+        $res = $conn['svc']->hub('GET', '/api/v1/cloudhim/themes', array_filter([
             'q'        => (string) ($query['q'] ?? ''),
             'category' => (string) ($query['category'] ?? ''),
             'tag'      => (string) ($query['tag'] ?? ''),
             'sort'     => (string) ($query['sort'] ?? ''),
             'page'     => (string) ($query['page'] ?? ''),
-        ], fn($v) => $v !== '')));
-
-        $res = $this->httpGet($conn['url'] . '/api/v1/cloudhim/themes?' . $qs);
+        ], fn($v) => $v !== ''));
         if ($res['error'] !== null) return ['ok' => false, 'error' => 'Could not reach the Basehim marketplace: ' . $res['error']];
         $json = json_decode($res['body'], true);
         if (!is_array($json) || empty($json['ok'])) {
@@ -425,35 +423,68 @@ class ThemeService
     {
         $conn = $this->cloudhimConn();
         if (!$conn) return ['ok' => false, 'error' => 'not_connected'];
-        $res = $this->httpGet($conn['url'] . '/api/v1/cloudhim/themes/facets?key=' . urlencode($conn['key']));
+        $res = $conn['svc']->hub('GET', '/api/v1/cloudhim/themes/facets');
         $json = json_decode($res['body'], true);
         return is_array($json) ? $json : ['ok' => false, 'categories' => [], 'tags' => []];
     }
 
     /**
-     * Download a theme from CloudHim by slug and install it (SHA-256 verified
-     * against the header CloudHim sends), reusing the local zip installer.
+     * Download a theme from CloudHim by slug and install it. The checksum and
+     * the publisher's signature are both verified, and the zip must be the
+     * theme that was asked for, so a compromised hub cannot hand back a
+     * different or unsigned theme (1.2.103).
      */
-    public function marketplaceInstall(string $slug): array
+    public function marketplaceInstall(string $slug, string $version = '', string $signature = ''): array
     {
         $conn = $this->cloudhimConn();
         if (!$conn) return ['ok' => false, 'error' => 'This site is not connected to the Basehim marketplace yet — open Updates to connect.'];
         $slug = $this->sanitizeSlug($slug);
 
-        $url = $conn['url'] . '/api/v1/cloudhim/theme-download?' . http_build_query(['key' => $conn['key'], 'slug' => $slug]);
-        $res = $this->httpGet($url, 120);
-        if ($res['error'] !== null || $res['status'] >= 400 || $res['body'] === '') {
+        $query = ['slug' => $slug];
+        $version = trim($version);
+        if ($version !== '' && preg_match('/^[0-9A-Za-z.\-+]{1,32}$/', $version)) $query['version'] = $version;
+        else $version = '';
+
+        // Streamed to storage/updates, not the shared system temp folder (1.2.103).
+        $dir = BASEHIM_ROOT . '/storage/updates';
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        $tmp = $dir . '/bh-theme-' . bin2hex(random_bytes(6)) . '.zip';
+        $res = $conn['svc']->hub('GET', '/api/v1/cloudhim/theme-download', $query, null, 120, true, $tmp);
+        if ($res['error'] !== null || $res['status'] !== 200 || !is_file($tmp) || filesize($tmp) === 0) {
+            @unlink($tmp);
             return ['ok' => false, 'error' => 'Download failed: ' . ($res['error'] ?? ('HTTP ' . $res['status']))];
         }
 
-        $tmp = sys_get_temp_dir() . '/bh-theme-' . bin2hex(random_bytes(5)) . '.zip';
-        file_put_contents($tmp, $res['body']);
-
-        // Verify checksum from the response header when present.
+        // Checksum required (1.2.103): a download with none is refused.
         $expected = strtolower(trim((string) ($res['headers']['x-checksum-sha256'] ?? '')));
-        if ($expected !== '' && !hash_equals($expected, hash_file('sha256', $tmp))) {
+        if ($expected === '') {
+            @unlink($tmp);
+            return ['ok' => false, 'error' => 'The marketplace gave no checksum for this theme, so it was not installed.'];
+        }
+        if (!hash_equals($expected, (string) hash_file('sha256', $tmp))) {
             @unlink($tmp);
             return ['ok' => false, 'error' => 'Checksum mismatch — download may be corrupted. Nothing was installed.'];
+        }
+
+        // The zip must be the theme we asked for, and its manifest version is
+        // what the signature is checked against when none was passed.
+        try {
+            $manifest = $this->peekZipManifest($tmp);
+        } catch (\Throwable $e) {
+            @unlink($tmp);
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+        $zipSlug = $this->sanitizeSlug((string) ($manifest['slug'] ?? $manifest['name'] ?? ''));
+        if ($zipSlug !== $slug) {
+            @unlink($tmp);
+            return ['ok' => false, 'error' => "The downloaded theme's slug ('{$zipSlug}') does not match '{$slug}'."];
+        }
+
+        $sig = \App\Services\PackageSignature::clean($signature) ?: \App\Services\PackageSignature::clean($res['headers']['x-package-signature'] ?? '');
+        $sigError = \App\Services\PackageSignature::check($tmp, 'theme', $slug, $version !== '' ? $version : (string) ($manifest['version'] ?? ''), $sig);
+        if ($sigError !== null) {
+            @unlink($tmp);
+            return ['ok' => false, 'error' => $sigError];
         }
 
         try {
@@ -467,7 +498,7 @@ class ThemeService
         }
     }
 
-    /** Pull the CloudHim connection the updater already stores. */
+    /** Pull the CloudHim connection the updater already stores (1.2.103: reuse its hub client). */
     private function cloudhimConn(): ?array
     {
         try {
@@ -478,43 +509,10 @@ class ThemeService
             }
             $c = $update->config();
             if (($c['url'] ?? '') === '' || ($c['key'] ?? '') === '') return null;
-            return ['url' => rtrim($c['url'], '/'), 'key' => $c['key']];
+            return ['url' => rtrim($c['url'], '/'), 'key' => $c['key'], 'svc' => $update];
         } catch (\Throwable) {
             return null;
         }
-    }
-
-    private function httpGet(string $url, int $timeout = 30): array
-    {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 5,
-            CURLOPT_TIMEOUT        => $timeout,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_USERAGENT      => 'Basehim-Marketplace/' . (defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1'),
-            CURLOPT_HEADER         => true,
-        ] + \App\Core\Tls::curlOptions());
-        $raw = \App\Core\Tls::exec($ch);
-        $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
-        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        unset($ch);   // frees the handle; the old explicit close is a no-op since PHP 8.0 and deprecated in 8.5 (BH-106)
-
-        $headers = [];
-        $body = '';
-        if (is_string($raw)) {
-            $headerBlob = substr($raw, 0, $headerSize);
-            $body = substr($raw, $headerSize);
-            foreach (explode("\r\n", $headerBlob) as $line) {
-                if (str_contains($line, ':')) {
-                    [$k, $v] = explode(':', $line, 2);
-                    $headers[strtolower(trim($k))] = trim($v);
-                }
-            }
-        }
-        return ['body' => $body, 'status' => $status, 'error' => $err, 'headers' => $headers];
     }
 
     private function sanitizeSlug(string $slug): string

@@ -710,10 +710,19 @@ class AppService
      * @return array{slug:string, manifest:array}
      * @throws \RuntimeException on validation failure.
      */
-    public function installFromZip(string $zipPath, string $source = 'upload'): array
+    public function installFromZip(string $zipPath, string $source = 'upload', string $expectedSlug = ''): array
     {
         $staged = $this->stageZip($zipPath);
         $slug = $staged['slug'];
+
+        // When the caller knows which app it asked for (a marketplace install
+        // names the slug), the zip must be that app — otherwise a hub could
+        // answer a request for one app with a different one (1.2.103).
+        if ($expectedSlug !== '' && $slug !== $this->sanitizeSlug($expectedSlug)) {
+            $this->rrmdir($staged['tempDir']);
+            throw new \RuntimeException("The downloaded app's slug ('{$slug}') does not match '{$expectedSlug}'.");
+        }
+
         $targetDir = $this->appPath . '/' . $slug;
 
         if (is_dir($targetDir)) {
@@ -2012,12 +2021,16 @@ class AppService
                 ->make(\App\Services\PermissionBroker::class);
 
             $declared = $broker->declared($slug);
-            if ($declared === []) return false;              // unrestricted app
-            if (!$broker->hasConsented($slug)) return true;  // never approved
+            if (!$broker->hasConsented($slug)) return $declared !== []; // never approved
 
-            // Anything newly declared since the last approval.
-            $known = array_merge($broker->grantedFor($slug), $broker->withheld($slug));
-            return array_diff($declared, $known) !== [];
+            // What the app declared at the last consent. Anything added OR
+            // removed since then needs the operator to look again (1.2.103):
+            // a dropped permission can mean the app is trying to become
+            // unrestricted. The old check compared declared against
+            // granted∪withheld, which always equals declared, so it never
+            // fired.
+            $baseline = $broker->consentedDeclared($slug);
+            return array_diff($declared, $baseline) !== [] || array_diff($baseline, $declared) !== [];
         } catch (\Throwable) {
             // Broker unavailable (migration not yet run): don't block activation.
             return false;
@@ -2142,15 +2155,13 @@ class AppService
         $conn = $this->cloudhimConn();
         if (!$conn) return ['ok' => false, 'error' => 'not_connected'];
 
-        $qs = http_build_query(array_merge(['key' => $conn['key']], array_filter([
+        $res = $conn['svc']->hub('GET', '/api/v1/cloudhim/plugins', array_filter([
             'q'        => (string) ($query['q'] ?? ''),
             'category' => (string) ($query['category'] ?? ''),
             'tag'      => (string) ($query['tag'] ?? ''),
             'sort'     => (string) ($query['sort'] ?? ''),
             'page'     => (string) ($query['page'] ?? ''),
-        ], fn($v) => $v !== '')));
-
-        $res = $this->httpGet($conn['url'] . '/api/v1/cloudhim/plugins?' . $qs);
+        ], fn($v) => $v !== ''));
         if ($res['error'] !== null) return ['ok' => false, 'error' => 'Could not reach the Basehim marketplace: ' . $res['error']];
         $json = json_decode($res['body'], true);
         if (!is_array($json) || empty($json['ok'])) {
@@ -2188,7 +2199,7 @@ class AppService
     {
         $conn = $this->cloudhimConn();
         if (!$conn) return ['ok' => false, 'error' => 'not_connected'];
-        $res = $this->httpGet($conn['url'] . '/api/v1/cloudhim/plugins/facets?key=' . urlencode($conn['key']));
+        $res = $conn['svc']->hub('GET', '/api/v1/cloudhim/plugins/facets');
         $json = json_decode($res['body'], true);
         return is_array($json) ? $json : ['ok' => false, 'categories' => [], 'tags' => []];
     }
@@ -2199,7 +2210,7 @@ class AppService
      * the app's DB row / active state are preserved; a new install inserts
      * the row and fires onInstall via sync().
      */
-    public function marketplaceInstall(string $slug, string $expectedSha256 = '', string $version = ''): array
+    public function marketplaceInstall(string $slug, string $expectedSha256 = '', string $version = '', string $signature = ''): array
     {
         $conn = $this->cloudhimConn();
         if (!$conn) return ['ok' => false, 'error' => 'This site is not connected to the Basehim marketplace yet — open Updates to connect.'];
@@ -2214,43 +2225,63 @@ class AppService
         // With the pin the file, its checksum and the hub's own header all
         // describe the same version. The hub serves the latest when no version
         // is sent, so the marketplace "Install" button (no version) is unchanged.
-        $query = ['key' => $conn['key'], 'slug' => $slug];
+        $query = ['slug' => $slug];
         $version = trim($version);
         if ($version !== '' && preg_match('/^[0-9A-Za-z.\-+]{1,32}$/', $version)) {
             $query['version'] = $version;
+        } else {
+            $version = '';
         }
-        $url = $conn['url'] . '/api/v1/cloudhim/plugin-download?' . http_build_query($query);
-        $res = $this->httpGet($url, 120);
-        if ($res['error'] !== null || $res['status'] >= 400 || $res['body'] === '') {
+
+        // Downloaded into storage/updates, streamed to disk — not the system
+        // temp folder, which other accounts on a shared host may read (1.2.103).
+        $tmp = self::downloadPath('app');
+        $res = $conn['svc']->hub('GET', '/api/v1/cloudhim/plugin-download', $query, null, 120, true, $tmp);
+        if ($res['error'] !== null || $res['status'] !== 200 || !is_file($tmp) || filesize($tmp) === 0) {
+            @unlink($tmp);
             return ['ok' => false, 'error' => 'Download failed: ' . ($res['error'] ?? ('HTTP ' . $res['status']))];
         }
 
-        $tmp = sys_get_temp_dir() . '/bh-app-' . bin2hex(random_bytes(5)) . '.zip';
-        file_put_contents($tmp, $res['body']);
-
-        // The file must match the checksum sent with the download AND, when
-        // one was offered, the checksum the update list announced for this
-        // version — a redirect cannot swap in a different file with a header
-        // to match it.
-        $actual = hash_file('sha256', $tmp);
-        $bad = false;
-        foreach ([(string) ($res['headers']['x-checksum-sha256'] ?? ''), $expectedSha256] as $expected) {
-            $expected = strtolower(trim($expected));
-            if ($expected !== '' && !hash_equals($expected, $actual)) $bad = true;
-        }
-        if ($bad) {
+        // The file must match the checksum the update list announced for this
+        // version AND the one the download itself sent; a redirect cannot swap
+        // in a different file with a header to match it. A download with no
+        // checksum at all is refused (1.2.103): before, it was installed
+        // unchecked.
+        $actual = (string) hash_file('sha256', $tmp);
+        $header = strtolower(trim((string) ($res['headers']['x-checksum-sha256'] ?? '')));
+        $checks = array_values(array_filter([strtolower(trim($expectedSha256)), $header], fn($h) => $h !== ''));
+        if (!$checks) {
             @unlink($tmp);
-            return ['ok' => false, 'error' => 'Checksum mismatch — download may be corrupted. Nothing was installed.'];
+            return ['ok' => false, 'error' => 'The marketplace gave no checksum for this app, so it was not installed.'];
+        }
+        foreach ($checks as $expected) {
+            if (!hash_equals($expected, $actual)) {
+                @unlink($tmp);
+                return ['ok' => false, 'error' => 'Checksum mismatch — download may be corrupted. Nothing was installed.'];
+            }
+        }
+
+        // The publisher's signature over kind+slug+version+hash (1.2.103), so
+        // a compromised hub cannot serve code of its own even with a matching
+        // checksum. Skipped only on a build that trusts no key yet.
+        $sig = PackageSignature::clean($signature) ?: PackageSignature::clean($res['headers']['x-package-signature'] ?? '');
+        $sigVersion = $version !== '' ? $version : (string) ($this->peekZipManifest($tmp)['version'] ?? '');
+        $sigError = PackageSignature::check($tmp, 'app', $slug, $sigVersion, $sig);
+        if ($sigError !== null) {
+            @unlink($tmp);
+            return ['ok' => false, 'error' => $sigError];
         }
 
         try {
             // Installed (a row) → replace its files, which also restores an
             // app whose folder went missing. Otherwise a fresh install, which
-            // refuses to overwrite a folder that isn't an installed app.
+            // refuses to overwrite a folder that isn't an installed app. Both
+            // bind the zip's own slug to $slug, so the hub cannot return a
+            // different app than the one asked for.
             if ($this->find($slug)) {
                 $result = $this->replaceAppFiles($tmp, $slug); // update in place
             } else {
-                $result = $this->installFromZip($tmp, 'marketplace');
+                $result = $this->installFromZip($tmp, 'marketplace', $slug);
             }
             @unlink($tmp);
             $this->forgetCachedUpdate($slug);
@@ -2259,6 +2290,14 @@ class AppService
             @unlink($tmp);
             return ['ok' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    /** A private scratch path under storage/updates for a download (1.2.103). */
+    private static function downloadPath(string $kind): string
+    {
+        $dir = BASEHIM_ROOT . '/storage/updates';
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        return $dir . '/bh-' . $kind . '-' . bin2hex(random_bytes(6)) . '.zip';
     }
 
     /**
@@ -2321,41 +2360,12 @@ class AppService
             if (!$update->isConfigured() && !$update->ensureConnected()) return null;
             $c = $update->config();
             if (($c['url'] ?? '') === '' || ($c['key'] ?? '') === '') return null;
-            return ['url' => rtrim($c['url'], '/'), 'key' => $c['key']];
+            // 'svc' is the UpdateService itself: the marketplace reuses its
+            // hub() client (header-auth, same-host redirects), so there is one
+            // outbound path to the hub, not three slightly different ones.
+            return ['url' => rtrim($c['url'], '/'), 'key' => $c['key'], 'svc' => $update];
         } catch (\Throwable) {
             return null;
         }
-    }
-
-    private function httpGet(string $url, int $timeout = 30): array
-    {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 5,
-            CURLOPT_TIMEOUT        => $timeout,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_USERAGENT      => 'Basehim-Marketplace/' . (defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1'),
-            CURLOPT_HEADER         => true,
-        ] + \App\Core\Tls::curlOptions());
-        $raw = \App\Core\Tls::exec($ch);
-        $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
-        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        unset($ch);   // frees the handle; the old explicit close is a no-op since PHP 8.0 and deprecated in 8.5 (BH-106)
-
-        $headers = [];
-        $body = '';
-        if (is_string($raw)) {
-            foreach (explode("\r\n", substr($raw, 0, $headerSize)) as $line) {
-                if (str_contains($line, ':')) {
-                    [$k, $v] = explode(':', $line, 2);
-                    $headers[strtolower(trim($k))] = trim($v);
-                }
-            }
-            $body = substr($raw, $headerSize);
-        }
-        return ['body' => $body, 'status' => $status, 'error' => $err, 'headers' => $headers];
     }
 }

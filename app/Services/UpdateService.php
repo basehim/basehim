@@ -16,9 +16,14 @@ use App\Core\Database;
  *             doubles as the heartbeat (sends this site's URL + versions so
  *             CloudHim can list who runs what, where).
  *   apply()   GET  {cloudhim}/api/v1/cloudhim/download   → zip; SHA-256
- *             verified, then extracted over the install with a protected-path
+ *             required and verified, the publisher's signature checked
+ *             (PackageSignature, 1.2.103) and the version inside the zip
+ *             matched, then extracted over the install with a protected-path
  *             list (config, uploads, storage, .htaccess are never touched)
  *             and zip-slip protection. Migrations run automatically after.
+ *
+ * Every request goes through hub(): the site key in a header, redirects
+ * kept to the hub's own host over https.
  *
  * The available-update count is cached in settings (group "updates"), which
  * is what the sidebar badge reads — no remote calls during page renders.
@@ -104,7 +109,7 @@ class UpdateService
             'version'     => BASEHIM_VERSION,
             'php'         => PHP_VERSION,
         ] + $this->siteIdentity();
-        $res = $this->httpPost($c['url'] . '/api/v1/cloudhim/register', $payload, 12);
+        $res = $this->hub('POST', '/api/v1/cloudhim/register', [], $payload, 12, false);
         if ($res['error'] !== null) {
             $this->rememberConnectError('Cannot reach ' . $c['url'] . ' — ' . $res['error']);
             return false;
@@ -247,10 +252,7 @@ class UpdateService
         if ($installed) {
             $pairs = [];
             foreach ($installed as $slug => $v) $pairs[] = $slug . '@' . $v;
-            $c = $this->config();
-            $res = $this->httpGet($c['url'] . '/api/v1/cloudhim/item-updates?' . http_build_query([
-                'key' => $c['key'], 'apps' => implode(',', $pairs),
-            ]), 20);
+            $res = $this->hub('GET', '/api/v1/cloudhim/item-updates', ['apps' => implode(',', $pairs)], null, 20);
             if ($res['error'] !== null) {
                 return ['ok' => false, 'error' => 'Could not reach the Basehim update service: ' . $res['error']];
             }
@@ -298,6 +300,9 @@ class UpdateService
             'version'      => $meta['version'],
             'size'         => (int) ($u['size'] ?? 0),
             'sha256'       => preg_match('/^[a-f0-9]{64}$/i', (string) ($u['sha256'] ?? '')) ? strtolower((string) $u['sha256']) : '',
+            // The publisher's signature for this version (1.2.103), checked
+            // against the downloaded file before anything is installed.
+            'signature'    => PackageSignature::clean($u['signature'] ?? ''),
             'notes'        => mb_substr((string) ($u['notes'] ?? ''), 0, 4000),
             'published_at' => mb_substr((string) ($u['published_at'] ?? ''), 0, 25),
             'changelog'    => $log,
@@ -396,27 +401,38 @@ class UpdateService
         if (!$this->isConfigured()) {
             return ['ok' => false, 'error' => 'Not connected to the Basehim update service yet.'];
         }
-        $c = $this->config();
         $version = $version ?? BASEHIM_VERSION;
         $identity = $this->siteIdentity();
-        $query = http_build_query([
-            'key'     => $c['key'],
+        $res = $this->hub('GET', '/api/v1/cloudhim/updates', [
             'version' => $version,
             'php'     => PHP_VERSION,
             'url'     => $this->siteUrl(),
-        ] + $identity);
-        $res = $this->httpGet($c['url'] . '/api/v1/cloudhim/updates?' . $query, $timeout);
+        ] + $identity, null, $timeout);
         if ($res['error'] !== null) {
             return ['ok' => false, 'error' => 'Could not reach the Basehim update service: ' . $res['error']];
         }
         $json = json_decode($res['body'], true);
         if (!is_array($json) || empty($json['ok'])) {
-            return ['ok' => false, 'error' => (string) ($json['error'] ?? ('The Basehim update service returned HTTP ' . $res['status']))];
+            return ['ok' => false, 'error' => mb_substr((string) ($json['error'] ?? ('The Basehim update service returned HTTP ' . $res['status'])), 0, 300)];
         }
 
-        $updates = array_values(array_filter((array) ($json['updates'] ?? []), function ($u) use ($version) {
-            return isset($u['version']) && version_compare((string) $u['version'], $version, '>');
-        }));
+        // Only the fields the updater uses, each checked (1.2.103): before,
+        // the hub's entries were cached exactly as they arrived.
+        $updates = [];
+        foreach ((array) ($json['updates'] ?? []) as $u) {
+            if (!is_array($u)) continue;
+            $v = (string) ($u['version'] ?? '');
+            if (!preg_match('/^\d+\.\d+\.\d+$/', $v) || !version_compare($v, $version, '>')) continue;
+            $updates[] = [
+                'version'      => $v,
+                'notes'        => mb_substr((string) ($u['notes'] ?? ''), 0, 20000),
+                'size'         => max(0, (int) ($u['size'] ?? 0)),
+                'sha256'       => preg_match('/^[a-f0-9]{64}$/i', (string) ($u['sha256'] ?? '')) ? strtolower((string) $u['sha256']) : '',
+                'signature'    => PackageSignature::clean($u['signature'] ?? ''),
+                'is_patch'     => !empty($u['is_patch']),
+                'published_at' => mb_substr((string) ($u['published_at'] ?? ''), 0, 25),
+            ];
+        }
         usort($updates, fn($a, $b) => version_compare((string) $b['version'], (string) $a['version']));
 
         $this->settings->set('updates', 'available', json_encode($updates, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
@@ -584,8 +600,8 @@ class UpdateService
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $name = (string) $zip->getNameIndex($i);
             if (str_ends_with($name, '/')) continue;
-            $rel = $prefix !== '' && str_starts_with($name, $prefix) ? substr($name, strlen($prefix)) : $name;
-            if ($rel === '' || str_contains($rel, '..')) continue;
+            $rel = self::entryPath($name, $prefix);
+            if ($rel === null) continue;
             $live = BASEHIM_ROOT . '/' . $rel;
             if (!is_file($live)) continue;                 // new file — nothing to restore
             $dest = $dir . '/' . $rel;
@@ -616,6 +632,51 @@ class UpdateService
             if (!@copy($file->getPathname(), $dest)) $ok = false;
         }
         return $ok;
+    }
+
+    /**
+     * Where a zip entry lands, relative to the install root, or null when it
+     * must not be written: traversal, an absolute or drive path, or a
+     * protected path (1.2.103).
+     *
+     * The name is normalised first: back-slashes, empty segments and "."
+     * segments are dropped, and protected paths are compared without regard
+     * to case. Up to 1.2.102 "./.env", "config//app.php" and "./storage/…"
+     * passed the protected-path check and were written.
+     */
+    public static function entryPath(string $name, string $prefix = ''): ?string
+    {
+        if (str_contains($name, "\0")) return null;
+        $name = str_replace('\\', '/', $name);
+        if ($prefix !== '' && str_starts_with($name, $prefix)) $name = substr($name, strlen($prefix));
+        if (preg_match('#^([a-zA-Z]:|/)#', $name)) return null;
+        $parts = [];
+        foreach (explode('/', $name) as $seg) {
+            if ($seg === '' || $seg === '.') continue;
+            if ($seg === '..') return null;
+            $parts[] = $seg;
+        }
+        if (!$parts) return null;
+        $rel = implode('/', $parts);
+        $lower = strtolower($rel);
+        foreach (self::PROTECTED as $p) {
+            if ($lower === $p || (str_ends_with($p, '/') && str_starts_with($lower . '/', $p))) return null;
+        }
+        return $rel;
+    }
+
+    /** BASEHIM_VERSION as written in a release zip's index.php, or null. */
+    private function versionInsideZip(string $zipPath): ?string
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath) !== true) return null;
+        $src = $zip->getFromName('index.php');
+        if ($src === false) {
+            $top = explode('/', trim((string) $zip->getNameIndex(0), '/'))[0] ?? '';
+            $src = $top !== '' ? $zip->getFromName($top . '/index.php') : false;
+        }
+        $zip->close();
+        return is_string($src) && preg_match("/define\('BASEHIM_VERSION',\s*'([^']+)'\)/", $src, $m) ? $m[1] : null;
     }
 
     /** Detect a single top-level wrapper folder inside a release zip. */
@@ -686,33 +747,48 @@ class UpdateService
             return ['ok' => false, 'error' => 'PHP zip extension is not available on this server.'];
         }
 
-        // 1) Download to storage.
-        $c = $this->config();
+        // A release without a checksum is refused (1.2.103): up to 1.2.102 a
+        // missing one meant the file was installed without any check.
+        $expected = strtolower((string) ($target['sha256'] ?? ''));
+        if (!preg_match('/^[a-f0-9]{64}$/', $expected)) {
+            return ['ok' => false, 'error' => 'The update service did not give a checksum for v' . $version . ', so it was not installed. Check for updates again; if it persists, the release needs to be published again.'];
+        }
+
+        // 1) Download to storage, streamed to disk.
         $dir = BASEHIM_ROOT . '/storage/updates';
         if (!is_dir($dir)) @mkdir($dir, 0755, true);
         // Local scratch filename only — nothing reads it back by name.
-        $zipPath = $dir . '/basehim-' . preg_replace('/[^0-9a-zA-Z._-]/', '', $version) . '.zip';
-        $url = $c['url'] . '/api/v1/cloudhim/download?' . http_build_query(['key' => $c['key'], 'version' => $version]);
-        $res = $this->httpGet($url, 300);
-        if ($res['status'] === 403) {
+        $zipPath = $dir . '/basehim-' . preg_replace('/[^0-9a-zA-Z._-]/', '', $version) . '-' . bin2hex(random_bytes(4)) . '.zip';
+        $res = $this->hub('GET', '/api/v1/cloudhim/download', ['version' => $version], null, 300, true, $zipPath);
+        if ($res['status'] === 403 && $res['error'] === null) {
             // Stale key mid-install — re-register and retry the download once.
             $this->settings->set('updates', 'cloudhim_key', '');
             if ($this->ensureConnected()) {
-                $c = $this->config();
-                $url = $c['url'] . '/api/v1/cloudhim/download?' . http_build_query(['key' => $c['key'], 'version' => $version]);
-                $res = $this->httpGet($url, 300);
+                $res = $this->hub('GET', '/api/v1/cloudhim/download', ['version' => $version], null, 300, true, $zipPath);
             }
         }
-        if ($res['error'] !== null || $res['status'] >= 400 || $res['body'] === '') {
+        if ($res['error'] !== null || $res['status'] !== 200 || !is_file($zipPath) || filesize($zipPath) === 0) {
+            @unlink($zipPath);
             return ['ok' => false, 'error' => 'Download failed: ' . ($res['error'] ?? ('HTTP ' . $res['status']))];
         }
-        file_put_contents($zipPath, $res['body']);
 
-        // 2) Verify checksum when the release carries one.
-        $expected = strtolower((string) ($target['sha256'] ?? ''));
-        if ($expected !== '' && !hash_equals($expected, hash_file('sha256', $zipPath))) {
+        // 2) Verify the checksum, then the publisher's signature (1.2.103).
+        if (!hash_equals($expected, (string) hash_file('sha256', $zipPath))) {
             @unlink($zipPath);
             return ['ok' => false, 'error' => 'Checksum mismatch — the downloaded file does not match the release. Aborted, nothing was changed.'];
+        }
+        $signature = PackageSignature::clean($target['signature'] ?? '') ?: PackageSignature::clean($res['headers']['x-package-signature'] ?? '');
+        $sigError = PackageSignature::check($zipPath, 'core', 'basehim', $version, $signature);
+        if ($sigError !== null) {
+            @unlink($zipPath);
+            try { $this->logger()?->error('Update to v' . $version . ' refused: ' . $sigError); } catch (\Throwable) {}
+            return ['ok' => false, 'error' => $sigError . ' Nothing was changed.'];
+        }
+        $inside = $this->versionInsideZip($zipPath);
+        if ($inside !== $version) {
+            @unlink($zipPath);
+            return ['ok' => false, 'error' => sprintf('The package for v%s says it is %s. It was not installed; nothing was changed.',
+                $version, $inside !== null ? 'v' . $inside : 'no version at all')];
         }
 
         // 3) Snapshot what we're about to overwrite, then extract. If the
@@ -838,19 +914,10 @@ class UpdateService
         $root = rtrim(BASEHIM_ROOT, '/');
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $name = (string) $zip->getNameIndex($i);
-            $rel = $prefix !== '' && str_starts_with($name, $prefix) ? substr($name, strlen($prefix)) : $name;
-            $rel = ltrim(str_replace('\\', '/', $rel), '/');
-            if ($rel === '' || str_ends_with($name, '/')) continue;
-
-            // Zip-slip protection: no traversal, no absolute paths.
-            if (str_contains($rel, '..') || preg_match('#^([a-zA-Z]:|/)#', $rel)) continue;
-
-            // Protected paths are never overwritten.
-            foreach (self::PROTECTED as $p) {
-                if ($rel === $p || (str_ends_with($p, '/') && str_starts_with($rel, $p))) {
-                    continue 2;
-                }
-            }
+            if (str_ends_with($name, '/')) continue;
+            // Normalised and checked (zip-slip, protected paths) in one place.
+            $rel = self::entryPath($name, $prefix);
+            if ($rel === null) continue;
 
             $destPath = $root . '/' . $rel;
             $destDir = dirname($destPath);
@@ -913,41 +980,112 @@ class UpdateService
     // HTTP + site identity
     // ------------------------------------------------------------------
 
-    private function httpGet(string $url, int $timeout = 30): array
+    /**
+     * One request to the update hub (1.2.103). Used for core updates and, via
+     * AppService and ThemeService, for the marketplaces.
+     *
+     *  - The site key travels in an X-Site-Key header, not the address, so it
+     *    stays out of the hub's access logs. A hub older than CloudHim 1.7.0
+     *    only reads ?key=; when such a hub refuses the header, the request is
+     *    repeated once with the key in the address.
+     *  - Redirects are followed only to the hub's own host (or its www.
+     *    twin) and never from https to http. Up to 1.2.102 curl followed up
+     *    to five redirects anywhere, carrying the request with it.
+     *  - $sink: a file the body is written to as it arrives, so a large
+     *    package never sits in memory.
+     *
+     * @return array{body:string, status:int, error:?string, headers:array<string,string>}
+     */
+    public function hub(string $method, string $path, array $query = [], ?array $payload = null, int $timeout = 30, bool $auth = true, ?string $sink = null): array
     {
-        return $this->http('GET', $url, null, $timeout);
+        $c = $this->config();
+        $key = $auth ? (string) $c['key'] : '';
+        $res = $this->hubOnce($method, $c['url'], $path, $query, $payload, $timeout, $key, false, $sink);
+        if ($key !== '' && $res['status'] === 403 && !isset($res['headers']['x-cloudhim-key-header'])) {
+            // An older hub that only reads the key from the address.
+            $res = $this->hubOnce($method, $c['url'], $path, $query, $payload, $timeout, $key, true, $sink);
+        }
+        return $res;
     }
 
-    private function httpPost(string $url, array $payload, int $timeout = 30): array
+    private function hubOnce(string $method, string $hubUrl, string $path, array $query, ?array $payload, int $timeout, string $key, bool $keyInQuery, ?string $sink): array
     {
-        return $this->http('POST', $url, $payload, $timeout);
+        if ($keyInQuery && $key !== '') $query = ['key' => $key] + $query;
+        $url = rtrim($hubUrl, '/') . '/' . ltrim($path, '/') . ($query ? '?' . http_build_query($query) : '');
+        $origin = parse_url($hubUrl);
+        $hubHost = strtolower((string) ($origin['host'] ?? ''));
+        $hubScheme = strtolower((string) ($origin['scheme'] ?? 'https'));
+
+        for ($hop = 0; $hop <= 3; $hop++) {
+            $res = $this->httpRaw($method, $url, $payload, $timeout, ($key !== '' && !$keyInQuery) ? $key : '', $sink);
+            if ($res['error'] !== null || !in_array($res['status'], [301, 302, 303, 307, 308], true)) return $res;
+
+            $loc = (string) ($res['headers']['location'] ?? '');
+            $next = $loc !== '' && !preg_match('#^[a-z][a-z0-9+.-]*://#i', $loc)
+                ? $hubScheme . '://' . $hubHost . (str_starts_with($loc, '/') ? '' : '/') . $loc
+                : $loc;
+            $p = parse_url($next);
+            $host = strtolower((string) ($p['host'] ?? ''));
+            $scheme = strtolower((string) ($p['scheme'] ?? ''));
+            $sameHost = $host !== '' && preg_replace('/^www\./', '', $host) === preg_replace('/^www\./', '', $hubHost);
+            $schemeOk = $scheme === 'https' || ($scheme === 'http' && $hubScheme === 'http');
+            if (!$sameHost || !$schemeOk) {
+                return ['body' => '', 'status' => $res['status'], 'headers' => $res['headers'],
+                        'error' => 'The update service redirected to another address (' . mb_substr($host ?: $loc, 0, 100) . '), which is not followed.'];
+            }
+            // A 303 always becomes a GET; 301/302 keep the method, as the
+            // registration request needs to survive a www rewrite.
+            if ($res['status'] === 303) { $method = 'GET'; $payload = null; }
+            $url = $next;
+        }
+        return ['body' => '', 'status' => 0, 'headers' => [], 'error' => 'The update service redirected too many times.'];
     }
 
-    private function http(string $method, string $url, ?array $payload, int $timeout): array
+    /** A single HTTP exchange, no redirects followed. */
+    private function httpRaw(string $method, string $url, ?array $payload, int $timeout, string $siteKey, ?string $sink): array
     {
+        $headers = [];
+        $out = null;
+        if ($sink !== null) {
+            $out = @fopen($sink, 'wb');
+            if ($out === false) return ['body' => '', 'status' => 0, 'headers' => [], 'error' => 'Could not write the download to ' . basename($sink) . '.'];
+        }
         $ch = curl_init($url);
+        $send = ['Accept: application/json, application/zip'];
+        if ($siteKey !== '') $send[] = 'X-Site-Key: ' . $siteKey;
         $opts = [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 5,
+            CURLOPT_RETURNTRANSFER => $out === null,
+            CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_TIMEOUT        => $timeout,
             CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
             CURLOPT_USERAGENT      => 'Basehim-Updater/' . BASEHIM_VERSION,
+            CURLOPT_HEADERFUNCTION => static function ($h, string $line) use (&$headers): int {
+                if (str_contains($line, ':')) {
+                    [$k, $v] = explode(':', $line, 2);
+                    $headers[strtolower(trim($k))] = trim($v);
+                }
+                return strlen($line);
+            },
         ];
+        if (defined('CURLOPT_PROTOCOLS_STR')) {
+            $opts[CURLOPT_PROTOCOLS_STR] = 'https,http';
+        } elseif (defined('CURLOPT_PROTOCOLS')) {
+            $opts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS | CURLPROTO_HTTP;
+        }
+        if ($out !== null) $opts[CURLOPT_FILE] = $out;
         if ($method === 'POST') {
             $opts[CURLOPT_POST] = true;
             $opts[CURLOPT_POSTFIELDS] = json_encode($payload ?? [], JSON_UNESCAPED_SLASHES);
-            $opts[CURLOPT_HTTPHEADER] = ['Content-Type: application/json'];
-            // Keep POST as POST across 301/302 redirects (e.g. www rewrites) —
-            // curl's default downgrades to GET, which breaks registration.
-            $opts[CURLOPT_POSTREDIR] = 7;
+            $send[] = 'Content-Type: application/json';
         }
+        $opts[CURLOPT_HTTPHEADER] = $send;
         curl_setopt_array($ch, $opts + \App\Core\Tls::curlOptions());
         $body = \App\Core\Tls::exec($ch);
         $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         unset($ch);   // frees the handle; the old explicit close is a no-op since PHP 8.0 and deprecated in 8.5 (BH-106)
-        return ['body' => (string) $body, 'status' => $status, 'error' => $err];
+        if ($out !== null) fclose($out);
+        return ['body' => $out === null ? (string) $body : '', 'status' => $status, 'error' => $err, 'headers' => $headers];
     }
 
     private function siteUrl(): string

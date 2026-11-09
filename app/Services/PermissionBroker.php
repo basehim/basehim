@@ -132,6 +132,13 @@ class PermissionBroker
         try {
             $this->db->update('apps', [
                 'granted_permissions' => json_encode($clean, JSON_UNESCAPED_SLASHES),
+                // What was declared at the moment of consent (1.2.103). This is
+                // the baseline needsConsent() compares against, so a later
+                // upgrade that adds OR removes a permission is caught. Storing
+                // the granted set here instead would miss a widening that the
+                // operator happened to withhold, and an upgrade that drops the
+                // whole array (making the app unrestricted) would go unnoticed.
+                'consented_permissions' => json_encode($declared, JSON_UNESCAPED_SLASHES),
                 'consented_at'        => date('Y-m-d H:i:s'),
             ], ['slug' => $slug]);
             unset($this->granted[$slug]);
@@ -139,6 +146,16 @@ class PermissionBroker
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * What the app declared when the operator last consented (1.2.103). Empty
+     * when it has never been consented to, or on a build before the column
+     * existed.
+     */
+    public function consentedDeclared(string $slug): array
+    {
+        return $this->decodeColumn($slug, 'consented_permissions');
     }
 
     /** Forget an app's grants — used on deactivate/uninstall. */
@@ -160,7 +177,14 @@ class PermissionBroker
      */
     public function isEnforced(string $slug): bool
     {
-        return $this->declared($slug) !== [];
+        // Declaring permissions opts an app in. It stays opted in while a
+        // consent baseline records that it once declared some (1.2.103): an
+        // upgrade that drops the whole array must not silently turn the app
+        // unrestricted — enforcement with the last-granted set continues, and
+        // needsReview()/needsConsent() flag it for the operator. Enforcement
+        // ends only once the operator re-consents to the empty declaration,
+        // at which point the baseline is empty too.
+        return $this->declared($slug) !== [] || $this->consentedDeclared($slug) !== [];
     }
 
     /**

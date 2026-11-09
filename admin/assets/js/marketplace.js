@@ -80,8 +80,15 @@
         if (co && dev && co.name === dev.name) co = null;
         return { dev: dev, co: co };
     }
+    function httpUrl(u) {
+        // Only a real web address becomes a link: a javascript:/data: URL from
+        // the hub would otherwise be clickable (1.2.103). The hub already
+        // filters these; this is the second line.
+        return (typeof u === 'string' && /^https?:\/\//i.test(u)) ? u : null;
+    }
     function link(x) {
-        return x.url ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener nofollow">' + esc(x.name) + '</a>' : esc(x.name);
+        var href = httpUrl(x.url);
+        return href ? '<a href="' + esc(href) + '" target="_blank" rel="noopener nofollow">' + esc(x.name) + '</a>' : esc(x.name);
     }
     function who(t, links) {
         var p = parties(t), bits = [];
