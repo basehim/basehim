@@ -533,5 +533,21 @@ module.exports = [
     "w-11",
     "w-px",
     "xl:grid-cols-3",
-    "z-50"
+    "z-50",
+    // 1.2.121: used only by the old admin header; kept so apps and themes that rely on them still get them.
+    "right-0",
+    "z-30",
+    "my-1",
+    "-ml-1",
+    "h-7",
+    "w-48",
+    "w-7",
+    "bg-transparent",
+    "pb-1",
+    "pt-0.5",
+    "opacity-70",
+    "sm:gap-3",
+    "sm:px-3",
+    "sm:px-6",
+    "md:inline"
 ];

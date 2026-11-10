@@ -129,6 +129,8 @@ $flash = $flash ?? null;
     <script>window.BASEHIM_TIME = <?= json_encode(\App\Core\Time::info(), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?>;</script>
     <script src="<?= $base ?>/admin/assets/js/time.js?v=<?= urlencode(BASEHIM_VERSION) ?>"></script>
     <?php $this->include('partials.ajax-client', ['base' => $base]); ?>
+    <?php /* Header search and notifications (1.2.121); deferred so it runs after the layout's menus are wired. */ ?>
+    <script src="<?= $base ?>/admin/assets/js/topbar.js?v=<?= urlencode(BASEHIM_VERSION) ?>" defer></script>
 <?php
 // App-registered admin stylesheets (via $this->addAdminStyle()).
 try {
@@ -392,16 +394,17 @@ try {
     @media (prefers-reduced-motion: reduce) { .bh-ask[open] { animation: none; } }
 
 
-    /* ===== Dropdowns (Create, account) ===== */
+    /* ===== Dropdowns (New, notifications, account) ===== */
     [data-bh-menu-panel]:not(.hidden) { animation: bh-menu-in .16s cubic-bezier(.2, .7, .3, 1) both; transform-origin: top right; }
     [data-bh-menu-panel].is-closing { animation: bh-menu-out .12s ease-in both; pointer-events: none; }
     @keyframes bh-menu-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
     @keyframes bh-menu-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.98); } }
-    [data-bh-menu-btn] > :last-child { transition: transform .2s ease; }
-    [data-bh-menu-btn][aria-expanded="true"] > :last-child { transform: rotate(180deg); }
+    /* Only a trailing caret turns (the bell ends with its count, not a caret). */
+    [data-bh-menu-btn] > svg:last-child { transition: transform .2s ease; }
+    [data-bh-menu-btn][aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
 
     @media (prefers-reduced-motion: reduce) {
-        .bh-sidebar, #bh-backdrop, .bh-nav-group .bh-submenu, [data-bh-menu-btn] > :last-child, .bh-sub-toggle svg, .bh-sub-toggle i { transition: none !important; }
+        .bh-sidebar, #bh-backdrop, .bh-nav-group .bh-submenu, [data-bh-menu-btn] > svg:last-child, .bh-sub-toggle svg, .bh-sub-toggle i { transition: none !important; }
         [data-bh-menu-panel]:not(.hidden), [data-bh-menu-panel].is-closing { animation: none !important; }
     }
     .bh-sidebar.is-collapsed { width: 4.5rem; overflow-x: hidden; }
@@ -669,50 +672,58 @@ try {
 
     <!-- Main -->
     <div id="bh-main" class="bh-main flex-1 ml-64 min-w-0 transition-[margin] duration-200">
-        <!-- Topbar -->
-        <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-10">
-            <div class="flex items-center gap-2 min-w-0">
-                <button type="button" id="bh-mobile-toggle" class="lg:hidden -ml-1 p-2.5 rounded-lg text-slate-600 hover:bg-slate-100" aria-label="Open menu" aria-controls="bh-sidebar" aria-expanded="false">
+        <!-- Topbar (1.2.121): the admin's own bar. Search, New, View site,
+             notifications and the account menu, so the front-end admin bar is
+             not needed in here. Kept as `.bh-main > header`: the data table
+             measures it for its sticky offsets. -->
+        <?php
+        $__barPath = (string) (parse_url($path, PHP_URL_PATH) ?: '/admin');
+        if ($base !== '' && str_starts_with($__barPath, $base)) $__barPath = substr($__barPath, strlen($base)) ?: '/admin';
+        // Signed like the front bar's page descriptor; type "admin" lets the
+        // header's search and bell ask for this user's results (and nothing else).
+        $__barCtx = \App\Core\AdminBar\AdminBarContext::make(['type' => 'admin', 'path' => $__barPath])->descriptor($csrfToken);
+        $can = function (?string $cap) use ($currentUser): bool {
+            if (!$cap) return true;
+            try { return \App\Http\Middleware\CheckCapability::userCan($currentUser, $cap); }
+            catch (\Throwable) { return false; }
+        };
+        // "New" menu, filtered to what this user may create.
+        $createItems = array_values(array_filter([
+            ['url' => '/admin/posts/create',        'label' => 'Post',     'icon' => 'newspaper',     'cap' => 'edit_posts'],
+            ['url' => '/admin/pages/create',        'label' => 'Page',     'icon' => 'document-text', 'cap' => 'edit_pages'],
+            ['url' => '/admin/media',               'label' => 'Media',    'icon' => 'photo',         'cap' => 'upload_media'],
+            ['url' => '/admin/taxonomies/category', 'label' => 'Category', 'icon' => 'folder-plus',   'cap' => 'manage_taxonomies'],
+            ['url' => '/admin/taxonomies/tag',      'label' => 'Tag',      'icon' => 'tag',           'cap' => 'manage_taxonomies'],
+            ['url' => '/admin/users/create',        'label' => 'User',     'icon' => 'user-plus',     'cap' => 'manage_users'],
+        ], fn($i) => $can($i['cap'] ?? null)));
+        $__userName = (string) (($user['display_name'] ?? '') !== '' ? $user['display_name'] : ($user['username'] ?? 'Account'));
+        ?>
+        <header class="bh-top sticky top-0 z-10" data-bh-top data-ctx="<?= htmlspecialchars($__barCtx, ENT_QUOTES) ?>">
+            <div class="bh-top__start">
+                <button type="button" id="bh-mobile-toggle" class="bh-btn bh-btn--ghost bh-btn--icon bh-top__menu lg:hidden" aria-label="Open menu" aria-controls="bh-sidebar" aria-expanded="false">
                     <?= icon('bars-3', 'w-5 h-5') ?>
                 </button>
-                <h1 class="text-base font-semibold text-slate-900 truncate"><?= htmlspecialchars($title ?? 'Dashboard') ?></h1>
+                <h1 class="bh-top__title"><?= htmlspecialchars($title ?? 'Dashboard') ?></h1>
             </div>
-            <div class="flex items-center gap-2 sm:gap-3">
-                <?php
-                // Quick-create menu — capability-filtered so users only see
-                // actions they can perform.
-                $createItems = [
-                    ['url' => '/admin/posts/create',       'label' => 'New Post',     'icon' => 'document-text',  'cap' => 'edit_posts'],
-                    ['url' => '/admin/pages/create',       'label' => 'New Page',     'icon' => 'document',       'cap' => 'edit_pages'],
-                    ['url' => '/admin/taxonomies/category', 'label' => 'New Category', 'icon' => 'folder-plus',   'cap' => 'manage_taxonomies'],
-                    ['url' => '/admin/taxonomies/tag',     'label' => 'New Tag',      'icon' => 'tag',           'cap' => 'manage_taxonomies'],
-                    ['url' => '/admin/media',              'label' => 'New Media',    'icon' => 'photo',         'cap' => 'upload_media'],
-                    ['url' => '/admin/users/create',       'label' => 'New User',     'icon' => 'user-plus',     'cap' => 'manage_users'],
-                ];
-                $can = function (?string $cap) use ($currentUser): bool {
-                    if (!$cap) return true;
-                    try { return \App\Http\Middleware\CheckCapability::userCan($currentUser, $cap); }
-                    catch (\Throwable) { return false; }
-                };
-                $createItems = array_values(array_filter($createItems, fn($i) => $can($i['cap'] ?? null)));
-                ?>
-                <?php if (!empty($createItems)): ?>
+            <div class="bh-top__end">
+                <button type="button" class="bh-top-search" data-bh-search-open aria-haspopup="dialog" aria-controls="bh-cmdk" aria-keyshortcuts="Control+K Meta+K">
+                    <?= icon('magnifying-glass', 'w-4 h-4 flex-none') ?>
+                    <span class="bh-top-search__label">Search content…</span>
+                    <kbd class="bh-kbd" data-bh-kbd>Ctrl K</kbd>
+                </button>
+
+                <?php if ($createItems): ?>
                 <div class="relative" data-bh-menu>
-                    <button type="button" data-bh-menu-btn
-                            class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-transparent hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg"
-                            aria-haspopup="true" aria-expanded="false" title="Create new">
+                    <button type="button" data-bh-menu-btn class="bh-btn bh-btn--secondary bh-top-new" aria-haspopup="true" aria-expanded="false" aria-label="New">
                         <?= icon('plus', 'w-4 h-4') ?>
-                        <span class="hidden sm:inline">Create</span>
-                        <?= icon('chevron-down', 'w-3 h-3 opacity-70 hidden sm:inline') ?>
+                        <span class="bh-top-new__label" aria-hidden="true">New</span>
+                        <?= icon('chevron-down', 'w-3.5 h-3.5 bh-top-new__caret') ?>
                     </button>
-                    <div data-bh-menu-panel
-                         class="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 hidden z-30">
-                        <div class="px-3 pb-1 pt-0.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Create new</div>
+                    <div data-bh-menu-panel class="bh-top-panel bh-top-panel--menu hidden">
+                        <p class="bh-top-panel__label">Create new</p>
                         <?php foreach ($createItems as $ci): ?>
-                        <a href="<?= $base . $ci['url'] ?>" class="flex items-center gap-3 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                            <span class="w-7 h-7 rounded-lg bg-slate-100 text-slate-500 grid place-items-center shrink-0">
-                                <?= icon($ci['icon'], 'w-3.5 h-3.5') ?>
-                            </span>
+                        <a href="<?= $base . $ci['url'] ?>" class="bh-top-item">
+                            <span class="bh-top-item__icon"><?= icon($ci['icon'], 'w-4 h-4') ?></span>
                             <?= htmlspecialchars($ci['label']) ?>
                         </a>
                         <?php endforeach; ?>
@@ -720,31 +731,81 @@ try {
                 </div>
                 <?php endif; ?>
 
+                <span class="bh-top-sep" aria-hidden="true"></span>
+
+                <a href="<?= $base ?>/" target="_blank" rel="noopener" class="bh-btn bh-btn--ghost bh-btn--icon bh-top-view" title="View site" aria-label="View site (opens in a new tab)">
+                    <?= icon('arrow-top-right-on-square', 'w-5 h-5') ?>
+                </a>
+
+                <div class="relative" data-bh-menu data-bh-notify>
+                    <button type="button" data-bh-menu-btn class="bh-btn bh-btn--ghost bh-btn--icon bh-top-bell" aria-haspopup="true" aria-expanded="false" aria-label="Notifications" title="Notifications">
+                        <?= icon('bell', 'w-5 h-5') ?>
+                        <span class="bh-top-badge" data-bh-notify-count hidden></span>
+                    </button>
+                    <div data-bh-menu-panel class="bh-top-panel bh-notify hidden" role="region" aria-label="Notifications">
+                        <div class="bh-notify__search">
+                            <button type="button" class="bh-top-search bh-top-search--block" data-bh-search-open aria-haspopup="dialog" aria-controls="bh-cmdk">
+                                <?= icon('magnifying-glass', 'w-4 h-4 flex-none') ?>
+                                <span class="bh-top-search__label">Search content…</span>
+                            </button>
+                        </div>
+                        <p class="bh-notify__head">Notifications</p>
+                        <div class="bh-notify__list" data-bh-notify-list aria-live="polite" aria-busy="true">
+                            <p class="bh-notify__state">Loading…</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="relative" data-bh-menu>
-                    <button type="button" data-bh-menu-btn class="flex items-center gap-2 px-1.5 sm:px-3 py-1.5 rounded-lg hover:bg-slate-100" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" data-bh-menu-btn class="bh-top-user" aria-haspopup="true" aria-expanded="false" aria-label="Your account: <?= htmlspecialchars($__userName, ENT_QUOTES) ?>">
                         <?php // The photo, or the initial; marked so the photo editor can swap it live. ?>
                         <?= function_exists('bh_user_avatar') ? bh_user_avatar($user ?? [], 'w-8 h-8 text-sm') : '' ?>
-                        <span class="hidden md:inline text-sm font-medium text-slate-700"><?= htmlspecialchars($user['display_name'] ?? 'User') ?></span>
-                        <?= icon('chevron-down', 'w-3.5 h-3.5 text-slate-400 hidden md:inline') ?>
+                        <span class="bh-top-user__name"><?= htmlspecialchars($__userName) ?></span>
+                        <?= icon('chevron-down', 'w-3.5 h-3.5 bh-top-user__caret') ?>
                     </button>
-                    <div data-bh-menu-panel class="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg py-1 hidden z-30">
-                        <a href="<?= $base ?>/admin/profile" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                            <?= icon('user', 'w-4 h-4 mr-2 text-slate-400') ?> Profile
+                    <div data-bh-menu-panel class="bh-top-panel bh-top-panel--menu hidden">
+                        <div class="bh-top-panel__who">
+                            <span class="bh-top-panel__name"><?= htmlspecialchars($__userName) ?></span>
+                            <?php if (!empty($user['email'])): ?><span class="bh-top-panel__mail"><?= htmlspecialchars((string) $user['email']) ?></span><?php endif; ?>
+                        </div>
+                        <a href="<?= $base ?>/admin/profile" class="bh-top-item">
+                            <span class="bh-top-item__icon"><?= icon('user-circle', 'w-4 h-4') ?></span> Profile
                         </a>
-                        <a href="<?= $base ?>/admin/settings/general" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                            <?= icon('cog-6-tooth', 'w-4 h-4 mr-2 text-slate-400') ?> Settings
+                        <?php if ($can('manage_settings')): ?>
+                        <a href="<?= $base ?>/admin/settings" class="bh-top-item">
+                            <span class="bh-top-item__icon"><?= icon('cog-6-tooth', 'w-4 h-4') ?></span> Settings
                         </a>
-                        <div class="border-t border-slate-100 my-1"></div>
+                        <?php endif; ?>
+                        <div class="bh-top-panel__sep" role="separator"></div>
                         <form method="POST" action="<?= $base ?>/admin/logout">
-                            <input type="hidden" name="_csrf" value="<?= htmlspecialchars(\App\Core\Application::getInstance()->make(\App\Core\Session::class)->csrfToken()) ?>">
-                            <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
-                                <?= icon('arrow-left-start-on-rectangle', 'w-4 h-4 mr-2') ?> Log out
+                            <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrfToken) ?>">
+                            <button type="submit" class="bh-top-item bh-top-item--danger">
+                                <span class="bh-top-item__icon"><?= icon('arrow-left-start-on-rectangle', 'w-4 h-4') ?></span> Log out
                             </button>
                         </form>
                     </div>
                 </div>
             </div>
         </header>
+
+        <dialog id="bh-cmdk" class="bh-dialog bh-dialog--lg bh-cmdk" aria-label="Search content" data-bh-search>
+            <div class="bh-cmdk__bar" role="search">
+                <?= icon('magnifying-glass', 'w-5 h-5 flex-none text-slate-400') ?>
+                <input type="search" class="bh-cmdk__input" data-bh-search-input placeholder="Search posts, pages, media…" autocomplete="off" spellcheck="false" enterkeyhint="go"
+                       role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="bh-cmdk-list" aria-label="Search content">
+                <button type="button" class="bh-btn bh-btn--ghost bh-btn--sm bh-cmdk__close" data-bh-dialog-close>
+                    <span class="bh-cmdk__esc"><kbd class="bh-kbd">Esc</kbd></span><span class="bh-cmdk__cancel">Cancel</span>
+                </button>
+            </div>
+            <div class="bh-cmdk__body" id="bh-cmdk-list" role="listbox" aria-label="Results" data-bh-search-list>
+                <p class="bh-cmdk__state">Type at least 2 characters to search the content you can edit.</p>
+            </div>
+            <div class="bh-cmdk__foot" aria-hidden="true">
+                <span><kbd class="bh-kbd">↑</kbd><kbd class="bh-kbd">↓</kbd> to move</span>
+                <span><kbd class="bh-kbd">Enter</kbd> to open</span>
+                <span><kbd class="bh-kbd">Esc</kbd> to close</span>
+            </div>
+        </dialog>
 
         <!-- Content -->
         <main id="bh-content" class="p-4 sm:p-6">

@@ -53,17 +53,18 @@ final class AdminBarActions
     /** admin.bar_notifications — the bell's notices for this user. */
     public function notifications(AjaxContext $ctx): array
     {
-        [$user, $context] = $this->begin($ctx);
-        $eff = $this->settings()->effective($user);
-        if (!$eff['notifications']) return ['items' => []];
+        [$user, $context] = $this->begin($ctx, true);
+        // The admin header's bell is part of the admin, not of the front bar,
+        // so the front bar's switches do not turn it off.
+        if ($context->type() !== 'admin' && !$this->settings()->effective($user)['notifications']) return ['items' => []];
         return ['items' => $this->bar()->runNotifications($user, $context)];
     }
 
     /** admin.bar_search — quick search across what this user may edit. */
     public function search(AjaxContext $ctx): array
     {
-        [$user, $context] = $this->begin($ctx);
-        if (!$this->settings()->effective($user)['search']) throw AjaxException::forbidden('Quick search is switched off.');
+        [$user, $context] = $this->begin($ctx, true);
+        if ($context->type() !== 'admin' && !$this->settings()->effective($user)['search']) throw AjaxException::forbidden('Quick search is switched off.');
         $q = trim((string) $ctx->input('q', ''));
         if (mb_strlen($q) < 2) return ['groups' => [], 'query' => $q];
         return ['groups' => $this->bar()->runSearch($q, $user, $context, 5), 'query' => $q];
@@ -118,16 +119,31 @@ final class AdminBarActions
         return ['prefs' => $next];
     }
 
-    /** @return array{0:array,1:AdminBarContext} */
-    private function begin(AjaxContext $ctx): array
+    /**
+     * The signed-in user and the page the call is about.
+     *
+     * $adminHeader: the call may come from the admin's own header (search and
+     * notifications only). Its descriptor says type "admin" and is signed like
+     * any other, so it cannot be forged; anyone who can open the admin may use
+     * it, whether or not the site shows them the front-end bar. What each
+     * provider returns is still filtered for this user.
+     *
+     * @return array{0:array,1:AdminBarContext}
+     */
+    private function begin(AjaxContext $ctx, bool $adminHeader = false): array
     {
         $user = $ctx->user();
-        if ($user === null || !$this->settings()->allows($user)) throw AjaxException::forbidden();
+        if ($user === null) throw AjaxException::forbidden();
+        // The front bar's own calls are refused before the descriptor is read,
+        // as they always were, for anyone the site does not show the bar to.
+        if (!$adminHeader && !$this->settings()->allows($user)) throw AjaxException::forbidden();
         $secret = $this->app->make(\App\Core\Session::class)->csrfToken();
         $context = AdminBarContext::fromDescriptor((string) $ctx->input('ctx', ''), $secret);
         if ($context === null) {
             throw new AjaxException('CONTEXT_INVALID', 'This page is out of date (you signed in or out somewhere else). Reload it and try again.', 409);
         }
+        if ($adminHeader && $context->type() !== 'admin' && !$this->settings()->allows($user)) throw AjaxException::forbidden();
+        if (!$adminHeader && $context->type() === 'admin') throw AjaxException::notFound('That is not available in the admin header.');
         return [$user, $context];
     }
 

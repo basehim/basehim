@@ -1101,4 +1101,120 @@ a.bh-foot-card:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
 @keyframes bh-foot-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(245 158 11 / .45); } 50% { box-shadow: 0 0 0 4px rgb(245 158 11 / 0); } }
 @media (prefers-reduced-motion: reduce) { .bh-foot-pill.is-pending .bh-foot-dot { animation: none; } }
 
+/* ── Admin header (1.2.121) ───────────────────────────────────────────────
+   The admin's own bar: search, New, View site, notifications, account. One
+   row, 64 px, every control 36 px. Phones keep New, the bell and the avatar;
+   search moves into the bell's panel and View site lives in the sidebar.
+   ────────────────────────────────────────────────────────────────────────── */
+.bh-kbd { @apply inline-grid h-5 min-w-[1.25rem] place-items-center rounded-md border border-b-2 border-slate-200 bg-white px-1 font-sans text-[0.6875rem] font-semibold leading-none text-slate-500; }
+.bh-top { @apply flex h-16 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 sm:px-6; }
+.bh-top__start { @apply flex min-w-0 items-center gap-1; }
+.bh-top__menu { @apply -ml-2 flex-none; }
+.bh-top__menu svg { @apply h-5 w-5; }
+.bh-top__title { @apply truncate text-base font-semibold text-slate-900; }
+.bh-top__end { @apply flex flex-none items-center gap-1 sm:gap-1.5; }
+.bh-top-sep { @apply mx-1 hidden h-5 w-px flex-none bg-slate-200 md:block; }
+
+/* Search: a field-shaped button that opens the search dialog. */
+.bh-top-search {
+    @apply hidden h-9 w-60 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 pl-3 pr-1.5 text-left text-sm text-slate-500 cursor-pointer;
+    @apply transition-[background-color,border-color,color] duration-150 ease-out;
+    @apply hover:border-slate-300 hover:bg-white hover:text-slate-700;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:ring-offset-1;
+}
+.bh-top-search__label { @apply min-w-0 flex-1 truncate; }
+.bh-top-search > .bh-kbd { @apply w-auto px-1.5; }
+.bh-top__end > .bh-top-search { @apply md:flex md:w-52 xl:w-72; }
+.bh-top-search--block { @apply flex h-11 w-full; }
+
+/* Phones show the plus alone (icon() marks svgs inline-block, hence the specificity). */
+.bh-top-new__label { @apply hidden sm:inline; }
+.bh-top-new svg.bh-top-new__caret { @apply hidden h-3.5 w-3.5 text-slate-400 sm:inline-block; }
+.bh-top-new { @apply w-9 px-0 sm:w-auto sm:px-3; }
+.bh-top-view { @apply hidden md:inline-flex; }
+.bh-top-bell, .bh-top__end .bh-top-view { @apply relative; }
+.bh-top-bell svg, .bh-top-view svg { @apply h-5 w-5; }
+.bh-top-badge { @apply pointer-events-none absolute -right-0.5 -top-0.5 grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-red-500 px-1 text-[0.625rem] font-bold leading-none tabular-nums text-white ring-2 ring-white; }
+.bh-top-badge[hidden] { display: none; }
+.bh-top-badge.is-quiet { @apply bg-accent-600; }
+
+.bh-top-user {
+    @apply flex h-9 items-center gap-2 rounded-xl pl-0.5 pr-0.5 text-sm font-medium text-slate-700 md:pr-2 cursor-pointer;
+    @apply transition-colors duration-150 hover:bg-slate-100;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:ring-offset-1;
+}
+.bh-top-user > :first-child { @apply flex-none; }
+.bh-top-user__name { @apply hidden max-w-[10rem] truncate md:inline; }
+.bh-top-user svg.bh-top-user__caret { @apply hidden h-3.5 w-3.5 text-slate-400 md:inline; }
+
+/* Panels: the New and account menus, and the notifications panel. */
+.bh-top-panel { @apply absolute right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10; }
+.bh-top-panel--menu { @apply w-56 py-1.5; }
+.bh-top-panel__label { @apply px-3 pb-1 pt-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-400; }
+.bh-top-panel__who { @apply mb-1 flex flex-col border-b border-slate-100 px-3 pb-2.5 pt-1.5; }
+.bh-top-panel__name { @apply truncate text-sm font-semibold text-slate-900; }
+.bh-top-panel__mail { @apply truncate text-xs text-slate-500; }
+.bh-top-panel__sep { @apply my-1 border-t border-slate-100; }
+.bh-top-item { @apply mx-1.5 flex w-[calc(100%-0.75rem)] items-center gap-3 rounded-lg px-1.5 py-1.5 text-left text-sm font-medium text-slate-700 no-underline hover:bg-slate-50 hover:text-slate-900 focus-visible:bg-slate-50 focus-visible:outline-none; }
+.bh-top-item__icon { @apply grid h-7 w-7 flex-none place-items-center rounded-lg bg-slate-100 text-slate-500; }
+.bh-top-item:hover .bh-top-item__icon { @apply bg-accent-50 text-accent-700; }
+.bh-top-item--danger { @apply text-red-600 hover:bg-red-50 hover:text-red-700; }
+.bh-top-item--danger .bh-top-item__icon, .bh-top-item--danger:hover .bh-top-item__icon { @apply bg-red-50 text-red-600; }
+
+.bh-notify { @apply w-[22rem]; }
+.bh-notify__search { @apply border-b border-slate-100 p-3 md:hidden; }
+.bh-notify__head { @apply border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900; }
+.bh-notify__list { @apply max-h-[min(26rem,70vh)] overflow-y-auto overscroll-contain; }
+.bh-notify__state { @apply px-4 py-8 text-center text-sm text-slate-500; }
+.bh-notify__state svg { @apply mx-auto mb-2 h-6 w-6 text-slate-300; }
+.bh-notify__retry { @apply mt-3; }
+.bh-notify__item { @apply flex gap-3 border-b border-slate-50 px-4 py-3 no-underline last:border-b-0 hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none; }
+.bh-notify__icon { @apply grid h-8 w-8 flex-none place-items-center rounded-lg bg-accent-50 text-accent-600; }
+.bh-notify__icon svg { @apply h-4 w-4; }
+.bh-notify__item--warning .bh-notify__icon { @apply bg-amber-50 text-amber-700; }
+.bh-notify__item--danger .bh-notify__icon { @apply bg-red-50 text-red-600; }
+.bh-notify__body { @apply min-w-0 flex-1; }
+.bh-notify__title { @apply block text-[0.8125rem] font-semibold leading-5 text-slate-900; }
+.bh-notify__text { @apply mt-0.5 block text-xs leading-5 text-slate-500; }
+@media (max-width: 767px) {
+    /* A sheet under the header, edge to edge with a 12 px gutter. */
+    .bh-notify { @apply fixed left-3 right-3 top-[4.25rem] mt-0 w-auto; }
+    .bh-notify__list { @apply max-h-[calc(100dvh-12rem)]; }
+}
+
+/* Search dialog (on .bh-dialog): near the top on wide screens so the field
+   stays put while results change; the whole screen on phones. */
+.bh-cmdk.bh-dialog { @apply mt-[12vh] h-fit max-h-[min(34rem,76vh)]; }
+.bh-cmdk__bar { @apply flex flex-none items-center gap-3 border-b border-slate-100 px-4 py-2; }
+.bh-cmdk__input { @apply h-11 min-w-0 flex-1 border-0 bg-transparent p-0 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0; }
+.bh-cmdk__input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.bh-cmdk__close { @apply -mr-1.5 flex-none; }
+.bh-cmdk__cancel { @apply hidden; }
+.bh-cmdk__body { @apply min-h-0 flex-1 overflow-y-auto overscroll-contain p-2; }
+.bh-cmdk__state { @apply px-3 py-10 text-center text-sm text-slate-500; }
+.bh-cmdk__state--error { @apply text-red-600; }
+.bh-cmdk__group { @apply px-3 pb-1 pt-3 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-400 first:pt-1; }
+.bh-cmdk__item { @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 no-underline; }
+.bh-cmdk__item[aria-selected="true"] { @apply bg-accent-50 text-slate-900; }
+.bh-cmdk__icon { @apply grid h-8 w-8 flex-none place-items-center rounded-lg bg-slate-100 text-slate-500; }
+.bh-cmdk__item[aria-selected="true"] .bh-cmdk__icon { @apply bg-white text-accent-600 shadow-sm; }
+.bh-cmdk__icon svg { @apply h-4 w-4; }
+.bh-cmdk__text { @apply min-w-0 flex-1; }
+.bh-cmdk__title { @apply block truncate font-medium; }
+.bh-cmdk__meta { @apply block truncate text-xs text-slate-500; }
+.bh-cmdk__go { @apply invisible h-4 w-4 flex-none text-accent-600; }
+.bh-cmdk__item[aria-selected="true"] .bh-cmdk__go { @apply visible; }
+.bh-cmdk__foot { @apply flex flex-none items-center gap-4 border-t border-slate-100 bg-slate-50 px-4 py-2.5 text-xs text-slate-500; }
+.bh-cmdk__foot > span { @apply inline-flex items-center gap-1; }
+@media (hover: none), (max-width: 639px) {
+    .bh-cmdk__foot, .bh-cmdk__esc { @apply hidden; }
+    .bh-cmdk__cancel { @apply inline; }
+}
+@media (max-width: 639px) {
+    .bh-cmdk.bh-dialog { @apply m-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none rounded-none; }
+    .bh-cmdk__bar { @apply px-3; }
+    .bh-cmdk__item { @apply py-2.5; }
+}
+
+
 @tailwind utilities;
