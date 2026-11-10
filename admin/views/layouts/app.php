@@ -26,17 +26,15 @@ $navItems = [
     ['url' => '/admin/customize',     'label' => 'Customize',   'icon' => 'paint-brush', 'cap' => 'manage_settings', 'section' => 'appearance'],
     ['url' => '/admin/themes',        'label' => 'Themes',      'icon' => 'swatch',     'cap' => 'manage_themes', 'section' => 'appearance'],
     ['url' => '/admin/api',           'label' => 'API',         'icon' => 'code-bracket',        'cap' => 'manage_options', 'section' => 'system'],
-    ['url' => '/admin/settings/general', 'label' => 'Settings', 'icon' => 'cog-6-tooth',  'cap' => 'manage_settings', 'section' => 'system', 'children' => [
-        ['url' => '/admin/settings/general',       'label' => 'General',       'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/reading',       'label' => 'Reading',       'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/writing',       'label' => 'Writing',       'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/discussion',    'label' => 'Discussion',    'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/permalinks',    'label' => 'Permalinks',    'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/media',         'label' => 'Media',         'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/seo',           'label' => 'SEO',           'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/email',         'label' => 'Email',         'cap' => 'manage_settings'],
-        ['url' => '/admin/settings/authorization', 'label' => 'Authentication', 'cap' => 'manage_settings'],
-    ]],
+    // Settings (1.2.120): /admin/settings is General on wide screens and the
+    // Settings home (a list of sections) on phones. The sub-menu comes from
+    // the same list as the tabs, so it always has every section (it was a
+    // hand-kept copy that had fallen 5 behind).
+    ['url' => '/admin/settings', 'label' => 'Settings', 'icon' => 'cog-6-tooth',  'cap' => 'manage_settings', 'section' => 'system', 'children' => array_values(array_map(
+        static fn(string $slug, array $s): array => ['url' => '/admin/settings/' . $slug, 'label' => $s['label'], 'cap' => 'manage_settings'],
+        array_keys($__settingsSections = array_filter(require __DIR__ . '/../settings/_sections.php', static fn(array $s): bool => ($s['menu'] ?? true) !== false)),
+        $__settingsSections
+    ))],
     ['url' => '/admin/system',         'label' => 'System',      'icon' => 'heart',  'cap' => 'manage_settings', 'section' => 'system'],
 ];
 
@@ -120,7 +118,7 @@ $flash = $flash ?? null;
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <?php $this->include('partials.admin-head', ['base' => $base, 'title' => $title ?? null]); ?>
     <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/tailwind.min.css?v=<?= urlencode(BASEHIM_VERSION) ?>">
     <?php $this->include('partials.admin-styles', ['base' => $base]); ?>
@@ -237,39 +235,11 @@ try {
     }
     .bh-modal.is-open .bh-modal-box { transform: translateY(0) scale(1); }
 
-    /* ===== Sidebar sections ===== */
-    /* Grouped navigation: a hairline separator between groups and a quiet
-       uppercase heading, so the menu reads as organised regions rather than
-       one long list. */
-    .bh-nav-section + .bh-nav-section { margin-top: .125rem; }
-    .bh-nav-sep {
-        height: 1px; margin: .625rem .25rem;
-        background: linear-gradient(to right, transparent, #e2e8f0 12%, #e2e8f0 88%, transparent);
-    }
-    .bh-nav-heading {
-        padding: 0 .75rem; margin: 0 0 .3rem;
-        font-size: .6875rem; font-weight: 600; letter-spacing: .06em;
-        text-transform: uppercase; color: #94a3b8; user-select: none;
-    }
-    /* Collapsed rail: headings/separators would be noise — show a short rule. */
-    .bh-sidebar.is-collapsed .bh-nav-sep { margin: .5rem .75rem; }
-    .bh-sidebar.is-collapsed .bh-nav-heading { display: none; }
-
-    /* Active item gets a soft left marker rather than a heavy fill. */
-    /* App brand icon in the sidebar: fit the glyph box without distortion.
-       object-contain / small radius aren't in the prebuilt utility sheet. */
+    /* App brand icon in the sidebar: fit the glyph box without distortion. */
     .bh-nav-appicon { object-fit: contain; border-radius: 5px; }
-    .bh-nav-item.bh-active > .bh-group-head,
-    a.bh-nav-item.bh-active { position: relative; }
-    .bh-nav-item.bh-active > .bh-group-head::before,
-    a.bh-nav-item.bh-active::before {
-        content: ''; position: absolute; left: -.75rem; top: 50%;
-        transform: translateY(-50%);
-        width: 3px; height: 1.15rem; border-radius: 0 3px 3px 0;
-        background: #2563eb;
-    }
-    .bh-sidebar.is-collapsed .bh-nav-item.bh-active > .bh-group-head::before,
-    .bh-sidebar.is-collapsed a.bh-nav-item.bh-active::before { left: -.5rem; }
+    /* Sidebar sections, items, sub-items, search and footer: core components
+       in admin/assets/css/src/tailwind.css ("Sidebar", 1.2.119). */
+
 
     /* ===== Section tabs (Settings / API / System) =====
        One component so every section's tabs look and behave identically. */
@@ -421,42 +391,6 @@ try {
     .bh-ask__btn:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
     @media (prefers-reduced-motion: reduce) { .bh-ask[open] { animation: none; } }
 
-    /* ===== Sidebar footer: version and update status ===== */
-    .bh-sidebar.is-collapsed .bh-foot-row { padding-left: 0; padding-right: 0; justify-content: center; gap: 0; }
-    .bh-foot-card {
-        display: flex; align-items: center; gap: .65rem;
-        margin: .35rem .75rem .75rem; margin-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px));
-        padding: .5rem .65rem .5rem .75rem; border-radius: .65rem;
-        background: #f8fafc; border: 1px solid #eef2f6; text-decoration: none;
-        transition: background-color .15s ease, border-color .15s ease;
-    }
-    a.bh-foot-card:hover { background: #f1f5f9; border-color: #e2e8f0; }
-    a.bh-foot-card:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
-    .bh-foot-mark { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: .5rem; background: #fff; border: 1px solid #eef2f6; }
-    .bh-foot-mark img, .bh-foot-mark svg { width: 1.25rem; height: 1.25rem; max-width: none; }
-    .bh-foot-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
-    .bh-foot-ver { font-size: 12px; line-height: 1.25; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-    .bh-foot-ver strong { color: #334155; font-weight: 600; }
-    .bh-foot-pill {
-        display: inline-flex; align-items: center; gap: .35rem; min-width: 0;
-        font-size: 11px; font-weight: 500; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .bh-foot-dot { width: .4rem; height: .4rem; border-radius: 50%; flex: none; background: currentColor; }
-    .bh-foot-pill.is-current { color: #047857; }
-    .bh-foot-pill.is-current .bh-foot-dot { background: #10b981; }
-    .bh-foot-pill.is-pending { color: #b45309; }
-    .bh-foot-pill.is-pending .bh-foot-dot { background: #f59e0b; animation: bh-foot-pulse 1.8s ease-in-out infinite; }
-    .bh-foot-pill.is-unknown { color: #64748b; }
-    .bh-foot-count {
-        display: inline-grid; place-items: center; min-width: 1.1rem; height: 1.1rem; padding: 0 .3rem; margin-left: .1rem;
-        border-radius: 999px; background: #f59e0b; color: #fff; font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
-    }
-    .bh-foot-count[hidden] { display: none; }
-    .bh-foot-go { flex: none; color: #cbd5e1; transition: transform .15s ease, color .15s ease; }
-    a.bh-foot-card:hover .bh-foot-go { color: #64748b; transform: translateX(2px); }
-    .bh-foot-pill.is-unknown .bh-foot-dot { background: #94a3b8; }
-    @keyframes bh-foot-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .45); } 50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); } }
-    @media (prefers-reduced-motion: reduce) { .bh-foot-pill.is-pending .bh-foot-dot { animation: none; } }
 
     /* ===== Dropdowns (Create, account) ===== */
     [data-bh-menu-panel]:not(.hidden) { animation: bh-menu-in .16s cubic-bezier(.2, .7, .3, 1) both; transform-origin: top right; }
@@ -518,8 +452,6 @@ try {
     }
 
     /* Submenu groups */
-    .bh-sub-toggle { color: #cbd5e1; font-size: 11px; padding: 2px 4px; }
-    .bh-sub-toggle:hover { color: #64748b; }
     /* Height animates (see the submenu script); padding sits on the links so a
        closed submenu is truly 0 high. */
     .bh-nav-group .bh-submenu { display: block; height: 0; overflow: hidden; transition: height .22s cubic-bezier(.4, 0, .2, 1); }
@@ -530,26 +462,6 @@ try {
     .bh-nav-group.is-open .bh-sub-toggle svg, .bh-nav-group.is-open .bh-sub-toggle i { transform: rotate(180deg); }
     .bh-sidebar.is-collapsed .bh-nav-group .bh-submenu { display: none !important; }
 
-    /* ===== Search box (self-contained, no fragile utility classes) ===== */
-    .bh-search { position: relative; display: block; }
-    /* The icon is an inline SVG with an explicit size (w-4 h-4), so it must be
-       centred with a transform — stretching it top-to-bottom over-constrains
-       the box and pins it to the top of the field. */
-    .bh-search-ico {
-        position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-        color: #94a3b8; pointer-events: none;
-    }
-    .bh-search-input {
-        width: 100%; box-sizing: border-box; padding: 8px 28px 8px 30px; font-size: 13px;
-        border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #1e293b; outline: none;
-    }
-    .bh-search-input:focus { background: #fff; border-color: #60a5fa; }
-    .bh-search-clear {
-        position: absolute; right: 6px; top: 0; bottom: 0; display: flex; align-items: center;
-        color: #94a3b8; font-size: 12px; padding: 0 4px; background: none; border: 0; cursor: pointer;
-    }
-    .bh-search-clear.hidden { display: none; }
-    .bh-search-clear:hover { color: #475569; }
     </style>
 </head>
 <?php $csrfToken = \App\Core\Application::getInstance()->make(\App\Core\Session::class)->csrfToken(); ?>
@@ -564,7 +476,7 @@ try {
     <!-- Sidebar -->
     <aside id="bh-sidebar" class="bh-sidebar w-64 bg-white border-r border-slate-200 flex flex-col fixed inset-y-0 left-0 z-20">
         <div class="h-16 flex items-center gap-2 px-6 border-b border-slate-200 bh-sidebar-head">
-            <a href="https://www.basehim.com" target="_blank" rel="noopener" class="shrink-0" title="Basehim — opens in a new tab"><?= brand_logo(36) ?></a>
+            <a href="<?= $base ?>/admin" class="shrink-0" title="Dashboard"><?= brand_logo(36) ?></a>
             <div class="bh-hide-collapsed min-w-0 flex-1">
                 <?php
                 try {
@@ -586,10 +498,11 @@ try {
                 $__siteAddr = $__host . rtrim((string) ($base ?? ''), '/');
                 ?>
                 <a href="<?= htmlspecialchars(($base ?? '') . '/') ?>" target="_blank" rel="noopener"
-                   class="block font-semibold text-slate-900 text-sm leading-tight truncate hover:text-blue-600" data-bh-site-name
+                   class="block font-semibold text-slate-900 text-sm leading-tight truncate hover:text-accent-600" data-bh-site-name
                    title="View <?= htmlspecialchars($__siteName) ?> — opens in a new tab"><?= htmlspecialchars($__siteName) ?></a>
                 <?php if ($__siteAddr !== ''): ?>
-                <div class="text-[11px] text-slate-400 leading-tight mt-0.5 truncate" title="<?= htmlspecialchars($__siteAddr) ?>"><?= htmlspecialchars($__siteAddr) ?></div>
+                <?php // The address is the View site link (1.2.119; the footer's "View Site" row is gone). ?>
+                <a href="<?= htmlspecialchars(($base ?? '') . '/') ?>" target="_blank" rel="noopener" class="bh-site-addr" title="View site — opens in a new tab"><span class="truncate"><?= htmlspecialchars($__siteAddr) ?></span><?= icon('arrow-top-right-on-square', 'w-3 h-3 flex-none') ?></a>
                 <?php endif; ?>
             </div>
             <button type="button" id="bh-mobile-close" class="lg:hidden p-2.5 -mr-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100" aria-label="Close menu">
@@ -604,6 +517,7 @@ try {
                 <input type="text" id="bh-nav-search" placeholder="Search menu…" autocomplete="off" spellcheck="false"
                        class="bh-search-input">
                 <button type="button" id="bh-nav-search-clear" class="hidden bh-search-clear" aria-label="Clear search"><?= icon('x-mark', 'w-4 h-4') ?></button>
+                <kbd class="bh-search-kbd" aria-hidden="true" title="Press / to search the menu">/</kbd>
             </div>
         </div>
 
@@ -635,25 +549,23 @@ try {
                 <div class="bh-nav-item bh-nav-group <?= $groupActive ? 'bh-active is-open' : '' ?>"
                      data-key="<?= htmlspecialchars($item['url']) ?>"
                      data-label="<?= htmlspecialchars($childLabels) ?>">
-                    <div class="group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition cursor-pointer bh-group-head
-                                <?= $groupActive ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' ?>"
+                    <div class="group flex items-center gap-3 h-9 px-3 rounded-lg text-sm font-medium transition cursor-pointer bh-group-head
+                                <?= $groupActive ? 'bg-accent-50 text-accent-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' ?>"
                          title="<?= htmlspecialchars($item['label']) ?>">
                         <a href="<?= htmlspecialchars($itemUrl) ?>" class="flex items-center gap-3 flex-1 min-w-0">
-                            <?= $navIcon($item, $groupActive ? 'text-blue-600' : 'text-slate-400') ?>
+                            <?= $navIcon($item, $groupActive ? 'text-accent-600' : 'text-slate-400') ?>
                             <span class="bh-nav-label flex-1 truncate"><?= $item['label'] ?></span>
                         </a>
                         <button type="button" class="bh-sub-toggle bh-hide-collapsed" title="Toggle submenu" aria-label="Toggle submenu">
-                            <?= icon('chevron-down', 'w-3 h-3 transition-transform') ?>
+                            <?= icon('chevron-down', 'w-3.5 h-3.5') ?>
                         </button>
                     </div>
                     <div class="bh-submenu bh-hide-collapsed">
                         <?php foreach ($children as $ch): ?>
                             <?php $chUrl = $base . $ch['url']; ?>
-                            <?php $chActive = rtrim($path, '/') === rtrim($chUrl, '/'); ?>
-                            <a href="<?= htmlspecialchars($chUrl) ?>"
-                               class="flex items-center gap-2 pl-11 pr-3 py-1.5 rounded-lg text-[13px] transition
-                                      <?= $chActive ? 'text-blue-700 font-medium' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50' ?>">
-                                <span class="w-1 h-1 rounded-full <?= $chActive ? 'bg-blue-600' : 'bg-slate-300' ?>"></span>
+                            <?php $chActive = rtrim($path, '/') === rtrim($chUrl, '/')
+                                || (rtrim($path, '/') === $base . '/admin/settings' && $ch['url'] === '/admin/settings/general'); ?>
+                            <a href="<?= htmlspecialchars($chUrl) ?>"<?= $chActive ? ' aria-current="page"' : '' ?>>
                                 <span class="truncate"><?= htmlspecialchars($ch['label']) ?></span>
                             </a>
                         <?php endforeach; ?>
@@ -662,12 +574,12 @@ try {
                 <?php else: ?>
                 <?php $active = str_starts_with($path, $itemUrl); ?>
                 <a href="<?= htmlspecialchars($itemUrl) ?>"
-                   class="bh-nav-item group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition
-                          <?= $active ? 'bg-blue-50 text-blue-700 bh-active' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' ?>"
+                   class="bh-nav-item group flex items-center gap-3 h-9 px-3 rounded-lg text-sm font-medium transition
+                          <?= $active ? 'bg-accent-50 text-accent-700 bh-active' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' ?>"
                    data-key="<?= htmlspecialchars($item['url']) ?>"
                    data-label="<?= htmlspecialchars(strtolower($item['label'])) ?>"
                    title="<?= htmlspecialchars($item['label']) ?>">
-                    <?= $navIcon($item, $active ? 'text-blue-600' : 'text-slate-400') ?>
+                    <?= $navIcon($item, $active ? 'text-accent-600' : 'text-slate-400') ?>
                     <span class="bh-nav-label flex-1 truncate"><?= $item['label'] ?></span>
                     <?php
                     // Optional count badge. Always emitted (hidden at zero) so a
@@ -700,7 +612,7 @@ try {
                             ? ($navBadgeN === 1 ? '1 comment awaiting moderation' : $navBadgeN . ' comments awaiting moderation')
                             : '';
                         ?>
-                    <span class="bh-nav-badge bh-hide-collapsed" data-bh-badge="<?= htmlspecialchars($navBadgeKey) ?>"<?= $navBadgeTitle !== '' ? ' title="' . htmlspecialchars($navBadgeTitle) . '"' : '' ?><?= $navBadgeN > 0 ? '' : ' hidden' ?>><?= $navBadgeN > 99 ? '99+' : $navBadgeN ?></span>
+                    <span class="bh-nav-badge" data-bh-badge="<?= htmlspecialchars($navBadgeKey) ?>"<?= $navBadgeTitle !== '' ? ' title="' . htmlspecialchars($navBadgeTitle) . '"' : '' ?><?= $navBadgeN > 0 ? '' : ' hidden' ?>><?= $navBadgeN > 99 ? '99+' : $navBadgeN ?></span>
                     <?php } ?>
                 </a>
                 <?php endif; ?>
@@ -730,40 +642,28 @@ try {
             }
         } catch (\Throwable) {}
         ?>
-        <div class="border-t border-slate-200 bh-sidebar-foot">
-            <div class="px-3 pt-2 flex items-center gap-1 bh-foot-row">
-                <a href="<?= $base ?>/" target="_blank" rel="noopener" class="bh-hide-collapsed flex-1 flex items-center gap-3 text-sm font-medium text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-50">
-                    <?= icon('arrow-top-right-on-square', 'w-5 h-5 text-slate-400') ?>
-                    <span>View Site</span>
-                </a>
-                <button type="button" id="bh-collapse-toggle" class="text-slate-500 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-slate-50" title="Collapse sidebar (Ctrl+B)">
-                    <?= icon('chevron-double-left', 'w-4 h-4 bh-collapse-icon') ?>
-                </button>
-            </div>
+        <?php // One row: a logo tile, then two lines — the version and the update status in words (1.2.120) — then collapse. ?>
+        <div class="bh-sidebar-foot">
             <?php
-            // One compact card: the version, and for people who can install
-            // updates a status pill; the whole card then opens the Updates page.
             $__pill = $__updN > 0 ? 'is-pending' : ($__checked ? 'is-current' : 'is-unknown');
-            $__pillText = $__updN > 0 ? 'Updates available' : ($__checked ? 'You’re up to date' : 'Check for updates');
+            $__pillText = $__updN > 0 ? $__updN . ' update' . ($__updN === 1 ? '' : 's') . ' available' : ($__checked ? 'You’re up to date' : 'Check for updates');
             $__cardTag = $__canUpdates ? 'a' : 'div';
             ?>
-            <<?= $__cardTag ?> class="bh-hide-collapsed bh-foot-card"<?= $__canUpdates ? ' href="' . $base . '/admin/updates" title="' . ($__updN > 0 ? $__updN . ' update' . ($__updN === 1 ? '' : 's') . ' ready to install' : 'Open Updates') . '"' : '' ?>>
+            <<?= $__cardTag ?> class="bh-hide-collapsed bh-foot-card"<?= $__canUpdates ? ' href="' . $base . '/admin/updates" title="' . ($__updN > 0 ? $__updN . ' update' . ($__updN === 1 ? '' : 's') . ' ready to install' : htmlspecialchars($__pillText)) . '"' : '' ?>>
                 <span class="bh-foot-mark" aria-hidden="true"><?= brand_logo(20) ?></span>
                 <span class="bh-foot-info">
                     <span class="bh-foot-ver"><strong>Basehim</strong> <span><?= htmlspecialchars(BASEHIM_VERSION) ?></span></span>
                     <?php if ($__canUpdates): ?>
                     <span class="bh-foot-pill <?= $__pill ?>" data-bh-update-line>
                         <span class="bh-foot-dot" aria-hidden="true"></span><span data-bh-update-text><?= $__pillText ?></span>
-                        <?php // The count, as a badge. The dashboard's background check and the
-                              // Updates page set its number and show/hide it (hidden at 0). ?>
                         <span class="bh-foot-count" data-bh-badge="updates"<?= $__updN > 0 ? '' : ' hidden' ?>><?= $__updN > 99 ? '99+' : $__updN ?></span>
                     </span>
                     <?php endif; ?>
                 </span>
-                <?php if ($__canUpdates): ?>
-                <?= icon('chevron-right', 'bh-foot-go w-4 h-4') ?>
-                <?php endif; ?>
             </<?= $__cardTag ?>>
+            <button type="button" id="bh-collapse-toggle" class="bh-btn bh-btn--ghost bh-btn--icon bh-btn--sm" title="Collapse sidebar (Ctrl+B)" aria-label="Collapse sidebar">
+                <?= icon('chevron-double-left', 'w-4 h-4 bh-collapse-icon') ?>
+            </button>
         </div>
     </aside>
 
@@ -1008,7 +908,24 @@ try {
         q = (q || '').trim().toLowerCase();
         var shown = 0;
         items.forEach(function (el) {
-            var match = !q || (el.getAttribute('data-label') || '').indexOf(q) >= 0;
+            var match;
+            if (el.classList.contains('bh-nav-group')) {
+                // A group: its own name shows all of it; otherwise only the
+                // sub-items that match, opened (1.2.119: one match used to show
+                // the whole group).
+                var head = el.querySelector('.bh-group-head .bh-nav-label');
+                var headHit = !q || (head ? head.textContent.toLowerCase().indexOf(q) >= 0 : false);
+                var subHit = false;
+                el.querySelectorAll('.bh-submenu > a').forEach(function (a) {
+                    var hit = !q || headHit || a.textContent.toLowerCase().indexOf(q) >= 0;
+                    a.style.display = hit ? '' : 'none';
+                    if (hit && q) subHit = true;
+                });
+                match = !q || headHit || subHit;
+                el.classList.toggle('is-search-open', !!q && match);
+            } else {
+                match = !q || (el.getAttribute('data-label') || '').indexOf(q) >= 0;
+            }
             el.style.display = match ? '' : 'none';
             if (match) shown++;
         });
@@ -1541,7 +1458,7 @@ try {
         line.classList.toggle('is-pending', n > 0);
         line.classList.toggle('is-current', n === 0);
         line.classList.remove('is-unknown');
-        text.textContent = n > 0 ? 'Updates available' : 'You’re up to date';
+        text.textContent = n > 0 ? n + ' update' + (n === 1 ? '' : 's') + ' available' : 'You’re up to date';
         var card = line.closest('.bh-foot-card');
         if (card) card.title = n > 0 ? n + ' update' + (n === 1 ? '' : 's') + ' ready to install' : 'Open Updates';
     }

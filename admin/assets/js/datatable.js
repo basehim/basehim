@@ -70,6 +70,7 @@
         var catalog = payload.catalog || [];
         var columns = payload.columns || [];
         var selected = Object.create(null);   // id -> status
+        var selecting = false;                 // touch select mode (1.2.116)
 
         var state = {
             page: (payload.meta && payload.meta.page) || 1,
@@ -106,6 +107,7 @@
             drawerBadge: root.querySelector('[data-dt-drawer-badge]'),
             toolAll: root.querySelector('[data-dt-selall-input]'),
             toolAllWrap: root.querySelector('[data-dt-selall]'),
+            selectMode: root.querySelector('[data-dt-selectmode]'),
             wrap: root.querySelector('.bh-dt-wrap'),
             table: root.querySelector('.bh-dt-table'),
             foot: root.querySelector('.bh-dt-foot')
@@ -131,11 +133,50 @@
         // ticking a row can never shift the table. Escape clears the selection.
         if (r.bulk) {
             document.body.appendChild(r.bulk);
-            if (r.bulkClear) r.bulkClear.addEventListener('click', clearSelection);
+            if (r.bulkClear) r.bulkClear.addEventListener('click', clearSelection);   // also Done in select mode
             document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && selectedIds().length) { clearSelection(); }
+                if (e.key === 'Escape' && (selectedIds().length || selecting)) { clearSelection(); }
             });
         }
+
+        // Select mode (1.2.116): the toolbar's Select button, a tap on an item
+        // while selecting, and a long press on an item to start.
+        if (r.selectMode) r.selectMode.addEventListener('click', function () { if (selecting) clearSelection(); else setSelecting(true); });
+        var lpTimer = null, lpX = 0, lpY = 0, lpFired = false;
+        function cardOf(t) { var c = t && t.closest ? t.closest('.bh-dt-card[data-dt-rowid]') : null; return c && root.contains(c) ? c : null; }
+        function toggleCard(card) { var cb = card.querySelector('.bh-dt-rowcheck'); if (cb) cb.click(); }
+        root.addEventListener('click', function (e) {
+            if (lpFired) { lpFired = false; e.preventDefault(); e.stopPropagation(); return; }   // the click that ends a long press
+            if (!selecting) return;
+            var card = cardOf(e.target); if (!card) return;
+            if (e.target.closest('.bh-dt-check')) return;          // the tick itself toggles natively
+            e.preventDefault(); e.stopPropagation();               // a tap selects instead of opening
+            toggleCard(card);
+        }, true);
+        root.addEventListener('touchstart', function (e) {
+            if (selecting || !e.touches || e.touches.length !== 1) return;
+            var card = cardOf(e.target); if (!card || e.target.closest('button, .bh-dt-check')) return;
+            lpX = e.touches[0].clientX; lpY = e.touches[0].clientY; lpFired = false;
+            clearTimeout(lpTimer);
+            lpTimer = setTimeout(function () {
+                lpTimer = null;
+                setSelecting(true);
+                var cb = card.querySelector('.bh-dt-rowcheck'); if (cb && !cb.checked) cb.click();
+                lpFired = true;   // after the tick's own click, or the guard below would swallow it
+                try { if (navigator.vibrate) navigator.vibrate(10); } catch (err) {}
+            }, 450);
+        }, { passive: true });
+        root.addEventListener('touchmove', function (e) {
+            if (!lpTimer || !e.touches || !e.touches[0]) return;
+            if (Math.abs(e.touches[0].clientX - lpX) > 10 || Math.abs(e.touches[0].clientY - lpY) > 10) { clearTimeout(lpTimer); lpTimer = null; }
+        }, { passive: true });
+        ['touchend', 'touchcancel'].forEach(function (t) { root.addEventListener(t, function () {
+            clearTimeout(lpTimer); lpTimer = null;
+            // Many browsers fire no click after a long press: don't let the flag
+            // swallow the next real tap.
+            if (lpFired) setTimeout(function () { lpFired = false; }, 400);
+        }, { passive: true }); });
+        root.addEventListener('contextmenu', function (e) { if ((lpTimer || lpFired) && cardOf(e.target)) e.preventDefault(); });
 
         // Shared floating menus (row actions, and a safety net for z-index).
         var menu = el('div', 'bh-dt-menu'); menu.style.display = 'none'; document.body.appendChild(menu);
@@ -309,6 +350,7 @@
             r.body.innerHTML = ''; r.cards.innerHTML = '';
             if (r.cardsHead) r.cardsHead.hidden = !rows.length;
             if (r.toolAllWrap) r.toolAllWrap.hidden = !rows.length;
+            if (r.selectMode) r.selectMode.hidden = !rows.length;
             if (!rows.length) { renderEmpty(); syncBulk(); syncSelectAll(); return; }
             rows.forEach(function (row) { r.body.appendChild(buildRow(row)); r.cards.appendChild(buildCard(row)); });
             syncBulk(); syncSelectAll();
@@ -402,9 +444,18 @@
         function buildFullCard(row) {
             var card = el('div', 'bh-dt-card'); card.setAttribute('data-dt-rowid', row.id);
             var top = el('div', 'bh-dt-card__top');
-            var chk = el('label', 'bh-dt-check'); chk.appendChild(rowCheckbox(row)); top.appendChild(chk);   // <label>: its padded hit area toggles the box (1.2.115)
             var cells = row.cells || {};
-            if (cells.thumb) top.appendChild(el('span', 'bh-dt-card__thumb', cells.thumb));
+            // The tick (a <label>, so its whole area toggles the box). With a
+            // thumbnail it sits ON the thumbnail and shows only while selecting
+            // or hovering, so a list is not a column of empty boxes (1.2.116).
+            var chk = el('label', 'bh-dt-check'); chk.appendChild(rowCheckbox(row));
+            if (cells.thumb) {
+                var thumb = el('span', 'bh-dt-card__thumb bh-dt-tickhost', cells.thumb);
+                chk.classList.add('bh-dt-check--over'); thumb.appendChild(chk);
+                card.classList.add('has-tick-media'); top.appendChild(thumb);
+            } else {
+                top.appendChild(chk);
+            }
             var main = el('div', 'bh-dt-card__main');
             if (cells.title) main.appendChild(el('div', 'bh-dt-card__title', cells.title));
             if (cells.status) main.appendChild(el('div', 'bh-dt-card__badge', cells.status));
@@ -437,8 +488,14 @@
             var join = function (list) { return list.map(function (x) { return x.html; }).join(' '); };
 
             var body = el('div', 'bh-dt-card__body');
-            var chk = el('label', 'bh-dt-check bh-dt-card__check'); chk.appendChild(rowCheckbox(row)); body.appendChild(chk);
-            if (slots.media.length) { body.appendChild(el('div', 'bh-dt-card__media', join(slots.media))); card.classList.add('has-media'); }
+            var chk = el('label', 'bh-dt-check bh-dt-card__check'); chk.appendChild(rowCheckbox(row));
+            if (slots.media.length) {
+                var media = el('div', 'bh-dt-card__media bh-dt-tickhost', join(slots.media));
+                chk.classList.add('bh-dt-check--over'); media.appendChild(chk);   // the tick rides on the picture (1.2.116)
+                body.appendChild(media); card.classList.add('has-media', 'has-tick-media');
+            } else {
+                body.appendChild(chk);
+            }
             var main = el('div', 'bh-dt-card__main');
             if (slots.title.length) main.appendChild(el('div', 'bh-dt-card__title', join(slots.title)));
             if (slots.sub.length) main.appendChild(el('div', 'bh-dt-card__sub', join(slots.sub)));
@@ -1266,13 +1323,21 @@
         var BULK_ICON = { publish: 'check', approve: 'check', draft: 'arrow-down-tray', pending: 'arrow-down-tray', spam: 'no-symbol', delete: 'trash' };
         function syncBulk() {
             var ids = selectedIds(), n = ids.length;
+            root.classList.toggle('has-selection', n > 0);   // desktop: every tick shows once one is ticked (1.2.116)
             if (r.bulkCount) {
                 r.bulkCount.innerHTML = '';
-                r.bulkCount.appendChild(el('span', 'bh-dt-bulk__n', String(n)));
-                r.bulkCount.appendChild(el('span', '', 'selected'));
+                if (!n && selecting) {
+                    r.bulkCount.appendChild(el('span', 'bh-dt-bulk__hint', 'Tap items to select'));
+                } else {
+                    r.bulkCount.appendChild(el('span', 'bh-dt-bulk__n', String(n)));
+                    r.bulkCount.appendChild(el('span', '', 'selected'));
+                }
             }
-            if (r.bulk) r.bulk.classList.toggle('is-active', n > 0);
-            if (r.bulkClear) r.bulkClear.hidden = n === 0;
+            if (r.bulk) r.bulk.classList.toggle('is-active', n > 0 || selecting);
+            if (r.bulkClear) {
+                r.bulkClear.hidden = n === 0 && !selecting;
+                r.bulkClear.setAttribute('aria-label', selecting ? 'Done selecting' : 'Clear selection');
+            }
             if (!r.bulkActions) return;
             r.bulkActions.innerHTML = '';
             if (!n) return;
@@ -1308,7 +1373,21 @@
             selected = Object.create(null);
             root.querySelectorAll('.bh-dt-rowcheck').forEach(function (cb) { cb.checked = false; });
             root.querySelectorAll('.is-selected[data-dt-rowid]').forEach(function (n) { n.classList.remove('is-selected'); });
+            selecting = false; syncSelecting();   // clearing also leaves select mode
             syncBulk(); syncSelectAll();
+        }
+        // --- select mode (touch, 1.2.116) ------------------------------------
+        // Phones show no tick boxes at rest. "Select" in the toolbar (or a long
+        // press on an item) enters select mode: the ticks appear — on each
+        // picture where there is one — a tap anywhere on an item toggles it,
+        // and the bulk bar shows with Done. Desktop instead reveals a row's tick
+        // on hover or focus (CSS), so this mode is a touch affordance.
+        function syncSelecting() {
+            root.classList.toggle('is-selecting', selecting);
+            if (r.selectMode) r.selectMode.setAttribute('aria-pressed', selecting ? 'true' : 'false');
+        }
+        function setSelecting(on) {
+            selecting = !!on; syncSelecting(); syncBulk();
         }
         /** The table's header box and the cards' Select all show the same state. */
         function syncSelectAll() {
@@ -1624,6 +1703,10 @@
         if (r.search) {
             var toolbar = root.querySelector('.bh-dt-toolbar');
             var setSearching = function (on) { if (toolbar) toolbar.classList.toggle('is-searching', on); };
+            // Typing (focused) is separate from "expanded with text": phones stop
+            // pinning the pager while the keyboard is up (1.2.117).
+            r.search.addEventListener('focus', function () { root.classList.add('is-typing'); });
+            r.search.addEventListener('blur', function () { root.classList.remove('is-typing'); });
             r.search.addEventListener('focus', function () { setSearching(true); });
             r.search.addEventListener('blur', function () { setSearching(r.search.value.trim() !== ''); });
         }

@@ -207,18 +207,19 @@
 .bh-dash-head__sub { @apply m-0 mt-1 text-sm text-slate-500; }
 .bh-dash-head__actions { @apply relative flex flex-wrap gap-2; }
 .bh-dash-head__actions[hidden] { @apply hidden; }
-/* Phones: the buttons share one row under the greeting. */
+/* Customize: an icon button (1.2.119) — a page setting, quieter than the
+   everyday actions beside it. */
+.bh-dash-head__customize { @apply text-slate-500; }
+/* Phones: the everyday actions split the row in equal halves (they were
+   sized by their words: 106 / 92 / 114 px), and Customize sits in the
+   card's top-right corner. The row is static so the corner is the card's;
+   its buttons stay positioned so they paint above the soft glow. */
 @media (max-width: 639px) {
-    /* Default size (36 px), each button as wide as its words plus 12 px a
-       side, sharing out what is left of the row. */
-    .bh-dash-head__actions { @apply w-full flex-nowrap gap-1.5; }
-    .bh-dash-head__actions .bh-btn--lg { @apply h-9 min-w-0 flex-auto gap-1.5 px-3 text-[0.8125rem]; }
-}
-/* Very narrow phones: Customize keeps its icon (and its name for screen
-   readers) so the other two keep theirs. */
-@media (max-width: 359px) {
-    .bh-dash-head__actions [data-bh-dash-customize] { @apply w-9 flex-none px-0; }
-    .bh-dash-head__actions [data-bh-dash-customize] .bh-btn__label { @apply sr-only; }
+    .bh-dash-head__actions { @apply static grid w-full gap-2; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+    .bh-dash-head__actions > .bh-btn { @apply relative; }
+    .bh-dash-head__actions .bh-btn--lg { @apply h-9 min-w-0 gap-1.5 px-3 text-[0.8125rem]; }
+    .bh-dash-head__actions .bh-dash-head__customize { @apply absolute right-3 top-3 w-9 px-0; }
+    .bh-dash-head:has(.bh-dash-head__customize) .bh-dash-head__hello { @apply pr-9; }
 }
 
 /* ── Customize bar ────────────────────────────────────────────────────── */
@@ -1023,5 +1024,81 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
     .bh-mk-ghost .bh-mk-art, .bh-mk-ghost .bh-dskel__bone, .bh-mk-card, .bh-mk-tab, .bh-mk-chip { @apply animate-none transition-none; }
     .bh-im[open] { animation: none; }
 }
+
+/* ═══ Sidebar (1.2.119 refresh) ═══════════════════════════════════════════
+   One marker for the current page (the accent pill; the extra edge bar is
+   gone), one 36px height for every item, section headings without extra
+   rules, sub-items on a guide line, a core-sized search that shows its "/"
+   shortcut, and a one-row footer. The layout's inline block keeps only the
+   collapse/drawer mechanics. */
+
+/* Sections: the heading alone separates them. The collapsed rail has no
+   headings, so there the short rule stays. */
+.bh-nav-section + .bh-nav-section { @apply mt-4; }
+.bh-nav-heading { @apply mb-1 select-none px-3 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] text-slate-400; }
+.bh-nav-sep { @apply hidden; }
+.bh-sidebar.is-collapsed .bh-nav-section + .bh-nav-section { @apply mt-0; }
+.bh-sidebar.is-collapsed .bh-nav-heading { @apply hidden; }
+.bh-sidebar.is-collapsed .bh-nav-sep { @apply mx-3 my-2 block h-px bg-slate-200; }
+
+/* Group toggle: a 24px target, not an 11px glyph. */
+.bh-sub-toggle { @apply grid h-6 w-6 flex-none cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-slate-400 transition-colors duration-150; }
+.bh-sub-toggle:hover { @apply bg-slate-200/60 text-slate-600; }
+
+/* Sub-items hang off a guide line under the parent's icon; the current one
+   is marked on the line. (They had dots, and no marker but colour.) */
+.bh-submenu { @apply ml-[1.375rem] border-l border-slate-200; }
+.bh-submenu > a { @apply -ml-px flex h-8 items-center rounded-r-lg pl-3.5 pr-3 text-[0.8125rem] text-slate-500 no-underline transition-colors duration-150; }
+.bh-submenu > a:hover { @apply bg-slate-50 text-slate-900; }
+.bh-submenu > a[aria-current="page"] { @apply bg-accent-50 font-medium text-accent-700 shadow-[inset_2px_0_0_theme(colors.accent.600)]; }
+/* Searching opens a group to show the sub-items that match. */
+.bh-nav-group.is-search-open .bh-submenu { height: auto !important; }
+
+/* The collapsed rail keeps a count as a dot on its icon (it vanished). */
+.bh-sidebar.is-collapsed a.bh-nav-item { @apply relative; }
+.bh-sidebar.is-collapsed .bh-nav-badge:not([hidden]) { @apply absolute right-1.5 top-1.5 h-2 w-2 min-w-0 p-0 text-[0px] ring-2 ring-white; }
+
+/* The site address is the View site link. */
+.bh-site-addr { @apply mt-0.5 flex min-w-0 items-center gap-1 text-[0.6875rem] leading-tight text-slate-400 no-underline transition-colors duration-150; }
+.bh-site-addr:hover { @apply text-accent-600; }
+
+/* Menu search: a core-sized field (36px, 14px; it was 38px and 13px). */
+.bh-search { @apply relative block; }
+.bh-search-ico { @apply pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400; }
+.bh-search-input { @apply h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-800 outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-slate-400; }
+.bh-search-input:focus { @apply border-accent-500 ring-[3px] ring-accent-500/20; }
+.bh-search-clear { @apply absolute inset-y-0 right-1.5 flex cursor-pointer items-center border-0 bg-transparent px-1 text-slate-400; }
+.bh-search-clear:hover { @apply text-slate-600; }
+.bh-search-clear.hidden { display: none; }   /* (can't @apply the class the selector names) */
+/* The "/" shortcut, shown until the field is in use; not on touch screens. */
+.bh-search-kbd { @apply pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-b-2 border-slate-200 bg-slate-50 px-1.5 py-0.5 font-sans text-[0.6875rem] font-semibold leading-none text-slate-500; }
+.bh-search-input:focus ~ .bh-search-kbd, .bh-search-input:not(:placeholder-shown) ~ .bh-search-kbd { @apply hidden; }
+@media (hover: none) { .bh-search-kbd { @apply hidden; } }
+
+/* Footer: one row — a logo tile, two lines (the version; the update status
+   in words), then collapse. The tile is exactly as tall as the two 16px lines
+   (32px), so the three read as one unit (1.2.120: 1.2.119 showed only a dot
+   and a bare count). It was the View Site row plus a two-line card, 117px. */
+.bh-sidebar-foot { @apply flex items-center gap-1 border-t border-slate-200 px-3 pt-2; padding-bottom: calc(.5rem + env(safe-area-inset-bottom, 0px)); }
+.bh-foot-card { @apply flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 no-underline transition-colors duration-150; }
+a.bh-foot-card:hover { @apply bg-slate-50; }
+a.bh-foot-card:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
+.bh-foot-mark { @apply grid h-8 w-8 flex-none place-items-center rounded-lg border border-slate-100 bg-white; }
+.bh-foot-mark img, .bh-foot-mark svg { @apply h-5 w-5 max-w-none; }
+.bh-foot-info { @apply flex min-w-0 flex-1 flex-col justify-center; }
+.bh-foot-ver { @apply truncate text-xs leading-4 tabular-nums text-slate-400; }
+.bh-foot-ver strong { @apply font-semibold text-slate-700; }
+.bh-foot-pill { @apply flex min-w-0 items-center gap-1.5 text-[0.6875rem] font-medium leading-4 text-slate-500; }
+.bh-foot-pill [data-bh-update-text] { @apply truncate; }
+.bh-foot-pill.is-current { @apply text-emerald-700; }
+.bh-foot-pill.is-pending { @apply text-amber-700; }
+.bh-foot-dot { @apply h-1.5 w-1.5 flex-none rounded-full bg-slate-400; }
+.bh-foot-pill.is-current .bh-foot-dot { @apply bg-emerald-500; }
+.bh-foot-pill.is-pending .bh-foot-dot { @apply bg-amber-500; animation: bh-foot-pulse 1.8s ease-in-out infinite; }
+/* The count chip is the source the update scripts watch and set; the words
+   now carry the number, so the chip itself stays out of sight. */
+.bh-foot-count, .bh-foot-count[hidden] { @apply hidden; }
+@keyframes bh-foot-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(245 158 11 / .45); } 50% { box-shadow: 0 0 0 4px rgb(245 158 11 / 0); } }
+@media (prefers-reduced-motion: reduce) { .bh-foot-pill.is-pending .bh-foot-dot { animation: none; } }
 
 @tailwind utilities;

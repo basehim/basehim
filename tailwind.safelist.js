@@ -12,6 +12,12 @@
  * checking themes/blocks.
  */
 module.exports = [
+    // 1.2.119: no longer used by the sidebar markup; kept for apps and themes.
+    "ease-in-out",
+    "h-1",
+    "pl-11",
+    "pt-2",
+    "w-1",
     "-mb-px",
     "-mr-1",
     "active:bg-blue-50",

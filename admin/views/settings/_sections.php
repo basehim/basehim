@@ -1,8 +1,11 @@
 <?php
 /**
  * The Settings sections, in order: slug => label, icon, and the line shown
- * under the title on desktop. Shared by the tabs (_nav.php) and the phone's
- * Settings home (_head.php).
+ * under the title on desktop. Shared by the tabs (_nav.php), the phone's
+ * Settings home (_head.php) and the sidebar's Settings sub-menu
+ * (layouts/app.php). 'menu' => false keeps a section's page working without
+ * listing it (1.2.120: Appearance — logo, favicon, footer and CSS are reached
+ * from Customize).
  */
 return [
     'general'       => ['label' => 'General',        'icon' => 'cog-6-tooth',               'sub' => 'Your site\'s name, address for notices, language and time.'],
@@ -14,7 +17,7 @@ return [
     'seo'           => ['label' => 'SEO',            'icon' => 'document-magnifying-glass', 'sub' => 'Search and social sharing tags.'],
     'ai'            => ['label' => 'AI Agents',      'icon' => 'cpu-chip',                  'sub' => 'How AI agents and crawlers find and use your site.'],
     'email'         => ['label' => 'Email',          'icon' => 'envelope',                  'sub' => 'How Basehim sends password resets, notifications and app mail.'],
-    'appearance'    => ['label' => 'Appearance',     'icon' => 'swatch',                    'sub' => 'Logo, favicon, footer and custom CSS.'],
+    'appearance'    => ['label' => 'Appearance',     'icon' => 'swatch',                    'sub' => 'Logo, favicon, footer and custom CSS.', 'menu' => false],
     'authorization' => ['label' => 'Authentication', 'icon' => 'shield-check',              'sub' => 'Two-step verification, registration and sign-in protection.'],
     'security'      => ['label' => 'Security',       'icon' => 'lock-closed',               'sub' => 'HTTPS and the security headers sent with every page.'],
     'search'        => ['label' => 'Search',         'icon' => 'magnifying-glass',          'sub' => 'The search index, and what the site\'s search page finds.'],

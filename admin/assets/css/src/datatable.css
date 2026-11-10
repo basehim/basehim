@@ -295,7 +295,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 
 /* Cells */
 .bh-dt-title { font-weight: 600; color: #0f172a; text-decoration: none; display: block; }
-.bh-dt-title:hover { color: #2563eb; }
+@media (hover: hover) { .bh-dt-title:hover { color: #2563eb; } }   /* touch keeps :hover after a tap (1.2.116) */
 .bh-dt-sub { display: block; font-size: .76rem; color: #94a3b8; }
 .bh-dt-date { color: #334155; display: block; }
 /* A date is one line in the table ("November 10, 2026" wrapped to three
@@ -571,7 +571,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-bulk__sep { display: none; }
     .bh-dt-bulkclear { order: 1; }
     .bh-dt-bulk__actions { order: 2; flex-basis: 100%; width: 100%; flex-wrap: wrap; gap: .5rem; }
-    .bh-dt-bulk__actions .bh-dt-bulkbtn { @apply h-10 flex-1 rounded-xl text-sm; min-width: 7rem; }   /* the core large size on phones */
+    .bh-dt-bulk__actions .bh-dt-bulkbtn { @apply h-9 flex-1 rounded-xl text-sm; min-width: 7rem; }   /* the core default 36px, like the toolbar (1.2.117) */
 }
 @media (prefers-reduced-motion: reduce) {
     .bh-dt-bulk, .bh-dt-bulk.is-active { transition: opacity .15s ease, visibility 0s; transform: translateX(-50%); }
@@ -616,15 +616,21 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-filterm__text { display: none; }
     /* Icon-only, so square at the toolbar height (they were 37 x 40). */
     .bh-dt-filterm, .bh-dt-tools [data-dt-options] { width: var(--dt-ctl-h); padding-left: 0; padding-right: 0; }
+    /* Icon-only, so the count is a corner badge out of the flow — in the flow
+       it pushed the icon 14px off-centre (1.2.116). Inside the button's
+       corner, not hanging off it: the tool group clips for the search fold. */
+    .bh-dt-filterm { position: relative; }
+    .bh-dt-filterm__badge { @apply absolute right-0.5 top-0.5 h-4 min-w-[1rem] px-1 text-[0.625rem] ring-2 ring-white; }
     /* A card's tick box is 18px; its <label> is padded to a ~42px target
        (WCAG 2.5.8), and the equal negative margin keeps the layout put. */
     .bh-dt-card .bh-dt-check { padding: .75rem; margin: -.75rem; cursor: pointer; }
 
     /* Focus the search and it grows to fill the row while the rest fold away. */
-    .bh-dt-selall { max-width: 3rem; overflow: hidden; transition: max-width .25s ease, opacity .2s ease; }
+    .bh-dt-selall, .bh-dt-selectmode { max-width: 3rem; overflow: hidden; transition: max-width .25s ease, opacity .2s ease; }
     .bh-dt-tools { max-width: 60vw; overflow: hidden; transition: max-width .25s ease, opacity .2s ease; }
     .bh-dt-toolbar.is-searching { gap: 0; }
     .bh-dt-toolbar.is-searching .bh-dt-selall,
+    .bh-dt-toolbar.is-searching .bh-dt-selectmode,
     .bh-dt-toolbar.is-searching .bh-dt-tools { max-width: 0; opacity: 0; pointer-events: none; }
 
     /* The Screen Options popover spans the row instead of running off-screen. */
@@ -645,11 +651,22 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
        (the top padding was 0) — and the page's own background, so at rest it
        is not a stray white strip. Stuck, it frosts over and gains a hairline.
        !important on the vertical padding: it must beat the stuck shrink. */
-    .bh-dt { --dt-ctl-h: 2.5rem; }
     .bh-dt > .bh-card--pad { @apply -mx-4 mb-3 bg-slate-50 px-4; padding-top: .625rem !important; padding-bottom: .625rem !important;
-        border-bottom: 1px solid transparent !important; transition: background-color .18s ease, box-shadow .18s ease, border-color .18s ease; }
-    .bh-dt--sticky > .bh-dt-top.is-stuck { @apply bg-slate-50/95 backdrop-blur-md;
-        border-bottom-color: rgb(226 232 240) !important; box-shadow: 0 8px 16px -12px rgb(15 23 42 / .3); }
+        border-bottom: 0 !important; box-shadow: none !important; }
+    /* Stuck, the bar keeps its fill — opaque slate-50, the page's own colour —
+       and gains only a hairline and a soft shadow underneath, drawn by ::after
+       and faded by opacity (1.2.117). A browser moves a sticky element on the
+       compositor but our is-stuck class lands a frame later, so anything that
+       snaps (a backdrop blur switching on, a fill changing) flashed at the
+       boundary on a fast scroll; an opacity fade hides that frame. */
+    .bh-dt--sticky > .bh-dt-top::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: .75rem;
+        pointer-events: none; border-top: 1px solid rgb(226 232 240);
+        background: linear-gradient(rgb(15 23 42 / .08), rgb(15 23 42 / 0));
+        opacity: 0; transition: opacity .2s ease; }
+    .bh-dt--sticky > .bh-dt-top.is-stuck::after { opacity: 1; }
+    /* While typing a search the keyboard takes half the screen: the pager
+       stops riding on it (it waits at the end of the list). */
+    .bh-dt.is-typing.bh-dt--sticky-foot .bh-dt-foot { position: relative; }
     .bh-dt-toolbar .bh-dt-panel { left: 1rem; right: 1rem; }
     .bh-dt .bh-dt-cards { grid-template-columns: minmax(0, 1fr); gap: .6rem; padding: 0; }
     /* With no frame, the empty state gets the cards' own surface (1.2.66). */
@@ -673,6 +690,9 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-count { font-size: .8rem; white-space: nowrap; }
     /* 16px text stops iOS zooming into the search box when it is tapped. */
     .bh-dt-search input { font-size: 16px; }
+    /* The placeholder matches every other field (14px, 1.2.118); only typed
+       text needs 16px, which is what stops iOS zooming on tap. */
+    .bh-dt-search input::placeholder { font-size: .875rem; }
 }
 
 /* Quick Edit (1.2.61; a modal dialog since 1.2.63) -------------------------
@@ -797,3 +817,65 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-table tr.is-updated > td, .bh-dt-card.is-updated { animation: none; }
     .bh-dt-card { transition: none; }
 }
+
+
+/* ── Selection without a wall of tick boxes (1.2.116) ──────────────────────
+   Desktop (a mouse): a row's tick shows while the row is hovered or has
+   focus, and every tick shows once one is ticked (.has-selection); the header
+   Select all always shows. Ticks hide by opacity, never display, so nothing
+   shifts and they stay reachable by keyboard.
+   Touch: no ticks at rest. Select mode (.is-selecting — the toolbar's Select
+   button, or a long press on an item) shows them, and a tap anywhere on an
+   item toggles it. On items with a picture the tick sits on the picture
+   (.bh-dt-check--over), so cards gain no checkbox column at all. */
+
+/* Card ticks are round, like a photo picker's; the table keeps square boxes. */
+.bh-dt-card .bh-dt-check input { -webkit-appearance: none; appearance: none; flex: none; margin: 0; cursor: pointer;
+    width: 1.375rem; height: 1.375rem; border-radius: 9999px; border: 2px solid #94a3b8; background-color: #fff;
+    transition: background-color .15s ease, border-color .15s ease; }
+.bh-dt-card .bh-dt-check input:checked { border-color: #2563eb;
+    background: #2563eb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / .875rem no-repeat; }
+.bh-dt-card .bh-dt-check input:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* The tick on a picture: covers it, centred; hidden until revealed below. */
+.bh-dt-tickhost { position: relative; }
+.bh-dt-card .bh-dt-check.bh-dt-check--over { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center;
+    width: auto; min-height: 0; padding: 0; margin: 0; border-radius: var(--dt-r); cursor: pointer;
+    background: transparent; opacity: 0; pointer-events: none; transition: opacity .15s ease, background-color .15s ease; }
+.bh-dt-card .bh-dt-check--over input { border-color: #fff; box-shadow: 0 1px 3px rgb(15 23 42 / .4); }
+.bh-dt-card .bh-dt-check--over:has(input:checked) { background: rgb(37 99 235 / .85); }
+.bh-dt-card .bh-dt-check--over input:checked { border-color: #fff; box-shadow: none; }
+
+.bh-dt-toolbar .bh-dt-selectmode { display: none; }
+.bh-dt-bulk__hint { @apply whitespace-nowrap pl-1 text-sm font-medium text-slate-500; }
+.bh-dt-bulk__actions:empty { display: none; }
+
+@media (hover: hover) and (pointer: fine) {
+    .bh-dt-table tbody td.bh-dt-check input,
+    .bh-dt-card .bh-dt-check:not(.bh-dt-check--over) input { opacity: 0; transition: opacity .12s ease; }
+    .bh-dt-table tbody tr:hover td.bh-dt-check input,
+    .bh-dt-table tbody tr:focus-within td.bh-dt-check input,
+    .bh-dt.has-selection .bh-dt-table tbody td.bh-dt-check input,
+    .bh-dt-card:hover .bh-dt-check input,
+    .bh-dt-card:focus-within .bh-dt-check input,
+    .bh-dt.has-selection .bh-dt-card .bh-dt-check input { opacity: 1; }
+    .bh-dt-card:hover .bh-dt-check--over,
+    .bh-dt-card:focus-within .bh-dt-check--over,
+    .bh-dt.has-selection .bh-dt-check--over { opacity: 1; pointer-events: auto; }
+    .bh-dt-card:hover .bh-dt-check--over:not(:has(input:checked)) { background: rgb(255 255 255 / .45); }
+}
+
+@media (hover: none) {
+    /* A long press starts select mode, not the browser's link menu. */
+    .bh-dt-card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    .bh-dt:not(.is-selecting) .bh-dt-card .bh-dt-check:not(.bh-dt-check--over) { display: none; }
+    .bh-dt.is-selecting .bh-dt-check--over { opacity: 1; pointer-events: auto; }
+    .bh-dt.is-selecting .bh-dt-card { cursor: pointer; }
+    .bh-dt.is-selecting .bh-dt-card .bh-dt-actbtn { visibility: hidden; }   /* a tap selects; the ⋮ comes back after */
+}
+/* Phones and tablets with cards: Select in the toolbar; Select all only while selecting. */
+@media (hover: none) and (max-width: 820px) {
+    .bh-dt:not(.is-selecting) .bh-dt-toolbar .bh-dt-selectmode:not([hidden]) { display: inline-flex; flex: none; width: var(--dt-ctl-h); height: var(--dt-ctl-h); }   /* flex:none — it shrank to 29px in the no-wrap row */
+    .bh-dt:not(.is-selecting) .bh-dt-selall { display: none; }
+}
+.bh-dt[data-select="none"] .bh-dt-selectmode { display: none !important; }

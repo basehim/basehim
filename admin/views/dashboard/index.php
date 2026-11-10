@@ -62,8 +62,11 @@ $__boot = [
                     <?= icon('arrow-up-tray', 'w-4 h-4') ?><span class="bh-btn__label">Upload</span>
                 </a>
             <?php endif; ?>
-            <button type="button" class="bh-btn <?= ($canWrite || $canUpload) ? 'bh-btn--secondary' : 'bh-btn--primary' ?> bh-btn--lg" data-bh-dash-customize>
-                <?= icon('adjustments-horizontal', 'w-4 h-4') ?><span class="bh-btn__label">Customize</span>
+            <?php /* Customize is a page setting, not an everyday action (1.2.119):
+                     an icon button — at the end of the row on wide screens, in
+                     the card's corner on phones. */ ?>
+            <button type="button" class="bh-btn bh-btn--ghost bh-btn--icon bh-btn--lg bh-dash-head__customize" data-bh-dash-customize aria-label="Customize dashboard" title="Customize dashboard">
+                <?= icon('adjustments-horizontal', 'w-5 h-5') ?>
             </button>
         </div>
     </header>

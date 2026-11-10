@@ -9,7 +9,8 @@ $this->include('partials.tabs', [
     'active'    => $tab ?? '',
     'urlPrefix' => '/admin/settings/',
     'ariaLabel' => 'Settings sections',
-    'tabs'      => array_map(static fn($t) => ['label' => $t['label'], 'icon' => $t['icon']], require __DIR__ . '/_sections.php'),
+    'tabs'      => array_map(static fn($t) => ['label' => $t['label'], 'icon' => $t['icon']],
+                       array_filter(require __DIR__ . '/_sections.php', static fn($t) => ($t['menu'] ?? true) !== false)),
 ]);
 ?>
 <script src="<?= htmlspecialchars((string) ($base ?? ''), ENT_QUOTES) ?>/admin/assets/js/settings-save.js?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>" defer></script>

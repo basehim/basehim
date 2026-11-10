@@ -151,6 +151,9 @@ $__selectable = $__declared
             <label class="bh-dt-selall" data-dt-selall hidden title="Select all">
                 <input type="checkbox" data-dt-selall-input aria-label="Select all">
             </label>
+            <!-- Touch screens (1.2.116): no ticks at rest; this enters select
+                 mode (so does a long press on an item). Hidden elsewhere by CSS. -->
+            <button type="button" class="bh-btn bh-btn--secondary bh-btn--icon bh-dt-selectmode" data-dt-selectmode hidden aria-pressed="false" aria-label="Select items" title="Select"><?= icon('check-circle', 'w-4 h-4') ?></button>
             <label class="bh-dt-search">
                 <?= icon('magnifying-glass') ?>
                 <input type="search" class="bh-input" data-dt-search placeholder="<?= htmlspecialchars($__def->searchPlaceholder) ?>" value="<?= htmlspecialchars($__payload['search']) ?>">

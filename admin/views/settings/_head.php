@@ -19,7 +19,7 @@ $__home = !empty($settingsHome);
 <?php if ($__home): ?>
 <nav class="bh-set-home" aria-label="Settings sections">
     <ul class="bh-set-home__list">
-        <?php foreach ($__sections as $__slug => $__s): ?>
+        <?php foreach ($__sections as $__slug => $__s): if (($__s['menu'] ?? true) === false) continue; ?>
         <li class="bh-set-home__item">
             <a class="bh-set-home__link" href="<?= $base ?>/admin/settings/<?= $__slug ?>">
                 <span class="bh-set-home__icon" aria-hidden="true"><?= icon($__s['icon'], 'w-5 h-5') ?></span>
