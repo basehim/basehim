@@ -169,10 +169,10 @@ $__selectable = $__declared
             </select>
             <?php endforeach; ?>
             <div class="bh-dt-tools">
-                <div class="bh-dt-views" role="group" aria-label="View">
-                    <button type="button" class="bh-dt-viewbtn" data-dt-view="table" title="Table view"><?= icon('table-cells', 'w-4 h-4') ?></button>
-                    <button type="button" class="bh-dt-viewbtn" data-dt-view="list" title="List view"><?= icon('list-bullet', 'w-4 h-4') ?></button>
-                    <button type="button" class="bh-dt-viewbtn" data-dt-view="grid" title="Grid view"><?= icon('squares-2x2', 'w-4 h-4') ?></button>
+                <div class="bh-seg bh-seg--icon bh-dt-views" role="group" aria-label="View">
+                    <button type="button" class="bh-dt-viewbtn" data-dt-view="table" aria-pressed="false" aria-label="Table view" title="Table view"><?= icon('table-cells', 'w-4 h-4') ?></button>
+                    <button type="button" class="bh-dt-viewbtn" data-dt-view="list" aria-pressed="false" aria-label="List view" title="List view"><?= icon('list-bullet', 'w-4 h-4') ?></button>
+                    <button type="button" class="bh-dt-viewbtn" data-dt-view="grid" aria-pressed="false" aria-label="Grid view" title="Grid view"><?= icon('squares-2x2', 'w-4 h-4') ?></button>
                 </div>
                 <!-- Phones/tablets: one button opens the filter & sort drawer
                      (built by datatable.js); hidden on desktop by CSS. -->
@@ -188,7 +188,7 @@ $__selectable = $__declared
             <span class="bh-dt-bulk__count" data-dt-bulk-count aria-live="polite"></span>
             <span class="bh-dt-bulk__sep" aria-hidden="true"></span>
             <div class="bh-dt-bulk__actions" data-dt-bulk-actions></div>
-            <button type="button" class="bh-dt-bulkclear" data-dt-bulk-clear aria-label="Clear selection"><?= icon('x-mark', 'w-4 h-4') ?></button>
+            <button type="button" class="bh-btn bh-btn--ghost bh-btn--icon bh-btn--sm bh-dt-bulkclear" data-dt-bulk-clear aria-label="Clear selection" title="Clear selection"><?= icon('x-mark', 'w-4 h-4') ?></button>
         </div>
     </div>
 
@@ -218,7 +218,7 @@ $__selectable = $__declared
                 <tr data-dt-row="<?= (int) $__row['id'] ?>">
                     <td class="bh-dt-check"><input type="checkbox" class="bh-dt-rowcheck"></td>
                     <?php foreach ($__payload['columns'] as $__c): ?>
-                    <td class="<?= $__c['id'] === 'views' ? 'bh-dt-views ' : '' ?><?= $__c['align'] === 'right' ? 'bh-dt-al-right' : ($__c['align'] === 'center' ? 'bh-dt-al-center' : '') ?>"><?= $__row['cells'][$__c['id']] ?? '' ?></td>
+                    <td class="<?= $__c['id'] === 'views' ? 'bh-dt-col-views ' : '' ?><?= $__c['align'] === 'right' ? 'bh-dt-al-right' : ($__c['align'] === 'center' ? 'bh-dt-al-center' : '') ?>"><?= $__row['cells'][$__c['id']] ?? '' ?></td>
                     <?php endforeach; ?>
                     <td class="bh-dt-rowactions">
                         <?php if (!empty($editBase)): ?><a href="<?= htmlspecialchars(str_replace('{id}', (string) $__row['id'], $editBase)) ?>" title="Edit"><?= icon('pencil-square', 'w-4 h-4') ?></a><?php endif; ?>

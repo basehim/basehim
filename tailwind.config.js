@@ -12,7 +12,8 @@
  *
  * (npm run build:css does the same.) Classes are found by scanning the files
  * below, so a class built from pieces at runtime ('bh-dstat--' + tone) must
- * appear whole somewhere, or be safelisted here.
+ * appear whole somewhere, or be safelisted in tailwind.safelist.js (runtime
+ * classes themes, blocks and apps add, 1.2.115).
  */
 module.exports = {
     content: [
@@ -23,6 +24,7 @@ module.exports = {
         './install.php',
         './docs/examples/**/*.php',
     ],
+    safelist: require('./tailwind.safelist.js'),
     theme: {
         extend: {
             colors: {

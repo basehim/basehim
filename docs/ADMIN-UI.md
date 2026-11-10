@@ -97,7 +97,12 @@ sentence each are rows: `.bh-choices > label.bh-choice` with a radio, a
 `.bh-choice__title` and a `.bh-choice__text`; the chosen row is outlined in
 the accent. Two to four short exclusive options sit in one track:
 `.bh-seg > label > input[type=radio].sr-only + text` (a chosen `block` value
-shows in red). Notes inside a card: `.bh-note` (neutral) and
+shows in red). The same track takes segments that act rather than submit
+(1.2.115): `<button aria-pressed="true|false">` (a view switch, a sort
+direction) and `<a aria-current="page">` (All / Trash list links); add
+`.bh-seg--icon` for icon-only segments, each with an `aria-label`. A segment
+is 36px tall, like `.bh-btn` and a one-line `.bh-input` / `.bh-select`, so it
+sits level in a toolbar. Notes inside a card: `.bh-note` (neutral) and
 `.bh-note--warn`, an icon then the text.
 
 ## Settings screens (1.2.82)

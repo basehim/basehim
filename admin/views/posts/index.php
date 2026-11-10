@@ -13,12 +13,14 @@ $csrf = $session->csrfToken();
         <p class="text-sm text-slate-500"><?= !empty($trashed) ? 'Items in the trash can be restored or deleted permanently.' : 'Manage your ' . strtolower($typeLabel) . 's.' ?></p>
     </div>
     <div class="bh-list-actions flex items-center gap-2 flex-wrap">
-        <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-sm">
-            <a href="<?= $base ?>/admin/<?= $type ?>s" class="px-3 py-1.5 <?= empty($trashed) ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50' ?>">All</a>
-            <a href="<?= $base ?>/admin/<?= $type ?>s?view=trash" class="px-3 py-1.5 border-l border-slate-200 <?= !empty($trashed) ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50' ?>">
-                <?= icon('trash', 'w-4 h-4 mr-1') ?>Trash<?= ($trashCount ?? 0) > 0 ? ' (' . (int)$trashCount . ')' : '' ?>
+        <?php /* All / Trash: the core segmented control (1.2.115; was a one-off
+                  bordered group with a solid-blue active tab). */ ?>
+        <nav class="bh-seg" aria-label="Show">
+            <a href="<?= $base ?>/admin/<?= $type ?>s"<?= empty($trashed) ? ' aria-current="page"' : '' ?>>All</a>
+            <a href="<?= $base ?>/admin/<?= $type ?>s?view=trash"<?= !empty($trashed) ? ' aria-current="page"' : '' ?>>
+                <?= icon('trash', 'w-4 h-4') ?>Trash<?= ($trashCount ?? 0) > 0 ? ' (' . (int)$trashCount . ')' : '' ?>
             </a>
-        </div>
+        </nav>
         <?php if (!empty($trashed) && ($trashCount ?? 0) > 0): ?>
         <form method="POST" action="<?= $base ?>/admin/<?= $type ?>s/empty-trash" class="inline"
               onsubmit="return confirm('Permanently delete ALL <?= (int)$trashCount ?> trashed <?= strtolower($typeLabel) ?>(s)? This cannot be undone.')">

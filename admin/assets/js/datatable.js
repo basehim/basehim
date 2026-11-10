@@ -329,7 +329,7 @@
             root.querySelectorAll('[data-dt-rowid="' + id + '"]').forEach(function (n) { n.classList.toggle('is-selected', !!on); });
         }
         function actionsButton(row) {
-            var btn = el('button', 'bh-dt-actbtn', icon('ellipsis-vertical'));
+            var btn = el('button', 'bh-btn bh-btn--ghost bh-btn--icon bh-btn--sm bh-dt-actbtn', icon('ellipsis-vertical'));
             btn.type = 'button'; btn.title = 'Actions'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
             btn.addEventListener('click', function (e) { e.stopPropagation(); openMenu(btn, row); });
             return btn;
@@ -342,7 +342,7 @@
             // bottom of the whole row from its first cell (CSS positions them).
             var links = rowLinks(row);
             columns.forEach(function (col, i) {
-                var cls = alignCls(col); if (col.id === 'views') cls += ' bh-dt-views';
+                var cls = alignCls(col); if (col.id === 'views') cls += ' bh-dt-col-views';   // not .bh-dt-views: that is the view switch
                 if (i < fc) cls += ' bh-dt-frz bh-dt-frz--' + (i + 1) + (i === fc - 1 ? ' bh-dt-frz--last' : '');
                 var td = el('td', cls.trim()); td.innerHTML = (row.cells && row.cells[col.id]) || '';
                 if (i === 0 && links) { td.classList.add('bh-dt-linkcell'); td.appendChild(links); }
@@ -402,7 +402,7 @@
         function buildFullCard(row) {
             var card = el('div', 'bh-dt-card'); card.setAttribute('data-dt-rowid', row.id);
             var top = el('div', 'bh-dt-card__top');
-            var chk = el('span', 'bh-dt-check'); chk.appendChild(rowCheckbox(row)); top.appendChild(chk);
+            var chk = el('label', 'bh-dt-check'); chk.appendChild(rowCheckbox(row)); top.appendChild(chk);   // <label>: its padded hit area toggles the box (1.2.115)
             var cells = row.cells || {};
             if (cells.thumb) top.appendChild(el('span', 'bh-dt-card__thumb', cells.thumb));
             var main = el('div', 'bh-dt-card__main');
@@ -437,7 +437,7 @@
             var join = function (list) { return list.map(function (x) { return x.html; }).join(' '); };
 
             var body = el('div', 'bh-dt-card__body');
-            var chk = el('span', 'bh-dt-check bh-dt-card__check'); chk.appendChild(rowCheckbox(row)); body.appendChild(chk);
+            var chk = el('label', 'bh-dt-check bh-dt-card__check'); chk.appendChild(rowCheckbox(row)); body.appendChild(chk);
             if (slots.media.length) { body.appendChild(el('div', 'bh-dt-card__media', join(slots.media))); card.classList.add('has-media'); }
             var main = el('div', 'bh-dt-card__main');
             if (slots.title.length) main.appendChild(el('div', 'bh-dt-card__title', join(slots.title)));
@@ -636,7 +636,7 @@
                 var h = text('h2', 'bh-qe__title', 'Quick Edit'); h.id = tid; h.setAttribute('tabindex', '-1');
                 dlgSub = text('p', 'bh-qe__sub', '');
                 titles.appendChild(h); titles.appendChild(dlgSub);
-                var x = el('button', 'bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
+                var x = el('button', 'bh-btn bh-btn--ghost bh-btn--icon bh-btn--sm bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
                 x.addEventListener('click', function () { close(false); });
                 head.appendChild(titles); head.appendChild(x);
                 dlgBody = el('div', 'bh-qe__body');
@@ -1088,7 +1088,7 @@
                     v.badges.forEach(function (b) { bw.appendChild(text('span', 'bh-badge bh-badge--' + b.tone, b.label)); });
                     titles.appendChild(bw);
                 }
-                var x = el('button', 'bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
+                var x = el('button', 'bh-btn bh-btn--ghost bh-btn--icon bh-btn--sm bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
                 x.addEventListener('click', function () { dlg.close(); });
                 head.appendChild(media); head.appendChild(titles); head.appendChild(x);
             }
@@ -1131,7 +1131,7 @@
                 var load = el('div', 'bh-dt-qe__loading bh-qv__loading', '<span class="bh-dt-spinner"></span>');
                 load.appendChild(text('span', '', 'Loading…'));
                 body.appendChild(load);
-                var x = el('button', 'bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
+                var x = el('button', 'bh-btn bh-btn--ghost bh-btn--icon bh-btn--sm bh-qe__x', icon('x-mark')); x.type = 'button'; x.setAttribute('aria-label', 'Close');
                 x.addEventListener('click', function () { d.close(); });
                 var t = el('div', 'bh-qe__titles'); var h = text('h2', 'bh-qe__title', 'Quick View'); h.id = d.__tid; t.appendChild(h);
                 head.appendChild(t); head.appendChild(x);
@@ -1159,11 +1159,17 @@
             var m = payload.meta || { page: 1, last_page: 1, total: 0, per_page: state.perPage };
             var from = m.total ? ((m.page - 1) * m.per_page + 1) : 0;
             var to = Math.min(m.page * m.per_page, m.total);
-            if (r.count) r.count.textContent = countText(from, to, m.total);
+            if (r.count) renderCount(r.count, from, to, m.total);
             if (!r.pages) return;
             r.pages.innerHTML = '';
+            // One page needs no pager (1.2.115: it showed a lone "1" between
+            // two dead arrows, even with nothing found).
+            r.pages.hidden = (m.last_page || 1) <= 1;
+            if (r.pages.hidden) return;
             var mk = function (html, page, opts) {
-                var b = el('button', 'bh-dt-page' + (opts && opts.current ? ' is-current' : ''), html);
+                // Core small buttons (1.2.115): the current page is primary, the rest secondary.
+                var b = el('button', 'bh-btn bh-btn--sm bh-dt-page ' + (opts && opts.current ? 'bh-btn--primary is-current' : 'bh-btn--secondary'), html);
+                if (opts && opts.current) b.setAttribute('aria-current', 'page');
                 if (opts && opts.disabled) b.disabled = true; else b.addEventListener('click', function () { state.page = page; scrollToListTop(); load(); });
                 return b;
             };
@@ -1226,7 +1232,18 @@
         /** "Showing 1–20 of 50 posts" — the table's own noun (1.2.65). */
         function countText(from, to, total) {
             var noun = String(payload.label || '').toLowerCase() || 'results';
+            if (!total) return 'No ' + noun;
             return 'Showing ' + from + '–' + to + ' of ' + total + ' ' + noun;
+        }
+        // The count as parts, so phones can drop the words and keep the
+        // numbers on one row with the pager ("1–8 of 25"; 1.2.115).
+        function renderCount(node, from, to, total) {
+            var noun = String(payload.label || '').toLowerCase() || 'results';
+            node.innerHTML = '';
+            if (!total) { node.textContent = countText(from, to, total); return; }
+            node.appendChild(el('span', 'bh-dt-count__lead', 'Showing '));
+            node.appendChild(document.createTextNode(from + '–' + to + ' of ' + total));
+            node.appendChild(el('span', 'bh-dt-count__noun', ' ' + esc(noun)));
         }
         function pageWindow(cur, last) {
             var out = [], i;
@@ -1276,7 +1293,10 @@
             if (bulk.indexOf('spam') !== -1) btns.push(['spam', 'Spam', 'danger', null, BULK_ICON.spam]);
             if (bulk.indexOf('delete') !== -1) btns.push(['delete', 'Delete', 'danger', null, BULK_ICON.delete]);
             btns.forEach(function (b) {
-                var btn = el('button', 'bh-dt-bulkbtn bh-dt-bulkbtn--' + b[2]);
+                // Core buttons (1.2.115): the bulk bar used its own pill buttons with a
+                // tinted Delete; it now speaks the admin's button language.
+                var tone = { publish: 'primary', neutral: 'secondary', danger: 'danger' }[b[2]] || 'secondary';
+                var btn = el('button', 'bh-btn bh-btn--sm bh-btn--' + tone + ' bh-dt-bulkbtn');
                 btn.type = 'button';
                 if (b[4]) btn.innerHTML = icon(b[4]);
                 btn.appendChild(el('span', '', esc(b[1])));
@@ -1350,7 +1370,7 @@
             if (['table', 'list', 'grid'].indexOf(v) === -1 || v === state.view) return;
             state.view = v; root.setAttribute('data-view', v);
             root.querySelectorAll('[data-dt-view]').forEach(function (btn) {
-                btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === v);
+                var on = btn.getAttribute('data-dt-view') === v; btn.classList.toggle('is-active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false');
             });
             savePrefs(true);
         }
@@ -1470,7 +1490,7 @@
                 .then(function (d) {
                     if (d.prefs) { state.visible = d.prefs.visible; state.order = d.prefs.order; state.perPage = d.prefs.page_size; state.density = d.prefs.density; state.view = d.prefs.view; state.sort = d.prefs.sort; }
                     root.setAttribute('data-density', state.density); root.setAttribute('data-view', state.view);
-                    root.querySelectorAll('[data-dt-view]').forEach(function (btn) { btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === state.view); });
+                    root.querySelectorAll('[data-dt-view]').forEach(function (btn) { var on = btn.getAttribute('data-dt-view') === state.view; btn.classList.toggle('is-active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); });
                     if (r.perpage) r.perpage.value = String(state.perPage);
                     closePanel(); state.page = 1; rebuildVisibleColumns(); load();
                 }).catch(function (err) { if (window.bhToast) window.bhToast(err.message, 'error'); });
@@ -1527,7 +1547,7 @@
             search.type = 'search'; search.placeholder = 'Search ' + label.toLowerCase() + '…';
             var listWrap = el('div', 'bh-dt-termlist');
             var foot = el('div', 'bh-dt-filterfoot');
-            var clear = el('button', 'bh-dt-bulkclear', 'Clear'); clear.type = 'button';
+            var clear = el('button', 'bh-btn bh-btn--ghost bh-btn--sm bh-dt-filterclear', 'Clear'); clear.type = 'button';   // was the round bulk-close class (1.2.115)
             var hint = el('span', 'bh-dt-filterhint', '');
             foot.appendChild(hint); foot.appendChild(clear);
 
@@ -1535,6 +1555,7 @@
                 var n = getSel(field).length;
                 if (n) { badge.textContent = n; badge.style.display = ''; btn.classList.add('is-active'); }
                 else { badge.style.display = 'none'; btn.classList.remove('is-active'); }
+                clear.disabled = !n;   // nothing to clear (1.2.115)
             }
             function renderList(terms) {
                 var sel = getSel(field), selSet = {}; sel.forEach(function (id) { selSet[id] = true; });
@@ -1607,7 +1628,7 @@
             r.search.addEventListener('blur', function () { setSearching(r.search.value.trim() !== ''); });
         }
         root.querySelectorAll('[data-dt-view]').forEach(function (btn) {
-            btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === state.view);
+            var on = btn.getAttribute('data-dt-view') === state.view; btn.classList.toggle('is-active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false');
             btn.addEventListener('click', function () { setView(btn.getAttribute('data-dt-view')); });
         });
         if (r.perpage) r.perpage.addEventListener('change', function () {
@@ -1641,7 +1662,7 @@
             var panel = el('div', 'bh-dt-drawer__panel');
             var head = el('div', 'bh-dt-drawer__head');
             head.appendChild(el('h2', 'bh-dt-drawer__title', icon('adjustments') + '<span>Filter &amp; sort</span>'));
-            var xBtn = el('button', 'bh-dt-drawer__x', icon('x-mark')); xBtn.type = 'button'; xBtn.setAttribute('aria-label', 'Close');
+            var xBtn = el('button', 'bh-btn bh-btn--ghost bh-btn--icon bh-dt-drawer__x', icon('x-mark')); xBtn.type = 'button'; xBtn.setAttribute('aria-label', 'Close');
             head.appendChild(xBtn);
             var body = el('div', 'bh-dt-drawer__body');
             var foot = el('div', 'bh-dt-drawer__foot');
@@ -1661,7 +1682,7 @@
                 sortSel = el('select', 'bh-select bh-dt-sort__sel');
                 var o0 = el('option'); o0.value = ''; o0.textContent = 'Default order'; sortSel.appendChild(o0);
                 sortCols().forEach(function (c) { var o = el('option'); o.value = c.id; o.textContent = c.label || c.id; sortSel.appendChild(o); });
-                var dir = el('div', 'bh-dt-sortdir');
+                var dir = el('div', 'bh-seg bh-seg--icon bh-dt-sortdir'); dir.setAttribute('role', 'group'); dir.setAttribute('aria-label', 'Sort direction');
                 sortUp = el('button', '', icon('arrow-up')); sortUp.type = 'button'; sortUp.setAttribute('aria-label', 'Ascending');
                 sortDown = el('button', '', icon('arrow-down')); sortDown.type = 'button'; sortDown.setAttribute('aria-label', 'Descending');
                 dir.appendChild(sortUp); dir.appendChild(sortDown);
@@ -1731,6 +1752,7 @@
                 var asc = c && tok.indexOf(state.sort) !== -1 && /(_az|_asc|oldest)$/.test(state.sort);
                 var desc = c && tok.indexOf(state.sort) !== -1 && !asc;
                 sortUp.classList.toggle('is-active', !!asc); sortDown.classList.toggle('is-active', !!desc);
+                sortUp.setAttribute('aria-pressed', asc ? 'true' : 'false'); sortDown.setAttribute('aria-pressed', desc ? 'true' : 'false');
                 sortUp.disabled = sortDown.disabled = !c;
             }
             function activeCount() {
@@ -1853,9 +1875,15 @@
             function measureGrid() {
                 try {
                     if (!r.wrap || !r.table) return;
+                    // Measure the table as it lays out normally: grid mode keeps its
+                    // cells on one line, which widens the table, so measuring with
+                    // the mode on would keep it on forever (1.2.115). Read in the
+                    // same frame, so nothing paints in between.
+                    var was = root.classList.contains('bh-dt--xscroll');
+                    if (was) root.classList.remove('bh-dt--xscroll');
                     var overflow = (r.table.scrollWidth - r.wrap.clientWidth) > 1;
                     root.classList.toggle('bh-dt--xscroll', overflow);
-                    if (!overflow) return;
+                    if (!overflow) { r.wrap.classList.remove('has-more-right', 'is-xscrolled'); return; }
                     // Cumulative left offset for each frozen leading cell: cell k
                     // sits at the summed width of the frozen cells before it,
                     // measured from the header row (columns share widths).
@@ -1876,7 +1904,7 @@
             // Show the frozen column's right-edge shadow only once scrolled, so
             // it reads as "more columns hide under here".
             function updateXShadow() {
-                try { if (r.wrap) r.wrap.classList.toggle('is-xscrolled', r.wrap.scrollLeft > 0); } catch (e) {}
+                try { if (r.wrap) { var w = r.wrap; w.classList.toggle('is-xscrolled', w.scrollLeft > 0); w.classList.toggle('has-more-right', w.scrollLeft + w.clientWidth < w.scrollWidth - 1); } } catch (e) {}
             }
             if (r.wrap && r.wrap.addEventListener) {
                 r.wrap.addEventListener('scroll', function () {

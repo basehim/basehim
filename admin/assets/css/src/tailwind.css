@@ -86,6 +86,11 @@
 .bh-input:focus, .bh-select:focus, .bh-textarea:focus { @apply border-accent-500 outline-none ring-[3px] ring-accent-500/20; }
 .bh-input[aria-invalid="true"], .bh-select[aria-invalid="true"], .bh-textarea[aria-invalid="true"] { @apply border-red-500; }
 .bh-textarea { @apply min-h-[6rem] resize-y; }
+/* One-line fields are exactly as tall as a default button (36 px), so a field
+   and a button side by side line up (1.2.115; py-2 plus the line height came
+   to 37.3 px). A list box keeps its own height. */
+.bh-input, .bh-select { @apply h-9 py-0; }
+.bh-select[multiple], .bh-select[size]:not([size="1"]) { @apply h-auto py-2; }
 .bh-input--auto, .bh-select--auto { @apply inline-block w-auto; }
 /* Small fields match small buttons (32 px). */
 .bh-input--sm, .bh-select--sm { @apply h-8 rounded-lg px-2.5 py-0 text-[0.8125rem]; }
@@ -132,6 +137,20 @@
 .bh-seg label:has(input:checked) { @apply bg-white text-slate-900 shadow-sm shadow-slate-900/10; }
 .bh-seg label:has(input:checked[value="block"]) { @apply text-red-700; }
 .bh-seg label:has(input:focus-visible) { @apply ring-2 ring-accent-500/40; }
+/* Button and link segments (1.2.115): the same track for things that act
+   instead of submitting a radio — a view switch (<button aria-pressed>), a
+   pair of list links (<a aria-current="page">), a sort direction. 36px tall,
+   like .bh-btn and .bh-input, so a segment sits level in a toolbar. */
+.bh-seg > button, .bh-seg > a {
+    @apply inline-flex h-8 cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md border-0 bg-transparent px-3 text-[0.8125rem] font-medium leading-none text-slate-600 no-underline transition-colors duration-150;
+}
+.bh-seg > button svg, .bh-seg > a svg { @apply h-4 w-4 flex-none; }
+.bh-seg > button:hover:not(:disabled), .bh-seg > a:hover { @apply text-slate-900; }
+.bh-seg > button[aria-pressed="true"], .bh-seg > a[aria-current="page"] { @apply bg-white text-slate-900 shadow-sm shadow-slate-900/10; }
+.bh-seg > button:disabled { @apply cursor-not-allowed opacity-40; }
+.bh-seg > button:focus-visible, .bh-seg > a:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
+/* Icon-only segments (each needs an aria-label): square, 32px inside the track. */
+.bh-seg--icon > button, .bh-seg--icon > a { @apply w-8 px-0; }
 
 /* ── Notes inside a card: --info (neutral) and --warn. ─────────────────── */
 .bh-note { @apply flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-relaxed text-slate-700; }
