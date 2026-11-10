@@ -352,9 +352,85 @@ $tables->register('comments.list', [
     ],
     // No per-row Edit screen for comments — moderation happens inline through
     // the row action menu and bulk bar, which are built from bulk_actions.
+    // Quick View stands in for an edit screen: it shows the full comment
+    // (the list truncates it to 140 chars) so a moderator can read it in
+    // place before approving, marking spam or deleting.
     'row_actions'  => [],
     'bulk_actions' => ['approve', 'pending', 'spam', 'delete'],
     'search_placeholder' => 'Search comments…',
+    'quick_view'   => static function (int $id) use ($db): ?array {
+        $c = $db->selectOne(
+            "SELECT c.*, p.title AS post_title, p.slug AS post_slug, p.type AS post_type
+             FROM {comments} c LEFT JOIN {posts} p ON p.id = c.post_id
+             WHERE c.id = :id",
+            ['id' => $id]
+        );
+        if ($c === null) {
+            return null;
+        }
+
+        $base   = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+        $name   = trim((string) ($c['author_name'] ?? ''));
+        $email  = trim((string) ($c['author_email'] ?? ''));
+        $status = (string) ($c['status'] ?? 'pending');
+        $body   = trim((string) ($c['content'] ?? ''));
+
+        // Status → badge tone (the Quick View's own palette, not CSS classes).
+        $tone = ['approved' => 'green', 'pending' => 'amber', 'spam' => 'red', 'trash' => 'gray'][$status] ?? 'gray';
+        $badges = [['label' => ucfirst($status), 'tone' => $tone]];
+
+        // Author details.
+        $items = [];
+        if ($email !== '') {
+            $items[] = ['label' => 'Email', 'value' => $email, 'url' => 'mailto:' . $email, 'mono' => true];
+        }
+        $site = \App\Services\CommentService::safeAuthorUrl($c['author_url'] ?? null);
+        if ($site !== null) {
+            $items[] = ['label' => 'Website', 'value' => $site, 'url' => $site];
+        }
+        $ip = trim((string) ($c['author_ip'] ?? ''));
+        if ($ip !== '') {
+            $items[] = ['label' => 'IP address', 'value' => $ip, 'mono' => true];
+        }
+        $dt = Time::local($c['created_at'] ?? null);
+        if ($dt !== null) {
+            $items[] = ['label' => 'Posted', 'value' => $dt->format(Time::dateFormat() . ' ' . Time::timeFormat())];
+        }
+        if (!empty($c['parent_id'])) {
+            $items[] = ['label' => 'In reply to', 'value' => 'Comment #' . (int) $c['parent_id']];
+        }
+
+        // The post this comment is on, linked to its editor.
+        $postTitle = trim((string) ($c['post_title'] ?? ''));
+        $postId    = (int) ($c['post_id'] ?? 0);
+        if ($postTitle !== '' && $postId > 0) {
+            $type = (string) ($c['post_type'] ?? 'post');
+            $area = in_array($type, ['post', 'page', 'template'], true)
+                ? '/admin/' . rawurlencode($type) . 's'
+                : '/admin/content/' . rawurlencode($type);
+            $items[] = ['label' => 'On post', 'value' => $postTitle, 'url' => $base . $area . '/' . $postId . '/edit'];
+        }
+
+        $sections = [];
+        if ($items !== []) {
+            $sections[] = ['title' => 'Details', 'items' => $items];
+        }
+        // The full comment body, as a labelless full-width block that keeps
+        // its line breaks (the wide Quick View item added in core 1.2.105).
+        $sections[] = ['title' => 'Comment', 'items' => [[
+            'label' => '',
+            'wide'  => true,
+            'value' => $body !== '' ? $body : '(empty comment)',
+        ]]];
+
+        return [
+            'title'    => $name !== '' ? $name : 'Anonymous',
+            'subtitle' => $email !== '' ? $email : null,
+            'icon'     => 'chat-bubble-left-right',
+            'badges'   => $badges,
+            'sections' => $sections,
+        ];
+    },
 ]);
 
 // ---------------------------------------------------------------------------
