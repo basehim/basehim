@@ -21,7 +21,7 @@ namespace App\Core\Table;
  * Field definitions returned by form() are plain arrays:
  *
  *   name      string   the key save() receives back
- *   type      string   text | slug | select | checklist | tags | number | toggle | date | time
+ *   type      string   text | slug | textarea | select | checklist | tags | number | toggle | date | time
  *   label     string
  *   value     mixed    the current value
  *   options   list     [{value, label}] for select and checklist

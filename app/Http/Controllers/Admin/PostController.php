@@ -76,6 +76,8 @@ class PostController extends Controller
             'type' => $this->type,
             'trashed' => $trashed,
             'trashCount' => $posts->trashedCount($this->type),
+            // Empty trash removes everyone's items, so it needs delete_others_* (1.2.122).
+            'canEmptyTrash' => \App\Http\Middleware\CheckCapability::userCan($this->user(), $this->capabilityFor('delete_others')),
         ]);
     }
 
@@ -132,6 +134,9 @@ class PostController extends Controller
             // Trash actions must find soft-deleted rows; normal find() excludes them.
             $existing = $trashActions ? $repo->findTrashedOrAny($id) : $posts->find($id);
             if (!$existing || ($existing['type'] ?? '') !== $this->type) { $skipped++; continue; }
+            // Restore and Delete permanently are for items in the trash only (1.2.122):
+            // a hand-made request can't use them to wipe a live post.
+            if ($trashActions && empty($existing['deleted_at'])) { $skipped++; continue; }
 
             // Per-item ownership check (edit for status changes, delete for delete).
             $own = (int)($existing['author_id'] ?? 0) === (int)($me['id'] ?? -1);
@@ -163,8 +168,18 @@ class PostController extends Controller
 
         \App\Services\ActivityLogService::record($this->userId(), $this->type . '.bulk_' . $action, $this->type, null,
             sprintf('Bulk %s: %d done, %d skipped', $action, $done, $skipped));
+        if ($trashActions) {
+            // Plain words for the trash (1.2.122): "2 posts restored.", "1 page deleted permanently."
+            $noun = $this->type . ($done === 1 ? '' : 's');
+            $msg = $done > 0
+                ? sprintf('%d %s %s.', $done, $noun, $action === 'restore' ? 'restored' : 'deleted permanently')
+                : 'Nothing was changed.';
+            if ($skipped) $msg .= sprintf(' %d skipped: not yours to change, or no longer in the trash.', $skipped);
+            $this->flash($done > 0 ? 'success' : 'error', $msg);
+        } else {
         $this->flash($done > 0 ? 'success' : 'error',
             sprintf('Bulk %s: %d %s(s) processed%s.', str_replace('_', ' ', $action), $done, $this->type, $skipped ? ", {$skipped} skipped" : ''));
+        }
         return $this->redirect($this->basePath() . ($trashActions ? '?view=trash' : ''));
     }
 
@@ -409,17 +424,18 @@ class PostController extends Controller
         if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }
         /** @var PostService $posts */
         $posts = $this->app->make(PostService::class);
-        // Only users who can delete others' items may empty the whole trash.
-        if (!\App\Http\Middleware\CheckCapability::userCan($this->user(), $this->capabilityFor('delete_others'))
-            && !\App\Http\Middleware\CheckCapability::userCan($this->user(), $this->capabilityFor('delete'))) {
+        // Only users who can delete others' items may empty the whole trash: it
+        // removes everyone's. (Before 1.2.122 delete_* alone was enough, so an
+        // author could wipe other people's trashed posts.)
+        if (!\App\Http\Middleware\CheckCapability::userCan($this->user(), $this->capabilityFor('delete_others'))) {
             $this->flash('error', 'You do not have permission to empty the trash.');
             return $this->redirect($this->basePath() . '?view=trash');
         }
         $n = $posts->emptyTrash($this->type);
         \App\Services\ActivityLogService::record($this->userId(), $this->type . '.trash_emptied', $this->type, null,
             "Emptied trash ({$n} item(s))");
-        $this->flash('success', "Trash emptied — {$n} " . $this->type . "(s) permanently deleted.");
-        return $this->redirect($this->basePath());
+        $this->flash('success', sprintf('Trash emptied: %d %s deleted permanently.', $n, $this->type . ($n === 1 ? '' : 's')));
+        return $this->redirect($this->basePath() . '?view=trash');
     }
 
     /**

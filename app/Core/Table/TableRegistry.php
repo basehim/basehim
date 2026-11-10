@@ -117,9 +117,26 @@ final class TableRegistry
             rowLinks: $rowLinks,
             actions: $this->buildActions($key, (array) ($def['actions'] ?? [])),
             quickView: $quickView,
+            empty: self::emptyState((array) ($def['empty'] ?? [])),
         );
 
         return $this->tables[$key] = $table;
+    }
+
+    /**
+     * A table's own empty state (1.2.122): plain strings, and an icon the
+     * client draws (inbox or trash). Anything else is dropped.
+     *
+     * @return array{title?:string,text?:string,icon?:string}
+     */
+    private static function emptyState(array $raw): array
+    {
+        $out = [];
+        foreach (['title', 'text'] as $k) {
+            if (isset($raw[$k]) && is_string($raw[$k]) && trim($raw[$k]) !== '') $out[$k] = trim($raw[$k]);
+        }
+        if (isset($raw['icon']) && in_array($raw['icon'], ['inbox', 'trash'], true)) $out['icon'] = $raw['icon'];
+        return $out;
     }
 
     /**

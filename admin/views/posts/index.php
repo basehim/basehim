@@ -21,9 +21,11 @@ $csrf = $session->csrfToken();
                 <?= icon('trash', 'w-4 h-4') ?>Trash<?= ($trashCount ?? 0) > 0 ? ' (' . (int)$trashCount . ')' : '' ?>
             </a>
         </nav>
-        <?php if (!empty($trashed) && ($trashCount ?? 0) > 0): ?>
+        <?php if (!empty($trashed) && ($trashCount ?? 0) > 0 && !empty($canEmptyTrash)): ?>
+        <?php // Everyone's trashed items, so only for delete_others_* (1.2.122). The
+              // layout turns the confirm() into the admin's own danger dialog. ?>
         <form method="POST" action="<?= $base ?>/admin/<?= $type ?>s/empty-trash" class="inline"
-              onsubmit="return confirm('Permanently delete ALL <?= (int)$trashCount ?> trashed <?= strtolower($typeLabel) ?>(s)? This cannot be undone.')">
+              onsubmit="return confirm('<?= htmlspecialchars(sprintf('Delete all %d %s in the trash permanently? This cannot be undone.', (int) $trashCount, strtolower($typeLabel) . ((int) $trashCount === 1 ? '' : 's')), ENT_QUOTES) ?>')">
             <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
             <button type="submit" class="bh-btn bh-btn--danger">
                 <?= icon('trash', 'w-4 h-4') ?> Empty trash
@@ -39,10 +41,20 @@ $csrf = $session->csrfToken();
 </div>
 
 <?php
-// 1.2.54 — the Core Data Table. Used for the main list; the trash view and
-// ?view=classic keep the original server-rendered table as a fallback.
-$__useDataTable = empty($trashed) && (($_GET['view'] ?? '') !== 'classic');
-if ($__useDataTable):
+// 1.2.54 — the Core Data Table. Used for the main list and, since 1.2.122, for
+// the posts' and pages' trash; ?view=classic keeps the original
+// server-rendered list as a fallback.
+$__trashTables = ['post' => 'content.posts.trash', 'page' => 'content.pages.trash'];
+$__useDataTable = (($_GET['view'] ?? '') !== 'classic') && (empty($trashed) || isset($__trashTables[$type]));
+if ($__useDataTable && !empty($trashed)):
+    // Restore / Delete permanently go to the list's bulk handler; a trashed
+    // item has no editor, so no Edit link.
+    $this->include('partials.datatable', [
+        'tableKey'     => $__trashTables[$type],
+        'bulkEndpoint' => $base . '/admin/' . $type . 's/bulk',
+        'editBase'     => '',
+    ]);
+elseif ($__useDataTable):
     // App-registered types have their own list (1.2.94); until then they all showed posts.
     $__tableKey = ['post' => 'content.posts', 'page' => 'content.pages', 'template' => 'content.templates'][$type] ?? \App\Services\Table\TypeTableProvider::keyFor($type);
     $this->include('partials.datatable', [

@@ -214,6 +214,37 @@ Everything else runs through `bh:dt-bulk` (with `bulkEvents`) or the
 `bulkEndpoint` form, as before. A status filter can name its options:
 `'filter' => ['field' => 'status', 'in' => [...], 'labels' => ['consent' => 'Needs approval']]`.
 
+### Empty state (1.2.122)
+
+A table can word its own empty state, shown when nothing is listed and no
+search or filter is on (with one, "No matches" is shown as before):
+
+```php
+'empty' => ['icon' => 'trash', 'title' => 'Trash is empty',
+            'text' => 'Posts you move to the trash stay here until you restore them or delete them permanently.'],
+```
+
+`icon` is `inbox` (the default) or `trash`. The posts' and pages' trash
+(`content.posts.trash`, `content.pages.trash`) use it, with declared
+`restore` and `delete_forever` actions gated by the row flags `restore` and
+`purge` that their provider sets for each user.
+
+### Categories, Tags and apps' taxonomies (1.2.123)
+
+Each taxonomy has a table, `terms.{slug}` (dashes as underscores), served by
+`TermTableProvider` and paged in SQL (`TaxonomyRepository::paginateTerms()`):
+Name (with "Under {parent}"), Slug, Description (shown by default for
+hierarchical taxonomies) and a count that opens the posts list filtered by the
+term. Filter `usage` (`used` / `unused`); sorts `name_az`, `name_za`,
+`count_desc`, `count_asc`, `newest`, `oldest`. Quick Edit (`TermQuickEdit`)
+changes name, slug, parent and description. A rename keeps the slug, and a
+term can't move under its own subtree. Delete posts to
+`/admin/taxonomies/{slug}/bulk`.
+
+Quick Edit fields may be `textarea` (1.2.123). A page can open a row's Quick
+Edit with the inbound event `bh:dt-quickedit` `{ id }` (the row must be on the
+current page).
+
 ### Selection and phone cards (1.2.102)
 
 - A table with no bulk action shows no checkboxes. A bulk action is a

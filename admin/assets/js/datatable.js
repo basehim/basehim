@@ -281,6 +281,7 @@
          *                 { table, action, id, key, row } — the page runs it.
          *   bh:dt-query   (in)   { search?, filters?, sort? } — merged, page 1, load
          *   bh:dt-reload  (in)   { clearSelection? } — reload the current page
+         *   bh:dt-quickedit (in) { id } — open Quick Edit for a row on the current page
          */
         function emit(name, detail, cancelable) {
             var ev;
@@ -304,6 +305,14 @@
         root.addEventListener('bh:dt-reload', function (e) {
             if (e && e.detail && e.detail.clearSelection) clearSelection();
             load();
+        });
+        // bh:dt-quickedit (in) { id } — open Quick Edit for a row on this page (1.2.123:
+        // the Categories/Tags deep link ?edit={id}, from the front-end admin bar).
+        root.addEventListener('bh:dt-quickedit', function (e) {
+            var id = e && e.detail ? Number(e.detail.id) : 0;
+            if (!id || !payload.quick_edit) return;
+            var row = (payload.rows || []).filter(function (x) { return Number(x.id) === id; })[0];
+            if (row) quickEdit.open(row, null);
         });
 
         // --- header ----------------------------------------------------------
@@ -546,9 +555,10 @@
         function renderEmpty() {
             var noun = String(payload.label || '').toLowerCase() || 'items';
             var filtered = !!state.search || Object.keys(state.filters || {}).length > 0;
+            var own = payload.empty || {};   // the table's own words (1.2.122), e.g. "Trash is empty"
             var h = filtered
                 ? stateHtml('empty', 'magnifying-glass', 'No matches', 'No ' + noun + ' match the current search or filters.')
-                : stateHtml('empty', 'inbox', 'Nothing here yet', 'There are no ' + noun + ' to show yet.');
+                : stateHtml('empty', (own.icon && SVG[own.icon]) ? own.icon : 'inbox', own.title || 'Nothing here yet', own.text || ('There are no ' + noun + ' to show yet.'));
             r.body.innerHTML = '<tr><td colspan="99">' + h + '</td></tr>'; r.cards.innerHTML = h;
         }
         function renderError(msg) {
@@ -864,6 +874,13 @@
                         input.appendChild(row);
                     });
                     cur.initial[fd.name] = chosen.slice().sort().join(',');
+                } else if (fd.type === 'textarea') {
+                    // A few lines of text (1.2.123: a term's description).
+                    input = el('textarea', 'bh-textarea'); input.rows = 3;
+                    if (fd.max) input.maxLength = fd.max;
+                    if (fd.required) { input.required = true; input.setAttribute('aria-required', 'true'); }
+                    input.value = value == null ? '' : String(value);
+                    cur.initial[fd.name] = input.value;
                 } else {
                     input = el('input', 'bh-input');
                     input.type = { number: 'number', date: 'date', time: 'time' }[fd.type] || 'text';

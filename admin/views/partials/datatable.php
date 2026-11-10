@@ -214,9 +214,13 @@ $__selectable = $__declared
                     // The same empty state datatable.js draws (1.2.66).
                     $__noun = strtolower($__def->label) ?: 'items';
                     $__filtered = $__payload['search'] !== '' || $__filters !== [];
-                    $__path = $__filtered ? 'M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z' : 'M4 8l2-4h12l2 4v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8zM4 12h4l2 3h4l2-3h4';
+                    $__own = $__def->empty;   // the table's own empty state (1.2.122)
+                    $__path = $__filtered ? 'M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z'
+                        : (($__own['icon'] ?? '') === 'trash' ? 'M6 7.5h12M9.75 7.5V6a1.5 1.5 0 011.5-1.5h1.5A1.5 1.5 0 0114.25 6v1.5m-7 0 .64 11a1.5 1.5 0 001.5 1.4h5.22a1.5 1.5 0 001.5-1.4l.64-11' : 'M4 8l2-4h12l2 4v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8zM4 12h4l2 3h4l2-3h4');
+                    $__emptyTitle = $__filtered ? 'No matches' : ($__own['title'] ?? 'Nothing here yet');
+                    $__emptyText = $__filtered ? 'No ' . $__noun . ' match the current search or filters.' : ($__own['text'] ?? 'There are no ' . $__noun . ' to show yet.');
                 ?>
-                <tr><td colspan="99"><div class="bh-dt-state bh-dt-state--empty" role="status"><span class="bh-dt-state__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="<?= $__path ?>"/></svg></span><p class="bh-dt-state__title"><?= $__filtered ? 'No matches' : 'Nothing here yet' ?></p><p class="bh-dt-state__text"><?= htmlspecialchars($__filtered ? 'No ' . $__noun . ' match the current search or filters.' : 'There are no ' . $__noun . ' to show yet.') ?></p></div></td></tr>
+                <tr><td colspan="99"><div class="bh-dt-state bh-dt-state--empty" role="status"><span class="bh-dt-state__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="<?= $__path ?>"/></svg></span><p class="bh-dt-state__title"><?= htmlspecialchars($__emptyTitle) ?></p><p class="bh-dt-state__text"><?= htmlspecialchars($__emptyText) ?></p></div></td></tr>
                 <?php else: foreach ($__payload['rows'] as $__row): ?>
                 <tr data-dt-row="<?= (int) $__row['id'] ?>">
                     <td class="bh-dt-check"><input type="checkbox" class="bh-dt-rowcheck"></td>

@@ -136,7 +136,9 @@ $tagsCell = static function (array $row, $prepared): string {
     $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
     $out = [];
     foreach ($tags as $t) {
-        $url = $base . '/admin/taxonomies/tag?edit=' . (int) $t['id'] . '#term-row-' . (int) $t['id'];
+        // 1.2.123: a tag filters the list to its posts (it opened the old Tags
+        // screen's inline editor, which the paged table no longer has).
+        $url = $base . '/admin/posts?tag=' . (int) $t['id'];
         $out[] = '<a class="bh-dt-chip bh-dt-chip--link" href="' . htmlspecialchars($url, ENT_QUOTES) . '">'
                . htmlspecialchars((string) $t['name'], ENT_QUOTES) . '</a>';
     }
@@ -228,6 +230,44 @@ $tables->register('content.posts', [
     'search_placeholder' => 'Search posts, titles, or author…',
 ]);
 
+/*
+ * Trash (1.2.122): the posts' and pages' trash on the same table component as
+ * their lists. The title is plain text (a trashed item has no editor until it
+ * is restored); "Restores as" is the status it goes back to; Deleted is when it
+ * was moved here. Restore and Delete permanently are offered per row only to
+ * people allowed to (the provider's `restore` / `purge` flags) and post to the
+ * list's bulk handler, which checks each row again.
+ */
+$trashTitleCell = static function (array $row): string {
+    $title = htmlspecialchars((string) (($row['title'] ?? '') !== '' ? $row['title'] : '(no title)'), ENT_QUOTES);
+    $slug  = htmlspecialchars((string) ($row['slug'] ?? ''), ENT_QUOTES);
+    return '<span class="bh-dt-title">' . $title . '</span>'
+         . ($slug !== '' ? '<span class="bh-dt-sub">/' . $slug . '</span>' : '');
+};
+$deletedCell = static function (array $row): string {
+    $dt = Time::local($row['deleted_at'] ?? null);
+    if ($dt === null) return '';
+    return '<span class="bh-dt-date">' . htmlspecialchars($dt->format(Time::dateFormat()), ENT_QUOTES) . '</span>'
+         . '<span class="bh-dt-sub">' . htmlspecialchars($dt->format(Time::timeFormat()), ENT_QUOTES) . '</span>';
+};
+$trashColumns = [
+    ['id' => 'thumb',   'label' => 'Image', 'render' => $thumbCell,
+     'default_visible' => true, 'can_hide' => true, 'align' => 'center', 'card' => 'media'],
+    ['id' => 'title',   'label' => 'Title', 'render' => $trashTitleCell,
+     'sortable' => ['title_az', 'title_za'], 'default_visible' => true, 'can_hide' => false, 'card' => 'title'],
+    ['id' => 'author',  'label' => 'Author', 'render' => $authorCell, 'default_visible' => true, 'card' => 'side'],
+    ['id' => 'status',  'label' => 'Restores as', 'render' => $statusBadge,
+     'filter' => $postStatusFilter + ['all' => 'Any status'],
+     'default_visible' => true, 'align' => 'center', 'card' => 'under'],
+    ['id' => 'deleted', 'label' => 'Deleted', 'render' => $deletedCell, 'sortable' => ['deleted_desc', 'deleted_asc'],
+     'default_visible' => true, 'align' => 'right', 'card' => 'meta', 'card_icon' => 'trash'],
+];
+$trashActions = static fn (string $noun): array => [
+    ['id' => 'restore', 'label' => 'Restore', 'icon' => 'arrow-uturn-left', 'tone' => 'publish', 'flag' => 'restore'],
+    ['id' => 'delete_forever', 'label' => 'Delete permanently', 'icon' => 'trash', 'tone' => 'danger', 'danger' => true,
+     'flag' => 'purge', 'confirm' => 'Permanently delete {n} ' . $noun . '{s}? This can\'t be undone.'],
+];
+
 $tables->register('content.pages', [
     'label'        => 'Pages',
     'capability'   => 'edit_pages',
@@ -242,6 +282,116 @@ $tables->register('content.pages', [
     'bulk_actions' => ['publish', 'draft', 'delete'],
     'search_placeholder' => 'Search pages…',
 ]);
+
+$tables->register('content.posts.trash', [
+    'label'        => 'Posts in the trash',
+    'capability'   => 'edit_posts',
+    'area'         => '/admin/posts',
+    'provider'     => \App\Services\Table\PostTrashTableProvider::class,
+    'default_sort' => 'deleted_desc',
+    'page_sizes'   => [20, 50, 100],
+    'columns'      => $trashColumns,
+    'actions'      => $trashActions('post'),
+    'search_placeholder' => 'Search the trash…',
+    'empty'        => ['icon' => 'trash', 'title' => 'Trash is empty',
+                       'text' => 'Posts you move to the trash stay here until you restore them or delete them permanently.'],
+]);
+
+$tables->register('content.pages.trash', [
+    'label'        => 'Pages in the trash',
+    'capability'   => 'edit_pages',
+    'area'         => '/admin/pages',
+    'provider'     => \App\Services\Table\PageTrashTableProvider::class,
+    'default_sort' => 'deleted_desc',
+    'page_sizes'   => [20, 50, 100],
+    'columns'      => $trashColumns,
+    'actions'      => $trashActions('page'),
+    'search_placeholder' => 'Search the trash…',
+    'empty'        => ['icon' => 'trash', 'title' => 'Trash is empty',
+                       'text' => 'Pages you move to the trash stay here until you restore them or delete them permanently.'],
+]);
+
+/*
+ * Categories, Tags and apps' taxonomies (1.2.123): one table each, keyed
+ * terms.{slug}. Paged, searched and sorted in SQL, so a site with thousands
+ * of tags stays quick (the old screen printed every term twice).
+ */
+$termNameCell = static function (array $row): string {
+    $name = htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES);
+    $parent = (string) ($row['parent_name'] ?? '');
+    return '<span class="bh-dt-title">' . $name . '</span>'
+         . ($parent !== '' ? '<span class="bh-dt-sub">Under ' . htmlspecialchars($parent, ENT_QUOTES) . '</span>' : '');
+};
+$termSlugCell = static fn (array $row): string =>
+    '<span class="bh-dt-mono">/' . htmlspecialchars((string) ($row['slug'] ?? ''), ENT_QUOTES) . '</span>';
+$termDescCell = static function (array $row): string {
+    $d = trim((string) ($row['description'] ?? ''));
+    if ($d === '') return '<span class="bh-dt-sub">—</span>';
+    return '<span class="bh-dt-clamp">' . htmlspecialchars(mb_substr($d, 0, 300), ENT_QUOTES) . '</span>';
+};
+/** The count, linking to the posts list filtered by the term (Categories and Tags). */
+$termCountCell = static function (array $row): string {
+    $n = (int) ($row['count'] ?? 0);
+    $tax = (string) ($row['taxonomy'] ?? '');
+    if ($n > 0 && in_array($tax, ['category', 'tag'], true)) {
+        $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+        $url = $base . '/admin/posts?' . $tax . '=' . (int) ($row['id'] ?? 0);
+        return '<a class="bh-dt-countlink" href="' . htmlspecialchars($url, ENT_QUOTES) . '" title="Show these posts">' . number_format($n) . '</a>';
+    }
+    return '<span class="' . ($n === 0 ? 'bh-dt-sub' : '') . '">' . number_format($n) . '</span>';
+};
+$termLinks = static function (array $rows): array {
+    $reg = \App\Core\Application::getInstance()->make(\App\Services\TaxonomyRegistry::class);
+    $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+    $out = [];
+    foreach ($rows as $row) {
+        $url = $reg->termUrl((string) ($row['taxonomy'] ?? ''), (string) ($row['slug'] ?? ''), $base);
+        if ($url !== '') $out[(int) $row['id']] = ['url' => $url, 'live' => true];
+    }
+    return $out;
+};
+foreach ($app->make(\App\Services\TaxonomyRegistry::class)->all() as $__slug => $__tx) {
+    $__slug = (string) $__slug;
+    $__one = strtolower((string) ($__tx['singular'] ?? 'term'));
+    $__many = strtolower((string) ($__tx['label'] ?? 'terms'));
+    $__onPosts = in_array($__slug, ['category', 'tag'], true);
+    $__cols = [
+        ['id' => 'name', 'label' => 'Name', 'render' => $termNameCell, 'sortable' => ['name_az', 'name_za'],
+         'default_visible' => true, 'can_hide' => false, 'card' => 'title'],
+        ['id' => 'slug', 'label' => 'Slug', 'render' => $termSlugCell, 'default_visible' => true,
+         'responsive' => 'tablet-up', 'card' => 'under'],
+        ['id' => 'description', 'label' => 'Description', 'render' => $termDescCell,
+         'default_visible' => !empty($__tx['hierarchical']), 'responsive' => 'desktop-only', 'card' => 'hide'],
+        ['id' => 'count', 'label' => $__onPosts ? 'Posts' : 'Items', 'render' => $termCountCell,
+         'sortable' => ['count_desc', 'count_asc'], 'default_visible' => true, 'align' => 'right',
+         'card' => 'meta', 'card_icon' => 'document-text',
+         'filter' => ['field' => 'usage', 'in' => ['used', 'unused'], 'all' => 'Any usage',
+                      'labels' => ['used' => 'In use', 'unused' => 'Not used']]],
+    ];
+    $__actions = [];
+    if ($__onPosts) {
+        $__actions[] = ['id' => 'posts', 'label' => 'View posts', 'icon' => 'document-text',
+                        'href' => '/admin/posts?' . $__slug . '={id}'];
+    }
+    $__actions[] = ['id' => 'delete', 'label' => 'Delete', 'icon' => 'trash', 'tone' => 'danger', 'danger' => true,
+                    'confirm' => 'Delete {n} ' . $__one . '{s}? ' . ($__onPosts ? 'Posts keep their content; ' : 'Items keep their content; ')
+                                 . 'the ' . $__one . ' is removed from them. This can\'t be undone.'];
+    try { $tables->register(\App\Services\Table\TermTableProvider::keyFor($__slug), [
+        'label'        => $__many,
+        'capability'   => 'manage_taxonomies',
+        'area'         => '/admin/taxonomies',
+        'provider'     => \App\Services\Table\TermTableProvider::class,
+        'quick_edit'   => \App\Services\Table\TermQuickEdit::class,
+        'row_links'    => $termLinks,
+        'default_sort' => empty($__tx['hierarchical']) ? 'count_desc' : 'name_az',
+        'page_sizes'   => [20, 50, 100],
+        'columns'      => $__cols,
+        'actions'      => $__actions,
+        'search_placeholder' => 'Search ' . $__many . '…',
+        'empty'        => ['icon' => 'inbox', 'title' => 'No ' . $__many . ' yet',
+                           'text' => ucfirst($__many) . ' you add appear here.'],
+    ]); } catch (\Throwable) {}
+}
 
 // App-registered content types (1.2.94): one list each, content.type.{slug},
 // with the columns the type uses. Before 1.2.94 they all used content.posts

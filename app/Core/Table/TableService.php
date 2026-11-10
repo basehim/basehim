@@ -212,6 +212,7 @@ final class TableService
             'actions'      => $table->actions,
             'quick_edit'   => $table->quickEdit !== null,
             'quick_view'   => $table->quickView !== null,
+            'empty'        => $table->empty === [] ? null : $table->empty,
         ];
     }
 

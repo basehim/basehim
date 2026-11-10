@@ -146,6 +146,41 @@ $ajax->register('terms.tag_overview', [
     'description' => 'Most used and recently used tags for the tag box.',
 ]);
 
+// Categories, tags and apps' terms: the New dialog on their screen (1.2.123).
+// Same capability and area as the screen; the handler checks the taxonomy.
+use App\Http\Controllers\Ajax\TermManageActions;
+
+$ajax->register('terms.create', [
+    'handler'     => [TermManageActions::class, 'create'],
+    'capability'  => 'manage_taxonomies',
+    'area'        => '/admin/taxonomies',
+    'idempotent'  => true,
+    'rate_limit'  => ['max' => 120, 'per' => 60],
+    'input'       => [
+        'taxonomy'    => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-z0-9_-]+$/'],
+        'name'        => 'required|string|max:200',
+        'slug'        => 'string|max:200',
+        'parent_id'   => 'int|min:0',
+        'description' => 'string|max:5000',
+    ],
+    'description' => 'Add one category, tag or other term.',
+]);
+
+$ajax->register('terms.create_many', [
+    'handler'     => [TermManageActions::class, 'createMany'],
+    'capability'  => 'manage_taxonomies',
+    'area'        => '/admin/taxonomies',
+    'idempotent'  => true,
+    'rate_limit'  => ['max' => 60, 'per' => 60],
+    'input'       => [
+        'taxonomy'  => ['type' => 'string', 'required' => true, 'max' => 64, 'regex' => '/^[a-z0-9_-]+$/'],
+        'names'     => 'required|string|max:60000',
+        'parent_id' => 'int|min:0',
+        'preview'   => 'bool',
+    ],
+    'description' => 'Add several terms from a list of names (or preview which are new).',
+]);
+
 // Media: the library, the picker and the avatar editor.
 $ajax->register('media.list', [
     'handler'     => [MediaActions::class, 'list'],

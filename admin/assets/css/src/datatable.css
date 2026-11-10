@@ -879,3 +879,9 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt:not(.is-selecting) .bh-dt-selall { display: none; }
 }
 .bh-dt[data-select="none"] .bh-dt-selectmode { display: none !important; }
+
+/* ── Term cells (1.2.123): slug (plain, like the posts list's), a clamped description, a count that opens
+   the posts list filtered by the term. ──────────────────────────────────── */
+.bh-dt-mono { @apply text-[0.8125rem] text-slate-500; overflow-wrap: anywhere; }
+.bh-dt-clamp { @apply text-[0.8125rem] leading-5 text-slate-600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bh-dt-countlink { @apply rounded-md px-1.5 py-0.5 font-medium tabular-nums text-accent-700 no-underline hover:bg-accent-50 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40; }

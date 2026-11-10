@@ -549,5 +549,7 @@ module.exports = [
     "sm:gap-3",
     "sm:px-3",
     "sm:px-6",
-    "md:inline"
+    "md:inline",
+    // 1.2.123: used only by the old Categories/Tags screen.
+    "self-start"
 ];

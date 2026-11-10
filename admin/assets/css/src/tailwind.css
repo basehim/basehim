@@ -1217,4 +1217,40 @@ a.bh-foot-card:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
 }
 
 
+/* ── Fields: a label, a control, help and an error (1.2.123) ─────────────── */
+.bh-field { @apply min-w-0; }
+.bh-field + .bh-field { @apply mt-4; }
+.bh-field__error { @apply mt-1.5 text-xs font-medium leading-normal text-red-700; }
+.bh-field__error[hidden] { display: none; }
+.bh-field.has-error .bh-input, .bh-field.has-error .bh-textarea, .bh-field.has-error .bh-select { @apply border-red-400 focus:border-red-500 focus:ring-red-500/20; }
+
+/* ── New term dialog (1.2.123): One | Several ──────────────────────────────── */
+.bh-termnew__tabs { @apply flex-none border-b border-slate-100 px-5 py-3; }
+/* The panel not shown (.bh-dialog__form is display:flex, which beat [hidden]). */
+.bh-termnew .bh-dialog__form[hidden] { display: none; }
+.bh-termnew__body { @apply min-h-0 flex-1 overflow-y-auto; }
+.bh-termnew__more { @apply mt-4 rounded-xl border border-slate-200; }
+.bh-termnew__more > summary { @apply flex cursor-pointer list-none items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40; }
+.bh-termnew__more > summary::-webkit-details-marker { display: none; }
+.bh-termnew__more > summary::before { content: ""; @apply h-2 w-2 flex-none rotate-[-45deg] border-b-2 border-r-2 border-slate-400 transition-transform duration-150; }
+.bh-termnew__more[open] > summary::before { @apply rotate-45; }
+.bh-termnew__more-body { @apply border-t border-slate-100 p-3.5; }
+.bh-termnew__names { @apply leading-6; }
+.bh-termnew__summary { @apply mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm text-slate-700; }
+.bh-termnew__summary[hidden] { display: none; }
+.bh-termnew__counts { @apply flex flex-wrap items-center gap-x-4 gap-y-1 font-medium; }
+.bh-termnew__count { @apply inline-flex items-center gap-1.5; }
+.bh-termnew__count::before { content: ""; @apply h-2 w-2 rounded-full bg-emerald-500; }
+.bh-termnew__count--skip::before { @apply bg-slate-400; }
+.bh-termnew__count--bad::before { @apply bg-red-500; }
+.bh-termnew__chips { @apply mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto; }
+.bh-termnew__chip { @apply inline-flex max-w-full items-center truncate rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600; }
+.bh-termnew__note { @apply mt-2 text-xs text-slate-500; }
+@media (max-width: 639px) {
+    .bh-termnew .bh-dialog__foot { @apply flex-wrap; }
+    .bh-termnew .bh-dialog__foot > .bh-btn { @apply flex-1; }
+    .bh-termnew .bh-dialog__foot > [data-bh-dialog-close] { @apply hidden; }
+}
+
+
 @tailwind utilities;

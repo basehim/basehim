@@ -159,6 +159,7 @@ $router->group(['prefix' => '/admin'], function ($router) {
         // Taxonomies
         $router->get('/taxonomies/{taxonomy}', ['App\\Http\\Controllers\\Admin\\TaxonomyController', 'index']);
         $router->post('/taxonomies/{taxonomy}/terms', ['App\\Http\\Controllers\\Admin\\TaxonomyController', 'storeTerm']);
+        $router->post('/taxonomies/{taxonomy}/bulk', ['App\\Http\\Controllers\\Admin\\TaxonomyController', 'bulk']);
         $router->post('/terms/{id}', ['App\\Http\\Controllers\\Admin\\TaxonomyController', 'updateTerm']);
         $router->post('/terms/{id}/delete', ['App\\Http\\Controllers\\Admin\\TaxonomyController', 'destroyTerm']);
 

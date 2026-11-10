@@ -441,6 +441,9 @@ class PostRepository
             'title_za'   => 'p.title DESC, p.id DESC',
             'views_desc' => 'p.view_count DESC, p.id DESC',
             'views_asc'  => 'p.view_count ASC, p.id ASC',
+            // The trash list (1.2.122): when each item was moved there.
+            'deleted_desc' => 'p.deleted_at DESC, p.id DESC',
+            'deleted_asc'  => 'p.deleted_at ASC, p.id ASC',
         ];
         if (!isset($sortMap[$sortKey])) $sortKey = 'newest';
         $orderBy = $sortMap[$sortKey];

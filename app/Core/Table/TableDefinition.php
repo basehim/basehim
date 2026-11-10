@@ -57,6 +57,14 @@ final class TableDefinition
          * and TableActions::quickView() for the shape.
          */
         public readonly mixed $quickView = null,
+        /**
+         * The empty state when nothing is listed and no search or filter is
+         * on (1.2.122): {title, text, icon}; icon is `inbox` or `trash`.
+         * Empty means the generic "Nothing here yet".
+         *
+         * @var array{title?:string,text?:string,icon?:string}
+         */
+        public readonly array $empty = [],
     ) {
     }
 
