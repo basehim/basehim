@@ -1,0 +1,776 @@
+/*
+ * Core Data Table — shared admin table styles (SOURCE).
+ *
+ * This is the Tailwind source. It is compiled to ../datatable.css (the file the
+ * admin loads) with:   npm run build:datatable
+ * Newer sections use @apply with the design tokens (accent / slate) so the
+ * table tracks the admin's palette; older sections are plain CSS that passes
+ * through unchanged. Edit here, never the compiled file.
+ *
+ * Structural + component styles; status/category colours come from the
+ * Tailwind utility classes the cell renderers emit.
+ */
+
+/* Corners follow the admin sidebar's items (rounded-lg, .5rem), like Quick
+   Edit (1.2.63): containers, buttons and menus use --dt-r; small parts inside
+   them (a badge, a menu row, a checkbox row) use --dt-r-in. */
+.bh-dt { position: relative; --dt-r: .5rem; --dt-r-in: .375rem;
+    /* Sticky offsets, both MEASURED by the script (never assumed):
+       --dt-sticky-top = the app's sticky top-bar height,
+       --dt-top-h      = the controls' height when shrunk, so the header sticks
+                         a constant distance down and never jumps on shrink. */
+    --dt-sticky-top: 0px; --dt-top-h: 0px; }
+
+/* Sticky chrome (1.2.110) --------------------------------------------------
+   Controls + column header stick under the app's top bar; pagination sticks to
+   the bottom. On by default; toggled from Screen Options via the classes here.
+   The controls region is ALWAYS positioned so the Screen Options popover
+   anchors to it whether sticky is on or off. */
+.bh-dt-top { @apply relative; }
+.bh-dt--sticky .bh-dt-top { @apply z-[6] bg-white;
+    position: sticky; top: var(--dt-sticky-top);
+    border-top-left-radius: var(--dt-r); border-top-right-radius: var(--dt-r);
+    transition: padding .18s ease, box-shadow .18s ease; }
+.bh-dt--sticky .bh-dt-top.is-stuck.bh-card--pad { @apply py-2; }
+/* Controls + column header read as ONE sticky container: no shadow between
+   them (that made the header look detached); instead the shadow sits under the
+   header — the bottom edge of the combined unit — and the controls keep only a
+   hairline divider into the header. */
+.bh-dt--sticky .bh-dt-top.is-stuck { box-shadow: none; }
+.bh-dt--sticky .bh-dt-top.is-stuck ~ .bh-dt-wrap .bh-dt-table thead th { box-shadow: 0 10px 16px -14px rgb(15 23 42 / 0.3); }
+/* Suppress transitions while the script measures the shrunk height. */
+.bh-dt-measuring, .bh-dt-measuring * { transition: none !important; }
+
+.bh-dt--sticky .bh-dt-table thead th { position: sticky; top: calc(var(--dt-sticky-top) + var(--dt-top-h)); z-index: 4; }
+
+.bh-dt--sticky-foot .bh-dt-foot { @apply z-[5] bg-white; position: sticky; bottom: 0; }
+
+/* The sticky chrome stays ABOVE the table rows (z-0) but BELOW the admin
+   shell — the mobile off-canvas nav's backdrop (#bh-backdrop, z-15) and the
+   sidebar (z-20). Page content must never out-rank the navigation, so the
+   backdrop dims the whole list, sticky chrome included, with no z-toggle and
+   no jerk. (Low single digits, not z-20..30, which poked through the nav.) */
+
+/* Wide-table mode (1.2.114): when the table has too many columns to fit, the
+   wrap becomes a self-contained scroll box — the header row freezes to its top
+   and the first column (the select cell + the first data column) freezes to
+   its left, so you scroll both ways inside the box, like a spreadsheet grid.
+   Activated by the script (.bh-dt--xscroll) only when the table actually
+   overflows; desktop/tablet table only (phones show cards). These rules come
+   AFTER the page-sticky rules above so, at equal specificity, they win. */
+.bh-dt--xscroll .bh-dt-wrap { overflow: auto; max-height: var(--dt-grid-max, 70vh);
+    overscroll-behavior: contain; }
+/* Header row sticks to the top of the box, whatever the page-sticky toggle. */
+.bh-dt--xscroll .bh-dt-table thead th { position: sticky; top: 0; z-index: 3; }
+/* Frozen leading columns (the select cell + up to the title column): each sits
+   at its measured cumulative left offset (--dt-frzL-k, set by the script). */
+.bh-dt--xscroll .bh-dt-table .bh-dt-frz { position: sticky; z-index: 2; }
+.bh-dt--xscroll .bh-dt-table .bh-dt-frz--0 { left: var(--dt-frzL-0, 0px); }
+.bh-dt--xscroll .bh-dt-table .bh-dt-frz--1 { left: var(--dt-frzL-1, 0px); }
+.bh-dt--xscroll .bh-dt-table .bh-dt-frz--2 { left: var(--dt-frzL-2, 0px); }
+/* The frozen cells within the frozen header are the corner — above both. */
+.bh-dt--xscroll .bh-dt-table thead .bh-dt-frz { z-index: 4; }
+/* Opaque backgrounds so the scrolling columns pass UNDER the frozen ones
+   (header cells already carry the header fill; body cells are transparent). */
+.bh-dt--xscroll .bh-dt-table tbody td.bh-dt-frz { @apply bg-white; }
+.bh-dt--xscroll .bh-dt-table tbody tr:hover td.bh-dt-frz { background: #f8fafc; }
+.bh-dt--xscroll .bh-dt-table tbody tr.is-selected td.bh-dt-frz { background: #f5f9ff; }
+/* The freeze boundary: a hairline on the last frozen cell always, a soft
+   shadow once scrolled so it reads as "the other columns continue under here". */
+.bh-dt--xscroll .bh-dt-table .bh-dt-frz--last { border-right: 1px solid #e2e8f0; }
+.bh-dt--xscroll .bh-dt-wrap.is-xscrolled .bh-dt-table .bh-dt-frz--last {
+    box-shadow: 8px 0 12px -8px rgb(15 23 42 / 0.25); }
+
+@media (prefers-reduced-motion: reduce) { .bh-dt--sticky .bh-dt-top { transition: none; } }
+.bh-dt.bh-card { border-radius: var(--dt-r); }
+
+/* Reusable cell components ------------------------------------------------- */
+.bh-ava { border-radius: 9999px; object-fit: cover; display: inline-block; flex: none; background: #e2e8f0; }
+.bh-ava--initials { display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 600; line-height: 1; }
+.bh-usercell { display: inline-flex; align-items: center; gap: .5rem; min-width: 0; }
+.bh-usercell__meta { display: flex; flex-direction: column; min-width: 0; }
+.bh-usercell__name { font-weight: 500; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-usercell__sub { font-size: .72rem; color: #94a3b8; }
+.bh-thumb { display: inline-flex; align-items: center; justify-content: center; flex: none;
+    border-radius: .5rem; overflow: hidden; background: #eef2ff; color: #6366f1; }
+.bh-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bh-thumb--empty { background: linear-gradient(135deg,#eff6ff,#eef2ff); color: #93a5cf; }
+
+.bh-dt-badge { display: inline-block; padding: .2rem .55rem; border-radius: var(--dt-r-in, .375rem);
+    font-size: .72rem; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.bh-dt-chip { display: inline-block; padding: .15rem .55rem; border-radius: var(--dt-r-in, .375rem);
+    background: #eef2ff; color: #4338ca; font-size: .74rem; font-weight: 500; }
+a.bh-dt-chip--link { text-decoration: none; transition: background .12s, color .12s; }
+a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
+
+/* Term filter dropdowns (Category / Tags) — Screen-Options styling ---------- */
+.bh-dt-filter { position: relative; display: inline-flex; }
+.bh-dt-filterbtn { display: inline-flex; align-items: center; gap: .4rem; }
+.bh-dt-filterbtn.is-active { border-color: #bfdbfe; background: #eff6ff; color: #2563eb; }
+.bh-dt-filterbadge { display: inline-flex; align-items: center; justify-content: center;
+    min-width: 1.15rem; height: 1.15rem; padding: 0 .3rem; border-radius: 9999px;
+    background: #2563eb; color: #fff; font-size: .68rem; font-weight: 700; line-height: 1; }
+.bh-dt-filterpanel { left: 0; right: auto; width: 17rem; padding: .85rem; }
+.bh-dt-filtersearch { width: 100%; margin-bottom: .6rem; }
+.bh-dt-termlist { max-height: 15rem; overflow-y: auto; margin: 0 -.2rem; }
+.bh-dt-term { display: flex; align-items: center; gap: .55rem; padding: .38rem .4rem; border-radius: var(--dt-r-in); cursor: pointer; }
+.bh-dt-term:hover { background: #f8fafc; }
+.bh-dt-term input { width: 1rem; height: 1rem; accent-color: #2563eb; flex: none; }
+.bh-dt-term__name { flex: 1; font-size: .8125rem; color: #334155; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-dt-term__count { font-size: .72rem; color: #94a3b8; font-variant-numeric: tabular-nums; }
+.bh-dt-termempty { font-size: .82rem; color: #94a3b8; padding: .6rem .4rem; margin: 0; }
+.bh-dt-filterfoot { display: flex; align-items: center; justify-content: space-between;
+    gap: .5rem; margin-top: .6rem; padding-top: .55rem; border-top: 1px solid #f1f5f9; }
+.bh-dt-filterhint { font-size: .74rem; color: #94a3b8; }
+
+/* Toolbar ------------------------------------------------------------------ */
+/* The toolbar band (1.2.85; an inline style on the partial before). */
+/* position is set in the sticky-chrome section above (sticky establishes the
+   positioning context the Screen Options panel needs). */
+.bh-dt-top { border-bottom: 1px solid rgb(226 232 240); }
+.bh-dt-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.bh-dt-search { position: relative; flex: 1 1 260px; min-width: 200px; }
+.bh-dt-search > svg { position: absolute; top: 50%; left: .85rem; width: 1rem; height: 1rem;
+    transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
+.bh-dt-search input { width: 100%; padding-left: 2.5rem; }
+.bh-dt-filter { display: inline-flex; align-items: center; }
+.bh-dt-tools { display: flex; align-items: center; gap: .5rem; margin-left: auto; }
+
+/* Mobile "Filter & sort" trigger (1.2.107) ---------------------------------
+   On phones and tablets the inline filters and the (hidden) sort headers are
+   replaced by one button that opens the drawer below. Hidden on desktop. */
+.bh-dt-filterm { @apply hidden items-center gap-2; }
+.bh-dt-filterm__badge { @apply inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent-600 px-1.5 text-[0.68rem] font-bold leading-none text-white; }
+/* A class's display must not defeat the hidden attribute (same specificity, so
+   the later rule would otherwise win). */
+.bh-dt-filterm__badge[hidden], .bh-dt-bulkclear[hidden] { display: none !important; }
+
+/* Filter & sort drawer (1.2.107) -------------------------------------------
+   A right-hand sheet with every filter plus a Sort control — so a phone can
+   sort (the sort lives in the table header, which phones don't show) and all
+   the filters collapse behind one button instead of stacking down the page. */
+.bh-dt-drawer { @apply fixed inset-0 z-[70] hidden; }
+.bh-dt-drawer.is-open { @apply block; }
+/* Matches the admin sidebar's off-canvas backdrop (slate-900/40 + blur(4px))
+   and its 16rem width (1.2.109), so the drawer reads as the same system. */
+.bh-dt-drawer__overlay { @apply absolute inset-0 bg-slate-900/40; opacity: 0; transition: opacity .3s ease; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.bh-dt-drawer.is-open .bh-dt-drawer__overlay { opacity: 1; }
+.bh-dt-drawer__panel { @apply absolute inset-y-0 right-0 flex w-64 max-w-[85vw] flex-col bg-white shadow-2xl; transform: translateX(100%); transition: transform .32s cubic-bezier(.4,0,.2,1); }
+.bh-dt-drawer.is-open .bh-dt-drawer__panel { transform: translateX(0); }
+.bh-dt-drawer__head { @apply flex flex-none items-center gap-3 border-b border-slate-200 px-4 py-3.5; }
+.bh-dt-drawer__title { @apply flex items-center gap-2 text-base font-semibold text-slate-900; margin: 0; }
+.bh-dt-drawer__title svg { @apply h-5 w-5 text-slate-400; }
+.bh-dt-drawer__x { @apply ml-auto inline-grid h-9 w-9 flex-none place-items-center rounded-xl border-0 bg-transparent text-slate-500 cursor-pointer; }
+.bh-dt-drawer__x svg { @apply h-5 w-5; }
+.bh-dt-drawer__x:hover { @apply bg-slate-100 text-slate-900; }
+.bh-dt-drawer__body { @apply flex-1 overflow-y-auto overscroll-contain px-4 py-4; }
+.bh-dt-drawer__sec + .bh-dt-drawer__sec { @apply mt-5 border-t border-slate-100 pt-5; }
+.bh-dt-drawer__label { @apply mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500; }
+.bh-dt-drawer__field + .bh-dt-drawer__field { @apply mt-3; }
+.bh-dt-drawer__sublabel { @apply mb-1.5 block text-sm font-medium text-slate-600; }
+.bh-dt-drawer__empty { @apply text-sm text-slate-400; margin: 0; }
+.bh-dt-drawer__field > .bh-select, .bh-dt-drawer__field > [data-dt-filter] { @apply w-full; }
+.bh-dt-drawer__foot { @apply flex flex-none items-center gap-2 border-t border-slate-200 px-4 py-3; padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px)); }
+.bh-dt-drawer__foot .bh-btn { @apply flex-1; }
+/* Sort control inside the drawer: a select of sortable columns + a direction
+   segmented toggle. */
+.bh-dt-sort { @apply flex items-stretch gap-2; }
+.bh-dt-sort__sel { @apply flex-1; }
+.bh-dt-sortdir { @apply inline-flex flex-none overflow-hidden rounded-xl border border-slate-200; }
+.bh-dt-sortdir button { @apply inline-flex h-9 w-10 items-center justify-center border-0 border-l border-slate-200 bg-white text-slate-500 cursor-pointer; }
+.bh-dt-sortdir button:first-child { @apply border-l-0; }
+.bh-dt-sortdir button svg { @apply h-4 w-4; }
+.bh-dt-sortdir button.is-active { @apply bg-accent-50 text-accent-600; }
+.bh-dt-sortdir button:disabled { @apply opacity-40 cursor-default; }
+/* Filters placed in the drawer show expanded inline (not as floating
+   popovers): the term-filter's button is redundant (the field label names it),
+   so it is hidden and the panel sits in flow as a plain field. */
+.bh-dt-drawer .bh-dt-filter { @apply block w-full; }
+.bh-dt-drawer .bh-dt-filterbtn { @apply hidden; }
+.bh-dt-drawer .bh-dt-filterpanel { @apply block w-full rounded-xl border-slate-200 p-3; position: static !important; display: block !important; margin: 0; box-shadow: none; }
+.bh-dt-drawer .bh-dt-filterpanel .bh-dt-termlist { max-height: 11rem; }
+.bh-dt-drawer .bh-dt-filterfoot { margin-top: .5rem; padding-top: .5rem; }
+
+/* Skeleton loading (1.2.107) -----------------------------------------------
+   While a load is in flight the rows (or cards) are replaced by shimmer
+   placeholders shaped like the current view — same columns and density in the
+   table, same card shape in List/Grid and on phones, at the current rows-per-
+   page — so the real data lands exactly where the skeleton sat, with no dim
+   overlay blink. */
+.bh-dt-skel__bar { @apply block h-3 rounded; background: linear-gradient(100deg, #eef2f7 30%, #f8fafc 50%, #eef2f7 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
+.bh-dt-skel__bar--sm { @apply h-2.5; }
+.bh-dt-skel__bar--chip { @apply h-4 w-16 rounded-md; }
+.bh-dt-skel__thumb { @apply block flex-none rounded-lg; background: linear-gradient(100deg, #eef2f7 30%, #f8fafc 50%, #eef2f7 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
+.bh-dt-skel__dot { @apply h-6 w-6 flex-none rounded-full; background: linear-gradient(100deg, #eef2f7 30%, #f8fafc 50%, #eef2f7 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
+@keyframes bh-dt-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.bh-dt-skelrow td { vertical-align: middle; }
+.bh-dt-skelcell { @apply flex flex-col gap-2; }
+/* A skeleton card mirrors the compact card's checkbox · thumb · title rows. */
+.bh-dt-skelcard { @apply flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3; margin: 0; }
+.bh-dt-skelcard__main { @apply flex min-w-0 flex-1 flex-col gap-2; }
+@media (prefers-reduced-motion: reduce) {
+    .bh-dt-skel__bar, .bh-dt-skel__thumb, .bh-dt-skel__dot { animation: none; }
+}
+
+/* Selection bar ------------------------------------------------------------ */
+/* Floating bulk-action bar (1.2.104; restyled 1.2.107 onto the button system).
+   Fixed to the viewport and moved to <body> by the script, so ticking a row
+   never pushes the table down — the bar slides up over the content instead.
+   Hidden and non-interactive until a selection exists. A cohesive pill: a
+   bold count on the accent, a hairline divider, then the actions as real
+   buttons (primary / secondary / danger) with leading icons, and Clear. */
+.bh-dt-bulk {
+    @apply fixed bottom-5 z-[45] flex items-center gap-2.5 rounded-full border border-slate-200/80 bg-white pl-2 pr-2 py-2;
+    left: 50%;
+    max-width: calc(100vw - 1.5rem);
+    box-shadow: 0 18px 40px -14px rgb(15 23 42 / 0.42), 0 4px 12px -4px rgb(15 23 42 / 0.20);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(1rem);
+    transition: opacity .2s ease, transform .2s cubic-bezier(.2,.7,.3,1), visibility 0s linear .2s;
+}
+.bh-dt-bulk.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+    transition: opacity .2s ease, transform .2s cubic-bezier(.2,.7,.3,1), visibility 0s;
+}
+.bh-dt-bulk__check { @apply inline-flex items-center; }
+/* The count: a filled accent chip with the number, then "selected". */
+.bh-dt-bulk__count { @apply inline-flex items-center gap-2 whitespace-nowrap pl-2 pr-1 text-sm font-semibold text-slate-600; }
+.bh-dt-bulk__n { @apply inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-accent-600 px-1.5 text-xs font-bold leading-none text-white; }
+.bh-dt-bulk__sep { @apply h-6 w-px flex-none bg-slate-200; }
+.bh-dt-bulk__actions { @apply flex items-center gap-1.5 flex-nowrap; }
+/* Actions share the admin button scale (32px), rounded-full to sit in the pill. */
+.bh-dt-bulkbtn { @apply inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-transparent px-3 text-[0.8125rem] font-semibold leading-none cursor-pointer transition-colors duration-150; }
+.bh-dt-bulkbtn svg { @apply h-4 w-4 flex-none; }
+.bh-dt-bulkbtn--publish { @apply bg-accent-600 text-white; }
+.bh-dt-bulkbtn--publish:hover { @apply bg-accent-700; }
+.bh-dt-bulkbtn--neutral { @apply border-slate-200 bg-white text-slate-700; }
+.bh-dt-bulkbtn--neutral:hover { @apply border-slate-300 bg-slate-50 text-slate-900; }
+.bh-dt-bulkbtn--danger { @apply bg-red-50 text-red-700 border-red-100; }
+.bh-dt-bulkbtn--danger:hover { @apply bg-red-100 border-red-200 text-red-800; }
+.bh-dt-bulkbtn:focus-visible { @apply outline-none ring-2 ring-accent-500/40 ring-offset-1; }
+
+/* Table -------------------------------------------------------------------- */
+/* Visible overflow (not overflow-x:auto) so the sticky table header can stick
+   to the page instead of being trapped in a scroll container (1.2.110). Wide
+   tables stay in hand via responsive columns and Screen Options. */
+.bh-dt-wrap { position: relative; overflow: visible; }
+.bh-dt-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.bh-dt-table th, .bh-dt-table td { padding: .7rem 1rem; text-align: left; vertical-align: middle;
+    border: 0; border-radius: 0; background: none; }
+.bh-dt-table thead th { background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    font-weight: 600; color: #475569; white-space: nowrap; }
+.bh-dt-table tbody tr { border-bottom: 1px solid #f1f5f9; }
+.bh-dt-table tbody tr:hover { background: #f8fafc; }
+.bh-dt-table tbody tr.is-selected { background: #f5f9ff; }
+.bh-dt-table td.bh-dt-al-center, .bh-dt-table th.bh-dt-al-center { text-align: center; }
+.bh-dt-table td.bh-dt-al-right,  .bh-dt-table th.bh-dt-al-right  { text-align: right; }
+.bh-dt-table td.bh-dt-views { color: #334155; font-variant-numeric: tabular-nums; }
+
+/* Density */
+.bh-dt[data-density="compact"] .bh-dt-table th,
+.bh-dt[data-density="compact"] .bh-dt-table td { padding: .38rem 1rem; }
+
+/* Sortable headers */
+.bh-dt-sorth { cursor: pointer; user-select: none; }
+.bh-dt-sorth:hover { color: #1e293b; }
+.bh-dt-caret { display: inline-block; width: .85rem; height: .85rem; opacity: .35;
+    vertical-align: -2px; margin-left: .1rem; }
+.bh-dt-sorth[aria-sort] .bh-dt-caret { opacity: 1; color: #2563eb; }
+
+/* Cells */
+.bh-dt-title { font-weight: 600; color: #0f172a; text-decoration: none; display: block; }
+.bh-dt-title:hover { color: #2563eb; }
+.bh-dt-sub { display: block; font-size: .76rem; color: #94a3b8; }
+.bh-dt-date { color: #334155; display: block; }
+.bh-dt-check { width: 1.75rem; }
+.bh-dt-check input, .bh-dt-bulk__check input { width: 1rem; height: 1rem; accent-color: #2563eb; cursor: pointer; }
+.bh-dt-col-thumb { width: 3.25rem; }
+.bh-dt-rowactions { white-space: nowrap; text-align: right; width: 3rem; }
+.bh-dt-rowactions button, .bh-dt-rowactions a { color: #475569; padding: .3rem; border: 0;
+    background: none; cursor: pointer; border-radius: var(--dt-r-in); display: inline-flex; }
+.bh-dt-rowactions button:hover, .bh-dt-rowactions a:hover { color: #2563eb; background: #f1f5f9; }
+
+/* States ------------------------------------------------------------------- */
+/* Empty and error states (1.2.66): a large icon in a soft circle, centred
+   above the title and message. Laid out with flex, so the icon is centred
+   whatever an admin theme or Tailwind's base styles do to svg (display:block
+   left it flush left), and sized here rather than by utility classes. */
+.bh-dt-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .25rem; padding: 3.5rem 1.25rem; text-align: center; color: #64748b; }
+.bh-dt-state__icon { display: flex; align-items: center; justify-content: center; flex: none;
+    width: 4.5rem; height: 4.5rem; margin: 0 0 .75rem; border-radius: 50%;
+    background: #f1f5f9; color: #94a3b8; }
+.bh-dt-state__icon svg { display: block; width: 2.25rem; height: 2.25rem; margin: 0; }
+.bh-dt-state__title { font-size: .9375rem; font-weight: 600; color: #334155; margin: 0; }
+.bh-dt-state__text { margin: 0; max-width: 28rem; font-size: .875rem; line-height: 1.5; }
+.bh-dt-state--error .bh-dt-state__icon { background: #fef2f2; color: #ef4444; }
+.bh-dt-state--error .bh-dt-state__title { color: #991b1b; }
+/* The old dim-and-spin overlay is superseded by the skeleton (1.2.107); the
+   element is kept for any third party that toggles it, but stays hidden. */
+.bh-dt-loading { position: absolute; inset: 0; background: rgba(255,255,255,.6);
+    display: none; align-items: center; justify-content: center; z-index: 5; }
+.bh-dt-spinner { width: 1.5rem; height: 1.5rem; border: 2px solid #cbd5e1;
+    border-top-color: #2563eb; border-radius: 50%; animation: bh-dt-spin .6s linear infinite; }
+@keyframes bh-dt-spin { to { transform: rotate(360deg); } }
+
+/* Pagination (compacted + sticky bottom, 1.2.110) -------------------------- */
+.bh-dt-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: .5rem; padding: .45rem .85rem; border-top: 1px solid #e2e8f0; }
+.bh-dt-count { font-size: .8125rem; color: #64748b; }
+.bh-dt-foot__right { display: flex; align-items: center; gap: .9rem; margin-left: auto; }
+.bh-dt-pages { display: flex; align-items: center; gap: .15rem; }
+.bh-dt-page { min-width: 1.75rem; height: 1.75rem; padding: 0 .4rem; border: 1px solid #e2e8f0;
+    border-radius: var(--dt-r-in); background: #fff; color: #334155; font-size: .8125rem; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; }
+.bh-dt-page:hover:not(:disabled):not(.is-current) { background: #f1f5f9; }
+.bh-dt-page.is-current { background: #2563eb; border-color: #2563eb; color: #fff; }
+.bh-dt-page:disabled { opacity: .4; cursor: default; }
+.bh-dt-page--gap { border: 0; background: none; cursor: default; color: #94a3b8; }
+.bh-dt-perpage { display: flex; align-items: center; gap: .5rem; font-size: .82rem; color: #64748b; }
+
+/* Screen Options panel ----------------------------------------------------- */
+.bh-dt-panel { position: absolute; right: 0; top: calc(100% + .45rem); width: 20rem; z-index: 40;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r);
+    box-shadow: 0 16px 40px rgba(15,23,42,.16); padding: 1.1rem; display: none;
+    /* Never let the panel exceed the viewport — it scrolls instead of hiding
+       its lower items (1.2.110). --dt-panel-max is the space below the panel's
+       top, measured when it opens; the calc is the fallback before that. */
+    max-height: var(--dt-panel-max, calc(100vh - var(--dt-sticky-top) - 2rem)); overflow-y: auto; overscroll-behavior: contain; }
+.bh-dt-panel.is-open { display: block; }
+/* A long column list scrolls within the panel rather than pushing the rows and
+   toggles below it out of reach. */
+.bh-dt-collist { max-height: 14rem; overflow-y: auto; overscroll-behavior: contain; }
+.bh-dt-panel__title { display: flex; align-items: center; gap: .5rem; font-size: .875rem; font-weight: 600; color: #0f172a; }
+.bh-dt-panel__desc { font-size: .78rem; color: #94a3b8; margin: .35rem 0 .9rem; }
+.bh-dt-panel__label { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+    color: #94a3b8; font-weight: 600; margin: .9rem 0 .4rem; }
+.bh-dt-collist { list-style: none; margin: 0; padding: 0; }
+.bh-dt-col { display: flex; align-items: center; gap: .55rem; padding: .4rem .3rem; border-radius: var(--dt-r-in); }
+.bh-dt-col:hover { background: #f8fafc; }
+.bh-dt-col.is-dragging { opacity: .4; }
+.bh-dt-col__grip { cursor: grab; color: #cbd5e1; display: inline-flex; touch-action: none; }
+.bh-dt-col input { width: 1rem; height: 1rem; accent-color: #2563eb; }
+.bh-dt-col__name { flex: 1; font-size: .8125rem; color: #334155; }
+.bh-dt-panel__sep { border: 0; border-top: 1px solid #f1f5f9; margin: .9rem 0; }
+.bh-dt-panel__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .6rem; }
+.bh-dt-panel__row span { font-size: .8125rem; color: #334155; }
+.bh-dt-panel__actions { display: flex; align-items: center; gap: 1rem; margin-top: 1.1rem; }
+
+/* Cards ----------------------------------------------------------------------
+   Two layouts, chosen by datatable.js:
+   - Wide screens (List and Grid views): the Quick Edit dialog's look (1.2.64),
+     title and status on top, every other column as a label over its value.
+   - 820px and below, where cards are the only view: a compact card, one line
+     per item (1.2.65, .bh-dt-card--compact below). */
+.bh-dt-cards { display: none; }
+.bh-dt-cards > .bh-dt-state { grid-column: 1 / -1; }
+.bh-dt-card { position: relative; min-width: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r);
+    padding: .75rem .85rem; margin: .6rem .75rem; transition: border-color .12s, box-shadow .12s, background-color .12s; }
+.bh-dt-card.is-selected { border-color: #93c5fd; box-shadow: 0 0 0 1px #93c5fd; background: #f8fbff; }
+.bh-dt-card__top { display: flex; align-items: flex-start; gap: .65rem; }
+.bh-dt-card__top .bh-dt-check { width: auto; flex: none; display: inline-flex; align-items: center; min-height: 1.35rem; }
+.bh-dt-card__thumb { flex: none; }
+.bh-dt-card__main { flex: 1; min-width: 0; }
+.bh-dt-card__title { font-size: .875rem; line-height: 1.35; font-weight: 600; color: #0f172a; overflow-wrap: anywhere; }
+.bh-dt-card__title .bh-dt-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bh-dt-card__title .bh-dt-sub { margin-top: .1rem; font-weight: 400; }
+.bh-dt-card__badge { margin-top: .4rem; }
+/* The ⋮ button: a 2.25rem target, like the dialog's ×. */
+.bh-dt-card .bh-dt-actbtn { flex: none; width: 2.25rem; height: 2.25rem; margin: -.4rem -.5rem 0 0; padding: 0;
+    align-items: center; justify-content: center; border-radius: var(--dt-r); color: #475569; }
+.bh-dt-card .bh-dt-actbtn:hover { background: #f1f5f9; color: #0f172a; }
+.bh-dt-card__rows { margin-top: .7rem; padding-top: .65rem; border-top: 1px solid #f1f5f9;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem .85rem; }
+.bh-dt-card__row { display: flex; flex-direction: column; gap: .15rem; min-width: 0; font-size: .82rem; }
+.bh-dt-card__key { font-size: .72rem; font-weight: 600; color: #64748b; }
+.bh-dt-card__val { color: #334155; min-width: 0; overflow-wrap: anywhere; }
+
+/* The compact card (820px and below): one line per item (1.2.65) —
+   checkbox · picture · title with its chips · author · values with icons · ⋮.
+   Each column's `card` setting says where it goes. The layout follows the
+   card's own width (a container query): under 345px of content the author
+   shows as a picture only, under 300px the author and values move under the
+   title. */
+.bh-dt-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.bh-dt-card--compact { container: dtcard / inline-size; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); padding: .75rem .5rem .75rem .7rem; }
+.bh-dt-card--compact .bh-dt-card__body { display: grid; align-items: center; column-gap: .5rem;
+    grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "check main aside menu"; }
+.bh-dt-card--compact.has-media .bh-dt-card__body { grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "check media main aside menu"; }
+.bh-dt-card--compact .bh-dt-card__check { grid-area: check; width: auto; display: inline-flex; align-items: center; }
+.bh-dt-card--compact .bh-dt-card__media { grid-area: media; display: flex; }
+.bh-dt-card--compact .bh-dt-card__media .bh-thumb { width: 2.5rem !important; height: 2.5rem !important; border-radius: var(--dt-r); }
+.bh-dt-card--compact .bh-dt-card__main { grid-area: main; min-width: 0; }
+.bh-dt-card--compact .bh-dt-card__aside { grid-area: aside; display: flex; align-items: center; gap: .55rem; min-width: 0; }
+.bh-dt-card--compact .bh-dt-card__body > .bh-dt-actbtn { grid-area: menu; align-self: center; }
+
+.bh-dt-card--compact .bh-dt-card__title { font-size: .8125rem; line-height: 1.35; font-weight: 600; color: #0f172a; overflow-wrap: anywhere; }
+.bh-dt-card--compact .bh-dt-card__title .bh-dt-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bh-dt-card--compact .bh-dt-card__title .bh-dt-sub { display: none; }   /* the slug: in the table and Quick Edit */
+.bh-dt-card--compact .bh-dt-card__sub { margin-top: .15rem; font-size: .8rem; line-height: 1.4; color: #64748b;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bh-dt-card--compact .bh-dt-card__sub .bh-dt-sub { display: inline; font-size: inherit; }
+/* Chips and badges; the usual state (Published, Approved) is left off, so a
+   status shown here is one that needs attention. */
+.bh-dt-card--compact .bh-dt-card__under { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .3rem; margin-top: .4rem; min-width: 0; }
+.bh-dt-card--compact .bh-dt-card__under > * { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-dt-card--compact .bh-dt-card__under .bh-dt-chip, .bh-dt-card--compact .bh-dt-card__under .bh-dt-badge { font-size: .7rem; padding: .12rem .45rem; }
+.bh-dt-card--compact [data-card-quiet] { display: none; }
+.bh-dt-card--compact .bh-dt-card__under:not(:has(> :not([data-card-quiet]))) { display: none; }
+
+/* The person beside the title: a small avatar, the name on up to two lines. */
+.bh-dt-card--compact .bh-dt-card__side .bh-usercell { gap: .3rem; }
+.bh-dt-card--compact .bh-dt-card__side .bh-ava { width: 1.5rem !important; height: 1.5rem !important; font-size: .6rem !important; }
+.bh-dt-card--compact .bh-dt-card__side .bh-usercell__name { white-space: normal; overflow-wrap: anywhere; max-width: 2.9rem; font-size: .7rem; line-height: 1.3;
+    font-weight: 500; color: #475569; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.bh-dt-card--compact .bh-dt-card__side .bh-usercell__sub { display: none; }
+
+/* Views, date …: a value per line, each after its icon. */
+.bh-dt-card--compact .bh-dt-card__meta { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.bh-dt-card--compact .bh-dt-card__metaitem { display: flex; align-items: flex-start; gap: .25rem; font-size: .7rem; line-height: 1.3; color: #334155; font-variant-numeric: tabular-nums; }
+.bh-dt-card--compact .bh-dt-card__icon { flex: none; display: inline-flex; color: #94a3b8; margin-top: .05rem; }
+.bh-dt-card--compact .bh-dt-card__icon svg { width: .8rem; height: .8rem; }
+.bh-dt-card--compact .bh-dt-card__metakey { flex: none; color: #94a3b8; }
+.bh-dt-card--compact .bh-dt-card__metaval { min-width: 0; max-width: 3.1rem; }
+.bh-dt-card--compact .bh-dt-card__metaval .bh-dt-date { display: block; }
+.bh-dt-card--compact .bh-dt-card__metaval .bh-dt-sub { font-size: .68rem; margin-top: .1rem; }
+
+/* The ⋮ button: a 2rem target that does not widen the card. */
+.bh-dt-card--compact .bh-dt-actbtn { flex: none; width: 1.75rem; height: 2.25rem; padding: 0; margin: -.25rem -.15rem -.25rem 0;
+    align-items: center; justify-content: center; border-radius: var(--dt-r); color: #475569; }
+.bh-dt-card--compact .bh-dt-actbtn:hover { background: #f1f5f9; color: #0f172a; }
+
+/* Card polish (1.2.107): a hairline lift on hover/press and a softer resting
+   shadow, so the list reads as a stack of tappable surfaces. */
+.bh-dt-card--compact { transition: border-color .15s ease, box-shadow .15s ease, transform .12s ease; }
+.bh-dt-card--compact:hover { border-color: #cbd5e1; box-shadow: 0 8px 20px -10px rgb(15 23 42 / 0.18); }
+.bh-dt-card--compact:active { transform: scale(.995); }
+.bh-dt-card--compact.is-selected:hover { border-color: #93c5fd; }
+
+/* A roomy card (a phone on its side): nothing needs to wrap. */
+@container dtcard (min-width: 520px) {
+    .bh-dt-card--compact .bh-dt-card__body { column-gap: .9rem; }
+    .bh-dt-card--compact .bh-dt-card__aside { gap: 1.5rem; }
+    .bh-dt-card--compact .bh-dt-card__media .bh-thumb { width: 3rem !important; height: 3rem !important; }
+    .bh-dt-card--compact .bh-dt-card__side .bh-usercell__name { max-width: 8rem; }
+    .bh-dt-card--compact .bh-dt-card__metaval { max-width: none; }
+    .bh-dt-card--compact .bh-dt-card__meta { flex-direction: row; gap: 1.1rem; }
+}
+/* A phone-width card (under 420px of content, 1.2.102): the author and the
+   values move to their own row under the title, so the title has the whole
+   width and a date reads on one line. Before 1.2.102 that happened only under
+   300px; at 345–519px the values were squeezed into a 3rem column beside the
+   title, which stacked a date four lines high (375px phones, and the two
+   cards per row at 768px). The sizes are the card's content width. */
+@container dtcard (max-width: 419px) {
+    .bh-dt-card--compact .bh-dt-card__body { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "check main menu" ". aside aside"; align-items: start; row-gap: .6rem; }
+    .bh-dt-card--compact.has-media .bh-dt-card__body { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "check media main menu" ". . aside aside"; }
+    .bh-dt-card--compact .bh-dt-card__aside { flex-wrap: wrap; }
+    .bh-dt-card--compact .bh-dt-card__meta { flex-direction: row; flex-wrap: wrap; gap: .3rem .9rem; }
+    .bh-dt-card--compact .bh-dt-card__metaval, .bh-dt-card--compact .bh-dt-card__side .bh-usercell__name { max-width: none; }
+    .bh-dt-card--compact .bh-dt-card__metaval .bh-dt-date { display: inline; }
+    .bh-dt-card--compact .bh-dt-card__metaval .bh-dt-sub { display: inline; margin: 0 0 0 .3rem; }
+}
+
+/* No bulk action, no selection (1.2.102). */
+.bh-dt[data-select="none"] .bh-dt-check, .bh-dt[data-select="none"] .bh-dt-cardshead { display: none !important; }
+
+/* Select all for cards (1.2.65): the table header's checkbox, for the views
+   that have no table header. Shown wherever the cards are. */
+.bh-dt-cardshead { display: none; align-items: center; gap: .6rem; padding: .6rem 1rem; background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0; font-size: .82rem; font-weight: 600; color: #475569; cursor: pointer; user-select: none; }
+.bh-dt-cardshead input { width: 1rem; height: 1rem; accent-color: #2563eb; cursor: pointer; margin: 0; }
+.bh-dt[data-view="list"] .bh-dt-cardshead, .bh-dt[data-view="grid"] .bh-dt-cardshead { display: flex; }
+.bh-dt-cardshead[hidden] { display: none !important; }
+
+/* Compact Select all for the mobile toolbar row (1.2.108). Hidden on desktop
+   (the table header / cards carry it there) and when selection is off. */
+.bh-dt-selall { display: none; align-items: center; justify-content: center; flex: none;
+    min-height: 2.25rem; min-width: 2.25rem; padding: 0 .4rem; margin: 0; cursor: pointer; }
+.bh-dt-selall input { width: 1.15rem; height: 1.15rem; accent-color: #2563eb; cursor: pointer; margin: 0; }
+.bh-dt-selall[hidden] { display: none !important; }
+.bh-dt[data-select="none"] .bh-dt-selall { display: none !important; }
+
+/* View toggle (Table / List / Grid) ---------------------------------------- */
+.bh-dt-views { display: inline-flex; border: 1px solid #cbd5e1; border-radius: var(--dt-r); overflow: hidden; }
+.bh-dt-viewbtn { display: inline-flex; align-items: center; justify-content: center; width: 2.1rem; height: 2.1rem;
+    border: 0; border-left: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; }
+.bh-dt-viewbtn:first-child { border-left: 0; }
+.bh-dt-viewbtn:hover { background: #f8fafc; color: #334155; }
+.bh-dt-viewbtn.is-active { background: #eff6ff; color: #2563eb; }
+
+/* Row action button + floating menu */
+.bh-dt-actbtn { color: #475569; background: none; border: 0; cursor: pointer; padding: .3rem; border-radius: var(--dt-r-in); display: inline-flex; }
+.bh-dt-actbtn:hover { color: #2563eb; background: #f1f5f9; }
+/* 1.2.99: a larger, darker ⋮ that is easy to see and hit. */
+.bh-dt-actbtn svg { width: 1.25rem; height: 1.25rem; }
+.bh-dt-actbtn[aria-expanded="true"] { color: #2563eb; background: #eff6ff; }
+.bh-dt-actbtn:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+
+/* Row links (1.2.99). Comfortable density shows a row's actions as text links
+   along the bottom of the row, across its full width, while the row is
+   hovered or focused; there is no ⋮ column. They live inside the row (laid
+   over its cells' bottom padding from the first cell), so the row's own hover
+   colours them and nothing moves when they appear. Compact density shows the
+   ⋮ menu instead. Cards always keep the ⋮. */
+.bh-dt:not([data-density="compact"]) .bh-dt-table tbody tr.has-rowlinks > td { padding-bottom: 2.1rem; }
+.bh-dt-table td.bh-dt-linkcell { position: relative; }
+.bh-dt-rowlinks { position: absolute; left: 0; bottom: .55rem; display: flex; align-items: center; white-space: nowrap;
+    padding-left: 0; font-size: .8rem; line-height: 1.4; visibility: hidden; z-index: 1; }
+.bh-dt-table tbody tr:hover .bh-dt-rowlinks,
+.bh-dt-table tbody tr:focus-within .bh-dt-rowlinks { visibility: visible; }
+.bh-dt[data-density="compact"] .bh-dt-rowlinks { display: none; }
+.bh-dt-rowlink { position: relative; margin-left: 1rem; padding: 0; border: 0; background: none; font: inherit; color: #2563eb; cursor: pointer;
+    text-decoration: none; white-space: nowrap; }
+.bh-dt-rowlink + .bh-dt-rowlink::before { content: ""; position: absolute; left: -.55rem; top: .25em; height: .9em; width: 1px; background: #cbd5e1; }
+.bh-dt-rowlink:hover { color: #1d4ed8; text-decoration: underline; }
+.bh-dt-rowlink:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; border-radius: 2px; }
+.bh-dt-rowlink--danger { color: #b91c1c; }
+.bh-dt-rowlink--danger:hover { color: #991b1b; }
+.bh-dt:not([data-density="compact"]) .bh-dt-table .bh-dt-rowactions { display: none; }
+.bh-dt-menu { position: absolute; z-index: 60; min-width: 11rem; background: #fff; border: 1px solid #e2e8f0;
+    border-radius: .5rem; box-shadow: 0 12px 32px rgba(15,23,42,.16); padding: .3rem; }
+.bh-dt-menu__item { display: flex; align-items: center; gap: .55rem; width: 100%; padding: .5rem .6rem; border: 0;
+    background: none; color: #334155; font-size: .85rem; text-align: left; cursor: pointer; border-radius: .375rem; text-decoration: none; }
+.bh-dt-menu__item:hover { background: #f1f5f9; }
+.bh-dt-menu__item svg { width: 1rem; height: 1rem; color: #64748b; }
+.bh-dt-menu__item--danger { color: #dc2626; }
+.bh-dt-menu__item--danger svg { color: #dc2626; }
+
+/* Clear: a quiet ghost button that closes the selection. */
+.bh-dt-bulkclear { @apply inline-flex h-8 w-8 flex-none items-center justify-center rounded-full border-0 bg-transparent text-slate-500 cursor-pointer transition-colors duration-150; }
+.bh-dt-bulkclear svg { @apply h-[1.15rem] w-[1.15rem]; }
+.bh-dt-bulkclear:hover { @apply bg-slate-100 text-slate-900; }
+.bh-dt-bulkclear:focus-visible { @apply outline-none ring-2 ring-accent-500/40 ring-offset-1; }
+.bh-dt-reset { @apply text-sm text-accent-600 cursor-pointer; }
+
+/* On a narrow screen the pill becomes a full-width bottom sheet-ish bar: the
+   count holds the top line with Clear at its end, and the actions sit on their
+   own row below, each able to grow — so nothing is clipped and the targets are
+   comfortable. A safe-area inset keeps it above the home indicator. */
+@media (max-width: 640px) {
+    .bh-dt-bulk { left: .75rem; right: .75rem; max-width: none; border-radius: 1rem;
+        flex-wrap: wrap; gap: .5rem; padding: .7rem .8rem calc(.7rem + env(safe-area-inset-bottom, 0px));
+        transform: translateY(1.5rem); }
+    .bh-dt-bulk.is-active { transform: translateY(0); }
+    .bh-dt-bulk__count { order: 0; flex: 1 1 auto; }
+    .bh-dt-bulk__sep { display: none; }
+    .bh-dt-bulkclear { order: 1; }
+    .bh-dt-bulk__actions { order: 2; flex-basis: 100%; width: 100%; flex-wrap: wrap; gap: .5rem; }
+    .bh-dt-bulk__actions .bh-dt-bulkbtn { @apply h-10 flex-1 justify-center text-sm; min-width: 7rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bh-dt-bulk, .bh-dt-bulk.is-active { transition: opacity .15s ease, visibility 0s; transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 640px) {
+    .bh-dt-bulk, .bh-dt-bulk.is-active { transform: none; }
+}
+
+/* List / Grid views (desktop) */
+.bh-dt[data-view="list"] .bh-dt-table,
+.bh-dt[data-view="grid"] .bh-dt-table { display: none; }
+.bh-dt[data-view="list"] .bh-dt-cards { display: block; }
+.bh-dt[data-view="grid"] .bh-dt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: .85rem; padding: .85rem; }
+.bh-dt[data-view="grid"] .bh-dt-card { margin: 0; }
+.bh-dt[data-view="table"] .bh-dt-cards { display: none; }
+
+/* Phones and tablets: cards only, so the Table / List / Grid switch and the
+   Density option (which only changes table rows) are hidden; one column of
+   cards on phones, two on tablets. The saved view is kept for wider screens. */
+@media (max-width: 820px) {
+    .bh-dt-wrap .bh-dt-table { display: none !important; }
+    .bh-dt-views, .bh-dt-panel__row--density { display: none !important; }
+    .bh-dt .bh-dt-cards { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; padding: .75rem; }
+    .bh-dt .bh-dt-card { margin: 0; }
+    /* Select all now rides in the toolbar row, so the cards' own header goes. */
+    .bh-dt .bh-dt-cardshead { display: none !important; }
+    /* The sticky controls are full-bleed on phones/tablets — no rounded top. */
+    .bh-dt--sticky .bh-dt-top { border-top-left-radius: 0; border-top-right-radius: 0; }
+
+    /* One compact toolbar row (1.2.108):
+         [select all] [search] [Filter & sort] [Screen Options]
+       The inline filters and the view switch are hidden (filters live in the
+       drawer); the two buttons become icon-only. */
+    .bh-dt-toolbar { flex-wrap: nowrap; align-items: center; gap: .5rem; }
+    .bh-dt-toolbar > [data-dt-termfilter],
+    .bh-dt-toolbar > .bh-select[data-dt-filter] { display: none !important; }
+    .bh-dt-selall { display: inline-flex; }
+    .bh-dt-search { flex: 1 1 auto; min-width: 0; margin: 0; }
+    .bh-dt-tools { margin-left: 0; flex: none; gap: .4rem; }
+    .bh-dt-filterm { display: inline-flex; }
+    .bh-dt-filterm__text { display: none; }
+    .bh-dt-filterm, .bh-dt-tools [data-dt-options] { padding-left: .6rem; padding-right: .6rem; }
+
+    /* Focus the search and it grows to fill the row while the rest fold away. */
+    .bh-dt-selall { max-width: 3rem; overflow: hidden; transition: max-width .25s ease, opacity .2s ease; }
+    .bh-dt-tools { max-width: 60vw; overflow: hidden; transition: max-width .25s ease, opacity .2s ease; }
+    .bh-dt-toolbar.is-searching { gap: 0; }
+    .bh-dt-toolbar.is-searching .bh-dt-selall,
+    .bh-dt-toolbar.is-searching .bh-dt-tools { max-width: 0; opacity: 0; pointer-events: none; }
+
+    /* The Screen Options popover spans the row instead of running off-screen. */
+    .bh-dt-toolbar .bh-dt-panel { left: .75rem; right: .75rem; width: auto; max-height: min(70vh, 32rem); overflow-y: auto; }
+
+    .bh-dt-foot { justify-content: center; }
+    .bh-dt-foot__right { margin-left: 0; }
+    .bh-dt-menu { min-width: 12rem; }
+    .bh-dt-menu__item { padding: .65rem .7rem; font-size: .875rem; }
+}
+@media (max-width: 600px) {
+    /* No frame around the list: the toolbar, each card and the pager stand on
+       the page by themselves. */
+    .bh-dt.bh-card { background: transparent; border: 0; }
+    .bh-dt > .bh-card--pad { padding: 0 0 .75rem !important; border-bottom: 0 !important; }
+    .bh-dt .bh-dt-cards { grid-template-columns: minmax(0, 1fr); gap: .6rem; padding: 0; }
+    /* With no frame, the empty state gets the cards' own surface (1.2.66). */
+    .bh-dt .bh-dt-cards > .bh-dt-state { background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r); padding: 2.5rem 1rem; }
+    .bh-dt .bh-dt-wrap { overflow: visible; }
+    .bh-dt-foot { margin-top: .6rem; padding: .55rem .6rem .55rem .85rem !important; gap: .5rem; justify-content: space-between;
+        background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r); }
+    .bh-dt-foot__right { margin-left: auto; }
+    .bh-dt-perpage { display: none; }   /* in Screen Options */
+    .bh-list-actions { width: 100%; justify-content: space-between; }
+    /* (The single-row toolbar + fold-on-focus rules are set at 820px above.) */
+    .bh-dt-options__label { display: none; }
+    .bh-dt-tools .bh-btn { min-height: 2.5rem; }
+    .bh-dt-card__check input { width: 1.1rem; height: 1.1rem; }
+    .bh-dt-page { min-width: 2.1rem; height: 2.1rem; }
+    .bh-dt-pages { gap: .3rem; }
+    .bh-dt-count { font-size: .8rem; white-space: nowrap; }
+    /* 16px text stops iOS zooming into the search box when it is tapped. */
+    .bh-dt-search input { font-size: 16px; }
+}
+
+/* Quick Edit (1.2.61; a modal dialog since 1.2.63) -------------------------
+   Corners follow the admin sidebar's items (rounded-lg, .5rem): the dialog,
+   fields, chips, the Publish switch and messages all use --qe-r; nested parts
+   (a segment inside the switch, a suggestion row) use --qe-r-in. */
+.bh-qe {
+    --qe-r: .5rem; --qe-r-in: .375rem;
+    border: 0; padding: 0; border-radius: var(--qe-r); color: #0f172a; background: #fff;
+    width: min(52rem, calc(100vw - 2rem)); max-height: min(44rem, calc(100vh - 2rem)); max-height: min(44rem, calc(100dvh - 2rem));
+    box-shadow: 0 30px 70px -25px rgba(2, 6, 23, .55); overflow: hidden;
+}
+.bh-qe[open] { display: flex; flex-direction: column; animation: bh-qe-in .16s cubic-bezier(.2, .7, .3, 1); }
+.bh-qe::backdrop { background: rgba(15, 23, 42, .4); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+@keyframes bh-qe-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.bh-qe__head { flex: none; display: flex; align-items: flex-start; gap: .75rem; padding: .85rem 1rem .75rem 1.15rem; border-bottom: 1px solid #e2e8f0; }
+.bh-qe__titles { min-width: 0; flex: 1; }
+.bh-qe__title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.35; color: #0f172a; outline: none; }
+.bh-qe__sub { margin: .1rem 0 0; font-size: .8rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-qe__sub:empty { display: none; }
+.bh-qe__x { flex: none; display: inline-grid; place-items: center; width: 2rem; height: 2rem; margin: -.15rem -.25rem 0 0;
+    border: 0; border-radius: var(--qe-r); background: none; color: #64748b; cursor: pointer; }
+.bh-qe__x:hover { background: #f1f5f9; color: #0f172a; }
+.bh-qe__x:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.bh-qe__x svg { width: 1.15rem; height: 1.15rem; }
+.bh-qe__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+/* Quick View (1.2.101): the same dialog, read-only details. */
+.bh-qv { width: min(40rem, calc(100vw - 2rem)); }
+.bh-qv__head { align-items: center; }
+.bh-qv__media { flex: none; display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: .625rem;
+    background: #eff6ff; color: #2563eb; overflow: hidden; }
+.bh-qv__media svg { width: 1.35rem; height: 1.35rem; }
+.bh-qv__media.has-image { background: #f8fafc; border: 1px solid #e2e8f0; }
+.bh-qv__media img { width: 100%; height: 100%; object-fit: contain; padding: .3rem; }
+.bh-qv__sub { margin: .15rem 0 0; font-size: .8rem; line-height: 1.4; color: #64748b; overflow-wrap: anywhere; }
+.bh-qv__badges { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
+.bh-qv__body { padding: .35rem 1.15rem 1.1rem; }
+.bh-qv__loading { padding: 1rem 0; }
+.bh-qv__error { margin: 1rem 0; }
+.bh-qv__section { padding: .75rem 0 .35rem; }
+.bh-qv__section + .bh-qv__section { border-top: 1px solid #f1f5f9; }
+.bh-qv__heading { margin: 0 0 .4rem; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #64748b; }
+.bh-qv__list { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem 1rem; }
+.bh-qv__item { min-width: 0; }
+/* A full-width item (1.2.105) for a notes or description block: spans both
+   columns and keeps the text's own line breaks. */
+.bh-qv__item--wide { grid-column: 1 / -1; }
+.bh-qv__item--wide dd { white-space: pre-wrap; }
+.bh-qv__item dt { font-size: .72rem; color: #64748b; }
+.bh-qv__item dt:empty { display: none; }
+.bh-qv__item dd { margin: .1rem 0 0; font-size: .875rem; color: #0f172a; overflow-wrap: anywhere; }
+.bh-qv__item dd.is-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; }
+.bh-qv__item dd a { color: #2563eb; text-decoration: none; }
+.bh-qv__item dd a:hover { text-decoration: underline; }
+.bh-qv__foot { display: flex; flex-wrap: wrap; gap: .5rem; padding-top: .9rem; border-top: 1px solid #f1f5f9; margin-top: .5rem; }
+@media (max-width: 520px) {
+    .bh-qv__list { grid-template-columns: minmax(0, 1fr); }
+    .bh-qv__foot .bh-btn { flex: 1 1 auto; min-height: 2.75rem; }
+}
+
+.bh-dt-qe { padding: .9rem 1.15rem 0; }
+.bh-dt-qe__loading { display: flex; align-items: center; gap: .6rem; padding: .25rem 0 1rem; color: #64748b; font-size: .85rem; }
+.bh-dt-qe__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem .85rem; align-items: start; }
+.bh-dt-qe__field { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.bh-dt-qe__field.is-wide { grid-column: 1 / -1; }
+.bh-dt-qe__field[hidden] { display: none; }
+.bh-dt-qe__field .bh-label { margin: 0; font-size: .75rem; font-weight: 600; color: #475569; }
+.bh-dt-qe__field .bh-input, .bh-dt-qe__field .bh-select { min-height: 2.25rem; padding-top: .35rem; padding-bottom: .35rem; font-size: .875rem; border-radius: var(--qe-r); }
+.bh-dt-qe__field .bh-help { margin: 0; font-size: .72rem; color: #64748b; }
+.bh-dt-qe__field.has-error .bh-input,
+.bh-dt-qe__field.has-error .bh-select,
+.bh-dt-qe__field.has-error .bh-dt-qe__checklist,
+.bh-dt-qe__field.has-error .bh-terms__list { border-color: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
+.bh-dt-qe__error { margin: 0; font-size: .75rem; font-weight: 500; color: #b91c1c; }
+.bh-dt-qe__component { min-width: 0; }
+.bh-dt-qe__component .bh-terms__list { max-height: 7rem; }
+.bh-dt-qe__checklist { display: flex; flex-wrap: wrap; gap: .25rem .9rem; max-height: 7rem; overflow-y: auto;
+    padding: .45rem .6rem; border: 1px solid #cbd5e1; border-radius: var(--qe-r); background: #fff; }
+.bh-dt-qe__opt { display: inline-flex; align-items: center; gap: .4rem; font-size: .84rem; color: #334155; cursor: pointer; }
+.bh-dt-qe__opt[hidden] { display: none; }
+.bh-dt-qe__filter { max-width: 16rem; }
+.bh-dt-qe__field.is-toggle { justify-content: flex-end; }
+.bh-dt-qe__togglelabel { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; color: #334155; cursor: pointer; min-height: 2.25rem; }
+.bh-dt-qe__check { width: 1rem; height: 1rem; accent-color: #2563eb; }
+.bh-dt-qe__msg { margin: 0 0 .65rem; padding: .5rem .75rem; border-radius: var(--qe-r); font-size: .8rem; line-height: 1.45;
+    background: #eff6ff; color: #1e3a8a; display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.bh-dt-qe__msg[hidden] { display: none; }
+.bh-dt-qe__msg--error { background: #fef2f2; color: #991b1b; border-left: 3px solid #dc2626; }
+/* Footer: stays in view while the fields scroll. */
+.bh-dt-qe__actions { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: .5rem;
+    margin: .9rem -1.15rem 0; padding: .7rem 1.15rem; background: #fff; border-top: 1px solid #e2e8f0; }
+.bh-dt-qe__actions .bh-btn { border-radius: var(--qe-r); min-width: 5.5rem; }
+
+/* The shared fields, in the dialog's corners (the editor keeps its own). */
+.bh-qe .bh-tag { border-radius: var(--qe-r-in); }
+.bh-qe .bh-tag__x { border-radius: var(--qe-r-in); }
+.bh-qe .bh-tags__suggest { border-radius: var(--qe-r); }
+.bh-qe .bh-tags__opt { border-radius: var(--qe-r-in); }
+.bh-qe .bh-terms--compact .bh-terms__list { border-radius: var(--qe-r); }
+.bh-qe .bh-publish__seg { border-radius: var(--qe-r); }
+.bh-qe .bh-publish__mode span { border-radius: var(--qe-r-in); }
+.bh-qe .bh-publish__preview, .bh-qe .bh-publish__error { border-radius: var(--qe-r); }
+
+.bh-dt-table tr.is-updated > td, .bh-dt-card.is-updated { animation: bh-dt-flash 1.6s ease-out; }
+@keyframes bh-dt-flash { from { background: #dcfce7; } to { background: transparent; } }
+
+/* Wide: twelve columns, each field taking the span the server gave it
+   (title 6, slug 3, author 3; status 3 + publish 9; categories 5 + tags 7 …). */
+@media (min-width: 880px) {
+    .bh-dt-qe__grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .bh-dt-qe__field, .bh-dt-qe__field.is-wide { grid-column: span var(--qe-span, 12); }
+}
+/* Phones: the dialog fills the screen, one field per row, full-width buttons. */
+@media (max-width: 600px) {
+    .bh-qe { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh; margin: 0; border-radius: 0; }
+    .bh-dt-qe { padding: .8rem .9rem 0; }
+    .bh-dt-qe__grid { grid-template-columns: 1fr; }
+    .bh-dt-qe__actions { margin: .9rem -.9rem 0; padding: .65rem .9rem calc(.65rem + env(safe-area-inset-bottom, 0px)); }
+    .bh-dt-qe__actions .bh-btn { flex: 1; }
+    /* 16px text stops iOS zooming into a field when it is tapped. */
+    .bh-dt-qe__field .bh-input, .bh-dt-qe__field .bh-select, .bh-qe .bh-tags__input { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bh-qe[open] { animation: none; }
+    .bh-dt-table tr.is-updated > td, .bh-dt-card.is-updated { animation: none; }
+    .bh-dt-card { transition: none; }
+}

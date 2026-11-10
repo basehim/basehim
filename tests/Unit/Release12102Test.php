@@ -26,7 +26,7 @@ test('drawer: Escape closes it, the toggle says whether it is open, and a closed
 });
 
 test('data-table cards: on a phone-width card (< 420px) the values move under the title', function () {
-    $css = r102_file('admin/assets/css/datatable.css');
+    $css = r102_file('admin/assets/css/src/datatable.css');
     assert_contains('@container dtcard (max-width: 419px) {', $css);
     assert_false(str_contains($css, '@container dtcard (max-width: 299px)'), 'the old 300px threshold is gone');
     assert_false(str_contains($css, '(min-width: 300px) and (max-width: 344px)'));

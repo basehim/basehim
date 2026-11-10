@@ -3,7 +3,9 @@
   "private": true,
   "description": "Development tooling only. Sites never run this: the compiled CSS ships in every release.",
   "scripts": {
-    "build:css": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/tailwind.css -o admin/assets/css/tailwind.min.css --minify"
+    "build:css": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/tailwind.css -o admin/assets/css/tailwind.min.css --minify",
+    "build:datatable": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/datatable.css -o admin/assets/css/datatable.css --minify",
+    "build": "npm run build:css && npm run build:datatable"
   },
   "devDependencies": {
     "tailwindcss": "3.4.19"

@@ -59,7 +59,7 @@ test('BH-106: core uses Pdo\\Mysql::ATTR_INIT_COMMAND where it exists and never 
 });
 
 test('data table: Comfortable links are inside their row, shown by that row\'s own hover, never on every row at once', function () {
-    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/datatable.css');
+    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/src/datatable.css');
     assert_contains('.bh-dt-table tbody tr:hover .bh-dt-rowlinks,', $css);
     assert_contains('.bh-dt:not([data-density="compact"]) .bh-dt-table tbody tr.has-rowlinks > td { padding-bottom: 2.1rem; }', $css, 'room kept, so nothing moves');
     assert_not_contains('bh-dt-actrow', $css);

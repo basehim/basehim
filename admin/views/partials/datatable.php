@@ -145,6 +145,12 @@ $__selectable = $__declared
     <!-- Toolbar -->
     <div class="bh-card--pad bh-dt-top">
         <div class="bh-dt-toolbar">
+            <!-- Phones/tablets: a compact Select all that sits in the single
+                 toolbar row (1.2.108); hidden on desktop and when selection is
+                 off. The table header / cards keep their own in sync. -->
+            <label class="bh-dt-selall" data-dt-selall hidden title="Select all">
+                <input type="checkbox" data-dt-selall-input aria-label="Select all">
+            </label>
             <label class="bh-dt-search">
                 <?= icon('magnifying-glass') ?>
                 <input type="search" class="bh-input" data-dt-search placeholder="<?= htmlspecialchars($__def->searchPlaceholder) ?>" value="<?= htmlspecialchars($__payload['search']) ?>">
@@ -168,6 +174,9 @@ $__selectable = $__declared
                     <button type="button" class="bh-dt-viewbtn" data-dt-view="list" title="List view"><?= icon('list-bullet', 'w-4 h-4') ?></button>
                     <button type="button" class="bh-dt-viewbtn" data-dt-view="grid" title="Grid view"><?= icon('squares-2x2', 'w-4 h-4') ?></button>
                 </div>
+                <!-- Phones/tablets: one button opens the filter & sort drawer
+                     (built by datatable.js); hidden on desktop by CSS. -->
+                <button type="button" class="bh-btn bh-btn--secondary bh-dt-filterm" data-dt-drawer-open aria-haspopup="dialog" aria-expanded="false" aria-label="Filter and sort"><?= icon('sliders', 'w-4 h-4') ?> <span class="bh-dt-filterm__text">Filter &amp; sort</span><span class="bh-dt-filterm__badge" data-dt-drawer-badge hidden>0</span></button>
                 <button type="button" class="bh-btn bh-btn--secondary" data-dt-options aria-haspopup="true" aria-expanded="false" aria-label="Screen Options" title="Screen Options"><?= icon('cog-6-tooth', 'w-4 h-4') ?> <span class="bh-dt-options__label">Screen Options</span></button>
             </div>
             <div class="bh-dt-panel" data-dt-panel></div>
@@ -176,8 +185,10 @@ $__selectable = $__declared
         <!-- Selection / bulk bar: floats over the content (1.2.104); the script
              moves it to <body> and builds the buttons to match the selection. -->
         <div class="bh-dt-bulk" data-dt-bulk role="region" aria-label="Bulk actions">
-            <span class="bh-dt-bulk__count" data-dt-bulk-count aria-live="polite">0 items selected</span>
+            <span class="bh-dt-bulk__count" data-dt-bulk-count aria-live="polite"></span>
+            <span class="bh-dt-bulk__sep" aria-hidden="true"></span>
             <div class="bh-dt-bulk__actions" data-dt-bulk-actions></div>
+            <button type="button" class="bh-dt-bulkclear" data-dt-bulk-clear aria-label="Clear selection"><?= icon('x-mark', 'w-4 h-4') ?></button>
         </div>
     </div>
 

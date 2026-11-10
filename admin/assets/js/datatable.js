@@ -32,7 +32,12 @@
         'bolt': 'M13 2 4 14h7l-1 8 9-12h-7l1-8z',
         'calendar': 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5',
         'chat': 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.12 2.99 2.7 3.23 1.09.16 2.19.28 3.3.37V21l4.18-4.18a1.14 1.14 0 01.78-.33 48.4 48.4 0 005.83-.5c1.58-.23 2.7-1.62 2.7-3.23V6.74c0-1.6-1.12-2.99-2.7-3.23A48.4 48.4 0 0012 3c-2.39 0-4.74.17-7.04.51-1.58.23-2.7 1.62-2.7 3.23v6.02z',
-        'eye': 'M2.04 12.32a1 1 0 010-.64C3.42 7.51 7.36 4.5 12 4.5s8.57 3.01 9.96 7.18a1 1 0 010 .64C20.58 16.49 16.64 19.5 12 19.5s-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z'
+        'eye': 'M2.04 12.32a1 1 0 010-.64C3.42 7.51 7.36 4.5 12 4.5s8.57 3.01 9.96 7.18a1 1 0 010 .64C20.58 16.49 16.64 19.5 12 19.5s-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z',
+        'check': 'M4.5 12.75l6 6 9-13.5',
+        'no-symbol': 'M18.364 5.636a9 9 0 11-12.728 12.728 9 9 0 0112.728-12.728M5.636 5.636l12.728 12.728',
+        'arrow-up': 'M12 19.5V4.5m0 0L6.5 10M12 4.5 17.5 10',
+        'arrow-down': 'M12 4.5v15m0 0L6.5 14M12 19.5 17.5 14',
+        'adjustments': 'M4.5 6.75h10.5M18 6.75h1.5M4.5 12h1.5M9 12h10.5M4.5 17.25h10.5M18 17.25h1.5M15 4.5v4.5M7.5 9.75v4.5M15 15v4.5'
     };
     var DOTS = 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01';
     var VDOTS = 'M12 6h.01M12 12h.01M12 18h.01';
@@ -75,7 +80,11 @@
             density: (payload.prefs && payload.prefs.density) || 'comfortable',
             view: (payload.prefs && payload.prefs.view) || 'table',
             order: (payload.prefs && payload.prefs.order) || [],
-            visible: (payload.prefs && payload.prefs.visible) || []
+            visible: (payload.prefs && payload.prefs.visible) || [],
+            // Sticky chrome toggles (1.2.110), on by default. Kept per-browser
+            // in localStorage — a view-chrome choice, not a server-side pref.
+            sticky: lsGet('sticky', true),
+            stickyFoot: lsGet('stickyFoot', true)
         };
 
         var r = {
@@ -88,20 +97,41 @@
             bulk: root.querySelector('[data-dt-bulk]'),
             bulkCount: root.querySelector('[data-dt-bulk-count]'),
             bulkActions: root.querySelector('[data-dt-bulk-actions]'),
+            bulkClear: root.querySelector('[data-dt-bulk-clear]'),
             selectAll: null,
             optionsBtn: root.querySelector('[data-dt-options]'),
             panel: root.querySelector('[data-dt-panel]'),
-            perpage: root.querySelector('[data-dt-perpage]')
+            perpage: root.querySelector('[data-dt-perpage]'),
+            drawerBtn: root.querySelector('[data-dt-drawer-open]'),
+            drawerBadge: root.querySelector('[data-dt-drawer-badge]'),
+            toolAll: root.querySelector('[data-dt-selall-input]'),
+            toolAllWrap: root.querySelector('[data-dt-selall]'),
+            wrap: root.querySelector('.bh-dt-wrap'),
+            table: root.querySelector('.bh-dt-table'),
+            foot: root.querySelector('.bh-dt-foot')
         };
 
         root.setAttribute('data-density', state.density);
         root.setAttribute('data-view', state.view);
+
+        // Sticky toggles persist per-browser (not a server pref).
+        var remeasureSticky = function () {};   // set by stickyChrome() below
+        function lsKey(k) { return 'bh_dt_' + k + ':' + cfg.table; }
+        function lsGet(k, def) { try { var v = window.localStorage.getItem(lsKey(k)); return v === null ? def : v === '1'; } catch (e) { return def; } }
+        function lsSet(k, on) { try { window.localStorage.setItem(lsKey(k), on ? '1' : '0'); } catch (e) {} }
+        function applySticky() {
+            root.classList.toggle('bh-dt--sticky', !!state.sticky);
+            root.classList.toggle('bh-dt--sticky-foot', !!state.stickyFoot);
+            remeasureSticky();   // offsets depend on the sticky state being on
+        }
+        applySticky();
 
         // The floating bulk bar lives on <body> (1.2.104), so position:fixed is
         // relative to the viewport even when an ancestor is transformed, and
         // ticking a row can never shift the table. Escape clears the selection.
         if (r.bulk) {
             document.body.appendChild(r.bulk);
+            if (r.bulkClear) r.bulkClear.addEventListener('click', clearSelection);
             document.addEventListener('keydown', function (e) {
                 if (e.key === 'Escape' && selectedIds().length) { clearSelection(); }
             });
@@ -119,6 +149,8 @@
             r.cardsHead.appendChild(el('span', '', 'Select all'));
             r.cards.parentNode.insertBefore(r.cardsHead, r.cards);
         }
+        // The compact Select all in the toolbar row (1.2.108, phones/tablets).
+        if (r.toolAll) r.toolAll.addEventListener('change', function () { onSelectAll(r.toolAll.checked); });
 
         function colById(id) { for (var i = 0; i < catalog.length; i++) if (catalog[i].id === id) return catalog[i]; return null; }
 
@@ -151,9 +183,20 @@
             } catch (e) { /* an old browser keeps the old behaviour */ }
         }
 
+        // The skeleton shows for at least this long so a fast response still
+        // reads as a load rather than a flicker (1.2.108).
+        var SKEL_MIN = 300;
         function load() {
             var my = ++loadSeq;
             root.classList.add('is-loading');
+            renderSkeleton();
+            var skelAt = Date.now();
+            // Run the render only once the skeleton has been shown long enough,
+            // and only if this is still the latest load.
+            var after = function (fn) {
+                var wait = Math.max(0, SKEL_MIN - (Date.now() - skelAt));
+                window.setTimeout(function () { if (my === loadSeq) fn(); }, wait);
+            };
             window.Basehim.ajax.get('content.table', {
                 table: cfg.table, page: state.page, per_page: state.perPage,
                 sort: state.sort || '', search: state.search || '',
@@ -161,25 +204,29 @@
                 columns: JSON.stringify(columns ? columns.map(function (c) { return c.id; }) : [])
             }).then(function (data) {
                 if (my !== loadSeq) return;
-                payload = data; columns = data.columns || columns; catalog = data.catalog || catalog;
-                if (data.prefs) { state.order = data.prefs.order; state.visible = data.prefs.visible; }
-                state.sort = data.sort || null;
-                // Keep the current page across filter/sort/view changes, but if
-                // it now overruns the (possibly smaller) result set, drop to the
-                // last page that has rows and reload once.
-                var m = data.meta || {};
-                if (m.last_page && state.page > m.last_page) {
-                    state.page = m.last_page;
-                    load();
-                    return;
-                }
-                renderHead(); renderBody(); renderFoot();
-                syncUrl();
-                emit('bh:dt-loaded', { table: cfg.table, meta: data.meta || {}, sort: state.sort, search: state.search, filters: toObj(state.filters) });
+                after(function () {
+                    payload = data; columns = data.columns || columns; catalog = data.catalog || catalog;
+                    if (data.prefs) { state.order = data.prefs.order; state.visible = data.prefs.visible; }
+                    state.sort = data.sort || null;
+                    // Keep the current page across filter/sort/view changes, but
+                    // if it now overruns the (smaller) result set, drop to the
+                    // last page that has rows and reload once (skeleton stays up).
+                    var m = data.meta || {};
+                    if (m.last_page && state.page > m.last_page) { state.page = m.last_page; load(); return; }
+                    renderHead(); renderBody(); renderFoot();
+                    remeasureSticky();   // re-detect wide-table overflow after a (re)render
+                    syncUrl();
+                    if (drawerSync) drawerSync();
+                    root.classList.remove('is-loading');
+                    emit('bh:dt-loaded', { table: cfg.table, meta: data.meta || {}, sort: state.sort, search: state.search, filters: toObj(state.filters) });
+                });
             }).catch(function (err) {
                 if (my !== loadSeq) return;
-                renderError(err && err.message ? err.message : 'Could not load the table.');
-            }).then(function () { if (my === loadSeq) root.classList.remove('is-loading'); });
+                after(function () {
+                    renderError(err && err.message ? err.message : 'Could not load the table.');
+                    root.classList.remove('is-loading');
+                });
+            });
         }
 
         /**
@@ -232,11 +279,13 @@
         function alignCls(col) { return col.align === 'right' ? 'bh-dt-al-right' : (col.align === 'center' ? 'bh-dt-al-center' : ''); }
         function renderHead() {
             var tr = el('tr');
-            var th0 = el('th', 'bh-dt-check'); var all = el('input'); all.type = 'checkbox';
+            var fc = frozenCount();
+            var th0 = el('th', 'bh-dt-check bh-dt-frz bh-dt-frz--0'); var all = el('input'); all.type = 'checkbox';
             all.setAttribute('aria-label', 'Select all');
             all.addEventListener('change', function () { onSelectAll(all.checked); }); th0.appendChild(all); r.selectAll = all; tr.appendChild(th0);
-            columns.forEach(function (col) {
+            columns.forEach(function (col, i) {
                 var cls = alignCls(col); if (col.id === 'thumb') cls += ' bh-dt-col-thumb';
+                if (i < fc) cls += ' bh-dt-frz bh-dt-frz--' + (i + 1) + (i === fc - 1 ? ' bh-dt-frz--last' : '');
                 var th = el('th', cls.trim());
                 var label = col.id === 'thumb' ? '' : col.label;
                 if (col.sortable && col.sortable.length) {
@@ -259,6 +308,7 @@
             var rows = payload.rows || [];
             r.body.innerHTML = ''; r.cards.innerHTML = '';
             if (r.cardsHead) r.cardsHead.hidden = !rows.length;
+            if (r.toolAllWrap) r.toolAllWrap.hidden = !rows.length;
             if (!rows.length) { renderEmpty(); syncBulk(); syncSelectAll(); return; }
             rows.forEach(function (row) { r.body.appendChild(buildRow(row)); r.cards.appendChild(buildCard(row)); });
             syncBulk(); syncSelectAll();
@@ -286,12 +336,14 @@
         }
         function buildRow(row) {
             var tr = el('tr'); tr.setAttribute('data-dt-row', row.id); tr.setAttribute('data-dt-rowid', row.id);
-            var td0 = el('td', 'bh-dt-check'); td0.appendChild(rowCheckbox(row)); tr.appendChild(td0);
+            var fc = frozenCount();
+            var td0 = el('td', 'bh-dt-check bh-dt-frz bh-dt-frz--0'); td0.appendChild(rowCheckbox(row)); tr.appendChild(td0);
             // Comfortable density (1.2.99): the row's links, drawn across the
             // bottom of the whole row from its first cell (CSS positions them).
             var links = rowLinks(row);
             columns.forEach(function (col, i) {
                 var cls = alignCls(col); if (col.id === 'views') cls += ' bh-dt-views';
+                if (i < fc) cls += ' bh-dt-frz bh-dt-frz--' + (i + 1) + (i === fc - 1 ? ' bh-dt-frz--last' : '');
                 var td = el('td', cls.trim()); td.innerHTML = (row.cells && row.cells[col.id]) || '';
                 if (i === 0 && links) { td.classList.add('bh-dt-linkcell'); td.appendChild(links); }
                 tr.appendChild(td);
@@ -328,6 +380,17 @@
             if (col.id === 'title') return 'title';
             if (col.id === 'status') return 'under';
             return 'row';
+        }
+        // Wide-table mode freezes the leading identity cells: the select cell
+        // plus the data columns up to and including the primary (title) column,
+        // so a thumbnail + title stay pinned while the rest scroll. Capped at
+        // the first two data columns, so an unusual layout can't freeze half
+        // the table; falls back to the first column when title isn't near the
+        // front.
+        function frozenCount() {
+            var t = -1;
+            for (var i = 0; i < columns.length; i++) { if (cardSlot(columns[i]) === 'title') { t = i; break; } }
+            return (t >= 0 && t <= 1) ? t + 1 : 1;
         }
         /** A cell with nothing to show ('' or a lone dash) is left off the card. */
         function blankCell(html) {
@@ -1101,7 +1164,7 @@
             r.pages.innerHTML = '';
             var mk = function (html, page, opts) {
                 var b = el('button', 'bh-dt-page' + (opts && opts.current ? ' is-current' : ''), html);
-                if (opts && opts.disabled) b.disabled = true; else b.addEventListener('click', function () { state.page = page; load(); });
+                if (opts && opts.disabled) b.disabled = true; else b.addEventListener('click', function () { state.page = page; scrollToListTop(); load(); });
                 return b;
             };
             r.pages.appendChild(mk(icon('chevron-left'), m.page - 1, { disabled: m.page <= 1 }));
@@ -1113,6 +1176,52 @@
         }
         function narrowScreen() {
             try { return !!(window.matchMedia && window.matchMedia('(max-width: 600px)').matches); } catch (e) { return false; }
+        }
+        // --- skeleton loading -----------------------------------------------
+        // Shimmer placeholders shaped like the current view (same columns in the
+        // table, same card shape in cards) at the current rows-per-page, so the
+        // real data lands exactly where the skeleton sat (1.2.107). Both the
+        // table body and the cards are filled; CSS shows only the active view,
+        // as it does for the real rows/cards.
+        function skelBar(width, extra) { var b = el('span', 'bh-dt-skel__bar' + (extra ? ' ' + extra : '')); if (width) b.style.width = width; return b; }
+        function renderSkeleton() {
+            var per = Math.min(Math.max(parseInt(state.perPage, 10) || 10, 3), 12);
+            var i, c;
+            if (r.body) {
+                r.body.innerHTML = '';
+                var cols = columns || [];
+                for (i = 0; i < per; i++) {
+                    var tr = el('tr', 'bh-dt-skelrow');
+                    tr.appendChild(el('td', 'bh-dt-check'));
+                    for (c = 0; c < cols.length; c++) {
+                        var col = cols[c], td = el('td', alignCls(col));
+                        if (col.id === 'thumb') {
+                            var tb = el('span', 'bh-dt-skel__thumb'); tb.style.width = '2rem'; tb.style.height = '2rem';
+                            td.classList.add('bh-dt-col-thumb'); td.appendChild(tb); tr.appendChild(td); continue;
+                        }
+                        var cell = el('div', 'bh-dt-skelcell');
+                        cell.appendChild(skelBar(c === 0 ? '72%' : '54%'));
+                        if (c === 0) cell.appendChild(skelBar('42%', 'bh-dt-skel__bar--sm'));
+                        td.appendChild(cell); tr.appendChild(td);
+                    }
+                    tr.appendChild(el('td', 'bh-dt-rowactions'));
+                    r.body.appendChild(tr);
+                }
+            }
+            if (r.cards) {
+                r.cards.innerHTML = '';
+                for (i = 0; i < per; i++) {
+                    var card = el('div', 'bh-dt-skelcard');
+                    card.appendChild(el('span', 'bh-dt-skel__dot'));
+                    var thumb = el('span', 'bh-dt-skel__thumb'); thumb.style.width = '2.5rem'; thumb.style.height = '2.5rem';
+                    card.appendChild(thumb);
+                    var main = el('div', 'bh-dt-skelcard__main');
+                    main.appendChild(skelBar('78%'));
+                    main.appendChild(skelBar('44%', 'bh-dt-skel__bar--sm'));
+                    card.appendChild(main);
+                    r.cards.appendChild(card);
+                }
+            }
         }
         /** "Showing 1–20 of 50 posts" — the table's own noun (1.2.65). */
         function countText(from, to, total) {
@@ -1135,10 +1244,18 @@
 
         // --- selection + context bulk ----------------------------------------
         function selectedIds() { return Object.keys(selected); }
+        // Each bulk action's leading icon, by action id. A declared action can
+        // carry its own `icon`; these are the built-ins.
+        var BULK_ICON = { publish: 'check', approve: 'check', draft: 'arrow-down-tray', pending: 'arrow-down-tray', spam: 'no-symbol', delete: 'trash' };
         function syncBulk() {
             var ids = selectedIds(), n = ids.length;
-            if (r.bulkCount) r.bulkCount.textContent = n + (n === 1 ? ' item selected' : ' items selected');
+            if (r.bulkCount) {
+                r.bulkCount.innerHTML = '';
+                r.bulkCount.appendChild(el('span', 'bh-dt-bulk__n', String(n)));
+                r.bulkCount.appendChild(el('span', '', 'selected'));
+            }
             if (r.bulk) r.bulk.classList.toggle('is-active', n > 0);
+            if (r.bulkClear) r.bulkClear.hidden = n === 0;
             if (!r.bulkActions) return;
             r.bulkActions.innerHTML = '';
             if (!n) return;
@@ -1150,21 +1267,22 @@
             declared().forEach(function (a) {
                 if (!a.bulk || a.href || a.event) return;
                 var ok = ids.filter(function (id) { return offers(a, selected[id], null); });
-                if (ok.length) btns.push([a.id, a.label + (ok.length < n ? ' (' + ok.length + ')' : ''), a.tone, ok]);
+                if (ok.length) btns.push([a.id, a.label + (ok.length < n ? ' (' + ok.length + ')' : ''), a.tone, ok, a.icon || BULK_ICON[a.id]]);
             });
-            if (bulk.indexOf('publish') !== -1 && anyUnpublished) btns.push(['publish', 'Publish', 'publish']);
-            if (bulk.indexOf('draft') !== -1 && anyPublished) btns.push(['draft', 'Unpublish', 'neutral']);
-            if (bulk.indexOf('approve') !== -1) btns.push(['approve', 'Approve', 'publish']);
-            if (bulk.indexOf('pending') !== -1) btns.push(['pending', 'Unapprove', 'neutral']);
-            if (bulk.indexOf('spam') !== -1) btns.push(['spam', 'Spam', 'danger']);
-            if (bulk.indexOf('delete') !== -1) btns.push(['delete', 'Delete', 'danger']);
+            if (bulk.indexOf('publish') !== -1 && anyUnpublished) btns.push(['publish', 'Publish', 'publish', null, BULK_ICON.publish]);
+            if (bulk.indexOf('draft') !== -1 && anyPublished) btns.push(['draft', 'Unpublish', 'neutral', null, BULK_ICON.draft]);
+            if (bulk.indexOf('approve') !== -1) btns.push(['approve', 'Approve', 'publish', null, BULK_ICON.approve]);
+            if (bulk.indexOf('pending') !== -1) btns.push(['pending', 'Unapprove', 'neutral', null, BULK_ICON.pending]);
+            if (bulk.indexOf('spam') !== -1) btns.push(['spam', 'Spam', 'danger', null, BULK_ICON.spam]);
+            if (bulk.indexOf('delete') !== -1) btns.push(['delete', 'Delete', 'danger', null, BULK_ICON.delete]);
             btns.forEach(function (b) {
-                var btn = el('button', 'bh-dt-bulkbtn bh-dt-bulkbtn--' + b[2], esc(b[1]));
-                btn.type = 'button'; btn.addEventListener('click', function () { runBulk(b[0], b[3] || selectedIds()); });
+                var btn = el('button', 'bh-dt-bulkbtn bh-dt-bulkbtn--' + b[2]);
+                btn.type = 'button';
+                if (b[4]) btn.innerHTML = icon(b[4]);
+                btn.appendChild(el('span', '', esc(b[1])));
+                btn.addEventListener('click', function () { runBulk(b[0], b[3] || selectedIds()); });
                 r.bulkActions.appendChild(btn);
             });
-            var clear = el('button', 'bh-dt-bulkclear', 'Clear'); clear.type = 'button';
-            clear.addEventListener('click', clearSelection); r.bulkActions.appendChild(clear);
         }
         function clearSelection() {
             selected = Object.create(null);
@@ -1176,7 +1294,7 @@
         function syncSelectAll() {
             var rows = payload.rows || [];
             var checked = rows.filter(function (row) { return selected[row.id] !== undefined; }).length;
-            [r.selectAll, r.cardsAll].forEach(function (box) {
+            [r.selectAll, r.cardsAll, r.toolAll].forEach(function (box) {
                 if (!box) return;
                 box.checked = rows.length > 0 && checked === rows.length;
                 box.indeterminate = checked > 0 && checked < rows.length;
@@ -1279,11 +1397,27 @@
             var row1 = el('div', 'bh-dt-panel__row'); row1.appendChild(el('span', '', 'Rows per page')); row1.appendChild(sizeSel); r.panel.appendChild(row1);
             // Density only changes table rows; hidden where only cards show.
             var row2 = el('div', 'bh-dt-panel__row bh-dt-panel__row--density'); row2.appendChild(el('span', '', 'Density')); row2.appendChild(densSel); r.panel.appendChild(row2);
+            // Sticky chrome toggles (1.2.110), on by default. These apply at once
+            // (a per-browser view choice), not via Apply.
+            r.panel.appendChild(el('hr', 'bh-dt-panel__sep'));
+            r.panel.appendChild(el('div', 'bh-dt-panel__label', 'Sticky'));
+            r.panel.appendChild(stickyRow('Header & controls', state.sticky, function (on) { state.sticky = on; lsSet('sticky', on); applySticky(); }));
+            r.panel.appendChild(stickyRow('Pagination', state.stickyFoot, function (on) { state.stickyFoot = on; lsSet('stickyFoot', on); applySticky(); }));
             var actions = el('div', 'bh-dt-panel__actions');
             var apply = el('button', 'bh-btn bh-btn--primary bh-btn--sm', 'Apply'); apply.addEventListener('click', applyPanel);
             var reset = el('a', '', 'Reset to default'); reset.href = '#'; reset.className = 'bh-dt-reset';
             reset.addEventListener('click', function (e) { e.preventDefault(); resetPrefs(); });
             actions.appendChild(apply); actions.appendChild(reset); r.panel.appendChild(actions);
+        }
+        function stickyRow(label, on, cb) {
+            var row = el('div', 'bh-dt-panel__row');
+            row.appendChild(el('span', '', label));
+            var sw = el('label', 'bh-switch');
+            var inp = el('input'); inp.type = 'checkbox'; inp.setAttribute('role', 'switch'); inp.className = 'bh-switch__input'; inp.checked = !!on;
+            inp.addEventListener('change', function () { cb(inp.checked); });
+            sw.appendChild(inp); sw.appendChild(el('span', 'bh-switch__track'));
+            row.appendChild(sw);
+            return row;
         }
         function wireDrag(li, list) {
             li.addEventListener('dragstart', function () { li.classList.add('is-dragging'); });
@@ -1318,6 +1452,7 @@
             root.setAttribute('data-density', state.density);
             if (r.perpage) r.perpage.value = String(state.perPage);
             closePanel(); rebuildVisibleColumns();
+            scrollToListTop();   // a changed row count starts at the first row
             // Save first, THEN reload — so the reload reads the saved prefs and
             // does not race the write (which would revive a just-hidden column).
             savePrefs(false).then(load);
@@ -1340,7 +1475,16 @@
                     closePanel(); state.page = 1; rebuildVisibleColumns(); load();
                 }).catch(function (err) { if (window.bhToast) window.bhToast(err.message, 'error'); });
         }
-        function openPanel() { renderPanel(); r.panel.classList.add('is-open'); if (r.optionsBtn) r.optionsBtn.setAttribute('aria-expanded', 'true'); }
+        function openPanel() {
+            renderPanel(); r.panel.classList.add('is-open');
+            if (r.optionsBtn) r.optionsBtn.setAttribute('aria-expanded', 'true');
+            // Cap the panel to the space below its top so its lower items (and
+            // Apply) stay reachable by scrolling it, never clipped off-screen.
+            try {
+                var top = r.panel.getBoundingClientRect().top;
+                r.panel.style.setProperty('--dt-panel-max', Math.max(180, (window.innerHeight || 0) - top - 16) + 'px');
+            } catch (e) {}
+        }
         function closePanel() { if (r.panel) r.panel.classList.remove('is-open'); if (r.optionsBtn) r.optionsBtn.setAttribute('aria-expanded', 'false'); }
 
         // --- filters: status (single select) --------------------------------
@@ -1446,24 +1590,334 @@
             btn.addEventListener('click', function (e) { e.stopPropagation(); if (panel.classList.contains('is-open')) close(); else open(); });
             document.addEventListener('click', function (e) { if (!panel.contains(e.target) && !btn.contains(e.target)) close(); });
             termPanels.push(close);
+            // The drawer shows this filter expanded inline (no popover); it calls
+            // this to populate the list, since the popover's own open() won't run.
+            host.__dtRenderInline = function () { renderList(offline ? offlineFilter(search.value.trim()) : loaded); };
             updateBadge();
         }
         function closeTermPanels() { termPanels.forEach(function (c) { c(); }); if (r.panel) closePanel(); }
         root.querySelectorAll('[data-dt-termfilter]').forEach(buildTermFilter);
         if (r.search) r.search.addEventListener('input', debounce(function () { state.search = r.search.value.trim(); state.page = 1; load(); }, 300));
+        // On a phone the search grows to fill the row when focused and the other
+        // controls fold away (1.2.108); it stays expanded while it has text.
+        if (r.search) {
+            var toolbar = root.querySelector('.bh-dt-toolbar');
+            var setSearching = function (on) { if (toolbar) toolbar.classList.toggle('is-searching', on); };
+            r.search.addEventListener('focus', function () { setSearching(true); });
+            r.search.addEventListener('blur', function () { setSearching(r.search.value.trim() !== ''); });
+        }
         root.querySelectorAll('[data-dt-view]').forEach(function (btn) {
             btn.classList.toggle('is-active', btn.getAttribute('data-dt-view') === state.view);
             btn.addEventListener('click', function () { setView(btn.getAttribute('data-dt-view')); });
         });
         if (r.perpage) r.perpage.addEventListener('change', function () {
-            state.perPage = parseInt(r.perpage.value, 10) || state.perPage; savePrefs(true).then(load);
+            state.perPage = parseInt(r.perpage.value, 10) || state.perPage; scrollToListTop(); savePrefs(true).then(load);
         });
         if (r.optionsBtn) {
             r.optionsBtn.addEventListener('click', function (e) { e.stopPropagation(); if (r.panel.classList.contains('is-open')) closePanel(); else openPanel(); });
             document.addEventListener('click', function (e) { if (r.panel && !r.panel.contains(e.target) && !r.optionsBtn.contains(e.target)) closePanel(); });
         }
 
+        // --- Filter & sort drawer (phones/tablets) --------------------------
+        // One button replaces the inline filters, the view switch and Screen
+        // Options on small screens (1.2.107). It opens a right-hand sheet with
+        // a Sort control (the sort normally lives in the table header, which
+        // phones don't show), every filter moved in from the toolbar, and
+        // rows-per-page. Desktop never sees it.
+        var drawerSync = null;
+        (function buildDrawer() {
+            if (!r.drawerBtn) return;
+
+            // Sortable columns, from the catalog so a hidden-but-sortable column
+            // is still offered. Tokens: ascending ends _az/_asc/oldest.
+            function sortCols() { return (catalog || []).filter(function (c) { return c.sortable && c.sortable.length; }); }
+            function ascToken(c) { for (var i = 0; i < c.sortable.length; i++) if (/(_az|_asc|oldest)$/.test(c.sortable[i])) return c.sortable[i]; return c.sortable[0]; }
+            function descToken(c) { for (var i = 0; i < c.sortable.length; i++) if (!/(_az|_asc|oldest)$/.test(c.sortable[i])) return c.sortable[i]; return c.sortable[1] || c.sortable[0]; }
+            function activeSortCol() { var cs = sortCols(); for (var i = 0; i < cs.length; i++) if (cs[i].sortable.indexOf(state.sort) !== -1) return cs[i]; return null; }
+
+            var drawer = el('div', 'bh-dt-drawer');
+            drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true'); drawer.setAttribute('aria-label', 'Filter and sort');
+            var overlay = el('div', 'bh-dt-drawer__overlay');
+            var panel = el('div', 'bh-dt-drawer__panel');
+            var head = el('div', 'bh-dt-drawer__head');
+            head.appendChild(el('h2', 'bh-dt-drawer__title', icon('adjustments') + '<span>Filter &amp; sort</span>'));
+            var xBtn = el('button', 'bh-dt-drawer__x', icon('x-mark')); xBtn.type = 'button'; xBtn.setAttribute('aria-label', 'Close');
+            head.appendChild(xBtn);
+            var body = el('div', 'bh-dt-drawer__body');
+            var foot = el('div', 'bh-dt-drawer__foot');
+
+            // Sort section. The select's value is tracked explicitly in
+            // `sortChoice` rather than derived from state.sort, because the
+            // server echoes the *effective* sort — so choosing "Default order"
+            // (which sends no sort) would otherwise snap the control back to the
+            // default column (1.2.108 fix).
+            var sortSel, sortUp, sortDown;
+            var defaultSort = payload.sort || null;
+            var sortChoice = (state.sort && state.sort !== defaultSort && activeSortCol()) ? activeSortCol().id : '';
+            if (sortCols().length) {
+                var sSec = el('div', 'bh-dt-drawer__sec');
+                sSec.appendChild(el('div', 'bh-dt-drawer__label', icon('adjustments') + '<span>Sort by</span>'));
+                var sRow = el('div', 'bh-dt-sort');
+                sortSel = el('select', 'bh-select bh-dt-sort__sel');
+                var o0 = el('option'); o0.value = ''; o0.textContent = 'Default order'; sortSel.appendChild(o0);
+                sortCols().forEach(function (c) { var o = el('option'); o.value = c.id; o.textContent = c.label || c.id; sortSel.appendChild(o); });
+                var dir = el('div', 'bh-dt-sortdir');
+                sortUp = el('button', '', icon('arrow-up')); sortUp.type = 'button'; sortUp.setAttribute('aria-label', 'Ascending');
+                sortDown = el('button', '', icon('arrow-down')); sortDown.type = 'button'; sortDown.setAttribute('aria-label', 'Descending');
+                dir.appendChild(sortUp); dir.appendChild(sortDown);
+                sRow.appendChild(sortSel); sRow.appendChild(dir); sSec.appendChild(sRow); body.appendChild(sSec);
+
+                var applySort = function (id, wantDesc) {
+                    sortChoice = id || '';
+                    if (!id) { state.sort = null; }
+                    else { var c = colById(id); if (!c || !c.sortable) return; state.sort = wantDesc ? descToken(c) : ascToken(c); }
+                    state.page = 1; syncSort(); savePrefs(true); load();
+                };
+                sortSel.addEventListener('change', function () { applySort(sortSel.value, false); });
+                sortUp.addEventListener('click', function () { if (sortChoice) applySort(sortChoice, false); });
+                sortDown.addEventListener('click', function () { if (sortChoice) applySort(sortChoice, true); });
+            }
+
+            // Filters section — the toolbar's controls move in on open.
+            var fSec = el('div', 'bh-dt-drawer__sec');
+            fSec.appendChild(el('div', 'bh-dt-drawer__label', icon('funnel') + '<span>Filters</span>'));
+            var fHost = el('div', 'bh-dt-drawer__filters'); fSec.appendChild(fHost);
+
+            // Rows per page lives in Screen Options (restored on mobile in
+            // 1.2.108), so it is not duplicated here.
+            body.appendChild(fSec);
+            var clearAll = el('button', 'bh-btn bh-btn--ghost', 'Clear all'); clearAll.type = 'button';
+            var done = el('button', 'bh-btn bh-btn--primary', 'Done'); done.type = 'button';
+            foot.appendChild(clearAll); foot.appendChild(done);
+            panel.appendChild(head); panel.appendChild(body); panel.appendChild(foot);
+            drawer.appendChild(overlay); drawer.appendChild(panel);
+            document.body.appendChild(drawer);
+
+            // Move the toolbar's filter controls in/out, each with a label. A
+            // hidden slot marks every control's home so it returns exactly there.
+            var moved = [];
+            function filterControls() {
+                var out = [];
+                root.querySelectorAll('.bh-dt-toolbar > .bh-select[data-dt-filter]').forEach(function (n) { out.push({ node: n, label: n.getAttribute('aria-label') || 'Filter' }); });
+                root.querySelectorAll('.bh-dt-toolbar > [data-dt-termfilter]').forEach(function (n) { out.push({ node: n, label: n.getAttribute('data-dt-label') || n.getAttribute('data-dt-termfilter') }); });
+                return out;
+            }
+            function moveIn() {
+                if (moved.length) return;
+                filterControls().forEach(function (f) {
+                    var slot = el('span'); slot.hidden = true; f.node.parentNode.insertBefore(slot, f.node);
+                    var field = el('div', 'bh-dt-drawer__field');
+                    field.appendChild(el('label', 'bh-dt-drawer__sublabel', esc(f.label)));
+                    field.appendChild(f.node);
+                    fHost.appendChild(field);
+                    // Term filters show expanded inline in the drawer; populate
+                    // their list now (their popover open() won't fire here).
+                    if (typeof f.node.__dtRenderInline === 'function') f.node.__dtRenderInline();
+                    moved.push({ node: f.node, slot: slot });
+                });
+                if (!moved.length) fHost.appendChild(el('p', 'bh-dt-drawer__empty', 'No filters for this list.'));
+            }
+            function moveOut() {
+                moved.forEach(function (m) { m.slot.parentNode.insertBefore(m.node, m.slot); m.slot.parentNode.removeChild(m.slot); });
+                moved = []; fHost.innerHTML = '';
+            }
+
+            function syncSort() {
+                if (!sortSel) return;
+                // The select follows the explicit choice, not the server echo.
+                sortSel.value = sortChoice;
+                var c = sortChoice ? colById(sortChoice) : null;
+                var tok = c && c.sortable ? c.sortable : [];
+                var asc = c && tok.indexOf(state.sort) !== -1 && /(_az|_asc|oldest)$/.test(state.sort);
+                var desc = c && tok.indexOf(state.sort) !== -1 && !asc;
+                sortUp.classList.toggle('is-active', !!asc); sortDown.classList.toggle('is-active', !!desc);
+                sortUp.disabled = sortDown.disabled = !c;
+            }
+            function activeCount() {
+                // Active filters only — the sort (which has a default) is not a
+                // filter, so it does not raise the badge.
+                var n = 0; for (var k in state.filters) if (Object.prototype.hasOwnProperty.call(state.filters, k)) { var v = state.filters[k]; if (v != null && v !== '' && !(Array.isArray(v) && !v.length)) n++; }
+                return n;
+            }
+            function syncBadge() {
+                if (!r.drawerBadge) return;
+                var n = activeCount();
+                if (n) { r.drawerBadge.textContent = n; r.drawerBadge.hidden = false; }
+                else r.drawerBadge.hidden = true;
+            }
+            drawerSync = function () { syncSort(); syncBadge(); };
+
+            // Simple focus trap while open.
+            function trap(e) {
+                if (e.key !== 'Tab') return;
+                var f = panel.querySelectorAll('button, select, input, a[href], [tabindex]:not([tabindex="-1"])');
+                f = Array.prototype.filter.call(f, function (n) { return !n.disabled && n.offsetParent !== null; });
+                if (!f.length) return;
+                var first = f[0], last = f[f.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            }
+            var lastFocus = null, closeTimer = null;
+            // A CSS transition cannot run from display:none, so the panel is
+            // mounted (display set) first, then .is-open is added on the next
+            // frame so the slide-in animates; closing reverses it and unmounts
+            // after the transition (1.2.108, smoother open/close).
+            function open() {
+                if (drawer.classList.contains('is-open')) return;
+                if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+                lastFocus = document.activeElement;
+                moveIn(); syncSort();
+                drawer.style.display = 'block';
+                // two frames so the browser paints the closed state first
+                requestAnimationFrame(function () { requestAnimationFrame(function () {
+                    drawer.classList.add('is-open');
+                }); });
+                r.drawerBtn.setAttribute('aria-expanded', 'true');
+                document.documentElement.style.overflow = 'hidden';
+                document.addEventListener('keydown', trap);
+                setTimeout(function () { xBtn.focus(); }, 60);
+            }
+            function close() {
+                if (!drawer.classList.contains('is-open')) return;
+                drawer.classList.remove('is-open'); r.drawerBtn.setAttribute('aria-expanded', 'false');
+                document.documentElement.style.overflow = '';
+                document.removeEventListener('keydown', trap);
+                // Unmount and return the controls once the slide-out finishes.
+                closeTimer = setTimeout(function () { drawer.style.display = 'none'; moveOut(); closeTimer = null; }, 340);
+                if (lastFocus && lastFocus.focus) lastFocus.focus();
+            }
+            r.drawerBtn.addEventListener('click', function () { drawer.classList.contains('is-open') ? close() : open(); });
+            overlay.addEventListener('click', close);
+            xBtn.addEventListener('click', close);
+            done.addEventListener('click', close);
+            clearAll.addEventListener('click', function () {
+                state.filters = {}; state.sort = null; state.search = ''; sortChoice = '';
+                if (r.search) r.search.value = '';
+                root.querySelectorAll('[data-dt-filter]').forEach(function (s) { s.value = ''; });
+                root.querySelectorAll('[data-dt-termfilter] .bh-dt-filterbadge').forEach(function (b) { b.style.display = 'none'; });
+                root.querySelectorAll('[data-dt-termfilter] .bh-dt-filterbtn').forEach(function (b) { b.classList.remove('is-active'); });
+                // Repopulate the inline term lists so their ticks clear too.
+                root.querySelectorAll('[data-dt-termfilter]').forEach(function (h) { if (typeof h.__dtRenderInline === 'function') h.__dtRenderInline(); });
+                state.page = 1; syncSort(); savePrefs(true); load();
+            });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && drawer.classList.contains('is-open')) close(); });
+            // Growing back to desktop while open would leave the filters stranded
+            // in the hidden drawer; close it so they return to the toolbar.
+            try { window.matchMedia('(min-width: 821px)').addEventListener('change', function (ev) { if (ev.matches && drawer.classList.contains('is-open')) close(); }); } catch (e) {}
+            syncBadge();
+        })();
+
+        // --- Sticky chrome (1.2.110) ---------------------------------------
+        // The controls and the table header stick under the app's top bar and
+        // the pagination sticks to the bottom (CSS). Here we keep the header's
+        // sticky offset in step with the controls' live height, and flag the
+        // controls "stuck" so they can shrink.
+        (function stickyChrome() {
+            var topEl = root.querySelector('.bh-dt-top');
+            if (!topEl) return;
+
+            // The app's sticky top bar height — measured from the real element,
+            // never assumed, so the controls sit exactly under it on any screen.
+            function appBarHeight() {
+                var main = root.closest ? root.closest('.bh-main') : null;
+                var hdr = main ? main.querySelector(':scope > header') : null;
+                if (hdr) { try { if (getComputedStyle(hdr).position === 'sticky') return Math.round(hdr.getBoundingClientRect().height); } catch (e) {} }
+                return 0;
+            }
+            // Measure the offsets: the top-bar height, and the controls' height
+            // WHEN SHRUNK (transitions suppressed), so the sticky header offset
+            // is a constant and never jumps while the controls shrink.
+            function measure() {
+                try {
+                    root.style.setProperty('--dt-sticky-top', appBarHeight() + 'px');
+                    var hadStuck = topEl.classList.contains('is-stuck');
+                    topEl.classList.add('bh-dt-measuring'); topEl.classList.add('is-stuck');
+                    // Fractional height (getBoundingClientRect, not the integer
+                    // offsetHeight): on a 2x display a rounded height leaves a
+                    // sub-pixel gap between the controls and the sticky header.
+                    var h = topEl.getBoundingClientRect().height;
+                    if (!hadStuck) topEl.classList.remove('is-stuck');
+                    topEl.classList.remove('bh-dt-measuring');
+                    root.style.setProperty('--dt-top-h', h + 'px');
+                } catch (e) {}
+                measureGrid();
+            }
+
+            // Wide-table mode (1.2.114): when the table is wider than its wrap
+            // (too many columns to fit), the wrap becomes a self-contained
+            // scroll box — the header row freezes to its top and the first
+            // column freezes to its left (CSS, gated on .bh-dt--xscroll). Here
+            // we detect the overflow, measure the left offset of the frozen
+            // first data column (the width of the checkbox cell before it, 0
+            // when selection is off), and bound the box to the viewport.
+            function measureGrid() {
+                try {
+                    if (!r.wrap || !r.table) return;
+                    var overflow = (r.table.scrollWidth - r.wrap.clientWidth) > 1;
+                    root.classList.toggle('bh-dt--xscroll', overflow);
+                    if (!overflow) return;
+                    // Cumulative left offset for each frozen leading cell: cell k
+                    // sits at the summed width of the frozen cells before it,
+                    // measured from the header row (columns share widths).
+                    var frz = r.head ? r.head.querySelectorAll('.bh-dt-frz') : [];
+                    var left = 0;
+                    for (var k = 0; k < frz.length; k++) {
+                        root.style.setProperty('--dt-frzL-' + k, Math.round(left) + 'px');
+                        left += (frz[k].offsetParent !== null) ? frz[k].getBoundingClientRect().width : 0;
+                    }
+                    var top = parseFloat(getComputedStyle(root).getPropertyValue('--dt-sticky-top')) || 0;
+                    var th = parseFloat(getComputedStyle(root).getPropertyValue('--dt-top-h')) || 0;
+                    var footH = r.foot ? r.foot.getBoundingClientRect().height : 0;
+                    var avail = (window.innerHeight || 800) - top - th - footH - 24;
+                    root.style.setProperty('--dt-grid-max', Math.max(260, Math.round(avail)) + 'px');
+                    updateXShadow();
+                } catch (e) {}
+            }
+            // Show the frozen column's right-edge shadow only once scrolled, so
+            // it reads as "more columns hide under here".
+            function updateXShadow() {
+                try { if (r.wrap) r.wrap.classList.toggle('is-xscrolled', r.wrap.scrollLeft > 0); } catch (e) {}
+            }
+            if (r.wrap && r.wrap.addEventListener) {
+                r.wrap.addEventListener('scroll', function () {
+                    (window.requestAnimationFrame || function (f) { f(); })(updateXShadow);
+                }, { passive: true });
+            }
+            var ticking = false;
+            function updateStuck() {
+                ticking = false;
+                if (!root.classList.contains('bh-dt--sticky')) { topEl.classList.remove('is-stuck'); return; }
+                var off = parseFloat(getComputedStyle(root).getPropertyValue('--dt-sticky-top')) || 0;
+                try { topEl.classList.toggle('is-stuck', root.getBoundingClientRect().top <= off + 0.5); } catch (e) {}
+            }
+            function onScroll() { if (ticking) return; ticking = true; (window.requestAnimationFrame || function (f) { f(); })(updateStuck); }
+
+            remeasureSticky = function () { measure(); onScroll(); };
+            measure(); updateStuck();
+            if (window.addEventListener) {
+                window.addEventListener('scroll', onScroll, { passive: true });
+                var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { measure(); updateStuck(); }, 120); });
+            }
+        })();
+
+        // Scroll the list back to its first row after a page change, so the
+        // reader starts at the top of the new page instead of mid-list (1.2.110).
+        // Uses the MEASURED top-bar offset; only ever scrolls up.
+        function scrollToListTop() {
+            try {
+                if (typeof window.scrollTo !== 'function' || !root.getBoundingClientRect) return;
+                var off = parseFloat(getComputedStyle(root).getPropertyValue('--dt-sticky-top')) || 0;
+                var cur = window.pageYOffset || 0;
+                var y = root.getBoundingClientRect().top + cur - off;
+                if (cur > y + 2) {
+                    try { window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' }); }
+                    catch (e) { window.scrollTo(0, Math.max(0, y)); }
+                }
+            } catch (e) {}
+        }
+
         renderHead(); renderBody(); renderFoot();
+        remeasureSticky();   // initial wide-table overflow detection
     }
 
     function init() {

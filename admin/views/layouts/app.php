@@ -1230,6 +1230,10 @@ try {
     }
     function wrapTables(root) {
         (root.querySelectorAll ? root.querySelectorAll('table') : []).forEach(function (t) {
+            // The Data Table has its own responsive design (cards on small
+            // screens) and a sticky header, so it must not be wrapped in an
+            // overflow-x container — that would trap the sticky header.
+            if (t.classList.contains('bh-dt-table') || t.closest('.bh-dt-wrap')) return;
             if (t.closest('.bh-table-scroll') || scrolls(t)) return;
             var w = document.createElement('div');
             w.className = 'bh-table-scroll';

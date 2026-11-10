@@ -139,7 +139,7 @@ test('default and Dark Night themes honour the switches and size the logo with t
 });
 
 test('data table: Comfortable hides the ⋮ column and shows the row links inside each row; Compact the reverse; the ⋮ is darker and larger', function () {
-    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/datatable.css');
+    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/src/datatable.css');
     assert_contains('.bh-dt[data-density="compact"] .bh-dt-rowlinks { display: none; }', $css);
     assert_contains('.bh-dt-table tbody tr:hover .bh-dt-rowlinks', $css, 'the row\'s own hover shows them');
     assert_false(str_contains($css, '(hover: none) { .bh-dt-rowlinks'), 'never shown on every row at once');

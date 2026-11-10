@@ -67,8 +67,8 @@ function page(opts = {}) {
   };
   doc.body.innerHTML = '<div class="bh-dt bh-card" data-view="' + (opts.view || 'table') + '">'
     + '<script type="application/json" data-dt-config>' + JSON.stringify(cfg).replace(/</g, '\\u003c') + '</script>'
-    + '<div><input type="search" data-dt-search value="abc"><button type="button" data-dt-options>Screen Options</button><div class="bh-dt-panel" data-dt-panel></div>'
-    + '<div data-dt-bulk><span data-dt-bulk-count></span><div data-dt-bulk-actions></div></div></div>'
+    + '<div><input type="search" data-dt-search value="abc"><button type="button" data-dt-drawer-open>Filter &amp; sort<span data-dt-drawer-badge hidden>0</span></button><button type="button" data-dt-options>Screen Options</button><div class="bh-dt-panel" data-dt-panel></div>'
+    + '<div data-dt-bulk><span data-dt-bulk-count></span><span class="bh-dt-bulk__sep"></span><div data-dt-bulk-actions></div><button type="button" class="bh-dt-bulkclear" data-dt-bulk-clear></button></div></div>'
     + '<div class="bh-dt-wrap"><table class="bh-dt-table"><thead data-dt-head></thead><tbody data-dt-body></tbody></table><div class="bh-dt-cards" data-dt-cards></div></div>'
     + '<div data-dt-foot><span data-dt-count></span><div data-dt-pages></div><select data-dt-perpage><option value="2">2</option></select></div></div>';
 
@@ -83,6 +83,7 @@ function page(opts = {}) {
   const win = {
     document: doc, console,
     setTimeout: (fn) => { timers.push(fn); return timers.length; }, clearTimeout: () => {}, setInterval: () => 0,
+    requestAnimationFrame: (fn) => { fn(); return 0; },
     bhToast: (m, t) => toasts.push([m, t]),
     bhConfirm: (m) => { confirms.push(m); return Promise.resolve(confirmAnswer); },
     scrollX: 0, scrollY: 0, _listeners: {},
@@ -744,7 +745,7 @@ test('cards have their own Select all, in step with the table header', async () 
   const all = head.querySelector('input');
   all.checked = true; all.dispatchEvent(new Event('change', { bubbles: true }));
   eq(p.root.querySelectorAll('.bh-dt-card.is-selected').length, 2, 'every card');
-  eq(p.doc.querySelector('[data-dt-bulk-count]').textContent, '2 items selected', 'the bulk bar');
+  eq(p.doc.querySelector('.bh-dt-bulk__n').textContent, '2', 'the bulk bar count');
   ok(p.root.querySelector('thead .bh-dt-check input').checked, 'the table header agrees');
   // One card off: both boxes show "some".
   const cb = p.root.querySelector('.bh-dt-card[data-dt-rowid="1"] .bh-dt-rowcheck');
@@ -764,6 +765,76 @@ test('the count names the items, and phones get three page numbers', async () =>
   eq(narrow.root.querySelectorAll('[data-dt-pages] .bh-dt-page').map((b) => b.textContent).filter(Boolean), ['1', '2', '3']);
   const plain = page();
   eq(plain.root.querySelector('[data-dt-count]').textContent, 'Showing 3–4 of 9 results', 'no label: results');
+});
+
+test('the filter & sort drawer opens with a Sort control and sorts — which phones otherwise cannot do (1.2.107)', async () => {
+  const p = page({ view: 'list', mobile: true });
+  const btn = p.root.querySelector('[data-dt-drawer-open]');
+  ok(btn, 'the drawer button exists');
+  const drawer = p.doc.querySelector('.bh-dt-drawer');
+  ok(drawer && !drawer.classList.contains('is-open'), 'drawer built, closed at first');
+  btn.click();
+  ok(drawer.classList.contains('is-open'), 'opens on click');
+  const sel = drawer.querySelector('.bh-dt-sort__sel');
+  ok(sel, 'a Sort control is shown');
+  ok(sel.querySelectorAll('option').find((o) => o.value === 'title'), 'built from the sortable columns');
+  // Choosing a column sorts (ascending by its first token) and reloads.
+  sel.value = 'title'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  const load = p.calls.filter((c) => c.method === 'GET' && c.action === 'content.table').pop();
+  eq(load.data.sort, 'title_az', 'the load carries the ascending token');
+  // The descending button flips it.
+  drawer.querySelectorAll('.bh-dt-sortdir button')[1].click();
+  eq(p.calls.filter((c) => c.method === 'GET' && c.action === 'content.table').pop().data.sort, 'title_za', 'descending token');
+  // Close returns focus to the button.
+  drawer.querySelector('.bh-dt-drawer__x').click();
+  ok(!drawer.classList.contains('is-open'), 'closes');
+});
+
+test('a load paints a skeleton shaped like the current view, then the data replaces it (1.2.107)', async () => {
+  const served = {
+    'content.table': () => ({ rows: [row(1, 'First', 'draft'), row(2, 'Second', 'published')],
+      meta: { page: 1, per_page: 2, total: 2, last_page: 1 } }),
+  };
+  // Table view: skeleton rows with one cell per column land in the body.
+  const t = page({ view: 'table', handlers: served });
+  t.root.querySelector('[data-dt-search]').value = 'x';
+  t.root.querySelector('[data-dt-search]').dispatchEvent(new Event('input', { bubbles: true }));
+  t.flushTimers(); // search is debounced
+  ok(t.root.querySelector('.bh-dt-skelrow'), 'skeleton rows appear while loading');
+  ok(t.root.querySelector('.bh-dt-skelrow .bh-dt-skel__bar'), 'with shimmer bars');
+  await t.settle();
+  t.flushTimers(); // the skeleton has a minimum visible time (a timer)
+  ok(!t.root.querySelector('.bh-dt-skelrow'), 'the real rows replace the skeleton');
+  ok(t.root.querySelector('tr[data-dt-row]'), 'real rows are present');
+  // Card view: skeleton cards instead.
+  const c = page({ view: 'list', mobile: true, handlers: served });
+  c.root.querySelector('[data-dt-search]').value = 'y';
+  c.root.querySelector('[data-dt-search]').dispatchEvent(new Event('input', { bubbles: true }));
+  c.flushTimers();
+  ok(c.root.querySelector('.bh-dt-skelcard'), 'skeleton cards appear in card view');
+  await c.settle();
+  c.flushTimers();
+  ok(!c.root.querySelector('.bh-dt-skelcard'), 'real cards replace the skeleton');
+});
+
+test('Sort: "Default order" sticks even though the server echoes the default sort (1.2.108 bug fix)', async () => {
+  // The server always reports an effective sort; choosing Default must not snap
+  // the control back to the default column.
+  const p = page({ view: 'list', mobile: true, handlers: {
+    'content.table': () => ({ rows: [row(1, 'A', 'draft')], meta: { page: 1, per_page: 2, total: 1, last_page: 1 }, sort: 'newest' }),
+  }});
+  const drawer = p.doc.querySelector('.bh-dt-drawer');
+  p.root.querySelector('[data-dt-drawer-open]').click();
+  const sel = drawer.querySelector('.bh-dt-sort__sel');
+  sel.value = 'title'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  drawer.querySelectorAll('.bh-dt-sortdir button')[1].click();   // descending
+  await p.settle(); p.flushTimers();
+  eq(sel.value, 'title', 'still on the chosen column after the load');
+  // Now switch to Default order.
+  sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  await p.settle(); p.flushTimers();
+  eq(sel.value, '', 'stays on Default order, not snapped to the default column');
+  ok(drawer.querySelectorAll('.bh-dt-sortdir button')[0].disabled, 'direction toggles disabled on Default');
 });
 
 (async () => {
