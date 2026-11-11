@@ -160,6 +160,10 @@ final class Browser
             CURLOPT_HTTPHEADER     => $sendHeaders,
             CURLOPT_TIMEOUT        => 30,
             CURLOPT_PROXY          => '',          // talk to the local server directly
+            // Send the path exactly as written. Newer libcurl folds dot
+            // segments (also %2e%2e) before sending, so a test of how the
+            // server answers a malformed path never reached the server.
+            CURLOPT_PATH_AS_IS     => true,
             CURLOPT_NOPROXY        => '*',
             CURLOPT_HEADERFUNCTION => function ($ch, $line) use (&$respHeaders) {
                 $len = strlen($line);

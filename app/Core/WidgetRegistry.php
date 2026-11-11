@@ -366,7 +366,12 @@ final class WidgetRegistry
      */
     private function normaliseDashboard(array $d, string $owner, bool $hasRender): array
     {
-        $bad = static fn(string $m): never => throw new \InvalidArgumentException($m);
+        // A closure, not an arrow function: an arrow function returns its
+        // expression, and PHP 8.1 refuses `never` on anything that returns
+        // (8.2 allows it). It broke every PHP 8.1 request that loaded this file.
+        $bad = static function (string $m): never {
+            throw new \InvalidArgumentException($m);
+        };
 
         $view = $d['view'] ?? null;
         if ($view !== null && !in_array($view, self::VIEWS, true)) {

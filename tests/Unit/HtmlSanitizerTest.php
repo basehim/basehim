@@ -40,7 +40,6 @@ test('html filter: script, handlers, unsafe links and frames are removed', funct
     $cases = [
         '<p>hi</p><script>alert(1)</script>'                          => '<p>hi</p>',
         '<img src="x" onerror="alert(1)">'                            => '<img src="x">',
-        '<img/src=x/onerror=alert(1)>'                                => '<img>',
         '<a href="javascript:alert(1)">x</a>'                         => '<a>x</a>',
         '<a href="java&Tab;script:alert(1)">x</a>'                    => '<a>x</a>',
         '<a href="&#106avascript:alert(1)">x</a>'                     => '<a>x</a>',
@@ -65,6 +64,12 @@ test('html filter: script, handlers, unsafe links and frames are removed', funct
     foreach ($cases as $in => $want) {
         assert_same($want, hs($in), 'for ' . $in);
     }
+    // Slash-separated attributes. Browsers read this as src="x/onerror=alert(1)"
+    // (no event handler); newer libxml does the same, older libxml drops the
+    // src. Both are safe, so the test checks that, not one parser's output.
+    $img = hs('<img/src=x/onerror=alert(1)>');
+    assert_true(in_array($img, ['<img>', '<img src="x/onerror=alert(1)">'], true), 'slash-separated attributes: got ' . $img);
+    assert_false((bool) preg_match('/<[^>]*\son[a-z]+\s*=/i', $img), 'no event handler survives: ' . $img);
     $r = HtmlSanitizer::clean('<p onclick="x()">a</p><script>y()</script><a href="javascript:z()">b</a>');
     assert_contains('scripts', implode('|', $r['removed']));
     assert_contains('event handlers', implode('|', $r['removed']));
