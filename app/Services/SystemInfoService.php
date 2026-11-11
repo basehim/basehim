@@ -39,18 +39,20 @@ class SystemInfoService
     {
         $checks = [];
 
-        // PHP version
-        $phpOk = version_compare(PHP_VERSION, '8.1.0', '>=');
-        $checks[] = $this->check('PHP version', $phpOk ? 'pass' : 'warn',
-            PHP_VERSION . ($phpOk ? '' : ' (8.1+ recommended)'));
+        // PHP and extensions: the installer's list (App\Core\Requirements,
+        // 1.2.124). Before, Health kept its own list: openssl and fileinfo
+        // were "recommended" here but required to install, and zip, which
+        // updates and theme and app installs need, wasn't checked at all.
+        $phpOk = \App\Core\Requirements::phpOk();
+        $checks[] = $this->check('PHP version', $phpOk ? 'pass' : 'fail',
+            PHP_VERSION . ($phpOk ? '' : ' (' . \App\Core\Requirements::phpMinLabel() . ' or newer required)'),
+            $phpOk ? null : 'Choose PHP ' . \App\Core\Requirements::PHP_RECOMMENDED . ' in your hosting control panel.');
 
-        // Required extensions
-        foreach (['pdo_mysql', 'mbstring', 'json', 'openssl', 'gd', 'curl', 'fileinfo'] as $ext) {
-            $loaded = extension_loaded($ext);
-            $required = in_array($ext, ['pdo_mysql', 'mbstring', 'json'], true);
-            $checks[] = $this->check("Extension: {$ext}",
-                $loaded ? 'pass' : ($required ? 'fail' : 'warn'),
-                $loaded ? 'Loaded' : 'Missing' . ($required ? ' (required)' : ' (recommended)'));
+        foreach (\App\Core\Requirements::extensions() as $e) {
+            $checks[] = $this->check("Extension: {$e['extension']}",
+                $e['loaded'] ? 'pass' : ($e['required'] ? 'fail' : 'warn'),
+                $e['loaded'] ? 'Loaded' : 'Missing' . ($e['required'] ? ' (required)' : ' (recommended)'),
+                $e['loaded'] ? null : $e['purpose']);
         }
 
         // Database connectivity
@@ -61,16 +63,20 @@ class SystemInfoService
             $checks[] = $this->check('Database connection', 'fail', 'Cannot connect');
         }
 
-        // Writable paths
+        // Writable paths. Uploads are stored in storage/uploads; until 1.2.124
+        // this checked content/uploads, a folder nothing writes to. content/
+        // is where themes and apps are installed, as on the installer's check.
         foreach ([
-            'storage/logs'  => BASEHIM_ROOT . '/storage/logs',
-            'storage/cache' => BASEHIM_ROOT . '/storage/cache',
-            'content/uploads' => BASEHIM_ROOT . '/content/uploads',
-        ] as $label => $path) {
+            'storage/logs'    => [BASEHIM_ROOT . '/storage/logs', true, null],
+            'storage/cache'   => [BASEHIM_ROOT . '/storage/cache', true, null],
+            'storage/uploads' => [BASEHIM_ROOT . '/storage/uploads', true, null],
+            'content'         => [BASEHIM_ROOT . '/content', false, 'Needed to install themes and apps from the dashboard. Without it, upload them by FTP.'],
+        ] as $label => [$path, $required, $why]) {
             $writable = is_dir($path) && is_writable($path);
             $checks[] = $this->check("Writable: {$label}",
-                $writable ? 'pass' : 'fail',
-                !is_dir($path) ? 'Missing' : ($writable ? 'Writable' : 'Not writable'));
+                $writable ? 'pass' : ($required ? 'fail' : 'warn'),
+                !is_dir($path) ? 'Missing' : ($writable ? 'Writable' : 'Not writable'),
+                $writable ? null : $why);
         }
 
         // OPcache
@@ -313,9 +319,10 @@ class SystemInfoService
     // Helpers
     // ------------------------------------------------------------------
 
-    private function check(string $label, string $status, string $detail): array
+    /** One health row; 'hint' says what a failing or amber item affects. */
+    private function check(string $label, string $status, string $detail, ?string $hint = null): array
     {
-        return ['label' => $label, 'status' => $status, 'detail' => $detail];
+        return ['label' => $label, 'status' => $status, 'detail' => $detail, 'hint' => $hint];
     }
 
     private function bytes(float|int $b): string

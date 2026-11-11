@@ -37,7 +37,27 @@ class ApiController extends Controller
         return $this->render('mcp', [
             'title'   => 'MCP Server',
             'subtab'  => 'mcp',
+            'tools'   => self::coreTools(),
         ]);
+    }
+
+    /**
+     * Core's MCP tools for the table on this page, read from the tools'
+     * own definitions (1.2.124): name, the first sentence of the description,
+     * and the scope. The table was a second list kept by hand and had fallen
+     * behind.
+     *
+     * @return list<array{name:string,summary:string,scope:?string}>
+     */
+    public static function coreTools(): array
+    {
+        $out = [];
+        foreach ((new \App\Http\Controllers\Api\McpController())->allTools([]) as $tool) {
+            if (!empty($tool['_app'])) continue;
+            $first = preg_split('/(?<=[.!?])\s+/', trim((string) $tool['description']), 2)[0] ?? '';
+            $out[] = ['name' => (string) $tool['name'], 'summary' => $first, 'scope' => $tool['_scope'] ?? null];
+        }
+        return $out;
     }
 
     // -------------------------------------------------------------------------

@@ -50,10 +50,15 @@ $dot = ['pass' => 'bg-emerald-400', 'warn' => 'bg-amber-400', 'fail' => 'bg-red-
         <div class="px-5 py-3 border-b border-slate-100"><h3 class="text-sm font-semibold text-slate-900">Health checks</h3></div>
         <div class="divide-y divide-slate-100">
             <?php foreach ($overview['checks'] as $c): ?>
-            <div class="flex items-center gap-3 px-5 py-2.5">
-                <span class="w-2 h-2 rounded-full shrink-0 <?= $dot[$c['status']] ?? 'bg-slate-300' ?>"></span>
-                <span class="text-sm text-slate-700 flex-1"><?= htmlspecialchars($c['label']) ?></span>
-                <span class="text-xs text-slate-400"><?= htmlspecialchars($c['detail']) ?></span>
+            <div class="px-5 py-2.5">
+                <div class="flex items-center gap-3">
+                    <span class="w-2 h-2 rounded-full shrink-0 <?= $dot[$c['status']] ?? 'bg-slate-300' ?>"></span>
+                    <span class="text-sm text-slate-700 flex-1"><?= htmlspecialchars($c['label']) ?></span>
+                    <span class="text-xs text-slate-400 text-right"><?= htmlspecialchars($c['detail']) ?></span>
+                </div>
+                <?php if (!empty($c['hint'])): ?>
+                <p class="text-xs text-slate-500 mt-0.5 pl-5"><?= htmlspecialchars((string) $c['hint']) ?></p>
+                <?php endif; ?>
             </div>
             <?php endforeach; ?>
         </div>

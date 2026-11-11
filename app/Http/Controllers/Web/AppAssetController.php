@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Web;
 
+use App\Core\Http\PublicFiles;
 use App\Core\Request;
 use App\Core\Response;
 use App\Http\Controllers\Controller;
@@ -17,8 +18,9 @@ use App\Http\Controllers\Controller;
  * app serves its assets from this URL — a page cached
  * with old asset URLs keeps rendering after the rename.
  *
- * Only the `assets/` subdirectory is exposed. PHP and other executable
- * extensions are explicitly blocked.
+ * Only the `assets/` subdirectory is exposed, and only the static file
+ * types in PublicFiles (1.2.124): before, anything but a list of script
+ * extensions was sent, so a backup such as `app.js.bak` was too.
  */
 class AppAssetController extends Controller
 {
@@ -49,15 +51,12 @@ class AppAssetController extends Controller
             return Response::make('Not Found', 404);
         }
 
-        // Block executable scripts as defense-in-depth.
-        $ext = strtolower(pathinfo($real, PATHINFO_EXTENSION));
-        $blocked = ['php', 'phtml', 'phar', 'php3', 'php4', 'php5', 'php7', 'php8',
-                    'pl', 'py', 'jsp', 'asp', 'sh', 'cgi', 'htaccess'];
-        if (in_array($ext, $blocked, true)) {
+        // Static assets only: the same list content/.htaccess allows.
+        $mime = PublicFiles::typeOf($real);
+        if ($mime === null) {
             return Response::make('Forbidden', 403);
         }
 
-        $mime = $this->mimeFor($real, $ext);
         $size = filesize($real);
         $mtime = filemtime($real);
         $etag = '"' . sha1($real . $size . $mtime) . '"';
@@ -80,30 +79,5 @@ class AppAssetController extends Controller
         $versioned = ($request->query['v'] ?? '') !== '';
         $response->header('Cache-Control', $versioned ? 'public, max-age=2592000' : 'public, no-cache');
         return $response;
-    }
-
-    private function mimeFor(string $path, string $ext): string
-    {
-        static $map = [
-            'css' => 'text/css', 'js' => 'application/javascript', 'mjs' => 'application/javascript',
-            'json' => 'application/json', 'xml' => 'application/xml',
-            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
-            'gif' => 'image/gif', 'webp' => 'image/webp', 'avif' => 'image/avif',
-            'svg' => 'image/svg+xml', 'ico' => 'image/x-icon',
-            'woff' => 'font/woff', 'woff2' => 'font/woff2', 'ttf' => 'font/ttf', 'otf' => 'font/otf',
-            'mp4' => 'video/mp4', 'webm' => 'video/webm',
-            'mp3' => 'audio/mpeg', 'wav' => 'audio/wav', 'ogg' => 'audio/ogg',
-            'txt' => 'text/plain', 'html' => 'text/html', 'htm' => 'text/html',
-            'map' => 'application/json',
-        ];
-        if (isset($map[$ext])) return $map[$ext];
-
-        if (function_exists('finfo_open')) {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mime = $finfo ? finfo_file($finfo, $path) : null;
-            if ($finfo) finfo_close($finfo);
-            if ($mime) return $mime;
-        }
-        return 'application/octet-stream';
     }
 }

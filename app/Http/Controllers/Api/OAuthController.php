@@ -240,6 +240,11 @@ final class OAuthController
             'comments:write'   => 'moderate_comments',
             'users:read'       => 'manage_users',
             'settings:read'    => 'manage_settings',
+            'settings:write'   => 'manage_settings',
+            'menus:read'       => 'manage_menus',
+            'menus:write'      => 'manage_menus',
+            'themes:read'      => 'manage_themes',
+            'themes:write'     => 'manage_themes',
         ];
         // Scopes apps add (mcp.scopes) default to administrators. Until 1.2.51
         // a scope missing from this map was granted to whoever signed in, a

@@ -182,7 +182,9 @@ and mirrored in the admin at `/admin/api/reference`.
 
 ## Requirements
 
-- PHP 8.1+ with `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `gd`, `zip`
+- PHP 8.1+ (8.2 or 8.3 recommended) with `pdo_mysql`, `mbstring`, `openssl` and
+  `fileinfo`; `gd`, `curl` and `zip` recommended (image sizes, updates, and
+  installing themes and apps from the dashboard)
 - MySQL 5.7+ or MariaDB 10.3+
 - Apache or LiteSpeed with `mod_rewrite` (works on default cPanel). nginx works
   too, but you must replicate the `.htaccess` rules yourself — see Security.
@@ -475,7 +477,17 @@ instead. List tasks with `GET /api/v1/schedule`, or run one on demand with
 
 - All requests funnel through `index.php`. `.htaccess` blocks direct access to
   `app/`, `config/`, `storage/`, `database/`, `.env` and `bootstrap.php`.
-  **If you run nginx you must replicate those denials yourself.**
+  `content/.htaccess` lets the web server send only static assets (styles,
+  scripts, images, fonts, audio, video) from `content/`; templates, app
+  source, manifests and backups such as `single.php.bak` are refused.
+  **If you run nginx you must replicate those denials yourself**, for example:
+
+  ```nginx
+  location ~ ^/content/ {
+      location ~* \.(css|js|mjs|map|jpe?g|png|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|m4v|webm|mp3|m4a|wav|ogg)$ { try_files $uri /index.php?$query_string; }
+      return 403;
+  }
+  ```
 - Passwords hashed with bcrypt, cost 12.
 - CSRF tokens on every form (`_csrf` field, `X-CSRF-Token` header).
 - JWTs (HS256) are short-lived; refresh tokens are stored as SHA-256 hashes and

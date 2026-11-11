@@ -91,50 +91,27 @@ $prm     = $baseUrl . '/.well-known/oauth-protected-resource';
     <!-- Tools -->
     <div class="bg-white rounded-xl border border-slate-200 p-5">
         <h3 class="text-sm font-semibold text-slate-900 mb-1">What an assistant can do</h3>
-        <p class="text-xs text-slate-500 mb-4">Twenty-five tools, each gated by the scopes you approve on the consent screen. The default is read-only — approve write scopes only when you want an assistant drafting, tagging, moderating or maintaining the site. Most destructive actions are soft: <code class="bg-slate-100 px-1 rounded">trash_post</code> is reversible and settings secrets are always redacted. The one exception is <code class="bg-slate-100 px-1 rounded">delete_menu</code>, which permanently removes a menu and its items — it needs <code class="bg-slate-100 px-1 rounded">menus:write</code>.</p>
+        <p class="text-xs text-slate-500 mb-4"><?= count($tools) ?> tools, each gated by the scopes you approve on the consent screen. The default is read-only — approve write scopes only when you want an assistant drafting, tagging, moderating or maintaining the site. Most changes can be undone: <code class="bg-slate-100 px-1 rounded">trash_post</code> is reversible, switching the theme back restores its options, and settings secrets are always redacted and can't be written. <code class="bg-slate-100 px-1 rounded">delete_menu</code> is permanent, and <code class="bg-slate-100 px-1 rounded">save_menu</code> replaces a menu's items when it is sent new ones; both need <code class="bg-slate-100 px-1 rounded">menus:write</code>. Apps can add tools of their own.</p>
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b border-slate-200">
                         <th class="text-left font-semibold text-slate-700 py-2 pr-4">Tool</th>
-                        <th class="text-left font-semibold text-slate-700 py-2 pr-4">Does</th>
+                        <th class="hidden sm:table-cell text-left font-semibold text-slate-700 py-2 pr-4">Does</th>
                         <th class="text-left font-semibold text-slate-700 py-2 whitespace-nowrap">Scope</th>
                     </tr>
                 </thead>
                 <tbody class="text-slate-600">
-                <?php foreach ([
-                    ['get_site_info',    'Title, tagline, URL and post counts', '—'],
-                    ['search_content',   'Full-text search across posts and pages', 'posts:read'],
-                    ['list_posts',       'List posts, newest first', 'posts:read'],
-                    ['list_pages',       'List pages, newest first', 'posts:read'],
-                    ['get_post',         'Read one post in full', 'posts:read'],
-                    ['get_page',         'Read one page in full', 'posts:read'],
-                    ['create_post',      'Create a post (draft by default)', 'posts:write'],
-                    ['create_page',      'Create a page (draft by default)', 'posts:write'],
-                    ['update_post',      'Update an existing post', 'posts:write'],
-                    ['update_page',      'Update an existing page', 'posts:write'],
-                    ['trash_post',       'Move a post/page to the trash (reversible)', 'posts:write'],
-                    ['set_post_terms',   'Set the categories/tags on a post', 'posts:write'],
-                    ['list_taxonomies',  'List categories and tags', 'taxonomies:read'],
-                    ['create_term',      'Create a category or tag', 'taxonomies:write'],
-                    ['list_media',       'Browse the media library for embeddable URLs', 'media:read'],
-                    ['get_media',        'One media item: URL, size, alt, caption', 'media:read'],
-                    ['list_comments',    'List comments (find what needs moderating)', 'comments:read'],
-                    ['moderate_comment', 'Approve, unapprove, spam or trash a comment', 'comments:write'],
-                    ['get_settings',     'Read a settings group (secrets redacted)', 'settings:read'],
-                    ['list_users',       'List site users and roles', 'users:read'],
-                    ['list_widget_areas','List theme widget areas and their widget counts', 'settings:read'],
-                    ['get_widget_area',  'One widget area with its widgets and rendered HTML', 'settings:read'],
-                    ['list_menus',       'List navigation menus (id, name, location, item count)', 'menus:read'],
-                    ['delete_menu',      'Permanently delete a menu and its items', 'menus:write'],
-                    ['regenerate_thumbnails', 'Rebuild all image thumbnails from current Media settings', 'media:write'],
-                ] as [$tool, $does, $scope]): ?>
+                <?php foreach ($tools as ['name' => $tool, 'summary' => $does, 'scope' => $scope]): ?>
                     <tr class="border-b border-slate-100 last:border-0">
-                        <td class="py-2 pr-4 font-mono text-xs text-slate-800 whitespace-nowrap"><?= $tool ?></td>
-                        <td class="py-2 pr-4 text-xs"><?= $does ?></td>
-                        <td class="py-2 text-xs whitespace-nowrap">
-                            <?php if ($scope === '—'): ?><span class="text-slate-400">—</span>
-                            <?php else: ?><code class="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]"><?= $scope ?></code><?php endif; ?>
+                        <td class="py-2 pr-4 text-xs whitespace-normal align-top">
+                            <span class="font-mono text-slate-800"><?= htmlspecialchars($tool) ?></span>
+                            <span class="block sm:hidden text-slate-600 mt-0.5"><?= htmlspecialchars($does) ?></span>
+                        </td>
+                        <td class="hidden sm:table-cell py-2 pr-4 text-xs align-top"><?= htmlspecialchars($does) ?></td>
+                        <td class="py-2 text-xs whitespace-nowrap align-top">
+                            <?php if ($scope === null): ?><span class="text-slate-400">—</span>
+                            <?php else: ?><code class="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]"><?= htmlspecialchars($scope) ?></code><?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>

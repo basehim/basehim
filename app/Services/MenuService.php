@@ -163,6 +163,108 @@ class MenuService
         return $saved;
     }
 
+    /** Whether $itemId is an item of $menuId, at any depth. */
+    public function hasItem(int $menuId, int $itemId): bool
+    {
+        return $this->db->selectOne(
+            'SELECT id FROM {menu_items} WHERE id = :id AND menu_id = :mid',
+            ['id' => $itemId, 'mid' => $menuId]
+        ) !== null;
+    }
+
+    /** The deepest nesting replaceItems() accepts (top level is 1): as the Menus screen. */
+    public const MAX_DEPTH = 3;
+
+    /** The most items replaceItems() accepts in one menu. */
+    public const MAX_ITEMS = 300;
+
+    /**
+     * Replace a menu's items with a tree, in one transaction (1.2.124).
+     *
+     * Each node: {title, url?, target?, children?}. Nothing changes unless
+     * the whole tree is valid, so a menu is never left half rebuilt. Used by
+     * the MCP save_menu tool.
+     *
+     * @param list<array<string,mixed>> $tree
+     * @return int the number of items saved
+     * @throws \InvalidArgumentException naming the first bad item
+     */
+    public function replaceItems(int $menuId, array $tree): int
+    {
+        $flat = [];
+        $this->flattenTree($tree, 1, '', $flat);
+        if (count($flat) > self::MAX_ITEMS) {
+            throw new \InvalidArgumentException('A menu can have at most ' . self::MAX_ITEMS . ' items.');
+        }
+
+        return (int) $this->db->transaction(function () use ($menuId, $flat): int {
+            $this->clearItems($menuId);
+            $ids = [];
+            $order = 0;
+            foreach ($flat as $node) {
+                $ids[$node['path']] = (int) $this->db->insert('menu_items', [
+                    'menu_id'    => $menuId,
+                    'parent_id'  => $node['parent'] !== '' ? $ids[$node['parent']] : null,
+                    'type'       => 'custom',
+                    'object_id'  => null,
+                    'title'      => $node['title'],
+                    'url'        => $node['url'],
+                    'target'     => $node['target'],
+                    'icon'       => null,
+                    'classes'    => null,
+                    'menu_order' => ++$order,
+                ]);
+            }
+            return count($ids);
+        });
+    }
+
+    /**
+     * Validate and flatten a tree, parents before children.
+     *
+     * @param array<string,mixed>[] $nodes
+     * @param list<array{path:string,parent:string,title:string,url:string,target:string}> $flat
+     */
+    private function flattenTree(array $nodes, int $depth, string $parent, array &$flat): void
+    {
+        if ($depth > self::MAX_DEPTH) {
+            throw new \InvalidArgumentException('Menus can be at most ' . self::MAX_DEPTH . ' levels deep (under "' . $parent . '").');
+        }
+        foreach (array_values($nodes) as $i => $node) {
+            $path = ($parent === '' ? '' : $parent . '.') . ($i + 1);
+            if (!is_array($node)) throw new \InvalidArgumentException("Item {$path} must be an object.");
+            $title = trim((string) ($node['title'] ?? ''));
+            if ($title === '' || mb_strlen($title) > 255) {
+                throw new \InvalidArgumentException("Item {$path} needs a title of 1 to 255 characters.");
+            }
+            $url = trim((string) ($node['url'] ?? '#'));
+            if (!self::isSafeUrl($url)) {
+                throw new \InvalidArgumentException("Item {$path} (\"{$title}\") has an address that isn't allowed: use a path like /about, a #fragment, or an http(s), mailto: or tel: link.");
+            }
+            $target = (string) ($node['target'] ?? '_self');
+            $flat[] = ['path' => $path, 'parent' => $parent, 'title' => $title, 'url' => $url,
+                       'target' => $target === '_blank' ? '_blank' : '_self'];
+            $children = $node['children'] ?? [];
+            if (!is_array($children)) throw new \InvalidArgumentException("Item {$path}: children must be a list.");
+            if ($children !== []) $this->flattenTree($children, $depth + 1, $path, $flat);
+        }
+    }
+
+    /** A link a menu may hold: no javascript: or data: addresses. */
+    public static function isSafeUrl(string $url): bool
+    {
+        if ($url === '' || strlen($url) > 2048 || preg_match('/[\x00-\x1F\x7F\s]/', $url)) return false;
+        // //host/path is another site, so it must be a valid address.
+        if (str_starts_with($url, '//')) return filter_var('https:' . $url, FILTER_VALIDATE_URL) !== false;
+        if (in_array($url[0], ['/', '#', '?'], true)) return true;
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+        return match ($scheme) {
+            'http', 'https' => filter_var($url, FILTER_VALIDATE_URL) !== false,
+            'mailto', 'tel' => strlen($url) > strlen($scheme) + 1,
+            default => false,
+        };
+    }
+
     /** Remove every item in a menu (used by "clear"). */
     public function clearItems(int $menuId): int
     {

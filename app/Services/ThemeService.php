@@ -118,6 +118,35 @@ class ThemeService
         return is_array($data) ? $data : [];
     }
 
+    /** Locations offered when a theme declares none: what core themes read. */
+    public const DEFAULT_MENU_LOCATIONS = ['primary' => 'Primary Menu', 'footer' => 'Footer Menu'];
+
+    /**
+     * Where menus can go: the active theme's `menu_locations` (1.2.124),
+     * key => name. The Menus screen used to offer a fixed Primary, Footer and
+     * Sidebar whatever the theme declared, so a theme's own location (a docs
+     * sidebar, say) couldn't be chosen, and saving such a menu's settings
+     * cleared it.
+     *
+     * @return array<string,string>
+     */
+    public function menuLocations(): array
+    {
+        $declared = $this->activeManifest()['menu_locations'] ?? null;
+        $out = [];
+        if (is_array($declared)) {
+            foreach ($declared as $key => $name) {
+                // Also accepts a plain list: ["primary", "footer"].
+                if (is_int($key)) { $key = $name; $name = null; }
+                if (!is_string($key) && !is_int($key)) continue;
+                $key = (string) $key;
+                if (!preg_match('/^[a-z0-9_-]{1,64}$/i', $key)) continue;
+                $out[$key] = is_string($name) && $name !== '' ? $name : ucfirst($key);
+            }
+        }
+        return $out !== [] ? $out : self::DEFAULT_MENU_LOCATIONS;
+    }
+
     public function scan(): array
     {
         $themes = [];

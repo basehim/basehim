@@ -87,7 +87,13 @@ class MenuController extends ApiController
         return Response::json(['data' => $this->app->make(MenuService::class)->items((int) $id)]);
     }
 
-    /** POST /menus/{id}/items — body: {label, url, parent_id?, sort_order?} */
+    /**
+     * POST /menus/{id}/items — body: {title (or label), url, parent_id?, target?}
+     *
+     * Until 1.2.124 this passed `label` to MenuService, which stores `title`,
+     * so every call failed. Both names are accepted now; items are added at
+     * the end (the Menus screen or the MCP save_menu tool sets the whole order).
+     */
     public function addItem(Request $request, string $id): Response
     {
         if (!$this->canManage()) return $this->denied();
@@ -96,15 +102,20 @@ class MenuController extends ApiController
         $menus = $this->app->make(MenuService::class);
         if (!$menus->find((int) $id)) return Response::json(['error' => 'Menu not found'], 404);
 
-        $label = trim((string) $request->input('label', ''));
-        if ($label === '') return Response::json(['error' => 'label is required'], 422);
+        $title = trim((string) ($request->input('title') ?? $request->input('label', '')));
+        if ($title === '') return Response::json(['error' => 'title is required'], 422);
+
+        $parent = (int) ($request->input('parent_id') ?: 0);
+        if ($parent > 0 && !$menus->hasItem((int) $id, $parent)) {
+            return Response::json(['error' => 'parent_id is not an item of this menu.'], 422);
+        }
+        $target = (string) ($request->input('target') ?? '_self');
 
         $itemId = $menus->addItem((int) $id, [
-            'label'      => $label,
-            'url'        => (string) $request->input('url', '#'),
-            'parent_id'  => $request->input('parent_id') ?: null,
-            'sort_order' => (int) $request->input('sort_order', 0),
-            'target'     => $request->input('target'),
+            'title'     => $title,
+            'url'       => (string) $request->input('url', '#'),
+            'parent_id' => $parent ?: null,
+            'target'    => $target === '_blank' ? '_blank' : '_self',
         ]);
         if ($itemId <= 0) return Response::json(['error' => 'Could not add the item.'], 500);
         return Response::json(['data' => ['id' => $itemId]], 201);
@@ -115,11 +126,14 @@ class MenuController extends ApiController
     {
         if (!$this->canManage()) return $this->denied();
 
+        // `label` is accepted for `title` (the name this endpoint documented).
         $data = [];
-        foreach (['label', 'url', 'parent_id', 'sort_order', 'target'] as $field) {
-            if ($request->input($field) !== null) $data[$field] = $request->input($field);
+        foreach (['title', 'url', 'target'] as $field) {
+            if ($request->input($field) !== null) $data[$field] = (string) $request->input($field);
         }
-        if (!$data) return Response::json(['error' => 'Nothing to update.'], 422);
+        if (!isset($data['title']) && $request->input('label') !== null) $data['title'] = (string) $request->input('label');
+        if (isset($data['target'])) $data['target'] = $data['target'] === '_blank' ? '_blank' : '_self';
+        if (!$data) return Response::json(['error' => 'Nothing to update. Send title, url or target.'], 422);
 
         $ok = $this->app->make(MenuService::class)->updateItem((int) $id, $data);
         return Response::json(['updated' => $ok], $ok ? 200 : 404);

@@ -25,9 +25,9 @@
                 <label class="bh-label">Location</label>
                 <select name="location" class="bh-select">
                     <option value="">— None —</option>
-                    <option value="primary">Primary</option>
-                    <option value="footer">Footer</option>
-                    <option value="sidebar">Sidebar</option>
+                    <?php foreach ($locations as $val => $lbl): ?>
+                    <option value="<?= htmlspecialchars((string) $val) ?>"><?= htmlspecialchars($lbl) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <button type="submit" class="bh-btn bh-btn--primary w-full">Create Menu</button>
@@ -58,7 +58,7 @@
                     </td>
                     <td data-label="Location">
                         <?php if ($m['location']): ?>
-                            <span class="bh-badge bh-badge--blue"><?= htmlspecialchars($m['location']) ?></span>
+                            <span class="bh-badge bh-badge--blue"><?= htmlspecialchars($locations[$m['location']] ?? $m['location']) ?></span>
                         <?php else: ?>
                             <span class="text-slate-400">—</span>
                         <?php endif; ?>

@@ -8,7 +8,7 @@
             <h2 class="text-xl font-semibold text-slate-900 truncate"><?= htmlspecialchars($menu['name']) ?></h2>
             <p class="text-xs text-slate-500">
                 <?php $loc = (string) ($menu['location'] ?? ''); ?>
-                <?= $loc !== '' ? 'Shown in the <strong>' . htmlspecialchars(ucfirst($loc)) . '</strong> location' : 'Not assigned to a location yet' ?>
+                <?= $loc !== '' ? 'Shown in the <strong>' . htmlspecialchars($locations[$loc] ?? ucfirst($loc)) . '</strong> location' : 'Not assigned to a location yet' ?>
             </p>
         </div>
     </div>
@@ -129,8 +129,8 @@
                 <div>
                     <label class="bh-label">Location</label>
                     <select name="location" class="bh-select">
-                        <?php foreach (['' => '— None —', 'primary' => 'Primary', 'footer' => 'Footer', 'sidebar' => 'Sidebar'] as $val => $lbl): ?>
-                            <option value="<?= $val ?>" <?= ($menu['location'] ?? '') === $val ? 'selected' : '' ?>><?= $lbl ?></option>
+                        <?php foreach (['' => '— None —'] + $locations as $val => $lbl): $val = (string) $val; ?>
+                            <option value="<?= htmlspecialchars($val) ?>" <?= (string) ($menu['location'] ?? '') === $val ? 'selected' : '' ?>><?= htmlspecialchars($lbl) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>

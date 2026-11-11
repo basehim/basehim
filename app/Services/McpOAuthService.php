@@ -109,7 +109,9 @@ final class McpOAuthService
         'taxonomies:read', 'taxonomies:write',
         'media:read',
         'comments:read', 'comments:write',
-        'settings:read',
+        'settings:read', 'settings:write',
+        'menus:read', 'menus:write',
+        'themes:read', 'themes:write',
         'users:read',
     ];
 

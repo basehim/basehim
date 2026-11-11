@@ -1,0 +1,20 @@
+# Basehim — what the web server may send from content/ (1.2.124)
+#
+# content/ holds theme templates, app source, manifests and notes. Only
+# static assets are public: stylesheets, scripts, images, fonts, audio and
+# video. Everything else, including PHP files and backups such as
+# single.php.bak, is refused. Themes and apps are run by Basehim itself, never
+# requested directly.
+#
+# The list matches App\Core\Http\PublicFiles; change both together.
+# Updates replace this file. Put site-specific rules in the root .htaccess.
+
+Options -Indexes -ExecCGI
+
+<FilesMatch ".">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(?i:css|js|mjs|map|jpg|jpeg|png|gif|webp|avif|svg|ico|woff|woff2|ttf|otf|eot|mp4|m4v|webm|mp3|m4a|wav|ogg)$">
+    Require all granted
+</FilesMatch>

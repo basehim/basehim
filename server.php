@@ -37,6 +37,17 @@ if (preg_match('#^/(app|config|database|routes|tests)(/|$)#', $path)
     return true;
 }
 
+// content/ holds templates, app source and manifests: only static assets may
+// be sent from it, as content/.htaccess says on Apache (1.2.124). A missing
+// file still goes to the router, which serves app assets and answers 404.
+require_once __DIR__ . '/app/Core/Http/PublicFiles.php';
+if (str_starts_with($path, '/content/') && is_file(__DIR__ . $path)
+    && !\App\Core\Http\PublicFiles::isPublic($path)) {
+    http_response_code(403);
+    echo 'Forbidden';
+    return true;
+}
+
 // Real static files (CSS, JS, images, uploads) are served as they are.
 if ($path !== '/' && !str_ends_with($path, '.php') && is_file(__DIR__ . $path)) {
     return false;

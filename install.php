@@ -175,22 +175,28 @@ function explainDbError(PDOException $e, array $cfg): array
  */
 function checkRequirements(): array
 {
-    $ext = static fn(string $e): bool => extension_loaded($e);
+    // PHP and the extensions come from App\Core\Requirements, the list
+    // System → Health reads too (1.2.124). The folders are the installer's own.
     $procOpen = function_exists('proc_open') && !in_array('proc_open', array_map('trim', explode(',', (string) ini_get('disable_functions'))), true);
+    $min = \App\Core\Requirements::phpMinLabel();
     $rows = [
-        ['PHP 8.1 or newer', PHP_VERSION_ID >= 80100, true, PHP_VERSION, 'Choose PHP 8.2 or 8.3 in your control panel (often <strong>Select PHP Version</strong> or <strong>MultiPHP Manager</strong>).'],
-        ['PDO MySQL', $ext('pdo_mysql'), true, null, 'Enable the <code>pdo_mysql</code> extension in your control panel, or ask your host.'],
-        ['mbstring', $ext('mbstring'), true, null, 'Enable the <code>mbstring</code> extension.'],
-        ['JSON', $ext('json'), true, null, 'Enable the <code>json</code> extension.'],
-        ['OpenSSL', $ext('openssl'), true, null, 'Enable the <code>openssl</code> extension.'],
-        ['fileinfo', $ext('fileinfo'), true, null, 'Enable the <code>fileinfo</code> extension. Uploads use it to check file types.'],
+        ['PHP ' . $min . ' or newer', \App\Core\Requirements::phpOk(), true, PHP_VERSION, 'Choose PHP ' . \App\Core\Requirements::PHP_RECOMMENDED . ' in your control panel (often <strong>Select PHP Version</strong> or <strong>MultiPHP Manager</strong>).'],
+    ];
+    $required = $recommended = [];
+    foreach (\App\Core\Requirements::extensions() as $e) {
+        $code = '<code>' . htmlspecialchars($e['extension'], ENT_QUOTES, 'UTF-8') . '</code>';
+        $row = [$e['label'], $e['loaded'], $e['required'], null,
+            htmlspecialchars($e['purpose'], ENT_QUOTES, 'UTF-8') . ' Enable the ' . $code . ' extension in your control panel, or ask your host.'];
+        if ($e['required']) $required[] = $row; else $recommended[] = $row;
+    }
+    // Required first, so what blocks the install is at the top.
+    $rows = array_merge($rows, $required, [
         ['storage/ is writable', is_writable(__DIR__ . '/storage'), true, null, 'Let the web server write to the <code>storage</code> folder (permissions 755 or 775; never 777).'],
         ['Site folder is writable', is_writable(__DIR__), true, null, 'The installer saves its settings file, <code>.env</code>, here. Make the folder writable while you install, or create <code>.env</code> from <code>.env.example</code> yourself.'],
-        ['GD (image sizes)', $ext('gd'), false, null, 'Without GD, images upload but no smaller sizes are made. Enable the <code>gd</code> extension when you can.'],
-        ['cURL', $ext('curl'), false, null, 'Updates, the marketplace and apps that call other sites work better with the <code>curl</code> extension.'],
+    ], $recommended, [
         ['content/ is writable', is_writable(__DIR__ . '/content'), false, null, 'Needed to install themes and apps from the admin. Uploading them by FTP still works without it.'],
         ['proc_open', $procOpen, false, null, 'Lets Basehim test an app in a separate process before switching it on. Without it, apps are checked in the same process.'],
-    ];
+    ]);
     return array_map(static fn(array $r): array => [
         'name' => $r[0], 'ok' => (bool) $r[1], 'required' => $r[2],
         'value' => $r[3] ?? ($r[1] ? 'OK' : ($r[2] ? 'Missing' : 'Recommended')), 'fix' => $r[4],

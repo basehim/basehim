@@ -73,6 +73,8 @@ class ApiKeyService
         'settings:write'   => 'Update site settings',
         'menus:read'       => 'Read navigation menus',
         'menus:write'      => 'Manage navigation menus',
+        'themes:read'      => 'Read themes and theme options',
+        'themes:write'     => 'Switch the theme and change theme options',
     ];
 
     public function __construct(private Database $db) {}

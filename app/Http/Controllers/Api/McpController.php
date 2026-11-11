@@ -484,7 +484,7 @@ final class McpController
 
         $all[] = [
             'name' => 'list_menus',
-            'description' => 'List navigation menus (id, name, slug, location, item count). Requires menus:read.',
+            'description' => 'List navigation menus and the locations the active theme offers. Each menu has its id, name, slug, location and item count. Requires menus:read.',
             'inputSchema' => ['type' => 'object', 'properties' => (object) [], 'additionalProperties' => false],
             '_scope' => 'menus:read',
         ];
@@ -499,6 +499,108 @@ final class McpController
                 'additionalProperties' => false,
             ],
             '_scope' => 'menus:write',
+        ];
+
+        // Menus, themes and settings (1.2.124). Before, an agent could read
+        // these but change them only by running PHP through the Dev Tools app.
+        $all[] = [
+            'name' => 'get_menu',
+            'description' => 'Get one navigation menu with its items as a tree (title, url, target, children). Pass id, slug or location. Requires menus:read.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id'       => ['type' => 'integer', 'description' => 'Menu id from list_menus.'],
+                    'slug'     => ['type' => 'string', 'description' => 'Menu slug, e.g. main-menu.'],
+                    'location' => ['type' => 'string', 'description' => 'Theme location, e.g. primary (see list_menus).'],
+                ],
+                'additionalProperties' => false,
+            ],
+            '_scope' => 'menus:read',
+        ];
+
+        $all[] = [
+            'name' => 'save_menu',
+            'description' => 'Create or change a navigation menu, with all of its items at once. Leave out id to create one; pass id to change its name, slug, theme location and, when "items" is given, its items. Items replace the existing ones in a single step, so send the whole tree, in order. Each item: {title, url, target?: "_self"|"_blank", children?: [items]}, up to ' . \App\Services\MenuService::MAX_DEPTH . ' levels. URLs: /path, #fragment, http(s), mailto: or tel:. A location holds one menu: assigning it here takes it from any other menu. Requires menus:write.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id'       => ['type' => 'integer', 'description' => 'Menu to change. Leave out to create one.'],
+                    'name'     => ['type' => 'string', 'description' => 'Required when creating.'],
+                    'slug'     => ['type' => 'string'],
+                    'location' => ['type' => ['string', 'null'], 'description' => 'A location from list_menus, or "" / null for none.'],
+                    'items'    => [
+                        'type' => 'array',
+                        'description' => 'The complete item tree, in display order.',
+                        'items' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'title'    => ['type' => 'string'],
+                                'url'      => ['type' => 'string'],
+                                'target'   => ['type' => 'string', 'enum' => ['_self', '_blank']],
+                                'children' => ['type' => 'array', 'items' => ['type' => 'object']],
+                            ],
+                            'required' => ['title'],
+                        ],
+                    ],
+                ],
+                'additionalProperties' => false,
+            ],
+            '_scope' => 'menus:write',
+        ];
+
+        $all[] = [
+            'name' => 'list_themes',
+            'description' => 'List the installed themes and which one is active. Each has its slug, name, version, description and the Basehim version it needs. Requires themes:read.',
+            'inputSchema' => ['type' => 'object', 'properties' => (object) [], 'additionalProperties' => false],
+            '_scope' => 'themes:read',
+        ];
+
+        $all[] = [
+            'name' => 'activate_theme',
+            'description' => 'Make an installed theme the active one. Each theme keeps its own options, so switching back restores the previous look. Pass a slug from list_themes. Requires themes:write.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => ['slug' => ['type' => 'string', 'description' => 'Theme slug from list_themes.']],
+                'required' => ['slug'],
+                'additionalProperties' => false,
+            ],
+            '_scope' => 'themes:write',
+        ];
+
+        $all[] = [
+            'name' => 'get_theme_options',
+            'description' => 'Read the Appearance → Customize options and their current values. They come from core (site identity, colours…) and the active theme; each has its type, label and allowed values, keyed "section.option". Requires themes:read.',
+            'inputSchema' => ['type' => 'object', 'properties' => (object) [], 'additionalProperties' => false],
+            '_scope' => 'themes:read',
+        ];
+
+        $all[] = [
+            'name' => 'update_theme_options',
+            'description' => 'Change Appearance → Customize options. For example {"values": {"home.hero_title": "…", "colors.accent": "#2563eb"}}. Keys come from get_theme_options. Each value is checked against its type (colours must be hex, choices must be on the list, numbers are clamped); anything refused is listed in "skipped". Requires themes:write.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'values' => ['type' => 'object', 'description' => '"section.option": value', 'additionalProperties' => true],
+                ],
+                'required' => ['values'],
+                'additionalProperties' => false,
+            ],
+            '_scope' => 'themes:write',
+        ];
+
+        $all[] = [
+            'name' => 'update_settings',
+            'description' => 'Change site settings in one group, with the same checks as the Settings screen. Groups: ' . implode(', ', self::WRITABLE_SETTING_GROUPS) . '. Only fields that screen has are saved; read get_settings first for the keys. Security, sign-in, email, permalinks and the administration email are changed in the dashboard only. Requires settings:write.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'group'  => ['type' => 'string', 'enum' => self::WRITABLE_SETTING_GROUPS],
+                    'values' => ['type' => 'object', 'description' => 'key: value (text, number or true/false).', 'additionalProperties' => true],
+                ],
+                'required' => ['group', 'values'],
+                'additionalProperties' => false,
+            ],
+            '_scope' => 'settings:write',
         ];
 
         $all[] = [
@@ -597,13 +699,9 @@ final class McpController
         $allowed = array_column($this->toolDefinitions(), 'name');
         if (!in_array($name, $allowed, true)) {
             // Distinguish "unknown" from "not permitted".
-            $everything = [
-                'get_site_info','search_content','list_posts','list_pages','get_post','get_page',
-                'create_post','create_page','update_post','update_page','trash_post','set_post_terms',
-                'create_term','list_media','get_media','list_comments','moderate_comment',
-                'get_settings','list_users','list_taxonomies',
-                'list_widget_areas','get_widget_area','list_menus','delete_menu','regenerate_thumbnails',
-            ];
+            // Core tools, from their definitions: a list kept by hand here
+            // fell behind whenever a tool was added.
+            $everything = array_column(array_filter($this->allTools([]), static fn(array $t): bool => empty($t['_app'])), 'name');
             if (in_array($name, $everything, true)) {
                 return $this->toolError('This API key is not permitted to use the "' . $name . '" tool (missing scope).');
             }
@@ -641,6 +739,13 @@ final class McpController
             'get_widget_area'  => $this->toolText($this->doGetWidgetArea($args)),
             'list_menus'       => $this->toolText($this->doListMenus()),
             'delete_menu'      => $this->toolText($this->doDeleteMenu($args)),
+            'get_menu'         => $this->toolText($this->doGetMenu($args)),
+            'save_menu'        => $this->toolText($this->doSaveMenu($args)),
+            'list_themes'      => $this->toolText($this->doListThemes()),
+            'activate_theme'   => $this->toolText($this->doActivateTheme($args)),
+            'get_theme_options'    => $this->toolText($this->doGetThemeOptions()),
+            'update_theme_options' => $this->toolText($this->doUpdateThemeOptions($args)),
+            'update_settings'  => $this->toolText($this->doUpdateSettings($args)),
             'regenerate_thumbnails' => $this->toolText($this->doRegenerateThumbnails()),
             default            => $this->callAppTool($name, $args),
         };
@@ -1153,7 +1258,289 @@ final class McpController
                 'item_count' => count($menus->items($id)),
             ];
         }
-        return $this->json(['menus' => $out]);
+        // Where menus can go in the active theme (1.2.124), for save_menu.
+        $locations = $this->app()->make(\App\Services\ThemeService::class)->menuLocations();
+        return $this->json(['menus' => $out, 'locations' => $locations]);
+    }
+
+    // ------------------------------------------------------------------
+    // Menus, themes and settings (1.2.124)
+    // ------------------------------------------------------------------
+
+    /** One menu with its item tree, the shape get_menu and save_menu return. */
+    private function menuShape(\App\Services\MenuService $menus, array $menu): array
+    {
+        $locations = $this->app()->make(\App\Services\ThemeService::class)->menuLocations();
+        $loc = (string) ($menu['location'] ?? '');
+        $shape = static function (array $items) use (&$shape): array {
+            $out = [];
+            foreach ($items as $it) {
+                $node = [
+                    'id'     => (int) $it['id'],
+                    'title'  => (string) ($it['title'] ?? ''),
+                    'url'    => (string) ($it['url'] ?? ''),
+                    'target' => (string) ($it['target'] ?? '_self'),
+                ];
+                if (!empty($it['children'])) $node['children'] = $shape($it['children']);
+                $out[] = $node;
+            }
+            return $out;
+        };
+        return [
+            'id'       => (int) $menu['id'],
+            'name'     => (string) ($menu['name'] ?? ''),
+            'slug'     => (string) ($menu['slug'] ?? ''),
+            'location' => $loc !== '' ? $loc : null,
+            'location_name' => $loc !== '' ? ($locations[$loc] ?? null) : null,
+            'items'    => $shape($menus->items((int) $menu['id'])),
+        ];
+    }
+
+    private function doGetMenu(array $args): string
+    {
+        $this->requireCap('manage_menus');
+        $menus = $this->app()->make(\App\Services\MenuService::class);
+        $menu = null;
+        if (!empty($args['id'])) {
+            $menu = $menus->find((int) $args['id']);
+        } elseif (trim((string) ($args['slug'] ?? '')) !== '') {
+            $menu = $menus->findBySlug(trim((string) $args['slug']));
+        } elseif (trim((string) ($args['location'] ?? '')) !== '') {
+            foreach ($menus->all() as $m) {
+                if ((string) ($m['location'] ?? '') === trim((string) $args['location'])) { $menu = $m; break; }
+            }
+        } else {
+            throw new McpError('Pass "id", "slug" or "location".', -32602);
+        }
+        if (!$menu) return $this->json(['error' => 'No such menu. list_menus shows the menus there are.']);
+        return $this->json($this->menuShape($menus, $menu));
+    }
+
+    private function doSaveMenu(array $args): string
+    {
+        $this->requireCap('manage_menus');
+        $menus = $this->app()->make(\App\Services\MenuService::class);
+        $id = (int) ($args['id'] ?? 0);
+        $existing = $id > 0 ? $menus->find($id) : null;
+        if ($id > 0 && !$existing) return $this->json(['error' => 'No menu with id ' . $id . '.']);
+
+        $data = [];
+        if (array_key_exists('name', $args)) {
+            $name = trim((string) $args['name']);
+            if ($name === '' || mb_strlen($name) > 190) throw new McpError('"name" must be 1 to 190 characters.', -32602);
+            $data['name'] = $name;
+        }
+        if (!$existing && !isset($data['name'])) throw new McpError('A new menu needs a "name".', -32602);
+        if (trim((string) ($args['slug'] ?? '')) !== '') {
+            $slug = \App\Core\Helpers::slug((string) $args['slug']);
+            $other = $menus->findBySlug($slug);
+            if ($other && (int) $other['id'] !== $id) {
+                return $this->json(['error' => 'The slug "' . $slug . '" belongs to menu ' . (int) $other['id'] . ' ("' . $other['name'] . '").']);
+            }
+            $data['slug'] = $slug;
+        }
+
+        $locations = $this->app()->make(\App\Services\ThemeService::class)->menuLocations();
+        if (array_key_exists('location', $args)) {
+            $loc = trim((string) ($args['location'] ?? ''));
+            if ($loc !== '' && !isset($locations[$loc])) {
+                return $this->json(['error' => 'The active theme has no "' . $loc . '" location.', 'locations' => $locations]);
+            }
+            $data['location'] = $loc !== '' ? $loc : null;
+        }
+
+        // Check the whole item tree before anything is written.
+        $items = $args['items'] ?? null;
+        if ($items !== null && !is_array($items)) throw new McpError('"items" must be a list.', -32602);
+
+        $notes = [];
+        try {
+            $menuId = $this->app()->make(\App\Core\Database::class)->transaction(function () use ($menus, $existing, $id, $data, $items, &$notes): int {
+                $notes = [];
+                if ($existing) {
+                    $menus->update($id, $data);
+                    $menuId = $id;
+                } else {
+                    $menuId = $menus->create($data);
+                    if ($menuId <= 0) throw new \RuntimeException('The menu could not be created.');
+                }
+                // One menu per location, as themes read it.
+                if (!empty($data['location'])) {
+                    foreach ($menus->all() as $m) {
+                        if ((int) $m['id'] !== $menuId && (string) ($m['location'] ?? '') === $data['location']) {
+                            $menus->update((int) $m['id'], ['location' => null]);
+                            $notes[] = 'Menu ' . (int) $m['id'] . ' ("' . $m['name'] . '") was in this location and now has none.';
+                        }
+                    }
+                }
+                if ($items !== null) $menus->replaceItems($menuId, $items);
+                return $menuId;
+            });
+        } catch (\InvalidArgumentException $e) {
+            return $this->json(['error' => $e->getMessage() . ' Nothing was saved.']);
+        }
+
+        $menu = $menus->find((int) $menuId);
+        \App\Services\ActivityLogService::record((int) ($this->authUser()['id'] ?? 0) ?: null,
+            $existing ? 'menu.updated' : 'menu.created', 'menu', (int) $menuId,
+            ($existing ? 'Changed' : 'Created') . " menu '" . ($menu['name'] ?? '') . "' through MCP");
+        return $this->json(['saved' => true, 'created' => !$existing] + $this->menuShape($menus, (array) $menu) + ($notes ? ['notes' => $notes] : []));
+    }
+
+    private function doListThemes(): string
+    {
+        $this->requireCap('manage_themes');
+        $themes = $this->app()->make(\App\Services\ThemeService::class);
+        $active = $themes->activeSlug();
+        $out = [];
+        foreach ($themes->scan() as $slug => $t) {
+            $out[] = [
+                'slug'        => (string) $slug,
+                'name'        => (string) ($t['name'] ?? $slug),
+                'version'     => (string) ($t['version'] ?? ''),
+                'description' => (string) ($t['description'] ?? ''),
+                'requires'    => (string) ($t['requires']['basehim'] ?? ''),
+                'active'      => (string) $slug === $active,
+            ];
+        }
+        return $this->json(['active' => $active, 'themes' => $out]);
+    }
+
+    private function doActivateTheme(array $args): string
+    {
+        $this->requireCap('manage_themes');
+        $slug = trim((string) ($args['slug'] ?? ''));
+        $themes = $this->app()->make(\App\Services\ThemeService::class);
+        $installed = $themes->scan();
+        if ($slug === '' || !isset($installed[$slug])) {
+            return $this->json(['error' => 'No installed theme "' . $slug . '".', 'installed' => array_map('strval', array_keys($installed))]);
+        }
+        $previous = $themes->activeSlug();
+        if ($previous === $slug) return $this->json(['active' => $slug, 'changed' => false]);
+        if (!$themes->activate($slug)) return $this->json(['error' => 'The theme could not be activated.']);
+        \App\Services\ActivityLogService::record((int) ($this->authUser()['id'] ?? 0) ?: null,
+            'theme.activated', 'theme', null, "Activated theme '{$slug}' through MCP (was '{$previous}')");
+        return $this->json([
+            'active'   => $slug,
+            'previous' => $previous,
+            'changed'  => true,
+            'note'     => 'To switch back, call activate_theme with slug "' . $previous . '".',
+        ]);
+    }
+
+    private function doGetThemeOptions(): string
+    {
+        $this->requireCap('manage_themes');
+        $customizer = $this->app()->make(\App\Services\CustomizerService::class);
+        $values = $customizer->values();
+        $sections = [];
+        foreach ($customizer->sections() as $sKey => $section) {
+            $options = [];
+            foreach ((array) ($section['options'] ?? []) as $oKey => $opt) {
+                if (($opt['type'] ?? '') === 'widgets') continue;   // shown, not edited
+                $path = $sKey . '.' . $oKey;
+                $options[$path] = array_filter([
+                    'type'    => $opt['type'] ?? 'text',
+                    'label'   => $opt['label'] ?? $oKey,
+                    'help'    => $opt['help'] ?? null,
+                    'choices' => $opt['choices'] ?? null,
+                    'min'     => $opt['min'] ?? null,
+                    'max'     => $opt['max'] ?? null,
+                    'default' => $opt['default'] ?? null,
+                ], static fn($v) => $v !== null) + ['value' => $values[$path] ?? null];
+            }
+            if ($options) $sections[$sKey] = ['label' => $section['label'] ?? $sKey, 'options' => $options];
+        }
+        return $this->json(['theme' => $this->app()->make(\App\Services\ThemeService::class)->activeSlug(), 'sections' => $sections]);
+    }
+
+    private function doUpdateThemeOptions(array $args): string
+    {
+        $this->requireCap('manage_themes');
+        $values = $args['values'] ?? null;
+        if (!is_array($values) || $values === []) throw new McpError('"values" must be an object of "section.option": value.', -32602);
+        $result = $this->app()->make(\App\Services\CustomizerService::class)->save($values);
+        if ($result['saved'] > 0) {
+            \App\Services\ActivityLogService::record((int) ($this->authUser()['id'] ?? 0) ?: null,
+                'customizer.saved', 'theme', null, 'Changed ' . $result['saved'] . ' Customize option(s) through MCP');
+        }
+        return $this->json([
+            'saved'   => $result['saved'],
+            'skipped' => $result['skipped'],
+        ] + ($result['skipped'] ? ['note' => 'Skipped keys are unknown (see get_theme_options) or their value failed the option\'s check.'] : []));
+    }
+
+    /**
+     * Groups update_settings may change: the screens whose fields are content
+     * and presentation. Security, sign-in, email, permalinks (which rewrites
+     * .htaccess), AI access and media types stay with a person in the
+     * dashboard.
+     */
+    public const WRITABLE_SETTING_GROUPS = ['general', 'reading', 'writing', 'discussion', 'seo', 'appearance'];
+
+    /** Keys update_settings never takes, whatever the group's screen has. */
+    private const UNWRITABLE_SETTING_KEYS = [
+        'general' => ['admin_email', 'admin_email_account', 'admin_email_password'],
+    ];
+
+    private function doUpdateSettings(array $args): string
+    {
+        $this->requireCap('manage_settings');
+        $group = (string) ($args['group'] ?? '');
+        if (!in_array($group, self::WRITABLE_SETTING_GROUPS, true)) {
+            return $this->json(['error' => 'Settings group "' . $group . '" can\'t be changed through MCP.', 'groups' => self::WRITABLE_SETTING_GROUPS]);
+        }
+        $values = $args['values'] ?? null;
+        if (!is_array($values) || $values === [] || array_is_list($values)) {
+            throw new McpError('"values" must be an object of key: value.', -32602);
+        }
+
+        $in = [];
+        $refused = [];
+        foreach ($values as $key => $value) {
+            $key = (string) $key;
+            if (in_array($key, self::UNWRITABLE_SETTING_KEYS[$group] ?? [], true)) {
+                $refused[$key] = 'Changed in Settings → General only: it can change your account\'s address.';
+            } elseif (SettingService::redact([$key => 'x'])[$key] === SettingService::REDACTED) {
+                $refused[$key] = 'A credential: enter it on the Settings screen.';
+            } elseif (is_bool($value)) {
+                $in[$key] = $value ? '1' : '0';
+            } elseif (is_int($value) || is_float($value) || is_string($value)) {
+                $in[$key] = (string) $value;
+            } else {
+                $refused[$key] = 'Must be text, a number or true/false.';
+            }
+        }
+
+        $settings = $this->app()->make(SettingService::class);
+        $before = $settings->getGroup($group);
+        $result = $in ? (new \App\Services\SettingsSaver($this->app()))->save($group, $in, $this->authUser())
+                      : ['ok' => false, 'type' => 'error', 'message' => 'Nothing to save.'];
+        $settings->flushCache();
+        $after = $settings->getGroup($group);
+
+        // The saver stores only fields the screen has; say which were not.
+        $saved = $unchanged = [];
+        foreach ($in as $key => $value) {
+            $now = $after[$key] ?? null;
+            $was = $before[$key] ?? null;
+            if ((string) (is_bool($now) ? (int) $now : $now) === $value) {
+                if ((string) (is_bool($was) ? (int) $was : $was) === $value && array_key_exists($key, $before)) $unchanged[] = $key; else $saved[] = $key;
+            } else {
+                $refused[$key] = 'Not saved: not a field on the ' . \App\Services\SettingsSaver::label($group) . ' screen, or the value was refused.';
+            }
+        }
+        if ($saved) {
+            \App\Services\ActivityLogService::record((int) ($this->authUser()['id'] ?? 0) ?: null,
+                'settings.updated', 'settings', null, 'Changed ' . implode(', ', $saved) . " in '{$group}' through MCP");
+        }
+        return $this->json(array_filter([
+            'ok'        => $result['ok'] && $refused === [],
+            'message'   => $result['message'],
+            'saved'     => $saved,
+            'unchanged' => $unchanged,
+            'refused'   => $refused ?: null,
+        ], static fn($v) => $v !== null && $v !== []));
     }
 
     private function doDeleteMenu(array $args): string

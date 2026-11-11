@@ -21,6 +21,7 @@ class MenuController extends Controller
             'title' => 'Menus',
             'currentUser' => $this->user(),
             'menus' => $all,
+            'locations' => $this->locations(),
             'csrf' => $session->csrfToken(),
         ]);
     }
@@ -40,8 +41,25 @@ class MenuController extends Controller
             'sources' => $this->linkSources(),
             'menu' => $menu,
             'items' => $items,
+            'locations' => $this->locations((string) ($menu['location'] ?? '')),
             'csrf' => $session->csrfToken(),
         ]);
+    }
+
+    /**
+     * The locations to offer: the active theme's (ThemeService::menuLocations,
+     * 1.2.124), plus the menu's current one when the theme doesn't declare it,
+     * so saving the menu's settings never clears a location by accident.
+     *
+     * @return array<string,string>
+     */
+    private function locations(string $current = ''): array
+    {
+        $locations = $this->app->make(\App\Services\ThemeService::class)->menuLocations();
+        if ($current !== '' && !isset($locations[$current])) {
+            $locations[$current] = $current . ' (not used by the active theme)';
+        }
+        return $locations;
     }
 
     public function store(Request $request): Response
