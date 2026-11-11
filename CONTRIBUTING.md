@@ -1,7 +1,8 @@
 # Contributing to Basehim
 
-Thanks for taking an interest. Basehim is a deliberately small, dependency-free
-PHP CMS, and contributions that keep it that way are very welcome.
+Thanks for taking an interest. Basehim is a deliberately small PHP CMS with no
+third-party runtime dependencies, and contributions that keep it that way are
+very welcome.
 
 ## Before you start
 
@@ -12,8 +13,9 @@ PHP CMS, and contributions that keep it that way are very welcome.
 
 ## Local setup
 
-Basehim has no build step and no Composer install. You need PHP 8.1+, MySQL 5.7+
-(or MariaDB 10.3+), and Apache with `mod_rewrite`.
+You need PHP 8.1+ and MySQL 5.7+ (or MariaDB 10.3+). For the web server, use
+PHP's built-in server with `server.php`, or Apache or LiteSpeed with
+`mod_rewrite`.
 
 ```bash
 git clone https://github.com/<your-username>/basehim.git
@@ -27,9 +29,9 @@ php -r "echo 'JWT_SECRET=' . bin2hex(random_bytes(32)) . PHP_EOL;"
 chmod -R 775 storage/ content/
 ```
 
-Point a vhost (or XAMPP/MAMP) at the project root — there is no `public/`
-directory by design — then visit the site in a browser and the installer will
-take over. Set `APP_DEBUG=true` in `.env` while developing.
+Run `php -S localhost:8000 server.php`, or point a vhost (or XAMPP/MAMP) at the
+project root: the project root is the web root. Open the site in a browser and
+the installer takes over. Set `APP_DEBUG=true` in `.env` while developing.
 
 To reinstall from scratch, drop the database and delete `.env`.
 
@@ -56,8 +58,8 @@ CI runs this same lint against every supported PHP version.
 
 ## Tests
 
-The suite lives in `tests/` and needs nothing beyond PHP — no Composer, no
-PHPUnit. See [`tests/README.md`](tests/README.md).
+The suite lives in `tests/` and uses its own runner instead of PHPUnit, so it
+needs only PHP. See [`tests/README.md`](tests/README.md).
 
 ```bash
 php tests/run.php                       # unit tests only
@@ -91,7 +93,10 @@ docs in [`docs/`](docs/):
 - [`docs/APP-DEVELOPMENT.md`](docs/APP-DEVELOPMENT.md) — structure and lifecycle
 - [`docs/APP-API.md`](docs/APP-API.md) — the helper API available to apps
 - [`docs/APP-PERMISSIONS.md`](docs/APP-PERMISSIONS.md) — the permission model
-- [`docs/AGENT-API.md`](docs/AGENT-API.md) — the agent/MCP surface
+- [`docs/AI-AGENTS.md`](docs/AI-AGENTS.md) — what core publishes for AI agents
+  (llms.txt, crawler rules, WebMCP); the MCP server is described in the
+  [README](README.md#ai-and-agents)
+- [`docs/AGENT-API.md`](docs/AGENT-API.md) — desktop companion agents
 
 `content/apps/wp-migrator/` is a full-size worked example.
 
@@ -114,15 +119,23 @@ feat(api): add cursor pagination to /api/v1/posts
 docs(readme): correct app directory path
 ```
 
-## Compatibility promises
+## Compatibility requirements
 
-Basehim runs on cPanel-style shared hosting. That constrains what we can accept:
+Basehim supports managed hosting without shell access (cPanel, Plesk,
+DirectAdmin) as well as VPS and dedicated servers, and deploys by uploading
+files. Changes to core must keep that true:
 
-- **No Composer requirement.** Core must run from a plain file upload.
-- **No build step.** No npm, no bundler, no compiled assets in the critical path.
-- **No daemons.** No Redis, no queue workers, no cron dependency for core
-  functionality.
-- **PHP 8.1 is the floor.** Do not use 8.2+ syntax in core.
+- **No third-party runtime dependencies.** Core runs from the uploaded files;
+  do not require Composer packages. Bundle any library you need.
+- **No build steps, background processes or shell access at runtime.** A site
+  never runs npm, a bundler, a queue worker or a shell command. The admin
+  stylesheet is compiled by maintainers (`npm run build`) and committed, so
+  sites receive it ready to serve.
+- **No required services beyond PHP and the database.** No Redis, and no cron
+  dependency for core functionality.
+- **PHP 8.1 is the minimum.** Do not use 8.2+ syntax in core.
+- **Server requirements live in one place:** `app/Core/Requirements.php`, read
+  by the installer and System → Health. Change them there.
 
 A PR that breaks any of these will be asked to find another way, however elegant
 the code is.

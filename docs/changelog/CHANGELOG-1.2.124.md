@@ -213,7 +213,12 @@ Changes are written to the activity log.
     `admin/views/api/mcp.php`
   - `admin/assets/css/tailwind.min.css` (`sm:table-cell`,
     `whitespace-normal`)
-  - `README.md`
+  - `README.md`, `CONTRIBUTING.md`, `SECURITY.md`: requirements and the
+    `content/` rules; also aligned with the wording standard (requirements
+    and the deployment model instead of "no Composer, no build step"), the
+    scope list including the new scopes, a section on building with an AI
+    agent (Dev Tools), and the docs links corrected (`AGENT-API.md` is about
+    desktop agents)
 
 ## Tests
 

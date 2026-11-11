@@ -52,8 +52,11 @@ Basehim ships secure defaults, but self-hosting means a few things are on you:
   containing file paths and query fragments.
 - **Never commit your `.env`.** It is git-ignored by default; keep it that way.
 - **Confirm the `.htaccess` rules are active.** They deny direct HTTP access to
-  `.env`, `storage/`, and `content/apps/*/src/`. If you run nginx instead of
-  Apache you must replicate these denials yourself — nothing else enforces them.
+  `.env` and `storage/`, and `content/.htaccess` (1.2.124) lets only static
+  assets (styles, scripts, images, fonts, media) be sent from `content/`, so
+  templates, app source, manifests and backups such as `single.php.bak` stay
+  private. If you run nginx instead of Apache or LiteSpeed, replicate these
+  rules yourself (the README has an example); nothing else enforces them.
 - **`chmod` `storage/` and `content/` to 775, not 777.**
 - **Serve over HTTPS.** Session cookies and JWTs are only as private as the
   transport.

@@ -1,11 +1,11 @@
 # Basehim
 
-**The CMS built for the AI era.** An open-source, API-first PHP CMS with a
-built-in Model Context Protocol server, so AI agents can search, read and draft
-your content — every permission scoped, so you decide exactly what they reach.
+**Open-source PHP CMS with a REST API and a built-in MCP server for AI
+agents.** Manage content in the dashboard, through the REST API, or with AI
+assistants over MCP, each with only the permissions you grant.
 
-No Composer. No build step. No daemons. No `public/` directory. Upload the
-files, open your site, and the installer takes it from there.
+Requires PHP 8.1 and MySQL or MariaDB. Deploy by uploading the release
+archive; the installer sets up the rest.
 
 ![PHP](https://img.shields.io/badge/PHP-8.1%2B-blue)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-orange)
@@ -46,9 +46,10 @@ bundled `.htaccess`, and `server.php` answers 404 to anything else.
 
 ## Why Basehim
 
-Most modern CMSs assume SSH, Composer and a deploy pipeline. Basehim assumes
-the hosting real clients actually buy — cPanel, Plesk, plain Apache — and still
-gives you a first-class API surface and native agent support.
+Everything the dashboard does, the API can do: the dashboard is one client
+among several, alongside scripts, mobile apps and AI agents. Basehim runs on
+managed hosting with cPanel, Plesk or DirectAdmin as well as on a VPS or
+dedicated server, and shell access is not required.
 
 - **AI-ready by default** — a built-in MCP server at `/mcp`. Point Claude, or
   any MCP client, at your site and it registers itself. No client id, no secret.
@@ -56,10 +57,14 @@ gives you a first-class API surface and native agent support.
   scopes. A token issued to read posts cannot touch users.
 - **API-first** — a full REST API over posts, pages, media, taxonomies, menus,
   comments, users and settings.
-- **Zero-build deployment** — pure PHP. Upload a zip, run the installer.
-- **Apps and themes** — drop a folder in, activate, done. Marketplace built in,
-  every download checksum-verified.
-- **A readable micro-framework** — autoloader, DI container with autowiring,
+- **Simple deployment** — upload the release archive and open the site; the
+  installer checks the server and sets up the database. Updates install from
+  the dashboard.
+- **Apps and themes** — install from the built-in marketplace or upload a
+  folder, then activate. Every download is checksum-verified.
+- **No third-party runtime dependencies** — core is plain PHP with its own
+  small framework, so there is nothing else to install or keep patched.
+- **A readable framework** — autoloader, DI container with autowiring,
   router, view engine, hooks/events, JWT, CSRF, sessions, file cache.
 
 ## AI and agents
@@ -79,8 +84,23 @@ Add `https://your-site.com/mcp` as a custom connector in an AI assistant and it
 handles registration itself. The endpoint accepts either an OAuth token or a
 bearer API key.
 
+Core's tools cover content (posts, pages, terms, media, comments), menus,
+themes and theme options, widget areas and site settings: 32 tools, each tied
+to a scope. Admin → API → MCP Server lists them, and apps can add their own.
+Settings that affect security, sign-in, email and permalinks are changed in the
+dashboard only.
+
 Resources are addressed with a `basehim://` URI scheme — `basehim://site/info`,
 `basehim://post/{id-or-slug}` — and are enumerated through `resources/list`.
+
+### Build your site with an AI agent
+
+Install the free **Basehim Dev Tools** app from the Marketplace in your
+dashboard, connect an agent such as Claude, and it can build and change your
+theme, write apps, read logs and fix problems on the site itself. You choose
+what it may do: nothing, read-only, or development. Every code change is
+checked before it is kept and can be rolled back. See
+[basehim.com/docs/dev-tools](https://www.basehim.com/docs/dev-tools).
 
 ### OAuth 2.1 — built for agents, not humans clicking through consoles
 
@@ -108,8 +128,12 @@ Every token carries scopes, and a token issued for one thing cannot do another:
 ```
 posts:read        posts:write
 taxonomies:read   taxonomies:write
-media:read        comments:read      comments:write
-settings:read     users:read
+media:read
+comments:read     comments:write
+settings:read     settings:write
+menus:read        menus:write
+themes:read       themes:write
+users:read
 ```
 
 Installed apps can contribute their own scopes, so your site's list may be
@@ -126,7 +150,8 @@ administrators unless the app maps them to a capability with the
 
 ### Desktop agent API
 
-For companion apps running on a machine rather than in a chat window:
+For companion apps running on a machine rather than in a chat window, see
+[docs/AGENT-API.md](docs/AGENT-API.md).
 
 ### Token hygiene
 
@@ -186,10 +211,13 @@ and mirrored in the admin at `/admin/api/reference`.
   `fileinfo`; `gd`, `curl` and `zip` recommended (image sizes, updates, and
   installing themes and apps from the dashboard)
 - MySQL 5.7+ or MariaDB 10.3+
-- Apache or LiteSpeed with `mod_rewrite` (works on default cPanel). nginx works
-  too, but you must replicate the `.htaccess` rules yourself — see Security.
+- Apache or LiteSpeed with `mod_rewrite`. nginx is supported with equivalent
+  rules in the server configuration — see Security.
 - For local development, PHP's built-in server with `server.php` is enough
-- ~30 MB disk, plus space for uploads
+- About 30 MB of disk space, plus uploaded media
+
+The installer's server check and Admin → System → Health read the same list
+(`app/Core/Requirements.php`). Shell access is not required.
 
 ## Install
 
@@ -201,7 +229,7 @@ and mirrored in the admin at `/admin/api/reference`.
 4. Work through the installer's four screens: a server check, the database
    connection, your site and account (name, tagline, address, timezone and
    optional starter content), and a confirmation with first steps.
-5. That's it. The installer locks itself when it finishes (`INSTALLED=true` in
+5. The installer locks itself when it finishes (`INSTALLED=true` in
    `.env`); deleting `install.php` afterwards is optional.
 
 Log in at `/admin/login`.
@@ -441,8 +469,8 @@ Full guides live in [`docs/`](docs/):
 ## Themes
 
 A theme is a folder under `content/themes/` with a `theme.json` manifest and a
-`templates/` directory. No compile step, no framework to learn — ship one by
-zipping a folder.
+`templates/` directory. Templates are plain PHP and assets are served as they
+are; to ship a theme, zip its folder.
 
 ```
 content/themes/my-theme/
@@ -455,8 +483,9 @@ content/themes/my-theme/
 └── assets/
 ```
 
-Themes can declare widget areas through a `widget_areas` map in `theme.json`,
-which then appear on `/admin/widgets/areas` for placement.
+Themes declare where menus go with a `menu_locations` map and widget areas with
+a `widget_areas` map in `theme.json`; Appearance → Menus and
+`/admin/widgets/areas` offer exactly those.
 
 Two ship with core: `default` and `dark-night`.
 
@@ -507,9 +536,9 @@ Reporting a vulnerability and the operator hardening checklist:
 ## Contributing
 
 Bug reports and pull requests are welcome. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for local setup, code style, and the
-compatibility constraints that come with targeting shared hosting: no Composer
-requirement, no build step, no daemons, PHP 8.1 floor.
+[CONTRIBUTING.md](CONTRIBUTING.md) for local setup, code style and the
+compatibility requirements: PHP 8.1, no third-party runtime dependencies, and
+deployment by uploading files.
 
 ## License
 
