@@ -81,3 +81,7 @@ docs/**            linguist-documentation
 /docs/examples/system-monitor/desktop-modules export-ignore
 /content/apps/wp-migrator                    export-ignore
 /content/themes/dark-night                   export-ignore
+# Themes a release once carried (the basehim.com and Circuits-DIY site themes).
+# They belong to those sites, not to core.
+/content/themes/basehim                      export-ignore
+/content/themes/circuits-diy                 export-ignore

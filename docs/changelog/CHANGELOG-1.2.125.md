@@ -35,17 +35,54 @@ It is now a plain closure that throws. A new test scans core (`app`, `admin`,
   - The test pinned the older output. It now accepts either, and checks that
     no `on…` attribute survives.
 
+## Aligning the repository with CloudHim's release sync
+
+CloudHim writes the repository from a release's file list: the last full
+release (1.2.0) plus every patch since, with each file's content read from
+the hub's own installation. A dry run of that sync against `main` found two
+problems:
+
+- **The hub's `.gitattributes` decided the rules.** A release that ships the
+  file uses the hub's copy, and the hub's copy was 1.2.124's. So the next sync
+  would have:
+  - put back 1.2.124's `.gitattributes`;
+  - re-added `content/apps/wp-migrator`, `content/themes/dark-night`,
+    `docs/AGENT-API.md` and `admin/assets/css/marketplace.css`;
+  - added two site themes that an old release once carried,
+    `content/themes/basehim` and `content/themes/circuits-diy`.
+- **14 files differed** between the hub and the repository (README,
+  SECURITY, two docs pages, CHANGELOG and five tests, among others). The sync
+  would have put the hub's older copies back.
+
+This release ships `.gitattributes`, with the two site themes added to the
+retired list, and every file that differed. Once the hub runs 1.2.125, a
+simulated sync re-adds nothing and deletes nothing.
+
 ## Files
 
 - `app/Core/WidgetRegistry.php`
 - `index.php` (version)
+- `.gitattributes`: retires `content/themes/basehim` and
+  `content/themes/circuits-diy`
+- Brought level with the repository:
+  - `README.md`, `SECURITY.md`, `CHANGELOG.md`
+  - `docs/APP-PERMISSIONS.md`, `docs/THEME-DEVELOPMENT.md`
+  - `docs/changelog/CHANGELOG-1.2.124.md`
 - Tests:
   - `tests/support/harness.php`
   - `tests/Unit/HtmlSanitizerTest.php`
   - `tests/Unit/Release12125Test.php` (new)
+  - `tests/Integration/AdminBarTest.php`
+  - `tests/Unit/CommentModerationTest.php`
+  - `tests/Unit/Release12100Test.php`, `Release12102Test.php`,
+    `Release1299Test.php`
 
 ## Tests
 
 - **Full suite with the database (MariaDB):** 769 passed, 0 failed, 1 skipped.
-- **On GitHub:** CI runs PHP 8.1, 8.2, 8.3 and 8.4 for lint, and 8.1 and 8.3
-  with MySQL 8.0 for the tests.
+- **On GitHub:** CI passes all 7 jobs:
+  - lint on PHP 8.1, 8.2, 8.3 and 8.4;
+  - tests on PHP 8.1 and 8.3 with MySQL 8.0;
+  - the secrets check.
+
+  The previous green run was before 1.2.123.
