@@ -14,6 +14,8 @@ archive; the installer sets up the rest.
 
 [basehim.com](https://www.basehim.com) · [Docs](https://www.basehim.com/docs) · [API reference](https://www.basehim.com/docs/api-reference) · [Getting started](https://www.basehim.com/docs/getting-started) · [**Download**](https://github.com/basehim/basehim/releases/latest/download/basehim.zip)
 
+![The Basehim dashboard: site activity, recent posts and comments waiting for review](https://www.basehim.com/uploads/2026/11/dashboard.png)
+
 ## Quick start
 
 **On a web host** — download [`basehim.zip`](https://github.com/basehim/basehim/releases/latest/download/basehim.zip),
@@ -41,6 +43,18 @@ docker run -d --name basehim-db -p 3306:3306 \
 
 `server.php` is for local development only. On a real host Apache uses the
 bundled `.htaccess`, and `server.php` answers 404 to anything else.
+
+The installer checks the server first, then asks for the database and your
+site's name; setup takes about a minute.
+
+<p align="center">
+  <img src="https://www.basehim.com/uploads/2026/11/installer-1.png" width="560" alt="The installer's first step: a check of the server's PHP version and extensions">
+</p>
+
+<p align="center">
+  <img src="https://www.basehim.com/uploads/2026/11/circuitsdiy-mobile.png" width="640" alt="The dashboard on a phone: analytics and site totals">
+  <br><sub>The dashboard works on a phone too. This is a live Basehim site.</sub>
+</p>
 
 ---
 
@@ -92,6 +106,8 @@ dashboard only.
 
 Resources are addressed with a `basehim://` URI scheme — `basehim://site/info`,
 `basehim://post/{id-or-slug}` — and are enumerated through `resources/list`.
+
+![Admin → API → MCP Server: the connection address and the tools each scope allows](https://www.basehim.com/uploads/2026/11/mcp.png)
 
 ### Build your site with an AI agent
 

@@ -1,40 +1,40 @@
-[11-Nov-2026 17:56:25 UTC] PHP Fatal error:  Access level to BhAh\T\App::schema() must be protected (as in class App\Core\App) or weaker in /tmp/bh-ah-779e6d292f/src/App.php on line 7
+[11-Nov-2026 18:42:06 UTC] PHP Fatal error:  Access level to BhAh\T\App::schema() must be protected (as in class App\Core\App) or weaker in /tmp/bh-ah-04b0f804a6/src/App.php on line 7
 Stack trace:
 #0 Command line code(1): require()
 #1 [internal function]: {closure:Command line code:1}()
 #2 Command line code(1): class_exists()
 #3 {main}
-[11-Nov-2026 17:56:25 UTC] PHP Fatal error:  Declaration of BhAh\T\App::schema(string $sql, array $opts): void must be compatible with App\Core\App::schema(string $sql): void in /tmp/bh-ah-a137ab05df/src/App.php on line 7
+[11-Nov-2026 18:42:06 UTC] PHP Fatal error:  Declaration of BhAh\T\App::schema(string $sql, array $opts): void must be compatible with App\Core\App::schema(string $sql): void in /tmp/bh-ah-7cedbf9c3a/src/App.php on line 7
 Stack trace:
 #0 Command line code(1): require()
 #1 [internal function]: {closure:Command line code:1}()
 #2 Command line code(1): class_exists()
 #3 {main}
-[11-Nov-2026 17:56:25 UTC] PHP Fatal error:  Declaration of BhAh\T\App::table(string $name): array must be compatible with App\Core\App::table(string $name): string in /tmp/bh-ah-4425a99840/src/App.php on line 7
+[11-Nov-2026 18:42:06 UTC] PHP Fatal error:  Declaration of BhAh\T\App::table(string $name): array must be compatible with App\Core\App::table(string $name): string in /tmp/bh-ah-5e2190de6b/src/App.php on line 7
 Stack trace:
 #0 Command line code(1): require()
 #1 [internal function]: {closure:Command line code:1}()
 #2 Command line code(1): class_exists()
 #3 {main}
-[11-Nov-2026 17:56:25 UTC] PHP Fatal error:  Declaration of BhAh\T\App::schema(int $sql): void must be compatible with App\Core\App::schema(string $sql): void in /tmp/bh-ah-cf3a539249/src/App.php on line 7
+[11-Nov-2026 18:42:06 UTC] PHP Fatal error:  Declaration of BhAh\T\App::schema(int $sql): void must be compatible with App\Core\App::schema(string $sql): void in /tmp/bh-ah-0873ab1a0f/src/App.php on line 7
 Stack trace:
 #0 Command line code(1): require()
 #1 [internal function]: {closure:Command line code:1}()
 #2 Command line code(1): class_exists()
 #3 {main}
-[11-Nov-2026 17:56:25 UTC] PHP Fatal error:  Cannot make non static method App\Core\App::schema() static in class BhAh\T\App in /tmp/bh-ah-f101125a6d/src/App.php on line 7
+[11-Nov-2026 18:42:06 UTC] PHP Fatal error:  Cannot make non static method App\Core\App::schema() static in class BhAh\T\App in /tmp/bh-ah-bc817a2e1b/src/App.php on line 7
 Stack trace:
 #0 Command line code(1): require()
 #1 [internal function]: {closure:Command line code:1}()
 #2 Command line code(1): class_exists()
 #3 {main}
-[11-Nov-2026 17:56:25 UTC] PHP Fatal error:  Class BhAh\T\App contains 1 abstract method and must therefore be declared abstract or implement the remaining method (App\Core\App::boot) in /tmp/bh-ah-8168e103b2/src/App.php on line 4
+[11-Nov-2026 18:42:07 UTC] PHP Fatal error:  Class BhAh\T\App contains 1 abstract method and must therefore be declared abstract or implement the remaining method (App\Core\App::boot) in /tmp/bh-ah-4a7d6c20fe/src/App.php on line 4
 Stack trace:
 #0 Command line code(1): require()
 #1 [internal function]: {closure:Command line code:1}()
 #2 Command line code(1): class_exists()
 #3 {main}
-[11-Nov-2026 17:56:25 UTC] PHP Fatal error:  Declaration of BhAh\T\App::boot() must be compatible with App\Core\App::boot(): void in /tmp/bh-ah-e57dd271b9/src/App.php on line 6
+[11-Nov-2026 18:42:07 UTC] PHP Fatal error:  Declaration of BhAh\T\App::boot() must be compatible with App\Core\App::boot(): void in /tmp/bh-ah-2a9191d362/src/App.php on line 6
 Stack trace:
 #0 Command line code(1): require()
 #1 [internal function]: {closure:Command line code:1}()
