@@ -67,11 +67,16 @@ class MenuController extends Controller
         if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }
         /** @var MenuService $menus */
         $menus = $this->app->make(MenuService::class);
-        $id = $menus->create([
-            'name' => $request->input('name'),
-            'slug' => $request->input('slug'),
-            'location' => $request->input('location'),
-        ]);
+        try {
+            $id = $menus->create([
+                'name' => (string) $request->input('name', ''),
+                'slug' => (string) $request->input('slug', ''),
+                'location' => $request->input('location') ?: null,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            $this->flash('error', $e->getMessage());
+            return $this->back();
+        }
         $this->flash('success', 'Menu created.');
         return $this->redirect("/admin/menus/{$id}/edit");
     }
@@ -81,10 +86,15 @@ class MenuController extends Controller
         if (!$this->verifyCsrf($request)) { $this->flash('error', 'Security check failed.'); return $this->back(); }
         /** @var MenuService $menus */
         $menus = $this->app->make(MenuService::class);
-        $menus->update((int)$id, [
-            'name' => $request->input('name'),
-            'location' => $request->input('location'),
-        ]);
+        try {
+            $menus->update((int)$id, [
+                'name' => (string) $request->input('name', ''),
+                'location' => $request->input('location') ?: null,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            $this->flash('error', $e->getMessage());
+            return $this->back();
+        }
         $this->flash('success', 'Menu updated.');
         return $this->redirect("/admin/menus/{$id}/edit");
     }

@@ -110,7 +110,11 @@ class PostController extends ApiController
     }
 
     /** Statuses a client may set. Anything else is refused rather than stored. */
-    private const STATUSES = ['draft', 'pending', 'published'];
+    /**
+     * Statuses a client may send. "scheduled" (1.2.126) needs a published_at in
+     * the future; one already past publishes straight away.
+     */
+    private const STATUSES = ['draft', 'pending', 'published', 'scheduled'];
 
     /** Capability for an action on this type: edit_posts, delete_others_pages, ... */
     protected function cap(string $action): string
@@ -164,7 +168,7 @@ class PostController extends ApiController
         // defaults, as before, meant PATCH {"title": "x"} also emptied the
         // content, reset the slug and unpublished the post.
         $data = $this->extractData($request, $this->type, true);
-        if ($err = $this->checkStatus($data)) return $err;
+        if ($err = $this->checkStatus($data, $existing)) return $err;
 
         // Without publish rights a post that is already live cannot be edited
         // through the API: it would either go live unreviewed or be pulled.
@@ -211,10 +215,17 @@ class PostController extends ApiController
         return Response::json(['message' => 'Deleted']);
     }
 
-    private function checkStatus(array $data): ?Response
+    private function checkStatus(array $data, ?array $existing = null): ?Response
     {
         if (isset($data['status']) && !in_array($data['status'], self::STATUSES, true)) {
             return Response::json(['error' => 'status must be one of: ' . implode(', ', self::STATUSES)], 422);
+        }
+        // published_at (1.2.126): ISO 8601 with an offset, or "Y-m-d H:i:s" in UTC.
+        if (isset($data['published_at']) && \App\Core\Time::parse($data['published_at']) === null) {
+            return Response::json(['error' => 'published_at must be a date and time, such as 2026-11-20T09:00:00Z (UTC unless an offset is given).'], 422);
+        }
+        if (($data['status'] ?? '') === 'scheduled' && empty($data['published_at'] ?? ($existing['published_at'] ?? null))) {
+            return Response::json(['error' => 'A scheduled post needs a published_at in the future.'], 422);
         }
         return null;
     }
@@ -222,7 +233,7 @@ class PostController extends ApiController
     /** Roles without publish rights submit for review instead, as in the admin. */
     private function gatePublishing(array $data): array
     {
-        if (($data['status'] ?? '') === 'published' && !$this->userCan($this->cap('publish'))) {
+        if (in_array($data['status'] ?? '', ['published', 'scheduled'], true) && !$this->userCan($this->cap('publish'))) {
             $data['status'] = 'pending';
         }
         return $data;
@@ -248,6 +259,12 @@ class PostController extends ApiController
         }
         if (array_key_exists('featured_media_id', $body)) {
             $data['featured_media_id'] = $body['featured_media_id'] ?: null;
+        }
+        // The publish time (1.2.126). Until then it was dropped here, so an API
+        // client could neither schedule nor backdate a post. null clears it.
+        if (array_key_exists('published_at', $body)) {
+            $v = $body['published_at'];
+            $data['published_at'] = ($v === null || $v === '') ? null : (is_scalar($v) ? (string) $v : 'invalid');
         }
         if (array_key_exists('term_ids', $body)) {
             $termIds = $body['term_ids'];

@@ -41,11 +41,15 @@ class MenuController extends ApiController
 
         /** @var MenuService $menus */
         $menus = $this->app->make(MenuService::class);
-        $id = $menus->create([
-            'name'     => $name,
-            'slug'     => (string) $request->input('slug', ''),
-            'location' => $request->input('location'),
-        ]);
+        try {
+            $id = $menus->create([
+                'name'     => $name,
+                'slug'     => (string) $request->input('slug', ''),
+                'location' => $request->input('location'),
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return Response::json(['error' => $e->getMessage()], 422);
+        }
         if ($id <= 0) return Response::json(['error' => 'Could not create the menu.'], 500);
         return Response::json(['data' => $menus->find($id)], 201);
     }
@@ -65,7 +69,11 @@ class MenuController extends ApiController
         }
         if (!$data) return Response::json(['error' => 'Nothing to update.'], 422);
 
-        $menus->update((int) $id, $data);
+        try {
+            $menus->update((int) $id, $data);
+        } catch (\InvalidArgumentException $e) {
+            return Response::json(['error' => $e->getMessage()], 422);
+        }
         return Response::json(['data' => $menus->find((int) $id)]);
     }
 

@@ -58,21 +58,70 @@ class MenuService
         return $this->items((int)$menu['id']);
     }
 
+    /**
+     * Create a menu.
+     *
+     * Slugs are unique (a database key). Until 1.2.126 a second menu with the
+     * same name, such as another "Main Menu" next to the installer's, hit
+     * that key and every caller answered with a server error. Now a slug
+     * taken from the name gets a number ("main-menu-2"), and a slug asked for
+     * explicitly that is already used is refused with a message.
+     *
+     * @throws \InvalidArgumentException when the name is empty or the slug is taken
+     */
     public function create(array $data): int
     {
-        $slug = !empty($data['slug']) ? Helpers::slug($data['slug']) : Helpers::slug($data['name']);
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') throw new \InvalidArgumentException('A menu needs a name.');
+
+        $asked = trim((string) ($data['slug'] ?? ''));
+        if ($asked !== '') {
+            $slug = Helpers::slug($asked);
+            $this->assertSlugFree($slug);
+        } else {
+            $slug = $this->uniqueSlug(Helpers::slug($name) ?: 'menu');
+        }
         return (int)$this->db->insert('menus', [
-            'name' => $data['name'],
+            'name' => $name,
             'slug' => $slug,
             'location' => $data['location'] ?? null,
         ]);
     }
 
+    /** A slug no other menu uses: $base, then $base-2, $base-3… */
+    private function uniqueSlug(string $base, int $exceptId = 0): string
+    {
+        for ($n = 1; $n < 1000; $n++) {
+            $slug = $n === 1 ? $base : $base . '-' . $n;
+            $other = $this->findBySlug($slug);
+            if (!$other || (int) $other['id'] === $exceptId) return $slug;
+        }
+        throw new \RuntimeException('No free menu slug for "' . $base . '".');
+    }
+
+    /** @throws \InvalidArgumentException when another menu already uses $slug */
+    private function assertSlugFree(string $slug, int $exceptId = 0): void
+    {
+        if ($slug === '') throw new \InvalidArgumentException('Enter a slug with at least one letter or number.');
+        $other = $this->findBySlug($slug);
+        if ($other && (int) $other['id'] !== $exceptId) {
+            throw new \InvalidArgumentException('The slug "' . $slug . '" is already used by the menu "' . ($other['name'] ?? '') . '".');
+        }
+    }
+
+    /** @throws \InvalidArgumentException when the new slug is taken or the name is empty */
     public function update(int $id, array $data): bool
     {
         $payload = [];
-        if (isset($data['name'])) $payload['name'] = $data['name'];
-        if (isset($data['slug'])) $payload['slug'] = Helpers::slug($data['slug']);
+        if (isset($data['name'])) {
+            $name = trim((string) $data['name']);
+            if ($name === '') throw new \InvalidArgumentException('A menu needs a name.');
+            $payload['name'] = $name;
+        }
+        if (isset($data['slug'])) {
+            $payload['slug'] = Helpers::slug((string) $data['slug']);
+            $this->assertSlugFree($payload['slug'], $id);
+        }
         if (array_key_exists('location', $data)) $payload['location'] = $data['location'];
         if (empty($payload)) return true;
         return $this->db->update('menus', $payload, ['id' => $id]) >= 0;

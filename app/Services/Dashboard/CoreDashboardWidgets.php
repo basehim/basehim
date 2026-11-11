@@ -251,7 +251,11 @@ final class CoreDashboardWidgets
         if ($recent <= 0 || $before <= 0) return null;
         $pct = (int) round($recent / $before * 100);
         if ($pct < 1) return null;
-        return ['direction' => 'up', 'text' => '+' . ($pct > 999 ? '999' : $pct) . '%', 'good' => true];
+        // Past 999% a percentage says only that little came before (a young
+        // site). The count says more: "+10 new". Until 1.2.126 this read
+        // "+999%", a cap that looked like a real figure.
+        $text = $pct > 999 ? '+' . $recent . ' new' : '+' . $pct . '%';
+        return ['direction' => 'up', 'text' => $text, 'good' => true];
     }
 
     public static function recentPosts(WidgetContext $ctx): array

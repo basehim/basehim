@@ -278,7 +278,9 @@ select.bhe-input { padding-right: 28px; }
 
 /* Post settings rendered by the server (edit.php) */
 .bhe-row { display: flex; align-items: center; gap: 12px; min-height: 36px; }
-.bhe-row > .bhe-row__label { flex: 0 0 96px; color: var(--bhe-ink-2); font-size: 13px; }
+/* 72px fits the longest label ("Comments"); at 96px the controls were too
+   narrow for "Blocks (visual)" in the 280px sidebar (1.2.126). */
+.bhe-row > .bhe-row__label { flex: 0 0 72px; color: var(--bhe-ink-2); font-size: 13px; }
 .bhe-row > .bhe-row__control { flex: 1; min-width: 0; }
 .bhe-checklist { max-height: 220px; overflow: auto; padding: 2px; display: flex; flex-direction: column; gap: 8px; }
 .bhe-check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
