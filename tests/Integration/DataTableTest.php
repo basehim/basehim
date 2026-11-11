@@ -225,7 +225,7 @@ test('datatable: the posts table offers a tags column and tag is a filter key', 
     assert_true(in_array($p, $ids, true), 'the tagged post is listed');
 });
 
-test('datatable: the tags cell links each tag to its edit screen', function () {
+test('datatable: the tags cell links each tag to its posts', function () {
     $tagTax = (int) bh_db()->selectOne("SELECT id FROM {taxonomies} WHERE slug = 'tag' LIMIT 1")['id'];
     $tag = (int) bh_db()->insert('terms', ['taxonomy_id' => $tagTax, 'name' => 'DT LinkTag', 'slug' => 'dt-linktag-' . bin2hex(random_bytes(3))]);
     $p = dt_make_post('admin', 'published', 'DT Has Tag');
@@ -236,7 +236,7 @@ test('datatable: the tags cell links each tag to its edit screen', function () {
     foreach ($res->json()['data']['rows'] as $r) { if ((int) $r['id'] === $p) { $row = $r; break; } }
     assert_true($row !== null, 'the tagged post is in the page');
     $cell = $row['cells']['tags'] ?? '';
-    assert_true(str_contains($cell, '/admin/taxonomies/tag?edit=' . $tag), 'tag links to its edit screen');
+    assert_true(str_contains($cell, '/admin/posts?tag=' . $tag), 'a tag filters the list to its posts (1.2.123)');
     assert_true(str_contains($cell, 'DT LinkTag'), 'the tag name shows');
 });
 

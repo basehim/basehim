@@ -66,7 +66,6 @@ and a long list invites clicking through without reading.
 | `http.outbound` | high | Contact external servers |
 | `schedule` | medium | Run recurring background work |
 | `db.raw` | high | Arbitrary SQL — bypasses everything else here |
-| `agents` | high | List and command desktop agents |
 
 **Always available, never declared:** an app's own cache, its own settings, and
 its own log. That is the app's own storage — already namespaced to its slug and
@@ -84,7 +83,7 @@ result it would return if there were no data — `null`, `false`, `0`, or an emp
 array — and writes a line to the app's log naming the missing permission. An
 exception would turn a policy decision into a white screen on a page render.
 
-The exceptions are `db()`, `schema()` and `agents()` on the base class, which
+The exceptions are `db()` and `schema()` on the base class, which
 *do* throw. Every caller of those expects a real object and would fatal on a
 null anyway, so a clear exception is the more useful failure.
 

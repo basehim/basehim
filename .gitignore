@@ -48,16 +48,14 @@ content/uploads/*
 #------------------------------------------------------------------------------
 # User-installed apps and themes
 #
-# Only the bundled ones ship with core. Anything a site owner drops in at
-# runtime stays out of the repo. Add negations here if you vendor another.
+# Core ships only the default theme. Apps and other themes install from the
+# marketplace, and anything a site owner adds at runtime stays out of the repo.
 #------------------------------------------------------------------------------
 content/apps/*
 !content/apps/index.html
-!content/apps/wp-migrator/
 
 content/themes/*
 !content/themes/default/
-!content/themes/dark-night/
 
 #------------------------------------------------------------------------------
 # Installer lock

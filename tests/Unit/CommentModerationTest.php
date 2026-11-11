@@ -31,9 +31,11 @@ test('comments: every data table bulk endpoint on an admin screen is a registere
         foreach ($m[1] as $expr) {
             if (trim($expr) === "''") continue;           // a table without a bulk form
             // Expand the two shapes used: $base . '/admin/comments/bulk' and $base . '/admin/' . $type . 's/bulk'.
+            // 1.2.123: the taxonomy screen's is '/admin/taxonomies/' . $slug . '/bulk'.
             $paths = str_contains($expr, '$type')
                 ? ['/admin/posts/bulk', '/admin/pages/bulk']
-                : [preg_replace("#^.*?'(/admin/[^']+)'.*$#", '$1', $expr)];
+                : (str_contains($expr, "'/admin/taxonomies/'") ? ['/admin/taxonomies/{taxonomy}/bulk']
+                : [preg_replace("#^.*?'(/admin/[^']+)'.*$#", '$1', $expr)]);
             foreach ($paths as $p) {
                 if (!isset($routes[$p])) $missing[] = basename(dirname($view)) . ': ' . $p;
             }

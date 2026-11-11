@@ -13,9 +13,9 @@ DirectoryIndex index.php
     RewriteEngine On
 
     # Pass the Authorization header to PHP. Apache/cPanel under mod_rewrite/CGI
-    # commonly strips it, which breaks bearer-token auth — desktop agents would
-    # poll commands and get 401, so remote commands silently never run. Both
-    # lines are belt-and-suspenders for different server configs.
+    # commonly strips it, which breaks bearer-token auth: API keys, OAuth and
+    # MCP clients would get 401. Both lines are belt-and-suspenders for
+    # different server configs.
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
     SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
@@ -69,7 +69,7 @@ DirectoryIndex index.php
     </FilesMatch>
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "SAMEORIGIN"
-    Header set X-XSS-Protection "1; mode=block"
+    Header set X-XSS-Protection "0"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
     Header set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 </IfModule>

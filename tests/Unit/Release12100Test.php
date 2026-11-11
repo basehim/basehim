@@ -26,9 +26,9 @@ test('BH-105: a saved logo width adds no CSS variables for a theme that does not
     assert_same(':root{--bh-logo-width: 160px;--bh-logo-height: auto}', r99_customizer(['appearance.logo_width' => 160], ['logo-width'])->cssVariables());
 });
 
-test('BH-105: the bundled themes declare both, and the theme docs list them', function () {
+test('BH-105: the bundled theme declares both, and the theme docs list them', function () {
     $root = dirname(__DIR__, 2);
-    foreach (['default', 'dark-night'] as $t) {
+    foreach (['default'] as $t) {   // core ships one theme since 11 Nov 2026
         $m = json_decode((string) file_get_contents($root . "/content/themes/{$t}/theme.json"), true);
         assert_true(in_array('logo-width', $m['supports'] ?? [], true) && in_array('header-text', $m['supports'] ?? [], true), $t);
     }

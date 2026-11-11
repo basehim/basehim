@@ -72,3 +72,12 @@ docs/**            linguist-documentation
 /RELEASE-NOTES-*.md  export-ignore
 /app/Http/Controllers/Web/CategoryPostController.php export-ignore
 /admin/assets/css/dashboard.css export-ignore
+/admin/assets/css/marketplace.css export-ignore
+
+# Retired 11 Nov 2026: the desktop-agent docs (the feature left core in
+# 1.0.0), and the bundled app and theme. Core ships only the default theme;
+# WordPress Migrator installs from the marketplace.
+/docs/AGENT-API.md                           export-ignore
+/docs/examples/system-monitor/desktop-modules export-ignore
+/content/apps/wp-migrator                    export-ignore
+/content/themes/dark-night                   export-ignore

@@ -80,6 +80,16 @@ test('mcp 1.2.124: save_menu builds a menu tree, moves the location, refuses bad
 });
 
 test('mcp 1.2.124: themes can be listed and switched, and switched back', function () {
+    // Core ships one theme, so the test installs a minimal second one.
+    $dir = dirname(__DIR__, 2) . '/content/themes/r12124-switch';
+    @mkdir($dir . '/templates', 0755, true);
+    file_put_contents($dir . '/theme.json', json_encode(['name' => 'Switch test', 'slug' => 'r12124-switch', 'version' => '1.0.0']));
+    file_put_contents($dir . '/templates/index.php', '<?php echo "switch test";');
+    $cleanup = static function () use ($dir): void {
+        @unlink($dir . '/templates/index.php'); @rmdir($dir . '/templates');
+        @unlink($dir . '/theme.json'); @rmdir($dir);
+    };
+    try {
     $key = r12124_key('admin');
     $list = r12124_call($key, 'list_themes')['result'];
     $slugs = array_column($list['themes'], 'slug');
@@ -96,6 +106,9 @@ test('mcp 1.2.124: themes can be listed and switched, and switched back', functi
     assert_same($list['active'], r12124_setting('appearance', 'active_theme'));
 
     assert_contains('manage_themes', (string) r12124_call(r12124_key('editor'), 'activate_theme', ['slug' => $other])['error']);
+    } finally {
+        $cleanup();
+    }
 });
 
 test('mcp 1.2.124: theme options are checked by type', function () {

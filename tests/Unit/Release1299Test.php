@@ -127,15 +127,14 @@ test('customizer: switches use core\'s switch at the right of the label; the ima
     assert_contains("'All images'", $js, 'a logo picker says it lists images');
 });
 
-test('default and Dark Night themes honour the switches and size the logo with the variables', function () {
+test('the default theme honours the switches and size the logo with the variables', function () {
     $root = dirname(__DIR__, 2);
-    foreach (['default/templates/partials/header.php', 'dark-night/templates/partials/header.php'] as $f) {
+    foreach (['default/templates/partials/header.php'] as $f) {
         $php = (string) file_get_contents($root . '/content/themes/' . $f);
         assert_contains('$show_site_title ?? true', $php, $f);
         assert_contains('$show_tagline ?? true', $php, $f);
     }
     assert_contains('width: var(--bh-logo-width, auto); height: var(--bh-logo-height, 2.25rem)', (string) file_get_contents($root . '/content/themes/default/assets/theme.css'));
-    assert_contains('width: var(--bh-logo-width, auto); height: var(--bh-logo-height, 36px)', (string) file_get_contents($root . '/content/themes/dark-night/assets/dark-night.css'));
 });
 
 test('data table: Comfortable hides the ⋮ column and shows the row links inside each row; Compact the reverse; the ⋮ is darker and larger', function () {
@@ -145,6 +144,8 @@ test('data table: Comfortable hides the ⋮ column and shows the row links insid
     assert_false(str_contains($css, '(hover: none) { .bh-dt-rowlinks'), 'never shown on every row at once');
     assert_contains('.bh-dt:not([data-density="compact"]) .bh-dt-table .bh-dt-rowactions { display: none; }', $css);
     assert_contains('.bh-dt-table tbody tr:focus-within .bh-dt-rowlinks', $css, 'keyboard users see them too');
-    assert_contains('.bh-dt-actbtn { color: #475569;', $css);
+    // 1.2.115: the ⋮ is a core ghost icon button (slate-600, #475569, from core).
+    $js = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/js/datatable.js');
+    assert_contains("'bh-btn bh-btn--ghost bh-btn--icon bh-btn--sm bh-dt-actbtn'", $js);
     assert_contains('.bh-dt-actbtn svg { width: 1.25rem; height: 1.25rem; }', $css);
 });

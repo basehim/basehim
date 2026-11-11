@@ -808,9 +808,6 @@ and not `theme.json` at its root. Install through Appearance → Themes → Uplo
 ## Reference
 
 `content/themes/default` is a small, plain theme worth reading first.
-`content/themes/circuits-diy` is a fuller one: a mega menu, two optional
-sidebars, twenty-five Customizer options, and a windowed pager over hundreds of
-pages.
 
 ## Featured images in the right size
 

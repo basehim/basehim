@@ -76,7 +76,8 @@ test('screens on core components: Widgets tabs, menu editor buttons, taxonomy an
     assert_contains("\$this->include('widgets._nav'", r102_file('admin/views/widgets/index.php'));
     assert_contains("\$this->include('widgets._nav'", r102_file('admin/views/widgets/areas.php'));
     assert_false(str_contains(r102_file('admin/views/menus/edit.php'), 'bg-slate-800'), 'menu editor buttons are bh-btn');
-    assert_contains('class="bh-table bh-table--stack"', r102_file('admin/views/taxonomies/index.php'));
+    // 1.2.123: the taxonomy screen is the core Data Table now.
+    assert_contains("\$this->include('partials.datatable'", r102_file('admin/views/taxonomies/index.php'));
     assert_contains('class="bh-table bh-table--stack"', r102_file('admin/views/menus/index.php'));
     assert_contains('class="bh-check__input" name="roles[', r102_file('admin/views/settings/toolbar.php'));
     assert_false(str_contains(r102_file('admin/views/updates/index.php'), 'text-xs text-slate-500 truncate">This site checks'), 'the status line wraps');

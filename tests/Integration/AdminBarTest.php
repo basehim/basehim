@@ -399,3 +399,74 @@ test('admin bar: site settings — off for everyone, limited to roles, sections 
     }
     assert_true(ab_cfg(bh_browser('admin')->request('GET', $p['url'])) !== null);
 });
+
+/** The admin header's signed descriptor (1.2.121). */
+function ab_head_ctx(\HttpResponse $r): string
+{
+    preg_match('/<header class="bh-top[^"]*"[^>]*data-ctx="([^"]+)"/', $r->body, $m);
+    return html_entity_decode($m[1] ?? '', ENT_QUOTES);
+}
+
+test('admin header (1.2.121): search and notifications work in the admin, filtered for each user', function () {
+    ab_setup();
+    $draft = ab_post('admin', 'draft');
+    bh_db()->update('posts', ['title' => 'Quokkalantern admin draft'], ['id' => $draft['id'] ?? 0]);
+    $admin = bh_browser('admin');
+    $page = $admin->request('GET', '/admin/posts');
+    assert_same(200, $page->status);
+    assert_contains('data-bh-search-open', $page->body);
+    assert_contains('id="bh-cmdk"', $page->body);
+    assert_contains('/admin/assets/js/topbar.js', $page->body);
+    $ctx = ab_head_ctx($page);
+    assert_true($ctx !== '', 'the header carries a descriptor');
+
+    $n = $admin->ajaxGet('admin.bar_notifications', ['ctx' => $ctx]);
+    assert_same(200, $n->status, $n->body);
+    assert_true(is_array($n->json()['data']['items'] ?? null));
+    $s = $admin->ajaxGet('admin.bar_search', ['ctx' => $ctx, 'q' => 'Quokkalantern']);
+    assert_same(200, $s->status, $s->body);
+    $titles = [];
+    foreach ($s->json()['data']['groups'] ?? [] as $g) foreach ($g['items'] as $it) $titles[] = $it['title'];
+    assert_true(in_array('Quokkalantern admin draft', $titles, true), json_encode($titles));
+
+    // Someone else's draft stays out of a contributor's results.
+    $c = bh_browser('contributor');
+    $cctx = ab_head_ctx($c->request('GET', '/admin'));
+    $cs = $c->ajaxGet('admin.bar_search', ['ctx' => $cctx, 'q' => 'Quokkalantern']);
+    assert_same(200, $cs->status, $cs->body);
+    $ct = [];
+    foreach ($cs->json()['data']['groups'] ?? [] as $g) foreach ($g['items'] as $it) $ct[] = $it['title'];
+    assert_false(in_array('Quokkalantern admin draft', $ct, true));
+});
+
+test('admin header (1.2.121): independent of the front bar\'s switches; its descriptor opens nothing else', function () {
+    ab_setup();
+    $p = ab_post();
+    try {
+        ab_settings(['enabled' => '0']);
+        $admin = bh_browser('admin');
+        $ctx = ab_head_ctx($admin->request('GET', '/admin'));
+        assert_same(200, $admin->ajaxGet('admin.bar_search', ['ctx' => $ctx, 'q' => 'Bar post'])->status, 'search with the front bar off');
+        assert_same(200, $admin->ajaxGet('admin.bar_notifications', ['ctx' => $ctx])->status);
+        // The front bar's other calls stay closed while it is off.
+        assert_same(403, $admin->ajaxGet('admin.bar_panel', ['ctx' => $ctx, 'id' => 'context.details'])->status);
+        // A tampered descriptor is refused like any other.
+        assert_same(409, $admin->ajaxGet('admin.bar_search', ['ctx' => substr($ctx, 0, -1) . (substr($ctx, -1) === 'a' ? 'b' : 'a'), 'q' => 'Bar post'])->status);
+    } finally {
+        ab_settings([]);
+    }
+    // With the front bar on, the admin descriptor still opens only search and notifications.
+    $on = bh_browser('admin');
+    $octx = ab_head_ctx($on->request('GET', '/admin'));
+    assert_same(404, $on->ajaxGet('admin.bar_panel', ['ctx' => $octx, 'id' => 'context.details'])->status);
+    assert_same(404, $on->ajaxGet('admin.bar_indicators', ['ctx' => $octx, 'ids' => 'x'])->status);
+    // A front page's descriptor still needs the front bar.
+    $fb = bh_browser('admin');
+    $cfg = ab_cfg($fb->request('GET', $p['url']));
+    try {
+        ab_settings(['search' => '0']);
+        assert_same(403, $fb->ajaxGet('admin.bar_search', ['ctx' => $cfg['ctx'], 'q' => 'Bar post'])->status);
+    } finally {
+        ab_settings([]);
+    }
+});

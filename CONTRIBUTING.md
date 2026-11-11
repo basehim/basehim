@@ -96,9 +96,8 @@ docs in [`docs/`](docs/):
 - [`docs/AI-AGENTS.md`](docs/AI-AGENTS.md) — what core publishes for AI agents
   (llms.txt, crawler rules, WebMCP); the MCP server is described in the
   [README](README.md#ai-and-agents)
-- [`docs/AGENT-API.md`](docs/AGENT-API.md) — desktop companion agents
 
-`content/apps/wp-migrator/` is a full-size worked example.
+[`docs/examples/`](docs/examples/) has small working apps to copy from.
 
 ## Pull requests
 

@@ -148,11 +148,6 @@ stops its tokens and keys at once. Scopes added by apps are granted only to
 administrators unless the app maps them to a capability with the
 `mcp.scope_capabilities` filter.
 
-### Desktop agent API
-
-For companion apps running on a machine rather than in a chat window, see
-[docs/AGENT-API.md](docs/AGENT-API.md).
-
 ### Token hygiene
 
 A token is a password. Issue the narrowest scope that does the job, use a
@@ -449,10 +444,6 @@ directly, every download SHA-256 verified.
 
 ### Worked examples
 
-- `content/apps/wp-migrator/` — the bundled WordPress Migrator, and the most
-  complete example in the tree: a batched multi-step wizard, its own tables
-  created on activate and dropped on uninstall, admin views with a sidebar
-  entry, app-scoped settings, and bundled assets.
 - `docs/examples/system-monitor/` — a small working app: an admin page behind
   the app's access capability, rendered in the admin layout, and a dashboard
   card with a data provider, a setting and an action.
@@ -487,7 +478,8 @@ Themes declare where menus go with a `menu_locations` map and widget areas with
 a `widget_areas` map in `theme.json`; Appearance → Menus and
 `/admin/widgets/areas` offer exactly those.
 
-Two ship with core: `default` and `dark-night`.
+Core ships one theme, `default`. More themes and apps install from the
+marketplace in the dashboard (Admin → Marketplace).
 
 ## Scheduling
 
