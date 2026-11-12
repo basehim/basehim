@@ -94,17 +94,21 @@ final class ErrorHandler
         $class = $e::class;
         $line = $e->getLine();
         $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
+        // Rendered before the heredoc, which does not run PHP tags: until
+        // 1.2.128 the icon calls were written inside it and printed as text.
+        $iconError = Icon::svg('exclamation-circle', 'w-6 h-6 text-red-500');
+        $iconFile = Icon::svg('file-code', 'w-4 h-4 mt-1 text-slate-400');
 
         echo <<<HTML
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>Error · Basehim</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Error · Basehim</title>
 <link rel="stylesheet" href="{$base}/admin/assets/css/tailwind.min.css">
 </head><body class="bg-slate-100 text-slate-900 font-sans">
 <div class="max-w-5xl mx-auto p-8">
   <div class="bg-white rounded-2xl shadow-lg border border-red-200">
     <div class="p-6 border-b border-red-100 bg-red-50 rounded-t-2xl">
       <div class="flex items-center gap-3">
-        <?= \App\Core\Icon::svg('exclamation-circle', 'w-6 h-6 text-red-500') ?>
+        {$iconError}
         <div>
           <div class="text-xs uppercase tracking-wider text-red-600 font-semibold">{$class}</div>
           <h1 class="text-xl font-semibold text-slate-900">{$msg}</h1>
@@ -113,7 +117,7 @@ final class ErrorHandler
     </div>
     <div class="p-6 space-y-3">
       <div class="flex items-start gap-3">
-        <?= \App\Core\Icon::svg('file-code', 'w-4 h-4 mt-1 text-blue-500') ?>
+        {$iconFile}
         <div class="text-sm text-slate-700"><span class="text-slate-500">in</span> <code class="bg-slate-100 px-2 py-1 rounded">{$file}</code> <span class="text-slate-500">at line</span> <span class="font-semibold">{$line}</span></div>
       </div>
       <pre class="bg-slate-900 text-slate-100 rounded-lg p-4 text-xs overflow-auto max-h-96">{$trace}</pre>
@@ -129,19 +133,19 @@ HTML;
         $title = self::titleFromStatus($status);
         $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
         $home = $base ?: '/';
-        $iconWarn = Icon::svg('exclamation-triangle', 'w-16 h-16 text-blue-500 mb-4 mx-auto');
+        $iconWarn = Icon::svg('exclamation-triangle', 'w-16 h-16 text-accent-500 mb-4 mx-auto');
         $iconHome = Icon::svg('home', 'w-4 h-4');
 
         return <<<HTML
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>{$status} · {$title}</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{$status} · {$title}</title>
 <link rel="stylesheet" href="{$base}/admin/assets/css/tailwind.min.css">
-</head><body class="bg-blue-50 min-h-screen flex items-center justify-center text-slate-900">
-<div class="text-center">
+</head><body class="bg-accent-50 min-h-screen flex items-center justify-center text-slate-900 font-sans">
+<div class="text-center px-6">
   {$iconWarn}
   <h1 class="text-5xl font-bold mb-2">{$status}</h1>
   <p class="text-slate-600 text-lg">{$title}</p>
-  <a href="{$home}" class="inline-flex items-center gap-2 mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">{$iconHome} Back to home</a>
+  <a href="{$home}" class="bh-btn bh-btn--primary mt-6">{$iconHome} Back to home</a>
 </div>
 </body></html>
 HTML;

@@ -197,9 +197,10 @@ Settings, Remove). Icons are any name from core's set (`app/Core/icons.php`):
 names your data uses arrive with it, so you don't register them; a name core
 doesn't have is dropped.
 
-**stat** — key numbers, as tiles: an icon square, the label, a pill at the
-top right, the number (counted up when it loads), the hint, and small bars in
-the accent's shades.
+**stat** — key numbers, as tiles: an icon square, the label, the number
+(counted up when it loads) with its pill beside it, the hint, and a small
+chart of the tile's own data (1.2.128). A tile without a `chart` ends in three
+small decorative bars, as before.
 
 ```php
 ['items' => [
@@ -214,6 +215,26 @@ the accent's shades.
      'people' => ['items' => [['name' => 'Ayesha Khan', 'url' => '/uploads/a.jpg'], ['name' => 'Bilal']], 'more' => 838]],
 ]]
 ```
+
+A tile's `chart` (1.2.128) is one of:
+
+```php
+// A trend line, newest point marked. Up to 60 points, oldest first.
+'chart' => ['type' => 'line', 'label' => 'Orders per week, last 12 weeks',
+            'points' => [['value' => 12, 'label' => 'Week of 3 Nov: 12 orders'], /* … */],
+            'empty' => 'No orders in the last 12 weeks'],   // shown when every value is 0
+// One bar per period, the newest in the accent. Same data as 'line'.
+'chart' => ['type' => 'bars', 'label' => '…', 'points' => [/* … */]],
+// One bar in shares, with a key. Up to 6 parts; 'unit' => 'percent' shows each share.
+'chart' => ['type' => 'split', 'label' => 'Orders by status', 'unit' => 'count',
+            'parts' => [['label' => 'Paid', 'value' => 96, 'note' => 'tooltip text'],
+                        ['label' => 'Waiting', 'value' => 32]],
+            'empty' => 'No orders yet'],
+```
+
+`label` names the chart for screen readers, and each point's or part's label
+is its tooltip. Charts use the accent's shades only. Keep a split to three
+or four parts so its key stays short on a phone.
 
 Tiles sit two to a row on phones and narrow cards (a `wide` tile, or a last
 tile that would leave a row half empty, takes the whole row), and all in one

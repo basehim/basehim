@@ -15,7 +15,9 @@ function r12126_growth(int $total, int $recent): ?array
 }
 
 test('dashboard: the growth badge shows a count, not a capped percentage, for a young site', function () {
-    assert_same('+120%', r12126_growth(11, 6)['text'] ?? null, '5 before, 6 new');
+    // 1.2.128: fewer than ten before shows the count, not a percentage.
+    assert_same('+6 new', r12126_growth(11, 6)['text'] ?? null, '5 before, 6 new');
+    assert_same('+50%', r12126_growth(30, 10)['text'] ?? null, '20 before, 10 new');
     assert_same('+999%', r12126_growth(1099, 999)['text'] ?? null, '100 before, 999 new: exactly 999% is still a percentage');
     assert_same('+10 new', r12126_growth(11, 10)['text'] ?? null, '1 before, 10 new: 1000%');
     assert_same(null, r12126_growth(5, 0), 'nothing new');

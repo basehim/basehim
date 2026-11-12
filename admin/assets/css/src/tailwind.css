@@ -365,21 +365,50 @@
 a.bh-dstat:hover { @apply border-accent-200 bg-white shadow-card; }
 a.bh-dstat:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
 .bh-dstat__top { @apply flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1; }
-.bh-dstat__top > .bh-dstat__pill, .bh-dstat__top > .bh-dstat__go, .bh-dstat__top > .bh-dstat__people { @apply ml-auto; }
-.bh-dstat__icon { @apply grid h-7 w-7 flex-none place-items-center rounded-lg bg-accent-600 text-white; }
-.bh-dstat__icon svg { @apply h-4 w-4; }
-/* Wraps between words only; a word never splits, the pill moves aside. */
+.bh-dstat__top > .bh-dstat__go, .bh-dstat__top > .bh-dstat__people { @apply ml-auto; }
+/* Soft square (1.2.128): a light accent square and an accent icon. The solid
+   square made the whole section read as blue next to the tile charts. */
+.bh-dstat__icon { @apply grid h-8 w-8 flex-none place-items-center rounded-[9px] bg-accent-50 text-accent-600; }
+.bh-dstat__icon svg { @apply h-[18px] w-[18px]; }
+/* Wraps between words only; a word never splits. */
 .bh-dstat__label { @apply flex-1 self-center text-[0.8125rem] font-semibold leading-4 text-slate-900 [overflow-wrap:break-word]; }
 @container (max-width: 10rem) { .bh-dstat__top { @apply gap-x-1.5; } .bh-dstat__label { @apply text-xs; } }
-.bh-dstat__value { @apply mt-2.5 text-2xl font-bold leading-none tracking-tight text-slate-900 tabular-nums; }
+/* The number and its pill share a row, so every tile's number sits at the
+   same height; on a very narrow tile the pill drops below the number. */
+.bh-dstat__vrow { @apply mt-2.5 flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1; }
+.bh-dstat__value { @apply text-2xl font-bold leading-none tracking-tight text-slate-900 tabular-nums; }
 .bh-dstat__foot { @apply mt-1.5 flex min-w-0 items-end justify-between gap-2; }
 .bh-dstat__hint { @apply min-w-0 text-xs leading-4 text-slate-500 [overflow-wrap:anywhere]; }
+/* A tile's own chart (1.2.128), at the foot of the tile so charts line up
+   across a row. Accent shades only; the newest point or bar is the strongest. */
+.bh-dstat__chart { @apply relative mt-auto pt-3; }
+.bh-dstat__plot { @apply relative block h-10; }
+.bh-dstat__plot svg { @apply block h-full w-full overflow-visible; }
+.bh-dstat__area { @apply fill-accent-500/10; }
+.bh-dstat__line { @apply fill-none stroke-accent-600; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.bh-dstat__dot { @apply absolute right-0 h-2 w-2 -translate-y-1/2 translate-x-1/2 rounded-full bg-accent-600 ring-2 ring-white; }
+.bh-dstat__hits { @apply absolute inset-0 flex; }
+.bh-dstat__hits > span { @apply flex-1; }
+.bh-dstat__chart--bars { @apply flex h-[3.25rem] items-end gap-[3px]; }
+.bh-dstat__chart--bars > span { @apply flex-1 rounded-t-[3px] bg-accent-200; }
+.bh-dstat__chart--bars > span.is-last { @apply bg-accent-600; }
+.bh-dstat__split { @apply flex h-2 w-full gap-px overflow-hidden rounded-full bg-slate-100; }
+.bh-dstat__seg--1 { @apply bg-accent-600; }
+.bh-dstat__seg--2 { @apply bg-accent-400; }
+.bh-dstat__seg--3 { @apply bg-accent-200; }
+.bh-dstat__seg--4 { @apply bg-slate-300; }
+.bh-dstat__legend { @apply mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] leading-4 text-slate-600; }
+.bh-dstat__key { @apply inline-flex items-center gap-1.5 whitespace-nowrap; }
+.bh-dstat__swatch { @apply h-2 w-2 flex-none rounded-sm; }
+.bh-dstat__chart--empty { @apply flex flex-col justify-end gap-1.5 pt-6; }
+.bh-dstat__baseline { @apply block border-t-2 border-dashed border-accent-200; }
+.bh-dstat__nodata { @apply text-[0.6875rem] leading-4 text-slate-500; }
 .bh-dstat__spark { @apply flex h-4 flex-none items-end gap-[2px]; }
 .bh-dstat__spark span { @apply w-1 rounded-full; }
 .bh-dstat__spark span:nth-child(1) { @apply h-2 bg-accent-200; }
 .bh-dstat__spark span:nth-child(2) { @apply h-3 bg-accent-300; }
 .bh-dstat__spark span:nth-child(3) { @apply h-4 bg-accent-500; }
-/* The pill at the top right: a trend (accent up, neutral down), or a count
+/* The pill beside the number: a trend (accent up, neutral down), or a count
    that needs attention (solid accent). */
 .bh-dstat__pill { @apply inline-flex flex-none items-center gap-0.5 whitespace-nowrap rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[0.6875rem] font-semibold leading-4 text-slate-600; }
 .bh-dstat__pill svg { @apply h-3 w-3; }
@@ -413,7 +442,7 @@ a.bh-dstat:hover .bh-dstat__go { @apply border-accent-200 text-accent-600; }
 .bh-dstat--blue, .bh-dstat--green, .bh-dstat--violet, .bh-dstat--indigo, .bh-dstat--slate { @apply border-slate-200; }
 .bh-dstat--amber .bh-dstat__hint { @apply font-medium text-accent-700; }
 .bh-dstat--red { @apply border-red-200 bg-red-50/50; }
-.bh-dstat--red .bh-dstat__icon { @apply bg-red-600; }
+.bh-dstat--red .bh-dstat__icon { @apply bg-red-50 text-red-600; }
 .bh-dstat--red .bh-dstat__spark span { @apply bg-red-400; }
 .bh-dstat--red .bh-dstat__hint { @apply text-red-700; }
 .bh-dstat__trend { @apply text-xs font-semibold; }
@@ -510,7 +539,7 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
 .bh-dskel__line--sm { @apply mt-2 h-2.5; }
 .bh-dskel__tile { @apply pointer-events-none min-h-[8rem]; }
 .bh-dskel__tile .bh-dstat__top { @apply items-center; }
-.bh-dskel__icon { @apply h-7 w-7 flex-none rounded-lg; }
+.bh-dskel__icon { @apply h-8 w-8 flex-none rounded-[9px]; }
 .bh-dskel__value { @apply mt-3 h-6 w-14 rounded-md; }
 .bh-dskel__hint { @apply mt-2.5; }
 .bh-dskel__chart { @apply flex h-44 items-end gap-[5%] border-b border-l border-slate-200 pl-2 pt-6 ml-8; }

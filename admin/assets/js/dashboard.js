@@ -698,6 +698,103 @@
         return box;
     }
 
+    /*
+     * A stat tile's own small chart (1.2.128), drawn from its data:
+     *   line   a trend line with a soft fill, the newest point marked;
+     *   bars   one bar per period, the newest in the accent;
+     *   split  one bar in shares, with a legend.
+     * Every point and part carries its label as a tooltip, and the chart is
+     * named for screen readers by the data's own label.
+     */
+    function statChart(c) {
+        if (!c || !c.type) return null;
+        var box = el('div', 'bh-dstat__chart bh-dstat__chart--' + c.type);
+        box.setAttribute('role', 'img');
+        if (c.label) box.setAttribute('aria-label', c.label);
+        var NS = 'http://www.w3.org/2000/svg';
+        var pts = c.points || [];
+
+        // Nothing in it: a quiet empty chart that says so (1.2.128), rather
+        // than the old decorative bars coming back.
+        var none = c.type === 'split'
+            ? !(c.parts && c.parts.length)
+            : !pts.some(function (p) { return p.value > 0; });
+        if (none) {
+            if (!c.empty) return null;
+            box.className = 'bh-dstat__chart bh-dstat__chart--empty';
+            box.appendChild(el('span', 'bh-dstat__baseline'));
+            box.appendChild(el('span', 'bh-dstat__nodata', c.empty));
+            box.setAttribute('aria-label', c.empty);
+            return box;
+        }
+
+        if (c.type === 'line' && pts.length > 1) {
+            var max = pts.reduce(function (m, p) { return Math.max(m, p.value); }, 0) || 1;
+            var n = pts.length - 1;
+            var xy = pts.map(function (p, i) { return [i / n * 100, 30 - p.value / max * 26]; });
+            var line = 'M' + xy.map(function (q) { return q[0].toFixed(2) + ' ' + q[1].toFixed(2); }).join(' L');
+            var svg = document.createElementNS(NS, 'svg');
+            svg.setAttribute('viewBox', '0 0 100 32');
+            svg.setAttribute('preserveAspectRatio', 'none');
+            svg.setAttribute('aria-hidden', 'true');
+            var area = document.createElementNS(NS, 'path');
+            area.setAttribute('d', line + ' L100 32 L0 32 Z');
+            area.setAttribute('class', 'bh-dstat__area');
+            var stroke = document.createElementNS(NS, 'path');
+            stroke.setAttribute('d', line);
+            stroke.setAttribute('class', 'bh-dstat__line');
+            stroke.setAttribute('vector-effect', 'non-scaling-stroke');
+            svg.appendChild(area);
+            svg.appendChild(stroke);
+            var plot = el('span', 'bh-dstat__plot');
+            plot.appendChild(svg);
+            // The newest point, as a dot that keeps its shape when the chart stretches.
+            var dot = el('span', 'bh-dstat__dot');
+            dot.style.top = (xy[n][1] / 32 * 100) + '%';
+            plot.appendChild(dot);
+            // Hover areas, one per point, for the tooltips.
+            var hits = el('span', 'bh-dstat__hits');
+            pts.forEach(function (p) { var h = el('span'); if (p.label) h.title = p.label; hits.appendChild(h); });
+            plot.appendChild(hits);
+            box.appendChild(plot);
+            return box;
+        }
+        if (c.type === 'bars' && pts.length > 1) {
+            var top = pts.reduce(function (m, p) { return Math.max(m, p.value); }, 0) || 1;
+            pts.forEach(function (p, i) {
+                var b = el('span', i === pts.length - 1 ? 'is-last' : '');
+                b.style.height = Math.max(6, Math.round(p.value / top * 100)) + '%';
+                if (p.label) b.title = p.label;
+                box.appendChild(b);
+            });
+            return box;
+        }
+        if (c.type === 'split' && c.parts && c.parts.length) {
+            var total = c.parts.reduce(function (t, p) { return t + p.value; }, 0) || 1;
+            var bar = el('span', 'bh-dstat__split');
+            var legend = el('span', 'bh-dstat__legend');
+            c.parts.forEach(function (p, i) {
+                var share = p.value / total * 100;
+                var seg = el('span', 'bh-dstat__seg bh-dstat__seg--' + Math.min(i + 1, 4));
+                seg.style.width = share + '%';
+                var text = c.unit === 'percent'
+                    ? p.label + ' ' + (share >= 1 ? Math.round(share) : '<1') + '%'
+                    : p.label + ' ' + fmtNumber(p.value);
+                seg.title = p.note ? p.label + ': ' + p.note : text;
+                bar.appendChild(seg);
+                var key = el('span', 'bh-dstat__key');
+                key.appendChild(el('span', 'bh-dstat__swatch bh-dstat__seg--' + Math.min(i + 1, 4)));
+                key.appendChild(document.createTextNode(text));
+                if (p.note) key.title = p.note;
+                legend.appendChild(key);
+            });
+            box.appendChild(bar);
+            box.appendChild(legend);
+            return box;
+        }
+        return null;
+    }
+
     // A quiet group of figures for the wide People tile; decoration only.
     function peopleArt() {
         var NS = 'http://www.w3.org/2000/svg';
@@ -744,38 +841,49 @@
                 tile.classList.add('bh-dstat--' + tone);
                 if (it.wide) tile.classList.add('bh-dstat--wide');
 
-                // Icon, label, and a trend, a count that needs attention, or a way in.
+                // Icon and label, plus a way in on a wide tile.
                 var top = el('div', 'bh-dstat__top');
                 var ic = icon(it.icon && ICONS[it.icon] ? it.icon : 'chart-bar');
                 ic.className = 'bh-dstat__icon';
                 top.appendChild(ic);
                 top.appendChild(el('span', 'bh-dstat__label', it.label));
                 var pill = statPill(it);
-                if (pill) top.appendChild(pill);
-                else if (it.wide && it.href) {
+                if (!pill && it.wide && it.href) {
                     var go = icon('chevron-right');
                     go.className = 'bh-dstat__go';
                     top.appendChild(go);
                 }
                 tile.appendChild(top);
 
+                // The number, with its trend or the count that needs attention
+                // beside it (1.2.128). In the top row the pill wrapped under a
+                // label like "Comments" on a phone, pushing that tile's number
+                // lower than its neighbours'.
+                var vrow = el('div', 'bh-dstat__vrow');
                 var value = el('span', 'bh-dstat__value');
                 var key = String(it.label);
                 if (opt.animate) countUp(value, it.value, prev[key]); else value.textContent = fmtNumber(it.value);
                 if (typeof it.value === 'number') seen[key] = it.value;
-                tile.appendChild(value);
+                vrow.appendChild(value);
+                if (pill) vrow.appendChild(pill);
+                tile.appendChild(vrow);
 
                 var foot = el('div', 'bh-dstat__foot');
                 foot.appendChild(it.hint ? el('span', 'bh-dstat__hint', it.hint) : el('span'));
+                var chart = statChart(it.chart);
                 if (it.people && it.people.items && it.people.items.length) foot.appendChild(peopleStack(it.people));
-                else {
+                else if (!chart) {
+                    // A tile without data for a chart keeps the small mark it
+                    // always had (apps' tiles, an empty site).
                     var spark = el('span', 'bh-dstat__spark');
                     spark.setAttribute('aria-hidden', 'true');
                     for (var i = 0; i < 3; i++) spark.appendChild(el('span'));
                     foot.appendChild(spark);
                 }
                 tile.appendChild(foot);
-                if (it.wide) tile.appendChild(peopleArt());
+                if (chart) tile.appendChild(chart);
+                // The illustration fills a wide tile that has no chart.
+                if (it.wide && !chart) tile.appendChild(peopleArt());
                 wrap.appendChild(tile);
             });
             if (opt.id) lastValues[opt.id] = seen;

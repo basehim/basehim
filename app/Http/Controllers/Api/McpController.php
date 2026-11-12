@@ -194,11 +194,11 @@ final class McpController
 
         $all[] = [
             'name' => 'list_posts',
-            'description' => 'List posts, most recent first. Optional status filter (published/draft/pending). Requires posts:read.',
+            'description' => 'List posts, most recent first. Optional status filter (published/draft/pending/scheduled). Requires posts:read.',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
-                    'status' => ['type' => 'string', 'enum' => ['published', 'draft', 'pending', 'any'], 'default' => 'published'],
+                    'status' => ['type' => 'string', 'enum' => ['published', 'draft', 'pending', 'scheduled', 'any'], 'default' => 'published'],
                     'page'   => ['type' => 'integer', 'default' => 1],
                     'per_page' => ['type' => 'integer', 'description' => '1–50', 'default' => 10],
                 ],
@@ -237,13 +237,14 @@ final class McpController
 
         $all[] = [
             'name' => 'create_post',
-            'description' => 'Create a new post. Defaults to draft status. content_format may be html (default), markdown, or blocks. Requires posts:write.',
+            'description' => 'Create a new post. Defaults to draft status. Set status scheduled with a future published_at to schedule it. content_format may be html (default), markdown, or blocks. Requires posts:write.',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
                     'title'   => ['type' => 'string'],
                     'content' => ['type' => 'string', 'description' => 'Body. HTML unless content_format says otherwise.'],
-                    'status'  => ['type' => 'string', 'enum' => ['draft', 'pending', 'published'], 'default' => 'draft'],
+                    'status'  => ['type' => 'string', 'enum' => ['draft', 'pending', 'published', 'scheduled'], 'default' => 'draft'],
+                    'published_at' => ['type' => 'string', 'description' => 'Publish time: ISO 8601 such as 2026-11-20T09:00:00Z (UTC unless an offset is given). In the future with status scheduled; in the past to backdate. Empty clears it.'],
                     'excerpt' => ['type' => 'string'],
                     'slug'    => ['type' => 'string', 'description' => 'Optional; generated from title if omitted.'],
                     'content_format' => ['type' => 'string', 'enum' => ['html', 'markdown', 'blocks'], 'default' => 'html'],
@@ -263,7 +264,8 @@ final class McpController
                     'id'      => ['type' => 'integer'],
                     'title'   => ['type' => 'string'],
                     'content' => ['type' => 'string'],
-                    'status'  => ['type' => 'string', 'enum' => ['draft', 'pending', 'published']],
+                    'status'  => ['type' => 'string', 'enum' => ['draft', 'pending', 'published', 'scheduled']],
+                    'published_at' => ['type' => 'string', 'description' => 'Publish time: ISO 8601 such as 2026-11-20T09:00:00Z (UTC unless an offset is given). In the future with status scheduled; in the past to backdate. Empty clears it.'],
                     'excerpt' => ['type' => 'string'],
                 ],
                 'required' => ['id'],
@@ -278,7 +280,7 @@ final class McpController
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
-                    'status'   => ['type' => 'string', 'enum' => ['published', 'draft', 'pending', 'any'], 'default' => 'published'],
+                    'status'   => ['type' => 'string', 'enum' => ['published', 'draft', 'pending', 'scheduled', 'any'], 'default' => 'published'],
                     'page'     => ['type' => 'integer', 'default' => 1],
                     'per_page' => ['type' => 'integer', 'description' => '1–50', 'default' => 10],
                 ],
@@ -295,7 +297,8 @@ final class McpController
                 'properties' => [
                     'title'   => ['type' => 'string'],
                     'content' => ['type' => 'string'],
-                    'status'  => ['type' => 'string', 'enum' => ['draft', 'pending', 'published'], 'default' => 'draft'],
+                    'status'  => ['type' => 'string', 'enum' => ['draft', 'pending', 'published', 'scheduled'], 'default' => 'draft'],
+                    'published_at' => ['type' => 'string', 'description' => 'Publish time: ISO 8601 such as 2026-11-20T09:00:00Z (UTC unless an offset is given). In the future with status scheduled; in the past to backdate. Empty clears it.'],
                     'excerpt' => ['type' => 'string'],
                     'slug'    => ['type' => 'string'],
                     'content_format' => ['type' => 'string', 'enum' => ['html', 'markdown', 'blocks'], 'default' => 'html'],
@@ -315,7 +318,8 @@ final class McpController
                     'id'      => ['type' => 'integer'],
                     'title'   => ['type' => 'string'],
                     'content' => ['type' => 'string'],
-                    'status'  => ['type' => 'string', 'enum' => ['draft', 'pending', 'published']],
+                    'status'  => ['type' => 'string', 'enum' => ['draft', 'pending', 'published', 'scheduled']],
+                    'published_at' => ['type' => 'string', 'description' => 'Publish time: ISO 8601 such as 2026-11-20T09:00:00Z (UTC unless an offset is given). In the future with status scheduled; in the past to backdate. Empty clears it.'],
                     'excerpt' => ['type' => 'string'],
                 ],
                 'required' => ['id'],
@@ -905,12 +909,13 @@ final class McpController
         $title = trim((string) ($args['title'] ?? ''));
         if ($title === '') throw new McpError('title is required', -32602);
         $status = (string) ($args['status'] ?? 'draft');
-        if (!in_array($status, ['draft', 'pending', 'published'], true)) $status = 'draft';
+        if (!in_array($status, self::POST_STATUSES, true)) $status = 'draft';
+        $timing = $this->publishTime($args, $status, null);
 
         $family = $type === 'page' ? 'pages' : 'posts';
         $this->requireCap("edit_{$family}");
         // Without publish rights it goes in for review, as in the admin.
-        if ($status === 'published' && !$this->can("publish_{$family}")) $status = 'pending';
+        if (in_array($status, ['published', 'scheduled'], true) && !$this->can("publish_{$family}")) $status = 'pending';
 
         $posts = $this->app()->make(PostService::class);
         $authorId = (int) ($this->authUser()['id'] ?? 0);
@@ -923,7 +928,7 @@ final class McpController
             'excerpt' => (string) ($args['excerpt'] ?? ''),
             'slug'    => (string) ($args['slug'] ?? ''),
             'status'  => $status,
-        ], $authorId, $this->authUser());
+        ] + $timing, $authorId, $this->authUser());
 
         $created = $posts->find($id);
         return $this->json([
@@ -932,6 +937,7 @@ final class McpController
             'id' => $id,
             'slug' => $created['slug'] ?? '',
             'status' => $created['status'] ?? $status,
+            'published_at' => $created['published_at'] ?? null,
             'url' => $this->siteUrl() . '/' . ($created['slug'] ?? ''),
         ] + $this->htmlNote($posts));
     }
@@ -957,10 +963,11 @@ final class McpController
         foreach (['title', 'content', 'excerpt', 'status'] as $f) {
             if (array_key_exists($f, $args)) $patch[$f] = $args[$f];
         }
-        if (isset($patch['status']) && !in_array($patch['status'], ['draft', 'pending', 'published'], true)) {
+        if (isset($patch['status']) && !in_array($patch['status'], self::POST_STATUSES, true)) {
             unset($patch['status']);
         }
-        if (($patch['status'] ?? '') === 'published' && !$this->can("publish_{$family}")) $patch['status'] = 'pending';
+        $patch += $this->publishTime($args, (string) ($patch['status'] ?? ''), $existing);
+        if (in_array($patch['status'] ?? '', ['published', 'scheduled'], true) && !$this->can("publish_{$family}")) $patch['status'] = 'pending';
         if (!$patch) throw new McpError('Nothing to update', -32602);
 
         $posts->update($id, $patch, $this->authUser());
@@ -969,8 +976,39 @@ final class McpController
             'updated' => true,
             'id' => $id,
             'status' => $updated['status'] ?? '',
+            'published_at' => $updated['published_at'] ?? null,
             'slug' => $updated['slug'] ?? '',
         ] + $this->htmlNote($posts));
+    }
+
+    /** Statuses create_post/update_post (and the page tools) accept. */
+    private const POST_STATUSES = ['draft', 'pending', 'published', 'scheduled'];
+
+    /**
+     * The published_at a create or update asks for (1.2.128), as the REST API
+     * takes it since 1.2.126: ISO 8601 with an offset, or "Y-m-d H:i:s" in
+     * UTC; empty clears it. PostService then settles status and time together
+     * (a scheduled time that has passed publishes, for one).
+     *
+     * @return array{published_at?: ?string}
+     */
+    private function publishTime(array $args, string $status, ?array $existing): array
+    {
+        $out = [];
+        if (array_key_exists('published_at', $args)) {
+            $v = $args['published_at'];
+            if ($v === null || $v === '') {
+                $out['published_at'] = null;
+            } elseif (!is_string($v) || \App\Core\Time::parse($v) === null) {
+                throw new McpError('published_at must be a date and time, such as 2026-11-20T09:00:00Z (UTC unless an offset is given).', -32602);
+            } else {
+                $out['published_at'] = $v;
+            }
+        }
+        if ($status === 'scheduled' && empty($out['published_at'] ?? ($existing['published_at'] ?? null))) {
+            throw new McpError('A scheduled post needs a published_at in the future.', -32602);
+        }
+        return $out;
     }
 
     /** ['warning' => …] when the content was filtered (no unfiltered_html), so the agent can tell its user. */

@@ -29,7 +29,8 @@ final class CoreDashboardWidgets
     {
         $reg->register('core.dashboard.at-a-glance', [
             'title'       => 'At a glance',
-            'description' => 'Quick overview of your site activity',
+            // Says what the charts and the pills cover (1.2.128).
+            'description' => 'Charts: last 12 weeks · changes: last 30 days',
             'icon'        => 'chart-bar',
             'source'      => 'core',
             'surfaces'    => ['dashboard'],
@@ -192,34 +193,50 @@ final class CoreDashboardWidgets
             $items[] = [
                 'label' => $all ? 'Posts' : 'Your posts',
                 'value' => $c['total'],
-                'hint'  => sprintf('%d published · %s', $c['published'] ?? 0, self::plural($c['draft'] ?? 0, 'draft')),
+                'hint'  => sprintf('%s published · %s', number_format((int) ($c['published'] ?? 0)), self::plural((int) ($c['draft'] ?? 0), 'draft')),
                 'href'  => $ctx->url('/admin/posts'),
                 'tone'  => 'blue',
                 'icon'  => 'document-text',
                 'trend' => self::growth($c['total'], $c['recent']),
+                'chart' => self::weeklyTrend($db, 'posts', $all ? null : $uid),
             ];
         }
         if ($ctx->can('edit_pages')) {
             $all = $ctx->can('edit_others_pages');
             $c = self::statusCounts($db, 'page', $all ? null : $uid, $since);
+            // The legend already says how many are published; the hint says
+            // when a page last changed (1.2.128).
+            $sql = "SELECT MAX(updated_at) AS u FROM {posts} WHERE type = 'page' AND deleted_at IS NULL";
+            $params = [];
+            if (!$all) { $sql .= ' AND author_id = :a'; $params['a'] = $uid; }
+            $updated = $db->selectOne($sql, $params)['u'] ?? null;
             $items[] = ['label' => $all ? 'Pages' : 'Your pages', 'value' => $c['total'],
-                        'hint' => sprintf('%d published', $c['published'] ?? 0), 'href' => $ctx->url('/admin/pages'),
-                        'tone' => 'violet', 'icon' => 'document', 'trend' => self::growth($c['total'], $c['recent'])];
+                        'hint' => $updated ? 'Last updated ' . \App\Core\Time::ago($updated, 30) : 'No pages yet',
+                        'href' => $ctx->url('/admin/pages'),
+                        'tone' => 'violet', 'icon' => 'document', 'trend' => self::growth($c['total'], $c['recent']),
+                        'chart' => self::statusSplit($c)];
         }
         if ($ctx->can('upload_media')) {
             $row = $db->selectOne('SELECT COUNT(*) AS c, COALESCE(SUM(file_size), 0) AS s, SUM(created_at >= :since) AS r FROM {media}', ['since' => $since]) ?? [];
             $items[] = ['label' => 'Media', 'value' => (int) ($row['c'] ?? 0),
                         'hint' => self::bytes((int) ($row['s'] ?? 0)) . ' in the library', 'href' => $ctx->url('/admin/media'),
-                        'tone' => 'green', 'icon' => 'photo', 'trend' => self::growth((int) ($row['c'] ?? 0), (int) ($row['r'] ?? 0))];
+                        'tone' => 'green', 'icon' => 'photo', 'trend' => self::growth((int) ($row['c'] ?? 0), (int) ($row['r'] ?? 0)),
+                        'chart' => self::mediaSplit($db)];
         }
         if ($ctx->can('moderate_comments')) {
-            $rows = $db->select("SELECT status, COUNT(*) AS c FROM {comments} WHERE status IN ('approved','pending') GROUP BY status");
+            $rows = $db->select("SELECT status, COUNT(*) AS c, SUM(created_at >= :since) AS r FROM {comments} WHERE status IN ('approved','pending') GROUP BY status", ['since' => $since]);
             $by = array_column($rows, 'c', 'status');
             $pending = (int) ($by['pending'] ?? 0);
-            $items[] = ['label' => 'Comments', 'value' => (int) ($by['approved'] ?? 0) + $pending,
-                        'hint' => $pending > 0 ? "{$pending} waiting for review" : 'All reviewed',
-                        'href' => $ctx->url('/admin/comments'), 'tone' => 'amber', 'icon' => 'chat-bubble-oval-left',
-                        'badge' => $pending > 0 ? ['text' => (string) $pending, 'tone' => 'amber', 'icon' => 'clock'] : null];
+            $total = (int) ($by['approved'] ?? 0) + $pending;
+            $recent = (int) array_sum(array_column($rows, 'r'));
+            // The hint carries the review count; the pill is the comments'
+            // trend like every other tile (1.2.128). Until then the pill
+            // repeated the hint's number.
+            $items[] = ['label' => 'Comments', 'value' => $total,
+                        'hint' => $pending > 0 ? number_format($pending) . ' waiting for review' : 'All reviewed',
+                        'href' => $ctx->url('/admin/comments'), 'tone' => $pending > 0 ? 'amber' : 'blue', 'icon' => 'chat-bubble-oval-left',
+                        'trend' => self::growth($total, $recent),
+                        'chart' => self::weeklyTrend($db, 'comments', null)];
         }
         if ($ctx->can('manage_users')) {
             $row = $db->selectOne("SELECT COUNT(*) AS c FROM {users} WHERE status = 'active' AND deleted_at IS NULL") ?? [];
@@ -234,11 +251,121 @@ final class CoreDashboardWidgets
                 'name' => (string) (($u['display_name'] ?? '') !== '' ? $u['display_name'] : $u['username']),
                 'url'  => !empty($u['avatar_url']) ? \App\Services\AvatarService::pick((string) $u['avatar_url'], $u['avatar_sizes'] ?? null, 64) : null,
             ], $faces);
+            $seen = (int) ($db->selectOne(
+                "SELECT COUNT(*) AS c FROM {users} WHERE status = 'active' AND deleted_at IS NULL AND last_login_at >= :since",
+                ['since' => $since]
+            )['c'] ?? 0);
             $items[] = ['label' => 'People', 'value' => $total, 'hint' => 'Active accounts',
                         'href' => $ctx->url('/admin/users'), 'tone' => 'indigo', 'icon' => 'user-group', 'wide' => true,
-                        'people' => ['items' => $people, 'more' => max(0, $total - count($people))]];
+                        'people' => ['items' => $people, 'more' => max(0, $total - count($people))],
+                        // Who has signed in lately (1.2.128).
+                        'chart' => $total > 0 ? ['type' => 'split', 'label' => 'Accounts by last sign-in',
+                            'parts' => [
+                                ['label' => 'Signed in recently', 'value' => $seen],
+                                ['label' => 'Not in 30 days', 'value' => $total - $seen],
+                            ]] : null];
         }
         return ['items' => $items];
+    }
+
+    // ------------------------------------------------------------------
+    // Tile charts (1.2.128). Each tile shows a small chart of its own data in
+    // place of the three decorative bars it had before.
+    // ------------------------------------------------------------------
+
+    /** Weeks a tile's trend covers, newest last. */
+    private const TREND_WEEKS = 12;
+
+    /**
+     * Posts published, or comments received (approved or waiting; spam and
+     * trash are left out), in each of the last 12 weeks. Weeks are counted
+     * back from now, so the newest is always a full seven days.
+     * A post's week is its publish time; a comment's, when it was written.
+     *
+     * @return array{type:string,label:string,points:list<array{value:int,label:string}>}|null
+     */
+    private static function weeklyTrend(Database $db, string $what, ?int $authorId): ?array
+    {
+        $now = time();
+        $from = $now - self::TREND_WEEKS * 7 * 86400;
+        $since = gmdate('Y-m-d H:i:s', $from);
+        if ($what === 'posts') {
+            $sql = "SELECT published_at AS at FROM {posts}
+                     WHERE type = 'post' AND status = 'published' AND deleted_at IS NULL AND published_at >= :since";
+            $params = ['since' => $since];
+            if ($authorId !== null) { $sql .= ' AND author_id = :a'; $params['a'] = $authorId; }
+            $noun = ['post published', 'posts published'];
+        } else {
+            $sql = "SELECT created_at AS at FROM {comments} WHERE status IN ('approved','pending') AND created_at >= :since";
+            $params = ['since' => $since];
+            $noun = ['comment', 'comments'];
+        }
+        $counts = array_fill(0, self::TREND_WEEKS, 0);
+        foreach ($db->select($sql, $params) as $r) {
+            $t = strtotime((string) $r['at'] . ' UTC');
+            if ($t === false || $t > $now) continue;
+            $i = self::TREND_WEEKS - 1 - intdiv($now - $t, 7 * 86400);
+            if ($i >= 0) $counts[$i]++;
+        }
+        $empty = $what === 'posts' ? 'No posts published in the last 12 weeks' : 'No comments in the last 12 weeks';
+
+        $points = [];
+        foreach ($counts as $i => $n) {
+            $start = $now - (self::TREND_WEEKS - $i) * 7 * 86400;
+            $points[] = ['value' => $n, 'label' => 'Week of ' . \App\Core\Time::date(gmdate('Y-m-d H:i:s', $start), 'j M') . ': '
+                . number_format($n) . ' ' . $noun[$n === 1 ? 0 : 1]];
+        }
+        return [
+            'type'   => $what === 'posts' ? 'line' : 'bars',
+            'label'  => ucfirst($noun[1]) . ' per week, last ' . self::TREND_WEEKS . ' weeks',
+            'points' => $points,
+            'empty'  => array_sum($counts) === 0 ? $empty : '',
+        ];
+    }
+
+    /** Pages by status: published, drafts, and the rest (waiting, scheduled, private). */
+    private static function statusSplit(array $c): ?array
+    {
+        $published = (int) ($c['published'] ?? 0);
+        $draft = (int) ($c['draft'] ?? 0);
+        $other = max(0, (int) $c['total'] - $published - $draft);
+        return ['type' => 'split', 'label' => 'Pages by status', 'empty' => $c['total'] <= 0 ? 'No pages yet' : '', 'parts' => array_values(array_filter([
+            ['label' => 'Published', 'value' => $published],
+            ['label' => 'Drafts', 'value' => $draft],
+            ['label' => 'Other', 'value' => $other],
+        ], fn($p) => $p['value'] > 0))];
+    }
+
+    /** The library's size by kind of file, largest first. */
+    private static function mediaSplit(Database $db): ?array
+    {
+        $rows = $db->select(
+            "SELECT CASE WHEN mime_type LIKE 'image/%' THEN 'Images'
+                         WHEN mime_type LIKE 'video/%' OR mime_type LIKE 'audio/%' THEN 'Video and audio'
+                         WHEN mime_type = 'application/pdf' OR mime_type LIKE 'text/%'
+                              OR mime_type LIKE 'application/vnd.%' OR mime_type LIKE 'application/msword%' THEN 'Documents'
+                         ELSE 'Other' END AS kind,
+                    COALESCE(SUM(file_size), 0) AS bytes, COUNT(*) AS n
+               FROM {media} GROUP BY kind"
+        );
+        $parts = [];
+        foreach ($rows as $r) {
+            if ((int) $r['bytes'] <= 0) continue;
+            $parts[] = ['label' => (string) $r['kind'], 'value' => (int) $r['bytes'],
+                        'note' => number_format((int) $r['n']) . ' ' . ((int) $r['n'] === 1 ? 'file' : 'files') . ', ' . self::bytes((int) $r['bytes'])];
+        }
+        if (!$parts) return ['type' => 'split', 'label' => 'Library size by kind of file', 'parts' => [], 'empty' => 'Nothing uploaded yet'];
+        usort($parts, fn($a, $b) => $b['value'] <=> $a['value']);
+        // Three at most, so the legend stays short on a phone: the two
+        // largest, and the rest together as "Other".
+        if (count($parts) > 3) {
+            $rest = array_slice($parts, 2);
+            $bytes = array_sum(array_column($rest, 'value'));
+            $parts = array_slice($parts, 0, 2);
+            $parts[] = ['label' => 'Other', 'value' => $bytes,
+                        'note' => implode(', ', array_column($rest, 'label')) . ': ' . self::bytes($bytes)];
+        }
+        return ['type' => 'split', 'label' => 'Library size by kind of file', 'unit' => 'percent', 'parts' => $parts];
     }
 
     /**
@@ -254,7 +381,9 @@ final class CoreDashboardWidgets
         // Past 999% a percentage says only that little came before (a young
         // site). The count says more: "+10 new". Until 1.2.126 this read
         // "+999%", a cap that looked like a real figure.
-        $text = $pct > 999 ? '+' . $recent . ' new' : '+' . $pct . '%';
+        // From 1.2.128 a count is shown whenever fewer than ten came before:
+        // 5 files becoming 18 read as "+260%", which alarms more than it says.
+        $text = ($pct > 999 || $before < 10) ? '+' . number_format($recent) . ' new' : '+' . $pct . '%';
         return ['direction' => 'up', 'text' => $text, 'good' => true];
     }
 
@@ -444,7 +573,8 @@ final class CoreDashboardWidgets
 
     private static function plural(int $n, string $word): string
     {
-        return $n . ' ' . $word . ($n === 1 ? '' : 's');
+        // Grouped like the tile's number ("4,622"), which the browser formats.
+        return number_format($n) . ' ' . $word . ($n === 1 ? '' : 's');
     }
 
     private static function anyCap(array $user, array $caps): bool

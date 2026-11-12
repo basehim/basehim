@@ -105,7 +105,7 @@ final class SitePage
             $r = (new \App\Http\Controllers\Web\SitePageController())->page("{$status} {$title}", $body, ['robots' => 'noindex']);
             return $r->status($status);
         } catch (\Throwable) {
-            return Response::html('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>' . htmlspecialchars("{$status} {$title}") . '</title></head><body>' . $body . '</body></html>', $status);
+            return Response::html('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . htmlspecialchars("{$status} {$title}") . '</title></head><body>' . $body . '</body></html>', $status);
         }
     }
 

@@ -107,8 +107,10 @@ test('cards: At a glance has icons, tones, a pending badge and the people; Publi
     assert_same(['violet', 'document'], [$items['Pages']['tone'], $items['Pages']['icon']]);
     assert_same(['green', 'photo'], [$items['Media']['tone'], $items['Media']['icon']]);
     assert_same('amber', $items['Comments']['tone']);
-    assert_same('clock', $items['Comments']['badge']['icon'] ?? null, 'pending comments as a badge');
-    assert_true((int) $items['Comments']['badge']['text'] >= 1);
+    // 1.2.128: the waiting count is in the hint; the pill is the comments' trend.
+    assert_same(null, $items['Comments']['badge'] ?? null, 'no badge repeating the hint');
+    assert_contains('waiting for review', (string) $items['Comments']['hint']);
+    assert_same('amber', $items['Comments']['tone'], 'the waiting hint stands out');
     assert_true($items['People']['wide']);
     assert_true(count($items['People']['people']['items']) >= 1);
     assert_same($items['People']['value'], count($items['People']['people']['items']) + $items['People']['people']['more']);

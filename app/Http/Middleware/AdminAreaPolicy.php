@@ -153,16 +153,21 @@ final class AdminAreaPolicy
         }
 
         $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
-        $html = '<!doctype html><html><head><title>403 — Access denied</title></head>'
-            . '<body style="font-family:system-ui,Arial,sans-serif;background:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;">'
-            . '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:36px 42px;text-align:center;max-width:420px;">'
-            . '<div style="font-size:40px;margin-bottom:10px;">&#128274;</div>'
-            . '<h1 style="font-size:19px;color:#0f172a;margin:0 0 8px;">Access denied</h1>'
-            . '<p style="font-size:14px;color:#64748b;margin:0 0 20px;">Your account role does not have permission for this area'
-            . ' (requires <code style="background:#f1f5f9;padding:2px 6px;border-radius:5px;">' . htmlspecialchars($required) . '</code>).'
-            . ' Contact an administrator if you believe this is a mistake.</p>'
-            . '<a href="' . $base . '/admin/dashboard" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;'
-            . 'padding:9px 20px;border-radius:9px;font-size:14px;font-weight:600;">Back to Dashboard</a>'
+        // Shared admin styles and an icon (1.2.128): this page had inline
+        // styles, an emoji for an icon and no viewport, so it was tiny on a phone.
+        $lock = \App\Core\Icon::svg('lock-closed', 'w-6 h-6');
+        $html = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+            . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<title>Access denied</title>'
+            . '<link rel="stylesheet" href="' . $base . '/admin/assets/css/tailwind.min.css"></head>'
+            . '<body class="grid min-h-screen place-items-center bg-slate-50 p-4 font-sans">'
+            . '<div class="bh-card w-full max-w-md p-8 text-center">'
+            . '<div class="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-accent-50 text-accent-600">' . $lock . '</div>'
+            . '<h1 class="mb-2 text-lg font-semibold text-slate-900">Access denied</h1>'
+            . '<p class="mb-6 text-sm text-slate-500">Your role doesn\'t include this area (it needs '
+            . '<code class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">' . htmlspecialchars($required) . '</code>).'
+            . ' Ask an administrator if you need it.</p>'
+            . '<a href="' . $base . '/admin/dashboard" class="bh-btn bh-btn--primary">Back to dashboard</a>'
             . '</div></body></html>';
         return Response::html($html, 403);
     }

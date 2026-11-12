@@ -685,6 +685,7 @@ final class DashboardService
                     ]),
                     'more'  => max(0, (int) ($i['people']['more'] ?? 0)),
                 ] : null,
+                'chart' => $this->statChart($i['chart'] ?? null),
                 'wide'  => !empty($i['wide']),
             ])],
             'list' => ['items' => $this->mapList($raw['items'] ?? [], 50, fn($i) => [
@@ -714,6 +715,45 @@ final class DashboardService
             'html'  => ['html' => HtmlSanitizer::clean($this->str($raw['html'] ?? '', 100000))['html']],
         };
         return $p + $common;
+    }
+
+    /**
+     * A stat tile's small chart (1.2.128), or null:
+     *  - line / bars: up to 60 points, oldest first, each
+     *    ['value' => number >= 0, 'label' => tooltip text];
+     *  - split: up to 6 parts, each a label and a number >= 0 (shares of a
+     *    bar, with a legend); unit "percent" shows each part's share in the
+     *    legend instead of its value.
+     * `label` names the chart for screen readers; `empty`, when set, is shown
+     * in place of a chart with nothing in it ("No posts in the last 12 weeks").
+     */
+    private function statChart(mixed $c): ?array
+    {
+        if (!is_array($c)) return null;
+        $type = (string) ($c['type'] ?? '');
+        $num = static fn($v): float => is_int($v) || is_float($v) ? max(0.0, (float) $v) : (is_numeric($v) ? max(0.0, (float) $v) : 0.0);
+        if ($type === 'line' || $type === 'bars') {
+            $points = $this->mapList($c['points'] ?? [], 60, fn($p) => [
+                'value' => $num($p['value'] ?? 0), 'label' => $this->str($p['label'] ?? '', 120),
+            ]);
+            if (count($points) < 2) return null;
+            return ['type' => $type, 'label' => $this->str($c['label'] ?? '', 120), 'points' => $points,
+                    'empty' => $this->str($c['empty'] ?? '', 120)];
+        }
+        if ($type === 'split') {
+            $parts = array_values(array_filter($this->mapList($c['parts'] ?? [], 6, fn($p) => [
+                'label' => $this->str($p['label'] ?? '', 40),
+                'value' => $num($p['value'] ?? 0),
+                'note'  => $this->str($p['note'] ?? '', 120),
+            ]), fn($p) => $p['value'] > 0));
+            $empty = $this->str($c['empty'] ?? '', 120);
+            // Nothing to share out: an empty chart when the data says what is
+            // missing (1.2.128), else none.
+            if (!$parts && $empty === '') return null;
+            return ['type' => 'split', 'label' => $this->str($c['label'] ?? '', 120),
+                    'unit' => ($c['unit'] ?? '') === 'percent' ? 'percent' : 'count', 'parts' => $parts, 'empty' => $empty];
+        }
+        return null;
     }
 
     private function tablePayload(array $raw): array
