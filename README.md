@@ -1,5 +1,9 @@
 # Basehim
 
+<p align="center">
+  <img src="https://www.basehim.com/uploads/2026/11/basehim-readme-b.png" width="100%" alt="Basehim, the CMS for people and AI agents: the dashboard on a desktop monitor, surrounded by the posts, editor, analytics and media screens in light and dark mode, and the posts screen on a phone">
+</p>
+
 **Open-source PHP CMS with a REST API and a built-in MCP server for AI
 agents.** Manage content in the dashboard, through the REST API, or with AI
 assistants over MCP, each with only the permissions you grant.
@@ -13,8 +17,6 @@ archive; the installer sets up the rest.
 [![CI](https://github.com/basehim/basehim/actions/workflows/ci.yml/badge.svg)](https://github.com/basehim/basehim/actions/workflows/ci.yml)
 
 [basehim.com](https://www.basehim.com) · [Docs](https://www.basehim.com/docs) · [API reference](https://www.basehim.com/docs/api-reference) · [Getting started](https://www.basehim.com/docs/getting-started) · [**Download**](https://github.com/basehim/basehim/releases/latest/download/basehim.zip)
-
-![The Basehim dashboard: site activity, recent posts and comments waiting for review](https://www.basehim.com/uploads/2026/11/dashboard.png)
 
 ## Quick start
 
