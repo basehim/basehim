@@ -344,8 +344,20 @@ screen includes the shared partial:
 ]); ?>
 ```
 
+**From an app.** All of these work (1.3.0): core's `View::include()` as above,
+`$this->make(\App\Core\View::class)->include('partials.datatable', [...])`,
+or setting `$tableKey` (and the rest) and
+`require BASEHIM_ROOT . '/admin/views/partials/datatable.php'` inside your
+own view. The partial asks for `datatable.css` with
+`\App\Core\Http\HeadStyles::add()`: inside `$this->adminView()` it goes in
+the page's `<head>`, in a bare `$this->view()` fragment it is printed in place.
+Never rely on `$this` inside a core partial: an app may be including it.
+
 The partial server-renders the first page (so the table works with no
-JavaScript and paints instantly) and embeds the config the script enhances.
+JavaScript) and embeds the config the script enhances. The script builds the
+table as soon as it runs; until then the server's markup keeps its place but
+isn't shown (`[data-bh-draw]`, only when scripts run, shown after 2.5s
+regardless), so the plain table never flashes before the finished one.
 Posts and Pages use it by default; `?view=classic` falls back to the original
 server-rendered table.
 

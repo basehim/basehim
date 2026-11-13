@@ -66,7 +66,7 @@ test('phones: controls are an app bar with even 10px padding; the stuck footer i
     $css = r12115('admin/assets/css/src/datatable.css');
     assert_false(str_contains($css, 'padding: 0 0 .75rem !important'), 'the zero top padding is gone');
     assert_contains('padding-top: .625rem !important; padding-bottom: .625rem !important;', $css);
-    assert_contains('@apply -mx-4 mb-3 bg-slate-50 px-4;', $css, 'edge to edge across the p-4 gutter');
+    assert_contains('@apply -mx-4 mb-3 bg-slate-50 px-4 supports-[backdrop-filter]:bg-slate-50/80;', $css, 'edge to edge across the p-4 gutter');
     // (40px phone controls became the core 36px in 1.2.117, by request.)
     assert_contains('.bh-dt-count__lead, .bh-dt-count__noun { display: none; }', $css);
     assert_contains('padding-bottom: calc(.5rem + env(safe-area-inset-bottom));', $css);

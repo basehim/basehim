@@ -1,0 +1,362 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   The Customizer
+
+   A fixed two-pane screen: a scrolling control panel and a preview that fills
+   whatever is left. Nothing here scrolls the page itself — the panel scrolls
+   internally so the header and the Save button stay put, which matters when a
+   theme declares thirty options.
+
+   Source since 1.3.0: colours are theme() references, so the panel follows
+   the person's light/dark mode and accent (the preview shows the site as
+   visitors see it). Build admin/assets/css/customizer.css with
+       npm run build:customizer
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.bh-cz {
+    display: flex;
+    height: 100vh;
+    height: 100dvh;          /* dvh, so an iOS URL bar does not clip the panel */
+    background: theme("backgroundColor.slate.100");
+}
+
+/* ── control panel ───────────────────────────────────────────────────────── */
+
+.bh-cz__panel {
+    width: 340px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: theme("backgroundColor.white");
+    border-right: 1px solid theme("borderColor.slate.200");
+    min-height: 0;           /* or the inner scroll never engages */
+}
+
+.bh-cz__head {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid theme("borderColor.slate.200");
+    flex-shrink: 0;
+}
+.bh-cz__back {
+    display: grid;
+    place-items: center;
+    width: 34px; height: 34px;
+    border-radius: .5rem;
+    color: theme("textColor.slate.600");
+    flex-shrink: 0;
+}
+.bh-cz__back:hover { background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.900"); }
+
+.bh-cz__headtext { flex: 1; min-width: 0; }
+.bh-cz__title { font-size: .95rem; font-weight: 600; color: theme("textColor.slate.900"); line-height: 1.2; }
+.bh-cz__theme {
+    font-size: .75rem; color: theme("textColor.slate.500"); margin-top: .1rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.bh-cz__save {
+    padding: .5rem .9rem;
+    border-radius: .5rem;
+    background: theme("backgroundColor.accent.600");
+    color: theme("textColor.white");
+    font-size: .8125rem;
+    font-weight: 600;
+    border: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.bh-cz__save:hover:not(:disabled) { background: theme("backgroundColor.accent.700"); }
+.bh-cz__save:disabled { background: theme("backgroundColor.slate.200"); color: theme("textColor.slate.400"); cursor: default; }
+
+.bh-cz__status {
+    padding: .6rem 1rem;
+    font-size: .75rem;
+    line-height: 1.45;
+    border-bottom: 1px solid theme("borderColor.slate.200");
+    color: theme("textColor.slate.500");
+    background: theme("backgroundColor.slate.50");
+}
+.bh-cz__status[hidden] { display: none; }
+.bh-cz__status.is-ok    { color: theme("textColor.success.DEFAULT"); background: theme("backgroundColor.success.subtle"); }
+.bh-cz__status.is-warn  { color: theme("textColor.warning.DEFAULT"); background: theme("backgroundColor.warning.subtle"); }
+.bh-cz__status.is-error { color: theme("textColor.danger.DEFAULT"); background: theme("backgroundColor.danger.subtle"); }
+
+.bh-cz__sections { flex: 1; overflow-y: auto; min-height: 0; }
+
+/* ── a section ───────────────────────────────────────────────────────────── */
+
+.bh-cz__section { border-bottom: 1px solid theme("borderColor.slate.100"); }
+
+.bh-cz__sectionhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: .85rem 1rem;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    font-size: .8125rem;
+    font-weight: 600;
+    color: theme("textColor.slate.700");
+    text-align: left;
+}
+.bh-cz__sectionhead:hover { background: theme("backgroundColor.slate.50"); }
+.bh-cz__chev { color: theme("textColor.slate.400"); transition: transform .15s ease; flex-shrink: 0; }
+.bh-cz__sectionhead[aria-expanded="true"] .bh-cz__chev { transform: rotate(180deg); }
+
+.bh-cz__sectionbody { padding: 0 1rem 1rem; }
+.bh-cz__sectiondesc {
+    font-size: .75rem; color: theme("textColor.slate.500"); line-height: 1.5;
+    margin: 0 0 .9rem;
+}
+
+/* ── a field ─────────────────────────────────────────────────────────────── */
+
+.bh-cz__field + .bh-cz__field { margin-top: 1.1rem; }
+
+.bh-cz__label {
+    display: block;
+    font-size: .75rem;
+    font-weight: 600;
+    color: theme("textColor.slate.700");
+    margin-bottom: .4rem;
+}
+
+.bh-cz__input {
+    width: 100%;
+    padding: .5rem .6rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: .45rem;
+    font-size: .8125rem;
+    font-family: inherit;
+    line-height: 1.45;
+    color: theme("textColor.slate.900");
+    background: theme("backgroundColor.white");
+}
+.bh-cz__input:focus {
+    outline: none;
+    border-color: theme("borderColor.accent.600");
+    box-shadow: 0 0 0 3px theme("colors.accent.600 / 12%");
+}
+.bh-cz__input--mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .75rem;
+    line-height: 1.6;
+    resize: vertical;
+}
+
+.bh-cz__help {
+    font-size: .6875rem;
+    color: theme("textColor.slate.400");
+    line-height: 1.45;
+    margin: .35rem 0 0;
+}
+
+/* colour: a swatch and the hex value, which have to stay in step */
+.bh-cz__color { display: flex; gap: .5rem; align-items: center; }
+.bh-cz__color input[type="color"] {
+    width: 42px; height: 34px;
+    padding: 0;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: .45rem;
+    background: none;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.bh-cz__hex {
+    flex: 1;
+    min-width: 0;
+    padding: .5rem .6rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: .45rem;
+    font-family: ui-monospace, monospace;
+    font-size: .78125rem;
+    text-transform: lowercase;
+}
+.bh-cz__hex:focus { outline: none; border-color: theme("borderColor.accent.600"); box-shadow: 0 0 0 3px theme("colors.accent.600 / 12%"); }
+
+.bh-cz__range { display: flex; gap: .7rem; align-items: center; }
+.bh-cz__range input[type="range"] { flex: 1; min-width: 0; accent-color: theme("backgroundColor.accent.600"); }
+.bh-cz__range output {
+    min-width: 3.4rem;
+    text-align: right;
+    font-size: .75rem;
+    font-family: ui-monospace, monospace;
+    color: theme("textColor.slate.600");
+}
+
+/* toggle (1.2.99): the label at the left, core's switch at the right */
+.bh-cz__field--switch { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.bh-cz__field--switch .bh-cz__label { margin: 0; font-weight: 500; font-size: .8125rem; cursor: pointer; }
+.bh-cz__field--switch .bh-cz__help { flex-basis: 100%; }
+.bh-cz__field--switch + .bh-cz__field--switch { margin-top: .6rem; }
+
+/* a heading over a group of fields (1.2.99), such as "Show in the header" */
+.bh-cz__subhead {
+    margin: 1.4rem 0 .6rem;
+    padding-top: 1rem;
+    border-top: 1px solid theme("borderColor.slate.200");
+    font-size: .6875rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: theme("textColor.slate.500");
+}
+.bh-cz__subhead + .bh-cz__field { margin-top: 0; }
+
+/* image: the whole picture, never cropped or enlarged (1.2.99, BH-103). The
+   box gets its height from aspect-ratio, which max-height: 100% can't see, so
+   the image is laid over the box and contained in it. A light checkerboard
+   shows where a transparent logo ends. */
+.bh-cz__thumb {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border: 1px solid theme("borderColor.slate.200");
+    border-radius: .5rem;
+    background-color: theme("backgroundColor.white");
+    background-image: linear-gradient(45deg, theme("backgroundColor.slate.100") 25%, transparent 25%), linear-gradient(-45deg, theme("backgroundColor.slate.100") 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, theme("backgroundColor.slate.100") 75%), linear-gradient(-45deg, transparent 75%, theme("backgroundColor.slate.100") 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    margin-bottom: .5rem;
+}
+.bh-cz__thumb img {
+    position: absolute; inset: .75rem;
+    width: calc(100% - 1.5rem); height: calc(100% - 1.5rem);
+    max-width: none;
+    object-fit: contain; display: block;
+}
+/* The site icon is square and small in use: a smaller square box. */
+.bh-cz__field[data-path="identity.favicon_url"] .bh-cz__thumb { aspect-ratio: 1 / 1; width: 7.5rem; }
+.bh-cz__thumb.is-empty { background: theme("backgroundColor.slate.50"); }
+.bh-cz__thumb.is-empty::after {
+    content: 'No image chosen';
+    font-size: .6875rem;
+    color: theme("textColor.slate.400");
+}
+.bh-cz__imagebtns { display: flex; gap: .4rem; }
+
+.bh-cz__btn {
+    padding: .4rem .7rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: .4rem;
+    background: theme("backgroundColor.white");
+    font-size: .75rem;
+    font-weight: 500;
+    color: theme("textColor.slate.700");
+    cursor: pointer;
+}
+.bh-cz__btn:hover { background: theme("backgroundColor.slate.50"); }
+.bh-cz__btn--quiet { border-color: transparent; color: theme("textColor.slate.500"); }
+.bh-cz__btn--quiet:hover { background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.700"); }
+.bh-cz__btn[hidden] { display: none; }
+
+/* ── preview ─────────────────────────────────────────────────────────────── */
+
+.bh-cz__preview {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.bh-cz__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .5rem .75rem;
+    background: theme("backgroundColor.white");
+    border-bottom: 1px solid theme("borderColor.slate.200");
+    flex-shrink: 0;
+}
+
+.bh-cz__devices { display: flex; gap: .15rem; }
+.bh-cz__devices button {
+    display: grid;
+    place-items: center;
+    width: 32px; height: 32px;
+    border: 0;
+    border-radius: .4rem;
+    background: none;
+    color: theme("textColor.slate.500");
+    cursor: pointer;
+}
+.bh-cz__devices button:hover { background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.700"); }
+.bh-cz__devices button.is-on { background: theme("backgroundColor.accent.50"); color: theme("textColor.accent.600"); }
+
+.bh-cz__frame {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+    overflow: auto;
+}
+.bh-cz__frame iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: theme("backgroundColor.white");
+    border-radius: .5rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .1), 0 8px 24px rgba(15, 23, 42, .06);
+    transition: width .2s ease;
+}
+/* The device widths are real widths, not a scale transform: a media query has
+   to see the narrower viewport, and a scaled-down desktop layout would be a
+   lie about how the site looks on a phone. */
+.bh-cz__frame[data-device="tablet"] iframe { width: 768px; max-width: 100%; }
+.bh-cz__frame[data-device="mobile"] iframe { width: 390px; max-width: 100%; }
+
+/* ── narrow screens ──────────────────────────────────────────────────────────
+   Below 900px the panes stack, with the preview on top so there is something to
+   look at and the controls beneath it. Genuinely customising a site on a phone
+   is uncomfortable whatever we do, but it should at least work. */
+@media (max-width: 900px) {
+    .bh-cz { flex-direction: column-reverse; }
+    .bh-cz__panel {
+        width: auto;
+        border-right: 0;
+        border-top: 1px solid theme("borderColor.slate.200");
+        max-height: 55vh;
+    }
+    .bh-cz__frame { padding: .5rem; }
+    .bh-cz__frame[data-device] iframe { width: 100%; }
+}
+
+/* ── widget areas ────────────────────────────────────────────────────────────
+   A row per area rather than an editor. It says what is in each one and links
+   to the screen that already manages them. */
+.bh-cz__area {
+    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    padding: .6rem .7rem;
+    border: 1px solid theme("borderColor.slate.200"); border-radius: .5rem;
+    background: theme("backgroundColor.white"); text-decoration: none; color: inherit;
+    transition: border-color .15s, background .15s;
+}
+.bh-cz__area:hover { border-color: theme("borderColor.accent.600"); background: theme("backgroundColor.slate.50"); }
+.bh-cz__area-main { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.bh-cz__area-count {
+    flex-shrink: 0;
+    min-width: 1.6rem; height: 1.6rem;
+    display: grid; place-items: center;
+    border-radius: .4rem;
+    background: theme("backgroundColor.accent.50"); color: theme("textColor.accent.600");
+    font-size: .75rem; font-weight: 700;
+}
+/* An empty area is the thing worth noticing, so it is greyed rather than
+   coloured — a bright badge on a zero reads as a status, not a warning. */
+.bh-cz__area-count.is-empty { background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.400"); }
+.bh-cz__area-names {
+    font-size: .75rem; color: theme("textColor.slate.500"); line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bh-cz__area-go { color: theme("textColor.slate.300"); flex-shrink: 0; }
+.bh-cz__area:hover .bh-cz__area-go { color: theme("textColor.accent.600"); }

@@ -15,6 +15,8 @@
  * appear whole somewhere, or be safelisted in tailwind.safelist.js (runtime
  * classes themes, blocks and apps add, 1.2.115).
  */
+const palette = require('./tailwind.theme.js');
+
 module.exports = {
     content: [
         './admin/views/**/*.php',
@@ -25,18 +27,16 @@ module.exports = {
         './docs/examples/**/*.php',
     ],
     safelist: require('./tailwind.safelist.js'),
+    // Dark mode (1.3.0) follows <html data-theme="dark">, which the layout
+    // sets from the person's choice (or their device, for "System").
+    darkMode: ['selector', '[data-theme="dark"]'],
     theme: {
+        // Every colour is a CSS variable: the mode and the accent (each
+        // person's choice) switch them; see tailwind.theme.js. `accent` is
+        // the chosen accent, and `blue` means the same, so older markup
+        // follows it too.
+        ...palette.theme,
         extend: {
-            colors: {
-                // The admin's one accent colour (1.2.80): every decorative use —
-                // icon squares, tiles, pills, bars, links, primary buttons — is
-                // a shade of it; everything else is slate. Change it here to
-                // re-colour the admin. (Tailwind's blue.)
-                accent: {
-                    50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6',
-                    600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a', 950: '#172554',
-                },
-            },
             boxShadow: {
                 // One elevation for every card, tile button and panel.
                 card: '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 8px 24px -12px rgb(15 23 42 / 0.10)',
@@ -67,5 +67,5 @@ module.exports = {
             },
         },
     },
-    plugins: [],
+    plugins: [palette.plugin],
 };

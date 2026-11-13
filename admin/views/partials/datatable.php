@@ -139,7 +139,7 @@ $__selectable = $__declared
     ? (bool) array_filter($__declared, static fn($a) => !empty($a['bulk']) && empty($a['href']) && empty($a['event']))
     : !empty($__payload['bulk_actions']);
 ?>
-<div class="bh-dt bh-card overflow-visible" data-select="<?= $__selectable ? 'many' : 'none' ?>" data-density="<?= htmlspecialchars($__payload['prefs']['density']) ?>" data-view="<?= htmlspecialchars($__payload['prefs']['view'] ?? 'table') ?>">
+<div class="bh-dt bh-card overflow-visible" data-bh-draw data-select="<?= $__selectable ? 'many' : 'none' ?>" data-density="<?= htmlspecialchars($__payload['prefs']['density']) ?>" data-view="<?= htmlspecialchars($__payload['prefs']['view'] ?? 'table') ?>">
     <script type="application/json" data-dt-config><?= json_encode($__cfg, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 
     <!-- Toolbar -->
@@ -260,7 +260,8 @@ $__selectable = $__declared
 $__cssVer = @filemtime(BASEHIM_ROOT . '/admin/assets/css/datatable.css') ?: BASEHIM_VERSION;
 $__jsVer  = @filemtime(BASEHIM_ROOT . '/admin/assets/js/datatable.js') ?: BASEHIM_VERSION;
 ?>
-<link rel="stylesheet" href="<?= $base ?>/admin/assets/css/datatable.css?v=<?= urlencode((string) $__cssVer) ?>">
+<?php // In <head> when a layout is to come, here otherwise. A static call, never the view object: apps include this partial from their own views (1.3.0). ?>
+<?= \App\Core\Http\HeadStyles::add($base . '/admin/assets/css/datatable.css?v=' . urlencode((string) $__cssVer)) ?>
 <?php if ($__def->quickEdit !== null): $__pfVer = @filemtime(BASEHIM_ROOT . '/admin/assets/js/post-fields.js') ?: BASEHIM_VERSION; ?>
 <?php // Quick Edit draws Categories, Tags and Publish with the block editor's components (1.2.62). ?>
 <script src="<?= $base ?>/admin/assets/js/post-fields.js?v=<?= urlencode((string) $__pfVer) ?>"></script>

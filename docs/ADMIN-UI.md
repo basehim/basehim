@@ -11,15 +11,113 @@ one family of shapes: cards and large buttons `rounded-2xl` with a slate-200
 hairline and the `shadow-card` elevation; buttons, inputs and tiles
 `rounded-xl`; icon squares `rounded-xl` in the accent's lightest shade.
 
-**One accent colour (1.2.80).** Components use a single accent, `accent-*` in
-`tailwind.config.js` (blue: 50 `#eff6ff` … 950 `#172554`), and slate neutrals.
-Red is kept for errors and destructive actions, amber only for warning icons.
+**One accent, chosen by each person (1.3.0).** Components use the accent,
+`accent-*`, and slate neutrals. Since 1.3.0 each person picks light, dark or
+their device's setting and an accent palette (Account menu → Appearance), so
+never assume white backgrounds or blue: see [Light, dark and
+accent](#light-dark-and-accent-1229). Red is kept for errors and destructive
+actions, amber only for warning icons.
 Controls share one height scale: 32 px (`--sm`), 36 px, 40 px (`--lg`), small
 fields included. What a card says wraps; titles, labels and details are never
 cut with "…". Sites
 never build anything. After changing a view or the source, rebuild with
 `npm run build:css` (Tailwind 3.4, see `tailwind.config.js`); a class made up
 at runtime must appear whole in a scanned file or the source.
+
+## Light, dark and accent (1.3.0)
+
+Each person chooses light, dark or System (their device's setting; the
+default until they choose) and an
+accent: Default, Sunset, Rose, Amphibian, Strawberry, Kiwi or Pink LA. Each
+accent is a four-colour palette, and its full shade scale is worked out from
+the palette's main colour. The choice is saved on their account. `<html>`
+carries it:
+
+| Attribute | Values |
+|---|---|
+| `data-theme` | `light` or `dark`: what is drawn (System is resolved before the page paints) |
+| `data-appearance` | `light`, `dark` or `system`: what they chose |
+| `data-accent` | `blue` (Default), `sunset`, `rose`, `amphibian`, `strawberry`, `kiwi`, `pink-la` |
+
+**Using core components or core classes: nothing to do.** Every colour class in
+the admin stylesheet (`bg-white`, `text-slate-700`, `border-slate-200`,
+`bg-accent-600`, `text-red-600`…) reads a CSS variable, so the same markup is
+right in light and dark and in every accent. `blue-*` means the accent too.
+
+**Your own CSS (no build step).** Use the named variables. They hold `r g b`
+channels, so wrap them in `rgb()` and add an alpha when you need one:
+
+```css
+.my-card   { background: rgb(var(--bh-surface)); color: rgb(var(--bh-text)); border: 1px solid rgb(var(--bh-line)); }
+.my-hint   { color: rgb(var(--bh-muted)); }
+.my-button { background: rgb(var(--bh-accent)); color: rgb(var(--bh-on-accent)); }
+.my-chip   { background: rgb(var(--bh-accent) / .12); color: rgb(var(--bh-accent-text)); }
+.my-chart .series-2 { fill: rgb(var(--bh-palette-2)); }
+[data-theme="dark"] .my-photo { opacity: .9; }   /* only for what variables can't express */
+```
+
+| Variable | Use |
+|---|---|
+| `--bh-page` | the page behind cards |
+| `--bh-surface` | cards, menus, inputs (white in light) |
+| `--bh-raised` | hover rows, subtle fills |
+| `--bh-text`, `--bh-strong`, `--bh-muted` | body text, headings, hints |
+| `--bh-line`, `--bh-line-strong` | borders and dividers |
+| `--bh-accent`, `--bh-on-accent` | buttons and links; the text drawn on them (4.5:1 in every palette) |
+| `--bh-accent-soft`, `--bh-accent-text` | a light accent fill, and accent text that reads on it |
+| `--bh-accent-hover` | a pressed or hovered accent button |
+| `--bh-palette-1` … `--bh-palette-4` | the palette's four colours, for charts (main, second, then the other two; 3:1 against the card in dark) |
+| `--bh-success`, `--bh-warning`, `--bh-danger`, `--bh-info` | status colours, the same whatever the accent: see "Colour palette" below |
+| `--bh-neutral` | a neutral status (slate) |
+
+Every shade of the scales is a variable too (`--bh-bg-slate-100`,
+`--bh-tx-accent-700`, `--bh-bd-slate-200`), with separate background, text and
+border shades because dark mode needs different ones for each.
+
+**Your own Tailwind build.** Use core's preset, so your classes mean what
+they mean in core and `dark:` keys on `data-theme`:
+
+```js
+// tailwind.config.js in your app
+module.exports = {
+    presets: [require('../../../tailwind.preset.js')],   // from the Basehim folder
+    content: ['./views/**/*.php', './assets/js/**/*.js'],
+};
+```
+
+The preset defines no variables, because the admin stylesheet sets them, so
+don't load your CSS outside the admin without them.
+
+**JavaScript.** `Basehim.appearance` is ready before any app script runs:
+
+```js
+var a = Basehim.appearance.get();
+// { mode: 'system', theme: 'dark', dark: true, accent: 'kiwi',
+//   colors: { accent: '#028174', onAccent: '#ffffff', text: '#e2e8f0', surface: '#0f172a', … },
+//   palette: ['#028174', '#92de8b', '#0ab68b', '#ffe3b3'] }
+
+Basehim.appearance.color('accent', .2);      // 'rgb(2 129 116 / .2)', for a canvas fill
+var stop = Basehim.appearance.onChange(function (a) { myChart.setColors(a.palette); myChart.redraw(); });
+document.addEventListener('basehim:appearance', function (e) { /* e.detail is the same object */ });
+```
+
+Colours are real `#rrggbb` values, for chart libraries and `<canvas>`, which
+can't read CSS variables. A change (from the menu, from the device under
+System, from another script) is reported once.
+
+**Outside the admin.** The admin bar on the public site carries the same named
+colours, scoped to the bar (`#bh-admin-bar`, `.bhab-dialog`, `.bhab-toast`), so
+nothing is set on the theme's page. An app item in the bar can use them; a
+theme's own CSS can't, because they don't exist there.
+
+**PHP.** `$this->api()->appearance()` returns the viewer's choice (see
+APP-API.md). For System, `theme` is `null`, because only the browser knows
+the device, so prefer CSS or JavaScript where you can.
+
+**Checklist for an app screen:** no `#fff`, `white` or hex colours in your
+CSS; images and logos with transparent backgrounds checked on dark; charts
+take their colours from the palette, not fixed hex; check the screen in light
+and dark and in two accents.
 
 ## Buttons
 
@@ -300,6 +398,103 @@ Basehim.ajax.request('media.update', { id: 42, alt_text: input.value })
 
 `err.message` is written for people and safe to show. Actions are registered
 in PHP; see APP-AJAX.md.
+
+## Colour palette (1.3.0)
+
+Ten named colours and four statuses, the same whatever accent a person
+picks, for core, apps and themes, used the way Bootstrap's are:
+
+| Name | Colour | Name | Colour |
+|---|---|---|---|
+| `red` | #E81C2B | `pink` | #D80B8F |
+| `orange` | #F4891E | `purple` | #6A3499 |
+| `yellow` | #EACE2A | `brown` | #6D340D |
+| `green` | #0AA34F | `black` | #0F1113 |
+| `blue` | #459FE3 | `white` | #FFFFFF |
+
+Statuses are aliases: **`success` = green, `warning` = orange, `danger` =
+red, `info` = blue.** A rising figure is success, a falling one danger, in
+every accent.
+
+Each shade is worked out from the colour (`tailwind.theme.js`), so every
+combination is readable (4.5:1) in light and dark:
+
+| Variable | What it is |
+|---|---|
+| `--bh-red` | the fill. Deepened a little (at most 20%) when that lets white text read on it; otherwise kept, with black text |
+| `--bh-on-red` | the text drawn on the fill (white, or the palette's black for orange, yellow, blue and white) |
+| `--bh-red-text` | the colour as text on the page or on its subtle fill |
+| `--bh-red-subtle` | a tint, for notes, badges and rows |
+| `--bh-red-border` | a line that shows on the card |
+
+**Classes**, in the admin stylesheet and in `admin/assets/css/colors.css`,
+always shipped (no build needed):
+
+| Class | Sets |
+|---|---|
+| `.bh-bg-{name}` | background: the fill |
+| `.bh-text-bg-{name}` | background: the fill, with its readable text |
+| `.bh-bg-{name}-subtle` | background: the tint |
+| `.bh-text-{name}` | text in the colour |
+| `.bh-border-{name}` / `.bh-border-{name}-subtle` | border: the fill / a lighter line |
+
+```html
+<span class="bh-badge bh-text-bg-success">Paid</span>
+<div class="bh-note bh-bg-warning-subtle bh-text-warning">Expires in 3 days</div>
+<p class="bh-text-purple">Members only</p>
+```
+
+**Tailwind builds** (core, or an app using `tailwind.preset.js`): `bg-red`,
+`bg-red-subtle`, `text-red`, `text-on-red`, `border-red`, `border-red-subtle`,
+and the same for every name and status (`bg-success-subtle text-success`).
+`blue-50`…`blue-950` stay the accent; bare `blue` is the palette's blue.
+`black` and `white` keep Tailwind's own meaning there; use the `.bh-` classes
+for the palette's.
+
+**Components that use it:** `.bh-note--info`, `--success`, `--warn`,
+`--danger`; `.bh-badge--blue|green|amber|red`; the dashboard's trend pills
+and status rows; toasts.
+
+**Themes and pages outside the admin** link the palette on its own (1.5 KB
+gzipped; the default theme does):
+
+```php
+<link rel="stylesheet" href="<?= $base ?>/admin/assets/css/colors.css?v=<?= BASEHIM_VERSION ?>">
+```
+
+Its variables are light on `:root` and dark under `<html data-theme="dark">`,
+so a theme with a dark mode sets that attribute. Black and white fills are
+literal in both modes; as text they stay readable like the rest
+(`.bh-text-black` is a light grey in dark mode).
+
+**JavaScript:** `Basehim.appearance.get().colors` includes `success`,
+`warning`, `danger` and `info` as `#rrggbb`, for charts.
+
+## Scroll strips and sticky bars (1.3.0)
+
+A row that scrolls sideways (tabs, filter chips, a status switch) is a
+**scroll strip**: mark it `data-bh-strip`. The section tabs (`.bh-tabs`, from
+`partials/tabs.php`) are strips already.
+
+```html
+<div class="my-chips" data-bh-strip>
+    <a href="…" class="is-active">All</a> <a href="…">Drafts</a> …
+</div>
+```
+
+- With a mouse, an arrow appears at each end while there is more that way;
+  touch screens keep swiping, with faded edges.
+- The active item (`.is-active`, `aria-current`, `aria-selected="true"`) is
+  scrolled into view when the page opens; a vertical wheel scrolls sideways.
+- Set `--bh-strip-fade` to the colour behind the strip (the page by default)
+  and `--bh-strip-edge` to its side padding, so the arrows sit at its edges.
+- A strip drawn after the page loaded: `bhScrollStrip(element)`.
+
+**Sticky bars and tables.** A data table's sticky controls and column header
+stop below every sticky bar above them on the page: the admin header, section
+tabs, and any bar of your own marked `data-bh-sticky`. Before 1.3.0 a table
+under tabs slid behind them. Anchors and keyboard focus also stop clear of the
+header and tabs (`scroll-padding-top`).
 
 ## Also automatic
 

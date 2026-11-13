@@ -45,8 +45,9 @@ DirectoryIndex index.php
     Require all denied
 </FilesMatch>
 
-# Block config / DB dump / lockfiles by extension
-<FilesMatch "\.(env|log|sql|lock|yml|yaml|ini)$">
+# Block config / DB dump / lockfiles by extension, and PHP's error_log file
+# (many hosts write one into the site folder; it has no extension, 1.3.0)
+<FilesMatch "(^error_log$|\.(env|log|sql|lock|yml|yaml|ini)$)">
     Require all denied
 </FilesMatch>
 

@@ -103,31 +103,6 @@ $allCount = count($updates) + count($appUpdates);
         <button type="button" id="bh-am-update" class="bh-am__btn bh-am__btn--ok">Update</button>
     </div>
 </dialog>
-<style>
-    .bh-app-modal { border: 0; padding: 0; border-radius: .9rem; width: min(36rem, calc(100vw - 2rem)); max-height: min(44rem, calc(100vh - 2rem)); color: #0f172a; box-shadow: 0 30px 70px -25px rgba(2, 6, 23, .55); }
-    .bh-app-modal[open] { display: flex; flex-direction: column; animation: bh-ask-in .16s cubic-bezier(.2, .7, .3, 1); }
-    .bh-app-modal::backdrop { background: rgba(15, 23, 42, .4); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
-    .bh-am__head { display: flex; align-items: center; gap: .9rem; padding: 1.25rem 1.25rem .75rem; }
-    .bh-am__x { align-self: flex-start; padding: .25rem; border-radius: .4rem; color: #64748b; }
-    .bh-am__x:hover { background: #f1f5f9; color: #0f172a; }
-    .bh-am__body { padding: 0 1.25rem; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
-    .bh-am__facts { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-size: .8rem; padding: .75rem 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; margin-bottom: 1rem; }
-    .bh-am__facts dt { color: #64748b; }
-    .bh-am__facts dd { color: #0f172a; margin: 0; overflow-wrap: anywhere; }
-    .bh-am__notes h4 { font-size: .8rem; font-weight: 600; color: #0f172a; margin: 0 0 .3rem; }
-    .bh-am__notes + .bh-am__notes { margin-top: 1rem; }
-    .bh-am__notes div { font-size: .85rem; line-height: 1.55; color: #334155; white-space: pre-line; overflow-wrap: anywhere; }
-    .bh-am__foot { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; padding: 1rem 1.25rem 1.15rem; border-top: 1px solid #f1f5f9; }
-    .bh-am__btn { padding: .5rem 1rem; border-radius: .55rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
-    .bh-am__btn--ok { background: #059669; color: #fff; }
-    .bh-am__btn--ok:hover { background: #047857; }
-    .bh-am__btn--ok:disabled { opacity: .6; cursor: default; }
-    .bh-am__btn--cancel { background: #fff; color: #0f172a; border-color: #cbd5e1; font-weight: 500; }
-    .bh-am__btn--cancel:hover { background: #f8fafc; }
-    .bh-am__btn:focus-visible, .bh-am__x:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
-    .bh-app-open:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: .5rem; }
-    @media (prefers-reduced-motion: reduce) { .bh-app-modal[open] { animation: none; } }
-</style>
 
 <?php if ($configured): ?>
 <div id="bh-uptodate" class="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 mb-5 <?= $allCount === 0 ? '' : 'hidden' ?>">
@@ -156,7 +131,7 @@ $allCount = count($updates) + count($appUpdates);
         <p class="text-[11px] text-amber-700 mb-3">Basehim retries automatically every few minutes — the button below tries again right now. Your site keeps working normally in the meantime. If this keeps happening, check that this server can reach the internet, then contact support.</p>
         <form method="POST" action="<?= $base ?>/admin/updates/check" class="inline">
             <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-            <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium">
+            <button type="submit" class="bh-btn bh-btn--primary">
                 <?= icon('arrow-path', 'w-4 h-4') ?> Retry connection now
             </button>
         </form>

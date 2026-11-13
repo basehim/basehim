@@ -62,7 +62,7 @@ $choices = static function (string $name, array $opts, string $cur, string $labe
         <?= bh_set_card_close() ?>
 
         <?= bh_set_card_open('Appearance') ?>
-            <?= bh_set_row('Colours', $select('color', S::COLORS, $b['color'], 'ab-color'), '', ['for' => 'ab-color']) ?>
+            <?= bh_set_row('Colours', $select('color', S::COLORS, $b['color'], 'ab-color') . '<input type="hidden" name="color_chosen" value="1">', 'Each person\'s Appearance follows the light, dark or device setting they chose in their account menu. The accent is always theirs.', ['for' => 'ab-color']) ?>
             <?= bh_set_row('Spacing', $select('density', S::DENSITIES, $b['density'], 'ab-density'), '', ['for' => 'ab-density']) ?>
             <?= bh_set_row('Menu labels', $select('labels', S::LABELS, $b['labels'], 'ab-labels'), 'Icons only keeps the top bar short; labels are still read out by screen readers.', ['for' => 'ab-labels']) ?>
             <?= bh_set_toggle('branding', (bool) $b['branding'], 'Show the site\'s name', 'In the first menu, next to the home icon.') ?>

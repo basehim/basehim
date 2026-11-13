@@ -1,0 +1,1180 @@
+/* ============================================================
+   Basehim Media Picker and Media Library styles (SOURCE)
+   Loaded by the admin layouts via media-picker.css. Selectors are
+   prefixed `.nm-` / `.nml-` to avoid collisions.
+
+   Source since 1.3.0: colours are theme() references, so they follow
+   light and dark mode and the chosen accent. Build with
+       npm run build:media
+   (needs the colour variables from tailwind.min.css, loaded first).
+   ============================================================ */
+
+/* Modal overlay */
+.nm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 1rem;
+    font-family: Inter, "Inter Fallback", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    animation: nm-fade-in 0.15s ease-out;
+}
+
+@keyframes nm-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* Modal dialog */
+.nm-dialog {
+    background: theme("backgroundColor.white");
+    border-radius: 1rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    width: 100%;
+    max-width: 64rem;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header */
+.nm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid theme("borderColor.slate.200");
+    flex-shrink: 0;
+}
+.nm-title {
+    font-weight: 600;
+    color: theme("textColor.slate.900");
+    margin: 0;
+    font-size: 1rem;
+}
+.nm-title svg {
+    color: theme("textColor.accent.500");
+    margin-right: 0.5rem;
+}
+.nm-close {
+    padding: 0.5rem;
+    color: theme("textColor.slate.400");
+    background: none;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+}
+.nm-close:hover {
+    color: theme("textColor.slate.700");
+    background: theme("backgroundColor.slate.100");
+}
+
+/* Toolbar */
+.nm-toolbar {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid theme("borderColor.slate.200");
+    background: theme("backgroundColor.slate.50");
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+.nm-search {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    outline: none;
+    background: theme("backgroundColor.white");
+}
+.nm-search:focus {
+    border-color: theme("borderColor.accent.500");
+    box-shadow: 0 0 0 3px theme("colors.accent.500 / 18%");
+}
+.nm-upload-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    background: theme("backgroundColor.white");
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+.nm-upload-btn:hover { background: theme("backgroundColor.slate.100"); }
+.nm-upload-btn input { display: none; }
+
+/* Progress list */
+.nm-progress {
+    padding: 0 1.25rem;
+    flex-shrink: 0;
+}
+.nm-progress:empty { padding: 0; }
+
+/* Grid */
+.nm-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+    background: theme("backgroundColor.white");
+}
+
+/* Grid card */
+.nm-card {
+    aspect-ratio: 1 / 1;
+    background: theme("backgroundColor.slate.50");
+    border: 2px solid transparent;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, transform 0.15s;
+}
+.nm-card:hover {
+    border-color: theme("borderColor.accent.300");
+}
+.nm-card[data-selected="1"] {
+    border-color: theme("borderColor.accent.600");
+    box-shadow: 0 0 0 2px theme("colors.accent.600 / 20%");
+}
+.nm-card[data-selected="1"]::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 22px;
+    height: 22px;
+    background: theme("backgroundColor.accent.600");
+    border-radius: 50%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M13.5 4.5L6 12 2.5 8.5l1-1L6 10l6.5-6.5z'/%3E%3C/svg%3E");
+    background-size: 14px 14px;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+.nm-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.nm-card-file {
+    text-align: center;
+    padding: 0.5rem;
+    color: theme("textColor.slate.500");
+}
+.nm-card-file svg {
+    width: 2rem; height: 2rem;
+    color: theme("textColor.slate.400");
+    display: block;
+    margin-bottom: 0.25rem;
+}
+.nm-card-file-name {
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Empty / error states */
+.nm-empty,
+.nm-error {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem 1rem;
+}
+.nm-empty { color: theme("textColor.slate.500"); }
+.nm-error { color: theme("textColor.red.600"); }
+.nm-empty svg,
+.nm-error svg {
+    width: 2.5rem; height: 2.5rem;
+    display: block;
+    margin-bottom: 0.75rem;
+    color: theme("textColor.slate.300");
+}
+.nm-error svg { color: theme("textColor.red.300"); }
+
+/* Footer */
+.nm-footer {
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid theme("borderColor.slate.200");
+    background: theme("backgroundColor.slate.50");
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+.nm-status {
+    font-size: 0.75rem;
+    color: theme("textColor.slate.500");
+}
+.nm-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.nm-btn-cancel,
+.nm-btn-confirm {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+}
+.nm-btn-cancel {
+    border: 1px solid theme("borderColor.slate.300");
+    background: theme("backgroundColor.white");
+    color: theme("textColor.slate.700");
+}
+.nm-btn-cancel:hover { background: theme("backgroundColor.slate.100"); }
+.nm-btn-confirm {
+    background: theme("backgroundColor.accent.600");
+    color: theme("textColor.white");
+    border: none;
+    font-weight: 500;
+    opacity: 0.5;
+}
+.nm-btn-confirm:not(:disabled) { opacity: 1; }
+.nm-btn-confirm:not(:disabled):hover { background: theme("backgroundColor.accent.700"); }
+.nm-btn-confirm:disabled { cursor: not-allowed; }
+
+/* ============================================================
+   Inline progress rows (used by both picker upload + dropzone)
+   ============================================================ */
+.nm-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: theme("backgroundColor.accent.50");
+    border: 1px solid theme("borderColor.accent.200");
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+.nm-progress-row.is-error {
+    background: theme("backgroundColor.red.50");
+    border-color: theme("borderColor.red.200");
+}
+.nm-progress-row.is-done {
+    background: theme("backgroundColor.green.50");
+    border-color: theme("borderColor.green.200");
+}
+.nm-progress-row-icon {
+    color: theme("textColor.accent.600");
+    flex-shrink: 0;
+}
+.nm-progress-row.is-error .nm-progress-row-icon { color: theme("textColor.red.600"); }
+.nm-progress-row.is-done  .nm-progress-row-icon { color: theme("textColor.green.600"); }
+.nm-progress-row-body {
+    flex: 1;
+    min-width: 0;
+}
+.nm-progress-row-name {
+    font-weight: 500;
+    color: theme("textColor.slate.900");
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.nm-progress-row-bar {
+    margin-top: 0.25rem;
+    height: 6px;
+    background: theme("backgroundColor.accent.100");
+    border-radius: 999px;
+    overflow: hidden;
+}
+.nm-progress-row-bar-fill {
+    height: 100%;
+    background: theme("backgroundColor.accent.600");
+    transition: width 0.2s;
+    width: 0;
+}
+.nm-progress-row.is-done .nm-progress-row-bar-fill { background: theme("backgroundColor.green.600"); }
+.nm-progress-row-pct {
+    font-size: 0.75rem;
+    color: theme("textColor.accent.700");
+    font-weight: 500;
+    flex-shrink: 0;
+}
+.nm-progress-row.is-error .nm-progress-row-pct { color: theme("textColor.red.700"); }
+.nm-progress-row.is-done  .nm-progress-row-pct { color: theme("textColor.green.700"); }
+.nm-progress-row-msg {
+    font-size: 0.75rem;
+    color: theme("textColor.red.700");
+    margin-top: 0.25rem;
+}
+
+/* Compact variant for in-picker uploads */
+.nm-progress-row-compact {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+}
+.nm-progress-row-compact .nm-progress-row-bar { display: none; }
+
+/* ============================================================
+   Drag-drop zone is-dragging state
+   ============================================================ */
+.is-dragging {
+    border-color: theme("borderColor.accent.500") !important;
+    background-color: theme("backgroundColor.accent.50") !important;
+    transform: scale(1.01);
+}
+
+/* ============================================================
+   Media library page — drag/drop zone + grid
+   ============================================================ */
+.nm-zone {
+    background: linear-gradient(135deg, theme("backgroundColor.white") 0%, theme("backgroundColor.slate.50") 100%);
+    border: 2px dashed theme("borderColor.slate.300");
+    border-radius: 1rem;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    position: relative;
+    overflow: hidden;
+}
+.nm-zone:hover {
+    border-color: theme("borderColor.accent.400");
+    background: linear-gradient(135deg, theme("backgroundColor.accent.50") 0%, theme("backgroundColor.accent.100") 100%);
+}
+.nm-zone.is-dragging {
+    border-color: theme("borderColor.accent.600") !important;
+    background: linear-gradient(135deg, theme("backgroundColor.accent.100") 0%, theme("backgroundColor.accent.200") 100%) !important;
+    transform: scale(1.01);
+    box-shadow: 0 0 0 4px theme("colors.accent.600 / 15%");
+}
+.nm-zone input[type=file] { display: none; }
+
+.nm-zone-icon {
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 1.25rem;
+    background: linear-gradient(135deg, theme("backgroundColor.accent.100") 0%, theme("backgroundColor.accent.300") 100%);
+    color: theme("textColor.accent.700");
+    font-size: 1.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.875rem;
+    box-shadow: 0 4px 12px theme("colors.accent.600 / 12%");
+    pointer-events: none;
+}
+.nm-zone:hover .nm-zone-icon {
+    transform: translateY(-2px);
+    transition: transform 0.2s;
+}
+.nm-zone-title {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: theme("textColor.slate.900");
+    margin: 0 0 0.25rem 0;
+    pointer-events: none;
+}
+.nm-zone-sub {
+    font-size: 0.875rem;
+    color: theme("textColor.slate.500");
+    margin: 0;
+    pointer-events: none;
+}
+.nm-zone-sub-link {
+    color: theme("textColor.accent.600");
+    font-weight: 500;
+}
+.nm-zone-hint {
+    font-size: 0.75rem;
+    color: theme("textColor.slate.400");
+    margin: 0.875rem 0 0 0;
+    pointer-events: none;
+}
+.nm-zone-hint code {
+    background: theme("backgroundColor.slate.400 / 15%");
+    padding: 0.0625rem 0.375rem;
+    border-radius: 0.25rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.6875rem;
+    color: theme("textColor.slate.600");
+}
+
+/* Media library grid (used inside the page, not the modal picker) */
+.nm-lib-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+}
+.nm-lib-card {
+    background: theme("backgroundColor.white");
+    border: 1px solid theme("borderColor.slate.200");
+    border-radius: 0.75rem;
+    overflow: hidden;
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    display: flex;
+    flex-direction: column;
+}
+.nm-lib-card:hover {
+    border-color: theme("borderColor.accent.300");
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px -8px rgba(15, 23, 42, 0.1);
+}
+.nm-lib-thumb {
+    aspect-ratio: 1 / 1;
+    background: theme("backgroundColor.slate.100");
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.nm-lib-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.nm-lib-thumb .nm-lib-thumb-fallback {
+    color: theme("textColor.slate.400");
+    font-size: 2.5rem;
+}
+.nm-lib-meta {
+    padding: 0.625rem 0.75rem;
+    border-top: 1px solid theme("borderColor.slate.100");
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.nm-lib-meta-name {
+    color: theme("textColor.slate.700");
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    font-weight: 500;
+}
+.nm-lib-meta-size {
+    color: theme("textColor.slate.400");
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+}
+.nm-lib-actions {
+    padding: 0 0.75rem 0.625rem 0.75rem;
+    display: flex;
+    gap: 0.375rem;
+}
+.nm-lib-actions form { flex: 1; margin: 0; }
+.nm-lib-btn {
+    flex: 1;
+    text-align: center;
+    padding: 0.375rem;
+    font-size: 0.6875rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-block;
+    border: 1px solid transparent;
+}
+.nm-lib-btn-copy {
+    background: theme("backgroundColor.slate.100");
+    color: theme("textColor.slate.600");
+    border-color: theme("borderColor.slate.200");
+}
+.nm-lib-btn-copy:hover { background: theme("backgroundColor.slate.200"); }
+.nm-lib-btn-del {
+    background: theme("backgroundColor.red.50");
+    color: theme("textColor.red.700");
+    border-color: theme("borderColor.red.200");
+    width: 100%;
+}
+.nm-lib-btn-del:hover { background: theme("backgroundColor.red.100"); }
+
+.nm-lib-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem 1rem;
+    color: theme("textColor.slate.500");
+    background: theme("backgroundColor.slate.50");
+    border-radius: 0.75rem;
+    border: 2px dashed theme("borderColor.slate.200");
+}
+.nm-lib-empty svg {
+    width: 3rem; height: 3rem;
+    color: theme("textColor.slate.300");
+    display: block;
+    margin-bottom: 0.75rem;
+}
+
+/* Search bar on media page */
+.nm-lib-search {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.nm-lib-search input {
+    flex: 1;
+    padding: 0.5rem 0.875rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    outline: none;
+    background: theme("backgroundColor.white");
+}
+.nm-lib-search input:focus {
+    border-color: theme("borderColor.accent.500");
+    box-shadow: 0 0 0 3px theme("colors.accent.500 / 15%");
+}
+.nm-lib-search button {
+    padding: 0.5rem 1rem;
+    background: theme("backgroundColor.slate.800");
+    color: theme("textColor.white");
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+}
+.nm-lib-search button:hover { background: theme("backgroundColor.slate.900"); }
+.nm-lib-search .nm-clear-btn {
+    background: theme("backgroundColor.slate.100");
+    color: theme("textColor.slate.600");
+}
+.nm-lib-search .nm-clear-btn:hover { background: theme("backgroundColor.slate.200"); }
+
+/* ============================================================= */
+/* Media Library — rich grid (pills, sort, masonry, detail pane) */
+/* ============================================================= */
+.nml { --nml-line:theme("borderColor.slate.200"); --nml-ink:theme("textColor.slate.900"); --nml-mut:theme("textColor.slate.500"); --nml-accent:theme("backgroundColor.accent.600"); position:relative; max-width:100%; }
+.nml-body { max-width:100%; }
+.nml-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+.nml-title { font-size:20px; font-weight:600; color:var(--nml-ink); margin:0; }
+.nml-sub { font-size:13px; color:var(--nml-mut); margin:3px 0 0; }
+.nml-upload-btn { display:inline-flex; align-items:center; gap:7px; padding:9px 16px; font-size:13px; font-weight:600;
+  border-radius:9px; border:1px solid var(--nml-accent); background:var(--nml-accent); color:theme("textColor.white"); cursor:pointer; }
+.nml-upload-btn:hover { background:theme("backgroundColor.accent.700"); }
+
+/* collapsible upload zone */
+.nml-zone { overflow:hidden; transition:max-height .25s ease, opacity .2s, margin .2s, padding .2s; max-height:320px; margin-bottom:16px; }
+.nml-zone.is-collapsed { max-height:0; opacity:0; margin:0; padding-top:0; padding-bottom:0; border-width:0; pointer-events:none; }
+.nml-progress:empty { display:none; }
+.nml-progress { margin-bottom:12px; }
+
+/* toolbar */
+.nml-toolbar { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:18px; }
+.nml-pills { display:flex; gap:6px; flex-wrap:wrap; }
+.nml-pill { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; font-size:13px; font-weight:500;
+  border:1px solid var(--nml-line); background:theme("backgroundColor.white"); color:theme("textColor.slate.600"); border-radius:20px; cursor:pointer; transition:all .12s; }
+.nml-pill:hover { border-color:theme("borderColor.slate.300"); background:theme("backgroundColor.slate.50"); }
+.nml-pill.is-active { background:var(--nml-accent); border-color:var(--nml-accent); color:theme("textColor.white"); }
+.nml-pill svg { width:11px; height:11px; opacity:.85; }
+.nml-pill-count { font-size:11px; padding:1px 6px; border-radius:10px; background:theme("backgroundColor.slate.500 / 14%"); color:inherit; font-weight:600; }
+.nml-pill.is-active .nml-pill-count { background:rgb(var(--bh-on-accent) / .25); }
+.nml-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.nml-search { position:relative; display:inline-flex; align-items:center; flex:1 1 200px; min-width:0; }
+/* Direct child only — the clear button's own icon must not be caught here. */
+.nml-search > svg { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:theme("textColor.slate.400"); pointer-events:none; }
+.nml-search input { width:100%; padding:8px 28px 8px 30px; font-size:13px; border:1px solid var(--nml-line); border-radius:8px; background:theme("backgroundColor.white"); color:var(--nml-ink); outline:none; box-sizing:border-box; }
+.nml-search input:focus { border-color:var(--nml-accent); }
+.nml-search-clear { position:absolute; right:6px; top:0; bottom:0; display:flex; align-items:center; border:0; background:none; color:theme("textColor.slate.400"); cursor:pointer; font-size:12px; padding:0 4px; }
+.nml-search-clear:hover { color:theme("textColor.slate.600"); }
+.nml-select { padding:8px 10px; font-size:13px; border:1px solid var(--nml-line); border-radius:8px; background:theme("backgroundColor.white"); color:var(--nml-ink); cursor:pointer; }
+.nml-viewtoggle { display:inline-flex; border:1px solid var(--nml-line); border-radius:8px; overflow:hidden; }
+.nml-vt { border:0; background:theme("backgroundColor.white"); color:theme("textColor.slate.400"); padding:8px 11px; cursor:pointer; font-size:13px; }
+.nml-vt:hover { background:theme("backgroundColor.slate.50"); color:theme("textColor.slate.600"); }
+.nml-vt.is-active { background:var(--nml-accent); color:theme("textColor.white"); }
+
+/* ----- masonry grid (CSS columns, preserves aspect ratio) ----- */
+/* column-width only (no fixed count): the browser fits as many ~210px columns
+   as the container width allows, so it never overflows horizontally. */
+.nml-grid--masonry { column-width:210px; column-gap:14px; width:100%; }
+.nml-grid--masonry .nml-card { break-inside:avoid; -webkit-column-break-inside:avoid; margin-bottom:14px; width:100%; }
+.nml-grid--uniform { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; }
+.nml-grid--uniform .nml-card__media--img { aspect-ratio:1/1 !important; }
+.nml-grid--uniform .nml-card__media--img img { object-fit:cover; }
+
+.nml-card { background:theme("backgroundColor.white"); border:1px solid var(--nml-line); border-radius:12px; overflow:hidden; cursor:pointer;
+  transition:box-shadow .15s, border-color .15s, transform .05s; display:inline-block; }
+.nml-card:hover { border-color:theme("borderColor.slate.300"); box-shadow:0 4px 14px -4px rgba(15,23,42,.15); }
+.nml-card:focus { outline:2px solid var(--nml-accent); outline-offset:1px; }
+.nml-card.is-selected { border-color:var(--nml-accent); box-shadow:0 0 0 2px theme("colors.accent.600 / 25%"); }
+.nml-card__media { position:relative; width:100%; background:theme("backgroundColor.slate.100"); display:block; }
+.nml-card__media--img img { display:block; width:100%; height:100%; }
+.nml-card__media--icon { aspect-ratio:4/3; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+.nml-card__media--icon svg { color:theme("textColor.slate.400"); }
+.nml-media-video svg { color:theme("textColor.accent.600"); }
+.nml-media-audio { background:theme("backgroundColor.purple.50"); }
+.nml-media-audio svg { color:theme("textColor.purple.600"); }
+.nml-ext { font-size:11px; font-weight:700; color:theme("textColor.slate.500"); letter-spacing:.06em; }
+.nml-badge { position:absolute; top:8px; left:8px; font-size:9px; font-weight:700; letter-spacing:.06em; padding:2px 6px; border-radius:5px; background:rgba(15,23,42,.7); color:theme("textColor.white"); }
+.nml-badge--svg { background:theme("backgroundColor.purple.600 / 85%"); }
+/* Labels apps add to cards (BasehimMedia.addItemBadge, 1.2.87) */
+.nml-ext-badges { display:flex; flex-wrap:wrap; gap:4px; padding:6px 10px 0; }
+.nml-ext-badge { font-size:10px; font-weight:600; line-height:1.4; padding:1px 6px; border-radius:999px; background:theme("backgroundColor.slate.100"); color:theme("textColor.slate.700"); white-space:nowrap; }
+.nml-ext-badge--green { background:theme("backgroundColor.green.100"); color:theme("textColor.green.800"); }
+.nml-ext-badge--amber { background:theme("backgroundColor.amber.100"); color:theme("textColor.amber.800"); }
+.nml-ext-badge--red { background:theme("backgroundColor.red.100"); color:theme("textColor.red.800"); }
+.nml-ext-badge--blue { background:theme("backgroundColor.accent.100"); color:theme("textColor.accent.800"); }
+.nm-card-badges { position:absolute; left:4px; bottom:4px; padding:0; pointer-events:none; }
+/* The name wraps rather than being cut with "…" (1.3.0): on a phone's
+   two-column grid "Requests and res…" lost the words that tell files apart.
+   The size sits on the name's first line; it is slate-500 for 4.5:1. */
+.nml-card__foot { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:8px 10px; }
+.nml-card__name { min-width:0; font-size:12.5px; line-height:1.35; color:theme("textColor.slate.700"); overflow-wrap:anywhere; }
+.nml-card__size { font-size:11px; line-height:1.55; color:theme("textColor.slate.500"); flex-shrink:0; white-space:nowrap; }
+
+/* list view */
+.nml-grid--list { display:block; }
+.nml-list__head, .nml-row { display:grid; grid-template-columns:44px 2fr 90px 110px 90px 160px; gap:12px; align-items:center; }
+.nml-list__head { padding:8px 12px; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:theme("textColor.slate.400"); font-weight:600; }
+.nml-row { padding:8px 12px; border:1px solid transparent; border-bottom-color:theme("borderColor.slate.100"); cursor:pointer; }
+.nml-row:hover { background:theme("backgroundColor.slate.50"); }
+.nml-row.is-selected { background:theme("backgroundColor.accent.50"); border-color:theme("borderColor.accent.600 / 30%"); border-radius:8px; }
+.nml-row__thumb { width:36px; height:36px; border-radius:6px; overflow:hidden; background:theme("backgroundColor.slate.100"); display:flex; align-items:center; justify-content:center; }
+.nml-row__thumb img { width:100%; height:100%; object-fit:cover; }
+.nml-row__thumb svg { color:theme("textColor.slate.400"); }
+.nml-row__name { font-size:13px; color:theme("textColor.slate.700"); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.nml-row__type { font-size:12px; color:var(--nml-mut); text-transform:capitalize; }
+.nml-row__dims, .nml-row__size, .nml-row__date { font-size:12px; color:theme("textColor.slate.400"); }
+
+.nml-loading, .nml-empty { text-align:center; padding:48px 20px; color:var(--nml-mut); font-size:14px; }
+.nml-empty svg { width:34px; height:34px; color:theme("textColor.slate.300"); display:block; margin:0 auto 10px; }
+.nml-more-wrap { text-align:center; margin-top:18px; }
+.nml-more { padding:8px 20px; font-size:13px; border:1px solid var(--nml-line); border-radius:8px; background:theme("backgroundColor.white"); color:theme("textColor.slate.600"); cursor:pointer; }
+.nml-more:hover { background:theme("backgroundColor.slate.50"); }
+
+/* ----- detail side pane ----- */
+.nml-pane { position:fixed; top:50%; left:50%; width:min(960px, calc(100vw - 2rem)); max-height:calc(100vh - 2rem); background:theme("backgroundColor.white"); border-radius:16px;
+  box-shadow:0 20px 60px rgba(15,23,42,.28); transform:translate(-50%, -48%) scale(.97); opacity:0; visibility:hidden;
+  transition:transform .22s ease, opacity .22s ease, visibility .22s ease; z-index:60; display:flex; flex-direction:column; }
+.nml-pane.is-open { transform:translate(-50%, -50%) scale(1); opacity:1; visibility:visible; }
+/* 1.2.70: header, body and footer as in the Quick Edit dialog (datatable.css). */
+.nml-pane__head { flex:none; display:flex; align-items:flex-start; gap:.75rem; padding:.85rem 1rem .75rem 1.15rem; border-bottom:1px solid theme("borderColor.slate.200"); }
+.nml-pane__titles { min-width:0; flex:1; }
+.nml-pane__title { margin:0; font-size:1rem; font-weight:600; line-height:1.35; color:theme("textColor.slate.900"); }
+.nml-pane__sub { margin:.1rem 0 0; font-size:.8rem; color:theme("textColor.slate.500"); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nml-pane__sub:empty { display:none; }
+.nml-pane__close { flex:none; display:inline-grid; place-items:center; width:2rem; height:2rem; margin:-.15rem -.25rem 0 0;
+  border:0; border-radius:.5rem; background:none; color:theme("textColor.slate.500"); cursor:pointer; }
+.nml-pane__close:hover { background:theme("backgroundColor.slate.100"); color:theme("textColor.slate.900"); }
+.nml-pane__close:focus-visible { outline:2px solid theme("colors.accent.300"); outline-offset:1px; }
+.nml-pane__close svg { width:1.15rem; height:1.15rem; }
+.nml-pane__foot { flex:none; display:flex; align-items:center; justify-content:flex-end; gap:.5rem; padding:.7rem 1.15rem; border-top:1px solid theme("borderColor.slate.200"); background:theme("backgroundColor.white"); border-radius:0 0 16px 16px; }
+.nml-pane__foot[hidden] { display:none; }
+.nml-pane__foot .bh-btn { border-radius:.5rem; min-width:5.5rem; }
+.nml-pane__foot .nml-pane__saved { margin:0 auto 0 0; }
+.nml-pane__body { padding:16px 18px; overflow-y:auto; flex:1 1 auto; min-height:0; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+.nml-pane__preview { background:theme("backgroundColor.slate.100"); border-radius:10px; overflow:hidden; margin-bottom:10px; display:flex; align-items:center; justify-content:center; max-height:280px; }
+.nml-pane__preview img { max-width:100%; max-height:280px; object-fit:contain; display:block; }
+.nml-pane__preview video { max-width:100%; max-height:280px; background:#000; }
+.nml-pane__preview--audio { flex-direction:column; padding:20px; gap:12px; }
+.nml-pane__audio svg { width:44px; height:44px; color:theme("textColor.purple.600"); }
+.nml-pane__preview audio { width:100%; }
+.nml-pane__doc { padding:40px; }
+.nml-pane__doc svg { width:56px; height:56px; }
+.nml-pane__name { font-size:13px; font-weight:500; color:theme("textColor.slate.700"); word-break:break-word; margin-bottom:14px; }
+.nml-pane__section { border-top:1px solid theme("borderColor.slate.100"); padding-top:14px; margin-top:14px; }
+.nml-pane__section:first-of-type { border-top:0; padding-top:0; margin-top:0; }
+.nml-pane__lbl { display:block; font-size:11.5px; font-weight:600; color:theme("textColor.slate.500"); margin:10px 0 4px; }
+.nml-pane__lbl:first-child { margin-top:0; }
+.nml-pane__in { width:100%; box-sizing:border-box; padding:7px 9px; font-size:13px; border:1px solid var(--nml-line); border-radius:7px; background:theme("backgroundColor.white"); color:var(--nml-ink); outline:none; resize:vertical; }
+.nml-pane__in:focus { border-color:var(--nml-accent); }
+.nml-pane__save { margin-top:10px; padding:7px 14px; font-size:13px; font-weight:600; border:1px solid var(--nml-accent); background:var(--nml-accent); color:theme("textColor.white"); border-radius:8px; cursor:pointer; }
+.nml-pane__save:hover { background:theme("backgroundColor.accent.700"); }
+.nml-pane__save:disabled { opacity:.6; }
+.nml-pane__saved { margin-left:10px; font-size:12px; color:theme("textColor.green.600"); }
+.nml-pane__meta { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:4px 0; }
+.nml-pane__meta span:first-child { color:var(--nml-mut); }
+.nml-pane__meta span:last-child { color:theme("textColor.slate.700"); text-align:right; word-break:break-word; }
+.nml-pane__urlrow { display:flex; gap:6px; }
+.nml-pane__urlrow input { font-size:11px; font-family:ui-monospace,monospace; }
+.nml-pane__copy { flex-shrink:0; border:1px solid var(--nml-line); background:theme("backgroundColor.white"); border-radius:7px; padding:0 10px; cursor:pointer; color:theme("textColor.slate.600"); }
+.nml-pane__copy:hover { background:theme("backgroundColor.slate.50"); }
+.nml-pane__actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+.nml-pane__btn { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; font-size:12.5px; font-weight:500; border:1px solid var(--nml-line); background:theme("backgroundColor.white"); color:theme("textColor.slate.600"); border-radius:8px; cursor:pointer; text-decoration:none; }
+.nml-pane__btn:hover { background:theme("backgroundColor.slate.50"); }
+.nml-pane__btn--danger { border-color:theme("borderColor.red.200"); color:theme("textColor.red.600"); }
+.nml-pane__btn--danger:hover { background:theme("backgroundColor.red.50"); }
+.nml-pane-backdrop { position:fixed; inset:0; background:rgba(15,23,42,.45); -webkit-backdrop-filter:blur(5px); backdrop-filter:blur(5px); z-index:55; }
+.nml-pane-backdrop.hidden { display:none; }
+
+/* ===================== Responsive ===================== */
+/* Tablet: tighten grid columns. */
+@media (max-width:1100px){ .nml-grid--masonry { column-width:180px; } }
+
+/* Below 820px: stack the toolbar so pills sit above the tools row. */
+@media (max-width:820px){
+  .nml-grid--masonry { column-width:auto; column-count:3; column-gap:12px; }
+  /* Hard-cap width so no child (pills, tools) can push the page sideways. */
+  .nml, .nml-body { overflow-x:clip; }
+  .nml-toolbar { flex-direction:column; align-items:stretch; gap:10px; min-width:0; max-width:100%; }
+  /* Pills: contained horizontal scroll. min-width:0 + width:100% lets the
+     nowrap row shrink to the screen and scroll internally instead of
+     stretching its parent. No negative margin (that added 4px of overflow). */
+  .nml-pills { display:flex; flex-wrap:nowrap; gap:6px; width:100%; min-width:0; max-width:100%; margin:0;
+    overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+    padding-bottom:4px; scrollbar-width:none; }
+  .nml-pills::-webkit-scrollbar { display:none; }
+  .nml-pill { flex:0 0 auto; }
+  /* Tools: search on its own full-width line; sort + views + Select fit the
+     width on the line below. */
+  .nml-tools { display:flex; flex-wrap:wrap; gap:8px; width:100%; min-width:0; }
+  .nml-search { flex:1 1 100%; order:-1; min-width:0; }
+  .nml-select { flex:1 1 auto; min-width:0; }
+  .nml-viewtoggle { flex:0 0 auto; }
+  .nml-select-toggle { flex:0 0 auto; }
+}
+
+/* Phones: bulk bar and header adapt; grid gets denser. */
+@media (max-width:560px){
+  /* Force exactly 2 columns — column-width alone rounds to 1 once the
+     column-gap + page padding eat into the available width. column-count
+     is deterministic and never overflows. */
+  .nml-grid--masonry { column-width:auto; column-count:2; column-gap:12px; }
+  .nml-grid--masonry .nml-card { margin-bottom:12px; }
+  .nml-grid--uniform { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
+  .nml-head { gap:10px; }
+  .nml-upload-btn { flex:0 0 auto; }
+  /* Comfortable 40px+ touch targets for all interactive controls. */
+  .nml-pill, .nml-select, .nml-select-toggle, .nml-search input, .nml-vt { min-height:40px; }
+  .nml-vt { min-width:44px; }
+  /* Bulk action bar wraps cleanly instead of overflowing. */
+  .nml-bulkbar { flex-wrap:wrap; gap:10px 14px; padding:10px 12px; }
+  .nml-bulk-actions { margin-left:0; width:100%; }
+  .nml-bulk-actions .nml-bulk-btn { flex:1 1 auto; text-align:center; min-height:40px; }
+  /* Slightly smaller card text so 2-up cards read cleanly. */
+  .nml-card__name { font-size:12px; }
+}
+
+/* Very narrow: single column only when 2-up would be too cramped. */
+@media (max-width:360px){
+  .nml-grid--masonry { column-count:1; }
+  .nml-grid--uniform { grid-template-columns:1fr; }
+}
+
+/* ----- bulk selection ----- */
+.nml-select-toggle { display:inline-flex; align-items:center; gap:6px; padding:8px 12px; font-size:13px; font-weight:500;
+  border:1px solid var(--nml-line); background:theme("backgroundColor.white"); color:theme("textColor.slate.600"); border-radius:8px; cursor:pointer; }
+.nml-select-toggle:hover { background:theme("backgroundColor.slate.50"); }
+.nml-select-toggle.is-active { background:var(--nml-accent); border-color:var(--nml-accent); color:theme("textColor.white"); }
+.nml-bulkbar { display:flex; align-items:center; gap:16px; padding:10px 14px; margin-bottom:16px;
+  background:theme("backgroundColor.accent.50"); border:1px solid theme("borderColor.accent.200"); border-radius:10px; }
+.nml-bulk-all { display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:500; color:theme("textColor.accent.800"); cursor:pointer; }
+.nml-bulk-all input { width:16px; height:16px; cursor:pointer; }
+.nml-bulk-count { font-size:13px; color:theme("textColor.accent.700"); font-weight:600; }
+.nml-bulk-actions { margin-left:auto; display:flex; gap:8px; }
+.nml-bulk-btn { padding:6px 14px; font-size:13px; font-weight:500; border:1px solid var(--nml-line); background:theme("backgroundColor.white"); color:theme("textColor.slate.600"); border-radius:8px; cursor:pointer; }
+.nml-bulk-btn:hover { background:theme("backgroundColor.slate.50"); }
+.nml-bulk-btn--danger { border-color:theme("borderColor.red.300"); background:theme("backgroundColor.red.100"); color:theme("textColor.red.700"); }
+.nml-bulk-btn--danger:hover:not(:disabled) { background:theme("backgroundColor.red.200"); }
+.nml-bulk-btn:disabled { opacity:.5; cursor:default; }
+
+/* selection checkbox on cards */
+.nml-check { position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:6px; border:2px solid theme("textColor.white");
+  background:rgba(15,23,42,.35); display:none; align-items:center; justify-content:center; z-index:3; cursor:pointer; }
+.nml-check svg { color:theme("textColor.white"); width:11px; height:11px; opacity:0; }
+.nml--selecting .nml-check { display:flex; }
+/* Also reveal on hover so you can begin selecting without toggling select mode. */
+.nml-card:hover .nml-check { display:flex; }
+.nml--selecting .nml-card { cursor:pointer; }
+.nml-card.is-chosen .nml-check { display:flex; background:var(--nml-accent); border-color:var(--nml-accent); }
+.nml-card.is-chosen .nml-check svg { opacity:1; }
+.nml-card.is-chosen { border-color:var(--nml-accent); box-shadow:0 0 0 2px theme("colors.accent.600 / 30%"); }
+/* the card__media needs relative positioning for the absolute check (it already is) */
+.nml-card { position:relative; }
+/* list rows in select mode */
+.nml--selecting .nml-row { cursor:pointer; }
+.nml-row.is-chosen { background:theme("backgroundColor.accent.50"); box-shadow:inset 3px 0 0 var(--nml-accent); }
+
+/* ── Detail modal: two columns on desktop ────────────────────────────────
+   At 440px the preview and every field shared one narrow column, so the modal
+   looked cramped and scrolled a long way. From md up the preview takes the
+   left side and the details sit in a fixed rail on the right; below md it
+   stacks exactly as before (which already worked on phones). */
+@media (min-width: 768px) {
+    .nml-pane__body { display:flex; align-items:stretch; gap:20px; padding:18px 20px; }
+    .nml-pane__preview {
+        flex:1 1 auto; min-width:0; margin-bottom:0;
+        max-height:none; align-self:stretch;
+        background: theme("backgroundColor.slate.900 / 3%");
+    }
+    .nml-pane__preview img,
+    .nml-pane__preview video { max-height:min(62vh, 520px); }
+    .nml-pane__side {
+        flex:0 0 330px; min-width:0;
+        overflow-y:auto; max-height:min(62vh, 520px);
+        padding-right:2px;
+    }
+    /* The doc/audio placeholders have no natural size — give them presence. */
+    .nml-pane__preview--doc,
+    .nml-pane__preview--audio,
+    .nml-pane__preview--other { min-height:260px; }
+}
+
+@media (min-width: 1280px) {
+    .nml-pane__side { flex-basis:360px; }
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Picker: two-pane layout, responsive grid, details panel
+   Added in 1.0.4.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.nm-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;          /* or the grid cannot scroll inside a flex parent */
+    border-top: 1px solid theme("borderColor.slate.100");
+}
+.nm-body .nm-grid { flex: 1; min-width: 0; }
+
+/* Thumbnails size themselves to the space available. The old grid was a fixed
+   140px minimum at every width, which left one-and-a-bit columns on a phone and
+   a wall of tiny squares on a wide screen. */
+.nm-grid {
+    grid-template-columns: repeat(auto-fill, minmax(clamp(88px, 22vw, 150px), 1fr));
+    gap: 0.6rem;
+    align-content: start;
+}
+
+.nm-card img {
+    /* contain, not cover: a picker exists to tell images apart, and cover crops
+       exactly the part that identifies them. */
+    object-fit: contain;
+    background:
+        linear-gradient(45deg, theme("backgroundColor.slate.100") 25%, transparent 25%, transparent 75%, theme("backgroundColor.slate.100") 75%),
+        linear-gradient(45deg, theme("backgroundColor.slate.100") 25%, theme("backgroundColor.white") 25%, theme("backgroundColor.white") 75%, theme("backgroundColor.slate.100") 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;   /* so transparency reads as transparency */
+}
+
+.nm-card:focus-visible { outline: 2px solid theme("colors.accent.600"); outline-offset: 2px; }
+.nm-card[data-selected="1"]::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 0.4rem;
+    box-shadow: inset 0 0 0 2px theme("colors.accent.600");
+    pointer-events: none;
+}
+
+.nm-details {
+    width: 300px;
+    flex-shrink: 0;
+    border-left: 1px solid theme("borderColor.slate.200");
+    background: theme("backgroundColor.slate.50");
+    padding: 1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+.nm-details[hidden] { display: none; }
+
+.nm-details-preview {
+    aspect-ratio: 4 / 3;
+    background: theme("backgroundColor.white");
+    border: 1px solid theme("borderColor.slate.200");
+    border-radius: 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+}
+.nm-details-preview img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.nm-details-file { color: theme("textColor.slate.400"); }
+
+.nm-details-name {
+    font-size: 0.8125rem; font-weight: 600; color: theme("textColor.slate.900");
+    word-break: break-word; line-height: 1.35;
+}
+.nm-details-facts { font-size: 0.75rem; color: theme("textColor.slate.500"); margin-top: 0.15rem; }
+
+.nm-field { display: block; }
+.nm-field[hidden] { display: none; }
+.nm-field-label {
+    display: block;
+    font-size: 0.75rem; font-weight: 600; color: theme("textColor.slate.700");
+    margin-bottom: 0.3rem;
+}
+.nm-field textarea {
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: 0.45rem;
+    font-size: 0.8125rem;
+    font-family: inherit;
+    line-height: 1.45;
+    resize: vertical;
+    background: theme("backgroundColor.white");
+    color: theme("textColor.slate.900");
+}
+.nm-field textarea:focus {
+    outline: none;
+    border-color: theme("borderColor.accent.600");
+    box-shadow: 0 0 0 3px theme("colors.accent.600 / 12%");
+}
+.nm-field-hint {
+    display: block;
+    font-size: 0.6875rem; color: theme("textColor.slate.400"); margin-top: 0.25rem; line-height: 1.4;
+}
+
+.nm-savestate { font-size: 0.75rem; color: theme("textColor.slate.500"); min-height: 1rem; }
+.nm-savestate.is-ok { color: theme("textColor.emerald.600"); }
+.nm-savestate.is-error { color: theme("textColor.red.600"); }
+
+.nm-searchwrap { position: relative; flex: 1; display: flex; align-items: center; }
+.nm-searchwrap svg {
+    position: absolute; left: 0.6rem;
+    width: 1rem; height: 1rem; color: theme("textColor.slate.400"); pointer-events: none;
+}
+.nm-searchwrap .nm-search { padding-left: 2rem; width: 100%; }
+
+.nm-upload-btn { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.nm-title { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Below 760px the panes stack, and the details pane is capped in height so the
+   grid never collapses to one row with everything else pushed off-screen. */
+/*
+ * Rows are as tall as their cards, and the grid scrolls.
+ *
+ * A card has aspect-ratio and overflow:hidden, which gives it an automatic
+ * minimum height of zero. When the grid's height was limited — every phone,
+ * and any desktop library with a few rows — the rows were squeezed below the
+ * cards' height and the cards were drawn over each other.
+ */
+.nm-grid { align-content: start; grid-auto-rows: max-content; }
+/* The preview keeps its size; the details pane scrolls instead of squashing it. */
+.nm-details-preview { flex-shrink: 0; }
+
+@media (max-width: 760px) {
+    .nm-dialog { max-height: 94vh; }
+    .nm-body { flex-direction: column; }
+    /*
+     * Stacked under the grid, the details pane puts the selected image beside
+     * its name and size, as a square about 40% of the width, with alt text and
+     * caption below. The old 16:7 strip was squeezed to a sliver, leaving the
+     * selected image a few dozen pixels tall.
+     */
+    .nm-details {
+        width: auto;
+        border-left: 0;
+        border-top: 1px solid theme("borderColor.slate.200");
+        max-height: 38vh;   /* 1.3.0: was 46vh, which left the grid a strip on phones */
+        display: grid;
+        grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+        grid-auto-rows: max-content;   /* as in the grid: never squeeze the preview's row */
+        align-content: start;
+        align-items: center;
+        gap: 0.75rem 0.85rem;
+    }
+    .nm-details > * { grid-column: 1 / -1; }
+    .nm-details-preview { grid-column: 1; aspect-ratio: 1 / 1; }
+    .nm-details-meta { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+    .nm-grid { padding: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 0.6rem; }
+    .nm-toolbar { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+    .nm-overlay { padding: 0; }
+    .nm-dialog { max-height: 100vh; height: 100dvh; border-radius: 0; }
+    .nm-upload-btn span { display: none; }   /* the icon carries it at this width */
+    .nm-footer { padding: 0.75rem; }
+}
+
+/* Phones (1.2.70): the details dialog fills the screen like Quick Edit — the
+   header on top, the fields scrolling, Close / Save changes full width in a
+   footer above the home indicator, 16px text so iOS doesn't zoom. */
+@media (max-width: 600px) {
+  .nml-pane { top:0; left:0; width:100vw; max-width:100vw; height:100vh; height:100dvh; max-height:100vh; max-height:100dvh;
+    border-radius:0; transform:translateY(16px); }
+  .nml-pane.is-open { transform:none; }
+  .nml-pane__body { padding:.8rem .9rem; }
+  .nml-pane__foot { border-radius:0; padding:.65rem .9rem calc(.65rem + env(safe-area-inset-bottom, 0px)); }
+  .nml-pane__foot .bh-btn { flex:1; }
+  .nml-pane__foot .nml-pane__saved { display:none; }
+  .nml-pane__in { font-size:16px; }
+  .nml-pane__actions .nml-pane__btn { flex:1; justify-content:center; }
+}
+@media (prefers-reduced-motion: reduce) { .nml-pane { transition:none; } }
+
+/* ── Media library: the original loads over a generated preview (1.2.16) ── */
+.nml-pane__preview { position:relative; }
+.nml-pane__preview img { transition:filter .35s ease; }
+.nml-pane__preview.is-loading img { filter:blur(5px); }
+/* The full-size preview's loader is the shared .bh-loader (ui.css), placed
+   over the image; it shows only while loading, or to report an error. */
+.nml-pane__preview .nml-pane__loader { display:none; }
+.nml-pane__preview.is-loading .nml-pane__loader { display:inline-flex; }
+.nml-pane__preview.is-error img { filter:none; }
+.nml-pane__preview.is-error .nml-pane__loader { display:inline-flex; }
+/* 1.2.70: while the image loads the box keeps the image's shape (--nml-ar,
+   set from its dimensions), so the loader has somewhere to sit. Without it
+   the box was 0px tall on phones and the pill was clipped out of sight. */
+.nml-pane__preview--image.is-loading,
+.nml-pane__preview--svg.is-loading,
+.nml-pane__preview--image.is-error { min-height:12rem; }
+.nml-pane__preview--image.is-loading { width:100%; aspect-ratio:var(--nml-ar, 4 / 3); }
+@media (min-width: 768px) { .nml-pane__preview--image.is-loading { aspect-ratio:auto; } }
+.nml-pane__preview.is-loading img { max-width:100%; max-height:100%; }
+
+/* Grid thumbnails: a soft shimmer until the image arrives; a muted icon
+   tile if it can't load. */
+.nml-card__media--img:not(.is-loaded):not(.is-broken) {
+    background:linear-gradient(90deg, theme("backgroundColor.slate.100") 0%, theme("backgroundColor.slate.200") 50%, theme("backgroundColor.slate.100") 100%); background-size:200% 100%;
+    animation:nml-shimmer 1.3s ease-in-out infinite;
+}
+.nml-grid--masonry .nml-card__media--img:not(.is-loaded):not([style]) { min-height:9rem; }
+.nml-card__media--img.is-broken { min-height:9rem; }
+.nml-card__media--img.is-broken::after {
+    content:"Preview unavailable"; position:absolute; inset:0; display:grid; place-items:center;
+    font-size:12px; color:theme("textColor.slate.400");
+}
+@keyframes nml-shimmer { from { background-position:100% 0; } to { background-position:-100% 0; } }
+@media (prefers-reduced-motion: reduce) { .nml-card__media--img:not(.is-loaded):not(.is-broken) { animation:none; } }
+.nml-pane__sizes span:last-child { text-align:right; line-height:1.6; }
+.nml-pane__sizes a { color:theme("textColor.accent.600"); text-decoration:none; }
+.nml-pane__sizes a:hover { text-decoration:underline; }
+/* Shift+click range selection: no stray text highlight while selecting. */
+.nml--selecting .nml-grid { user-select:none; }
+
+/* ============================================================
+   1.2.67 — picker filters and Load More
+   ============================================================ */
+.nm-select {
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    background: theme("backgroundColor.white");
+    color: theme("textColor.slate.700");
+    font-family: inherit;
+    max-width: 11rem;
+}
+.nm-select:focus { outline: none; border-color: theme("borderColor.accent.500"); box-shadow: 0 0 0 3px theme("colors.accent.500 / 18%"); }
+.nm-select[hidden] { display: none; }
+.nm-card:focus-visible { outline: none; border-color: theme("borderColor.accent.600"); box-shadow: 0 0 0 3px theme("colors.accent.600 / 35%"); }
+/* The Load More row sits at the end of the grid and spans it. */
+.nm-more {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    min-height: 3rem;
+    padding: 0.5rem 0 0.25rem;
+    font-size: 0.8125rem;
+    color: theme("textColor.slate.500");
+}
+.nm-more:empty { min-height: 0; padding: 0; }
+.nm-more--empty { display: block; }
+.nm-more-btn {
+    padding: 0.5rem 1.25rem;
+    border: 1px solid theme("borderColor.slate.300");
+    border-radius: 0.5rem;
+    background: theme("backgroundColor.white");
+    color: theme("textColor.slate.800");
+    font: 500 0.875rem/1.2 inherit;
+    font-family: inherit;
+    cursor: pointer;
+}
+.nm-more-btn:hover { background: theme("backgroundColor.slate.100"); }
+.nm-more-btn:focus-visible { outline: none; border-color: theme("borderColor.accent.600"); box-shadow: 0 0 0 3px theme("colors.accent.600 / 25%"); }
+.nm-more-error { color: theme("textColor.red.700"); }
+.nm-spinner {
+    width: 1rem; height: 1rem;
+    border: 2px solid theme("borderColor.slate.300"); border-top-color: theme("borderColor.accent.600");
+    border-radius: 50%;
+    animation: nm-spin 0.7s linear infinite;
+}
+@keyframes nm-spin { to { transform: rotate(360deg); } }
+.nm-empty svg, .nm-error svg { margin-left: auto; margin-right: auto; }
+/* Phones: search on its own row, then both filters and the upload button on
+   one row (1.3.0: the icon-only upload button took a row of its own). */
+@media (max-width: 560px) {
+    .nm-toolbar .nm-select { flex: 1 1 0; min-width: 0; max-width: none; }
+    .nm-toolbar .nm-upload-btn { flex: none; }
+    .nm-searchwrap { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .nm-spinner { animation-duration: 2s; } }
+
+/* ============================================================
+   1.2.67 — Media Library: states, Load More, List view
+   ============================================================ */
+.nml-panel[hidden] { display: none; }
+.nml-grid--state { display: block; columns: auto; }
+.nml-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; gap: 0.5rem; padding: 3.5rem 1.25rem;
+    border: 1px dashed var(--nml-line); border-radius: 14px; background: theme("backgroundColor.white"); color: var(--nml-mut);
+}
+.nml-state__icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 4.5rem; height: 4.5rem; border-radius: 999px; background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.400"); margin-bottom: 0.25rem;
+}
+.nml-state__icon svg { width: 2.25rem; height: 2.25rem; }
+.nml-state--error .nml-state__icon { background: theme("backgroundColor.red.50"); color: theme("textColor.red.600"); }
+.nml-state__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--nml-ink); }
+.nml-state__text { margin: 0 0 0.5rem; font-size: 13px; max-width: 26rem; }
+.nml-spinner {
+    display: inline-block; width: 1.1rem; height: 1.1rem; flex: 0 0 auto;
+    border: 2px solid theme("borderColor.slate.300"); border-top-color: var(--nml-accent, theme("borderColor.accent.600")); border-radius: 50%;
+    animation: nm-spin 0.7s linear infinite; vertical-align: -3px;
+}
+.nml-state .nml-spinner { width: 1.75rem; height: 1.75rem; border-width: 3px; }
+.nml-more-wrap { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; min-height: 1px; }
+.nml-more-wrap:empty { margin-top: 0; }
+.nml-more-status { font-size: 12.5px; color: var(--nml-mut); display: inline-flex; align-items: center; gap: 8px; }
+.nml-more-status--error { color: theme("textColor.red.700"); }
+.nml-more:focus-visible, .nml-pill:focus-visible, .nml-vt:focus-visible, .nml-card:focus-visible {
+    outline: none; box-shadow: 0 0 0 3px theme("colors.accent.600 / 35%");
+}
+.nml-pane__note { font-size: 12.5px; color: var(--nml-mut); margin: 6px 0 0; }
+
+/* The List view is the shared Data Table; the page's toolbar drives its
+   search, filters and sort, so the table's own search and view buttons are
+   not shown here. Screen Options, paging and selection stay. */
+.nml-list .bh-dt-search,
+.nml-list .bh-dt-views { display: none; }
+.nml-list .bh-dt-toolbar { justify-content: flex-end; }
+.bh-media-open {
+    background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: left;
+    font: inherit; color: inherit; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
+}
+/* On cards (phones, List and Grid views) the title wraps to two lines inside
+   its column like other tables' titles; one unbroken line ran over the size
+   and date beside it (1.2.100). */
+.bh-dt-card .bh-media-open { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.bh-media-open:hover { color: theme("textColor.accent.600"); text-decoration: underline; }
+.bh-media-open:focus-visible { outline: 2px solid theme("colors.accent.600"); outline-offset: 2px; border-radius: 4px; }
+.bh-media-acts { display: inline-flex; gap: 2px; justify-content: flex-end; }
+.bh-media-acts .bh-btn { padding: 6px; }
+.bh-media-acts svg { width: 1rem; height: 1rem; }
+/* `hidden` must win over the component's own display (the bulk bar and the
+   search's clear button were showing when they should not). */
+.nml .hidden, .nml-more-wrap.hidden { display: none !important; }
+/* Visually hidden, still read out (the admin's Tailwind build has no sr-only). */
+.bh-sr-only {
+    position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.nml-select-toggle[hidden], .nml-select[hidden] { display: none !important; }
+.nml-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+
+/* An upload filter's note under a file name (1.2.87; a class since 1.3.0). */
+.nm-progress-row-note { margin-top: 2px; font-size: 11px; color: theme("textColor.slate.500"); }

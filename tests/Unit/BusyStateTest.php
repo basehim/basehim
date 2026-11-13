@@ -15,7 +15,8 @@ function busy_sources(): array
     return [
         'tailwind source' => (string) file_get_contents($root . 'src/tailwind.css'),
         'tailwind.min.css' => (string) file_get_contents($root . 'tailwind.min.css'),
-        'ui.css' => (string) file_get_contents($root . 'ui.css'),
+        // The source since 1.3.0 (ui.css is built from it).
+        'ui.css' => (string) file_get_contents($root . 'src/ui.css'),
         'admin-styles' => (string) file_get_contents(BASEHIM_ROOT . '/admin/views/partials/admin-styles.php'),
         'layout' => (string) file_get_contents(BASEHIM_ROOT . '/admin/views/layouts/app.php'),
     ];

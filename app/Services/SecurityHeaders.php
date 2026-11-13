@@ -284,6 +284,16 @@ final class SecurityHeaders
     private static function upgradeHtaccessOnce(): void
     {
         $svc = Application::getInstance()->make(SettingService::class);
+        // 1.3.0: refuse PHP's error_log file too (a separate step, so sites
+        // that already ran the X-XSS-Protection one get it).
+        if ((string) $svc->get(self::GROUP, 'htaccess_error_log', '') === '') {
+            $res = self::upgradeHtaccessErrorLog();
+            $svc->set(self::GROUP, 'htaccess_error_log', $res);
+            try {
+                Application::getInstance()->make(\App\Core\Logger::class)
+                    ->log($res === 'unwritable' ? 'warning' : 'info', "Security: .htaccess error_log rule {$res}.");
+            } catch (\Throwable) {}
+        }
         if ((string) $svc->get(self::GROUP, 'htaccess_xss', '') !== '') return;
         $result = self::upgradeHtaccess();
         $svc->set(self::GROUP, 'htaccess_xss', $result);
@@ -304,9 +314,34 @@ final class SecurityHeaders
      */
     public static function upgradeHtaccess(?string $path = null): string
     {
+        return self::replaceHtaccessLine(
+            'Header set X-XSS-Protection "1; mode=block"',
+            'Header set X-XSS-Protection "0"',
+            $path
+        );
+    }
+
+    /**
+     * Basehim's .htaccess up to 1.2.128 refuses *.log but not PHP's own
+     * `error_log` file, which cPanel and other hosts write into the site
+     * folder: it could be downloaded, with server paths and error details.
+     * Changes the one FilesMatch line, exactly as Basehim wrote it.
+     *
+     * @return string 'updated', 'already', 'absent' or 'unwritable'
+     */
+    public static function upgradeHtaccessErrorLog(?string $path = null): string
+    {
+        return self::replaceHtaccessLine(
+            '<FilesMatch "\.(env|log|sql|lock|yml|yaml|ini)$">',
+            '<FilesMatch "(^error_log$|\.(env|log|sql|lock|yml|yaml|ini)$)">',
+            $path
+        );
+    }
+
+    /** Replace one line Basehim wrote in .htaccess, atomically; nothing else changes. */
+    private static function replaceHtaccessLine(string $old, string $new, ?string $path = null): string
+    {
         $path ??= BASEHIM_ROOT . '/.htaccess';
-        $old = 'Header set X-XSS-Protection "1; mode=block"';
-        $new = 'Header set X-XSS-Protection "0"';
         $content = @file_get_contents($path);
         if (!is_string($content)) return 'absent';
         if (str_contains($content, $new) && !str_contains($content, $old)) return 'already';

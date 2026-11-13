@@ -52,7 +52,7 @@ test('items with a picture carry their tick on the picture', function () {
     assert_contains("chk.classList.add('bh-dt-check--over'); thumb.appendChild(chk);", $js, 'full cards');
     assert_contains("chk.classList.add('bh-dt-check--over'); media.appendChild(chk);", $js, 'compact cards');
     $css = r12116('admin/assets/css/src/datatable.css');
-    assert_contains('.bh-dt-card .bh-dt-check--over:has(input:checked) { background: rgb(37 99 235 / .85); }', $css);
+    assert_contains('.bh-dt-card .bh-dt-check--over:has(input:checked) { background: theme("backgroundColor.accent.600 / 85%"); }', $css);
     assert_contains('-webkit-appearance: none; appearance: none;', $css, 'round card ticks');
 });
 

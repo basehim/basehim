@@ -29,7 +29,7 @@
         <ul class="space-y-2.5 mb-6">
             <?php foreach ($scopes as $s): ?>
             <li class="flex items-start gap-2.5">
-                <span class="mt-0.5 w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center shrink-0">
+                <span class="mt-0.5 w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center shrink-0">
                     <?= icon('check', 'w-3 h-3') ?>
                 </span>
                 <span class="text-sm text-slate-700"><?= htmlspecialchars($scopeLabels[$s] ?? $s) ?></span>

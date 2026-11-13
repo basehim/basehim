@@ -27,7 +27,12 @@ final class AdminBarSettings
     public const MOBILE = ['same' => 'The same as on larger screens', 'floating' => 'A floating button', 'hidden' => 'Nothing'];
     public const DENSITIES = ['comfortable' => 'Comfortable', 'compact' => 'Compact'];
     public const LABELS = ['labels' => 'Icons and labels', 'icons' => 'Icons only'];
-    public const COLORS = ['dark' => 'Dark', 'light' => 'Light', 'auto' => 'Follow the device'];
+    /**
+     * The bar's colours. "account" (1.3.0, the default) follows each person's
+     * Appearance (Account menu → Appearance): their light, dark or device
+     * setting. The accent is always the person's own.
+     */
+    public const COLORS = ['account' => "Each person's Appearance", 'dark' => 'Always dark', 'light' => 'Always light', 'auto' => 'Follow the device'];
     public const OPEN_ON = ['click' => 'Click', 'hover' => 'Hover (mouse), click (touch)'];
     public const ALIGN = ['start' => 'Under the item', 'end' => 'Right-aligned'];
     /** Sections a user may hide for themselves; core's own and apps' menus. */
@@ -62,7 +67,7 @@ final class AdminBarSettings
         'float_size'     => 48,
         'panel_width'    => 360,
         'align'          => 'start',
-        'color'          => 'dark',
+        'color'          => 'account',
         'open_on'        => 'click',
         'remember'       => true,
         'auto_hide'      => 0,
@@ -121,7 +126,13 @@ final class AdminBarSettings
             'float_size'    => $num($raw['float_size'] ?? null, self::FLOAT_SIZES, $d['float_size']),
             'panel_width'   => $num($raw['panel_width'] ?? null, self::PANEL_WIDTHS, $d['panel_width']),
             'align'         => $pick($raw['align'] ?? null, self::ALIGN, $d['align']),
-            'color'         => $pick($raw['color'] ?? null, self::COLORS, $d['color']),
+            // Until 1.3.0 "dark" was the default and the screen saved it with
+            // everything else, so a stored "dark" from before then meant
+            // nothing chosen: it follows the person's Appearance like a new
+            // site. Saving the screen from 1.3.0 on records a real choice.
+            'color'         => ($raw['color'] ?? null) === 'dark' && empty($raw['color_chosen'])
+                ? 'account' : $pick($raw['color'] ?? null, self::COLORS, $d['color']),
+            'color_chosen'  => true,
             'open_on'       => $pick($raw['open_on'] ?? null, self::OPEN_ON, $d['open_on']),
             'remember'      => $bool($raw['remember'] ?? null, $d['remember']),
             'auto_hide'     => array_key_exists((int) ($raw['auto_hide'] ?? 0), self::AUTO_HIDE) ? (int) ($raw['auto_hide'] ?? 0) : 0,

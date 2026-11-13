@@ -73,13 +73,21 @@ final class AdminBarRenderer
         if (!$settings['branding']) $classes[] = 'bhab--no-brand';
         $style = '--bhab-h:' . (int) $settings['height'] . 'px;--bhab-fab:' . (int) $settings['float_size'] . 'px;--bhab-panel:' . (int) $settings['panel_width'] . 'px';
 
+        // Light, dark or the device, and the accent (1.3.0): the person's
+        // Appearance unless the site fixed the bar's colours. "System" is left
+        // to the stylesheet (prefers-color-scheme), so nothing flashes.
+        $look = \App\Core\Application::getInstance()->make(\App\Services\AppearanceService::class)->forUser((int) $user['id']);
+        $scheme = ['dark' => 'dark', 'light' => 'light', 'auto' => 'system'][$settings['color']] ?? $look['mode'];
+        $lookAttrs = ' data-appearance="' . self::e($scheme) . '" data-accent="' . self::e($look['accent']) . '"'
+                   . ($scheme === 'system' ? '' : ' data-theme="' . self::e($scheme) . '"');
+
         $ver = rawurlencode(defined('BASEHIM_VERSION') ? (string) BASEHIM_VERSION : '1');
         $e = fn($v) => self::e($v);
         $fabLabel = 'Site management';
 
         return "\n<!-- Basehim admin bar: only signed-in users who manage this site see it. -->\n"
             . '<link rel="stylesheet" href="' . $e($this->base . '/admin/assets/css/admin-bar.css?v=' . $ver) . '" id="bhab-css">'
-            . '<div id="bh-admin-bar" class="' . $e(implode(' ', $classes)) . '" style="' . $e($style) . '" data-bhab-mode="' . $e($mode) . '">'
+            . '<div id="bh-admin-bar" class="' . $e(implode(' ', $classes)) . '" style="' . $e($style) . '" data-bhab-mode="' . $e($mode) . '"' . $lookAttrs . '>'
             .   '<button type="button" class="bhab-fab" aria-expanded="false" aria-controls="bhab-bar" aria-label="' . $e($fabLabel) . '">'
             .     Icon::svg('squares-2x2', 'bhab-ico bhab-fab__ico') . '<span class="bhab-badge bhab-fab__badge" hidden></span></button>'
             .   '<button type="button" class="bhab-tab" aria-label="Show the admin bar" hidden>' . Icon::svg('chevron-down', 'bhab-ico') . '</button>'

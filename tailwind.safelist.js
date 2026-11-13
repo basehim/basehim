@@ -11,7 +11,13 @@
  * Add to it when a runtime class goes missing; don't remove entries without
  * checking themes/blocks.
  */
+// 1.3.0: the named palette's classes (.bh-bg-red, .bh-text-bg-success…),
+// which apps and themes use without building anything.
+const NAMES = [...Object.keys(require('./tailwind.theme.js').NAMED), 'success', 'warning', 'danger', 'info'];
+const PALETTE = NAMES.flatMap((n) => [`bh-bg-${n}`, `bh-bg-${n}-subtle`, `bh-text-${n}`, `bh-text-bg-${n}`, `bh-border-${n}`, `bh-border-${n}-subtle`]);
+
 module.exports = [
+    ...PALETTE,
     // 1.2.119: no longer used by the sidebar markup; kept for apps and themes.
     "ease-in-out",
     "h-1",
@@ -551,5 +557,30 @@ module.exports = [
     "sm:px-6",
     "md:inline",
     // 1.2.123: used only by the old Categories/Tags screen.
-    "self-start"
+    "self-start",
+    // 1.3.0: no core file names these any more (a view's inline styles and
+    // spacing moved into components), but 1.2.128 shipped them and apps use
+    // core's stylesheet without a build of their own.
+    "-mx-4",
+    "ring",
+    "ease-in",
+    "ease-out",
+    "flex-shrink",
+    "backdrop-filter",
+    // 1.3.0: last used by error pages that now draw with StatusPage.
+    "border-red-100",
+    "from-accent-50",
+    "h-20",
+    "max-w-lg",
+    "max-w-sm",
+    "ring-inset",
+    "ring-red-200",
+    "rounded-t-2xl",
+    "shadow-lg",
+    "text-4xl",
+    "text-5xl",
+    "text-6xl",
+    "text-accent-500",
+    "to-accent-100",
+    "w-20"
 ];

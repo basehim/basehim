@@ -120,7 +120,7 @@ test('customizer: switches use core\'s switch at the right of the label; the ima
     $view = (string) file_get_contents($root . '/admin/views/customizer/index.php');
     assert_contains('class="bh-switch__input"', $view);
     assert_not_contains('<span>Enabled</span>', $view);
-    $css = (string) file_get_contents($root . '/admin/assets/css/customizer.css');
+    $css = (string) file_get_contents($root . '/admin/assets/css/src/customizer.css');
     assert_true((bool) preg_match('/\.bh-cz__thumb img \{[^}]*position: absolute;[^}]*object-fit: contain;/s', $css), 'image laid over the box and contained');
     assert_contains('.bh-cz__field--switch { display: flex;', $css);
     $js = (string) file_get_contents($root . '/admin/assets/js/media.js');

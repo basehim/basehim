@@ -21,7 +21,7 @@ test('Data table: sticky controls, header and pagination (CSS, gated by a class)
     assert_contains('position: sticky; top: var(--dt-sticky-top);', $css);
     assert_contains('.bh-dt--sticky .bh-dt-top.is-stuck', $css, 'a stuck state to shrink the controls');
     // Column header sticks just under the controls (offset tracks their height).
-    assert_contains('.bh-dt--sticky .bh-dt-table thead th { position: sticky; top: calc(var(--dt-sticky-top) + var(--dt-top-h));', $css);
+    assert_contains('.bh-dt--sticky .bh-dt-table thead th { @apply bh-glass; position: sticky; top: calc(var(--dt-sticky-top) + var(--dt-top-h));', $css);
     // Pagination sticks to the bottom, under its own toggle class.
     assert_contains('.bh-dt--sticky-foot .bh-dt-foot', $css);
     // The wrap no longer clips, so the sticky header is not trapped.

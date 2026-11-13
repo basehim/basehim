@@ -61,7 +61,7 @@ $noun      = $isApps ? 'apps' : 'themes';
     </div>
 
     <div id="mk-filters" class="bh-mk-filters" hidden>
-        <div id="mk-cats" class="bh-mk-chips" role="toolbar" aria-label="Categories">
+        <div id="mk-cats" class="bh-mk-chips" data-bh-strip role="toolbar" aria-label="Categories">
             <button type="button" class="bh-mk-chip is-on" data-cat="" aria-pressed="true">All</button>
         </div>
         <div id="mk-filter" class="bh-mk-tagfilter" hidden></div>

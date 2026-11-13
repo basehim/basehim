@@ -193,9 +193,8 @@
         head.addEventListener('click', function () {
             toggle(head.getAttribute('aria-expanded') !== 'true');
         });
-        // The first section starts open, so the screen is not a wall of
-        // closed headings with nothing to act on.
-        if (i === 0) toggle(true);
+        // The first section starts open (the view renders it so, 1.3.0), so
+        // the screen is not a wall of closed headings with nothing to act on.
     });
 
     // ── preview width ────────────────────────────────────────────────────────

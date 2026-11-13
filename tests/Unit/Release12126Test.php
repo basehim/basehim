@@ -25,7 +25,7 @@ test('dashboard: the growth badge shows a count, not a capped percentage, for a 
 });
 
 test('editor: sidebar labels leave the controls room for "Blocks (visual)"', function () {
-    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/block-editor.css');
+    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/src/block-editor.css');
     assert_contains('.bhe-row > .bhe-row__label { flex: 0 0 72px;', $css);
     assert_not_contains('flex: 0 0 96px', $css);
 });

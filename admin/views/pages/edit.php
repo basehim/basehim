@@ -187,7 +187,7 @@ $commentVal = $isEdit ? $post['comment_status'] : 'open';
                         <button type="button" id="featured-change" class="flex-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 rounded-lg text-xs font-medium text-slate-700">
                             <?= icon('arrow-path', 'w-4 h-4 mr-1') ?> Replace
                         </button>
-                        <button type="button" id="featured-remove" class="px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-medium">
+                        <button type="button" id="featured-remove" class="px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 rounded-lg text-xs font-medium">
                             <?= icon('trash', 'w-4 h-4 mr-1') ?> Remove
                         </button>
                     </div>

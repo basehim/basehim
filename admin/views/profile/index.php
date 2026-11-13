@@ -182,7 +182,7 @@ $tfaOn = !empty($tfa['enabled']) || !empty($tfa['required']);
                     <input type="password" name="current_password" id="tfa-pass" required autocomplete="current-password"
                         class="w-56 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none">
                 </div>
-                <button type="submit" class="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">Turn off</button>
+                <button type="submit" class="px-4 py-2 border border-red-200 text-red-700 hover:bg-red-50 rounded-lg text-sm font-medium">Turn off</button>
             </form>
             <?php endif; ?>
         <?php else: ?>

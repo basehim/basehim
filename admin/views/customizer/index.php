@@ -27,16 +27,18 @@ $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
             <button type="button" id="bh-cz-save" class="bh-cz__save" disabled>Save</button>
         </header>
 
-        <div class="bh-cz__status" id="bh-cz-status" aria-live="polite"></div>
+        <div class="bh-cz__status" id="bh-cz-status" aria-live="polite" hidden></div>
 
         <div class="bh-cz__sections">
-            <?php foreach ($sections as $sKey => $section): ?>
+            <?php $__czFirst = true; foreach ($sections as $sKey => $section): $__czOpen = $__czFirst; $__czFirst = false; ?>
+                <?php /* The first section is open from the start (1.3.0): opened by
+                         customizer.js, the list painted closed and then jumped. */ ?>
                 <section class="bh-cz__section" data-section="<?= htmlspecialchars($sKey) ?>">
-                    <button type="button" class="bh-cz__sectionhead" aria-expanded="false">
+                    <button type="button" class="bh-cz__sectionhead" aria-expanded="<?= $__czOpen ? 'true' : 'false' ?>">
                         <span><?= htmlspecialchars($section['label']) ?></span>
                         <?= icon('chevron-down', 'w-4 h-4 bh-cz__chev') ?>
                     </button>
-                    <div class="bh-cz__sectionbody" hidden>
+                    <div class="bh-cz__sectionbody"<?= $__czOpen ? '' : ' hidden' ?>>
                         <?php if (!empty($section['description'])): ?>
                             <p class="bh-cz__sectiondesc"><?= htmlspecialchars($section['description']) ?></p>
                         <?php endif; ?>
@@ -198,7 +200,7 @@ $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
     </main>
 </div>
 
-<link rel="stylesheet" href="<?= $base ?>/admin/assets/css/customizer.css?v=<?= urlencode(BASEHIM_VERSION) ?>">
+<?= \App\Core\Http\HeadStyles::add($base . '/admin/assets/css/customizer.css?v=' . urlencode(BASEHIM_VERSION)) // in <head> (1.3.0) ?>
 
 <?php $this->endSection(); ?>
 

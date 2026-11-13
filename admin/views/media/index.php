@@ -67,8 +67,16 @@ $__canEditOthers = $__user ? ($__canDeleteOthers || \App\Http\Middleware\CheckCa
         <input type="search" id="nml-search" placeholder="Search media…" aria-label="Search media" autocomplete="off" spellcheck="false">
         <button type="button" id="nml-search-clear" class="nml-search-clear hidden" aria-label="Clear search"><?= icon('x-mark', 'w-4 h-4') ?></button>
       </div>
-      <select id="nml-month" class="nml-select" aria-label="Date uploaded">
+      <select id="nml-month" class="nml-select" aria-label="Date uploaded" data-months-loaded>
         <option value="all">All dates</option>
+        <?php
+        // The months, drawn here (1.3.0): added by the script after the first
+        // request, the select widened and pushed sort and view sideways.
+        try { $__months = \App\Core\Application::getInstance()->make(\App\Services\MediaService::class)->months(); }
+        catch (\Throwable) { $__months = []; }
+        foreach ($__months as $__m): ?>
+        <option value="<?= htmlspecialchars((string) $__m['value']) ?>"><?= htmlspecialchars((string) ($__m['label'] ?? $__m['value'])) ?> (<?= (int) ($__m['count'] ?? 0) ?>)</option>
+        <?php endforeach; ?>
       </select>
       <select id="nml-sort" class="nml-select" aria-label="Sort">
         <option value="newest">Newest first</option>

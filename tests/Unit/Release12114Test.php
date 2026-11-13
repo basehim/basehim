@@ -26,9 +26,9 @@ test('Backdrop: the sticky chrome sits below the admin shell, not above it', fun
     $css = r12114_file('admin/assets/css/src/datatable.css');
     // Low single-digit z-indexes — above rows (z-0), below the backdrop (15)
     // and sidebar (20), so the mobile nav dims them.
-    assert_contains('.bh-dt--sticky .bh-dt-top { @apply z-[6] bg-white;', $css);
+    assert_contains('.bh-dt--sticky .bh-dt-top { @apply z-[6] bg-white bh-glass;', $css);
     assert_contains('z-index: 4;', $css, 'sticky header z below the shell');
-    assert_contains('.bh-dt--sticky-foot .bh-dt-foot { @apply z-[5] bg-white;', $css);
+    assert_contains('.bh-dt--sticky-foot .bh-dt-foot { @apply z-[5] bg-white bh-glass;', $css);
     // The replaced, regressing approach is gone from both layers.
     assert_false(str_contains($css, 'bh-nav-open'), 'no bh-nav-open override remains in the CSS');
     $layout = r12114_file('admin/views/layouts/app.php');

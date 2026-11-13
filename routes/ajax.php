@@ -34,6 +34,18 @@ $ajax->register('core.csrf', [
     'description' => "The session's current CSRF token, for a page whose token went stale.",
 ]);
 
+// 1.3.0: each person's light/dark mode and accent, saved on their account.
+$ajax->register('profile.appearance', [
+    'handler'     => [\App\Http\Controllers\Ajax\AccountActions::class, 'appearance'],
+    'capability'  => 'read',
+    'rate_limit'  => ['max' => 30, 'per' => 60],
+    'input'       => [
+        'mode'   => 'string|in:light,dark,system',
+        'accent' => 'string|in:' . implode(',', array_keys(\App\Services\AppearanceService::ACCENTS)),
+    ],
+    'description' => "Save the signed-in person's admin appearance: light, dark or system, and an accent colour.",
+]);
+
 $ajax->register('media.update', [
     'handler'     => [MediaActions::class, 'update'],
     'capability'  => 'upload_media',

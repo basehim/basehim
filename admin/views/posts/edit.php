@@ -139,15 +139,17 @@ if ($formatVal === 'markdown' && trim($contentVal) !== '') {
 }
 $v = urlencode(BASEHIM_VERSION);
 ?>
-<?php foreach ($nbeStyles as $nbeCss): ?>
-<link rel="stylesheet" href="<?= htmlspecialchars((string) $nbeCss) ?>" data-bhe-preview>
-<?php endforeach; ?>
-<link rel="stylesheet" href="<?= $base ?>/admin/assets/css/block-editor.css?v=<?= $v ?>">
+<?php
+// In <head> (1.3.0): linked here, the admin's sidebar painted before the
+// editor's own stylesheet arrived and covered it.
+foreach ($nbeStyles as $nbeCss) echo \App\Core\Http\HeadStyles::add((string) $nbeCss, ['data-bhe-preview' => true]);
+echo \App\Core\Http\HeadStyles::add($base . '/admin/assets/css/block-editor.css?v=' . $v);
+?>
 
 <form method="POST" action="<?= htmlspecialchars($action) ?>" id="bh-post-form" data-bh-post-form>
 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
 
-<div class="bhe-root has-sidebar<?= $isBlocks ? '' : ' is-code-mode' ?>" id="bhe-root">
+<div class="bhe-root has-sidebar<?= $isBlocks ? '' : ' is-code-mode' ?>" id="bhe-root" data-bh-draw>
     <header class="bhe-header" id="bhe-header" role="region" aria-label="Editor top bar">
         <div class="bhe-header__left">
             <a class="bhe-back" href="<?= htmlspecialchars($listUrl) ?>" title="Back to <?= htmlspecialchars($typePlural) ?>" aria-label="Back to <?= htmlspecialchars($typePlural) ?>">
@@ -263,8 +265,8 @@ $v = urlencode(BASEHIM_VERSION);
                             <?php if ($viewUrl !== ''): ?>
                                 <div class="bhe-row">
                                     <span class="bhe-row__label">Link</span>
-                                    <div class="bhe-row__control" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                                        <a href="<?= htmlspecialchars($viewUrl) ?>" target="_blank" rel="noopener" style="color:var(--bhe-accent)"><?= htmlspecialchars(preg_replace('#^https?://#', '', $viewUrl)) ?></a>
+                                    <div class="bhe-row__control">
+                                        <a href="<?= htmlspecialchars($viewUrl) ?>" target="_blank" rel="noopener" class="bhe-row__link"><?= htmlspecialchars(preg_replace('#^https?://#', '', $viewUrl)) ?></a>
                                     </div>
                                 </div>
                             <?php endif; ?>
@@ -821,6 +823,20 @@ $v = urlencode(BASEHIM_VERSION);
             window.location.href = a.href;
         });
     });
+})();
+</script>
+<script>
+// The editor is drawn by several scripts when the page has loaded (the block
+// editor, the publish and tag panels, a Markdown post opened as blocks one
+// task later). Until all have run, block-editor.css keeps the canvas and
+// sidebar hidden, so the source view and empty panels don't flash first
+// (1.3.0). This listener is added last, so it runs after theirs.
+(function () {
+    var root = document.getElementById('bhe-root');
+    if (!root) return;
+    var ready = function () { setTimeout(function () { root.classList.add('is-ready'); }, 0); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready);
+    else ready();
 })();
 </script>
 <?php $this->endSection(); ?>

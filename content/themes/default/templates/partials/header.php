@@ -18,6 +18,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <?php // Basehim's colour palette (.bh-bg-red, .bh-text-bg-success…), for content and blocks (1.3.0). ?>
+    <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/colors.css?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>">
     <link rel="stylesheet" href="<?= $base ?>/content/themes/default/assets/tailwind.min.css?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>">
     <link rel="stylesheet" href="<?= $base ?>/content/themes/default/assets/theme.css?v=<?= urlencode(defined('BASEHIM_VERSION') ? BASEHIM_VERSION : '1') ?>">
     <?= menu_assets() ?>

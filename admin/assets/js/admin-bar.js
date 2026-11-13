@@ -60,10 +60,18 @@
         return u;
     }
     function announce(msg) { if (live) { live.textContent = ''; setTimeout(function () { live.textContent = msg; }, 30); } }
+    // Dialogs and toasts live outside the bar, so they take its look
+    // (light/dark/device and accent, 1.3.0) from the bar's own attributes.
+    function look(node) {
+        ['data-theme', 'data-appearance', 'data-accent'].forEach(function (k) {
+            if (root.hasAttribute(k)) node.setAttribute(k, root.getAttribute(k)); else node.removeAttribute(k);
+        });
+    }
     var toastTimer = null;
     function toast(msg, isError) {
         var t = document.querySelector('.bhab-toast') || el('div', 'bhab-toast');
         t.className = 'bhab-toast' + (isError ? ' bhab-toast--error' : '');
+        look(t);
         t.setAttribute('role', isError ? 'alert' : 'status');
         t.textContent = msg;
         if (!t.parentNode) document.body.appendChild(t);
@@ -440,7 +448,8 @@
     // --- quick search -------------------------------------------------------------------
     var search = null;
     function dialog(cls, labelledBy) {
-        var d = el('div', 'bhab-dialog ' + (root.className.match(/bhab--color-\w+/) || [''])[0]);
+        var d = el('div', 'bhab-dialog');
+        look(d);
         d.setAttribute('role', 'dialog');
         d.setAttribute('aria-modal', 'true');
         if (labelledBy) d.setAttribute('aria-labelledby', labelledBy);
@@ -545,7 +554,7 @@
         var opener = document.activeElement;
         var dlg = dialog('', 'bhab-qe-title');
         var head = el('div', 'bhab-dialog__head');
-        var titles = el('div'); titles.style.flex = '1'; titles.style.minWidth = '0';
+        var titles = el('div', 'bhab-dialog__titles');
         var h = el('h2', 'bhab-dialog__title', 'Quick edit'); h.id = 'bhab-qe-title';
         var sub = el('div', 'bhab-dialog__sub', '');
         titles.appendChild(h); titles.appendChild(sub);
@@ -556,8 +565,7 @@
         var cancel = el('button', 'bhab-btn', 'Cancel'); cancel.type = 'button';
         var save = el('button', 'bhab-btn bhab-btn--primary', 'Save'); save.type = 'submit'; save.disabled = true;
         foot.appendChild(cancel); foot.appendChild(save);
-        var form = el('form'); form.noValidate = true;
-        form.style.display = 'contents';
+        var form = el('form', 'bhab-dialog__form'); form.noValidate = true;
         form.appendChild(head); form.appendChild(body); form.appendChild(foot);
         dlg.box.appendChild(form);
         document.body.appendChild(dlg.root);
@@ -634,7 +642,7 @@
             if (skipped.length) {
                 var note = el('p', 'bhab-note');
                 note.appendChild(document.createTextNode(skipped.join(', ') + ': change them in the editor. '));
-                if (editHref) { var a = el('a', '', 'Open the editor'); a.href = editHref; a.style.textDecoration = 'underline'; note.appendChild(a); }
+                if (editHref) { var a = el('a', '', 'Open the editor'); a.href = editHref; note.appendChild(a); }
                 grid.appendChild(note);
             }
             body.appendChild(grid);
@@ -696,7 +704,7 @@
         a.request('core.csrf', {}, { method: 'GET' }).then(function (r) {
             var token = r && (r.token || r.csrf);
             if (!token) return go();
-            var f = el('form'); f.method = 'POST'; f.action = href('/admin/logout'); f.style.display = 'none';
+            var f = el('form'); f.method = 'POST'; f.action = href('/admin/logout'); f.hidden = true;
             var i = el('input'); i.type = 'hidden'; i.name = '_csrf'; i.value = token;
             f.appendChild(i); document.body.appendChild(f); f.submit();
         }).catch(go);

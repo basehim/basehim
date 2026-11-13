@@ -35,7 +35,7 @@ test('BH-084: a trusted proxy\'s X-Forwarded-Proto counts, an untrusted one does
 });
 
 test('BH-085: on phones the whole admin bar row scrolls, so the account menu stays reachable', function () {
-    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/admin-bar.css');
+    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/src/admin-bar.css');
     $phone = substr($css, (int) strpos($css, '@media (max-width: 782px)'));
     assert_contains('.bhab--horizontal .bhab-bar { overflow-x: auto', $phone);
     assert_contains('.bhab--horizontal .bhab-menus { flex: none; }', $phone);

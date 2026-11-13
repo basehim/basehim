@@ -883,9 +883,12 @@ final class Router
         if (str_starts_with($request->path(), '/api/') || $request->wantsJson()) {
             return Response::json(['type' => 'about:blank', 'title' => $title, 'status' => $status, 'detail' => $detail], $status);
         }
-        $html = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            . '<title>' . $status . ' ' . htmlspecialchars($title) . '</title><style>body{font:16px/1.5 system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:grid;place-items:center;min-height:100vh;margin:0}main{text-align:center;padding:2rem}p{color:#475569}</style></head>'
-            . '<body><main><h1>' . $status . ' ' . htmlspecialchars($title) . '</h1><p>' . htmlspecialchars($detail) . '</p></main></body></html>';
+        // The page every standalone answer uses (1.3.0): it had inline CSS with fixed colours.
+        $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
+        $html = \App\Core\Http\StatusPage::html($status, $title, $detail, [
+            'tone' => $status >= 500 ? 'danger' : 'warning',
+            'actions' => [['label' => 'Home', 'href' => $base . '/', 'primary' => true, 'icon' => 'home']],
+        ]);
         return Response::html($html, $status);
     }
 

@@ -56,6 +56,16 @@ function esc(s) {
 }
 function uid() { return 'b_' + Math.random().toString(36).slice(2, 10); }
 function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
+// The editor's text colour and colour scheme, from the admin's appearance
+// (1.3.0), for previews drawn in their own frame (the HTML block), which
+// can't read the page's CSS variables.
+function bheInk() {
+  return (window.Basehim && Basehim.appearance) ? Basehim.appearance.color('text') : 'rgb(15 23 42)';
+}
+function bheScheme() {
+  return (window.Basehim && Basehim.appearance && Basehim.appearance.get().dark) ? 'dark' : 'light';
+}
+
 function h(tag, attrs, children) {
   var el = document.createElement(tag);
   if (attrs) Object.keys(attrs).forEach(function (k) {
@@ -2655,7 +2665,7 @@ registerBlock('html', {
     if (b.data._preview) {
       var frame = h('iframe', { class: 'bhe-html-preview', sandbox: '', title: 'Custom HTML preview' });
       var css = Array.prototype.map.call(document.querySelectorAll('link[rel="stylesheet"][data-bhe-preview]'), function (l) { return '<link rel="stylesheet" href="' + esc(l.href) + '">'; }).join('');
-      frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8">' + css + '<style>body{margin:0;font:16px/1.6 system-ui,sans-serif;color:#1e1e1e}img,video,iframe{max-width:100%}</style></head><body>' + (b.data.html || '') + '</body></html>';
+      frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8">' + css + '<style>:root{color-scheme:' + bheScheme() + '}body{margin:0;font:16px/1.6 system-ui,sans-serif;color:' + bheInk() + '}img,video,iframe{max-width:100%}</style></head><body>' + (b.data.html || '') + '</body></html>';
       frame.addEventListener('load', function () { try { frame.style.height = Math.max(60, frame.contentDocument.documentElement.scrollHeight) + 'px'; } catch (e) { frame.style.height = '200px'; } });
       el.appendChild(h('div', { class: 'bhe-html' }, [frame]));
       return;

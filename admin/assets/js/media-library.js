@@ -41,7 +41,7 @@
   var byId = Object.create(null);   // id -> item, for the grid's current list
   var loading = false;              // a grid request is in flight
   var seq = 0;                      // bumped by every new search/filter: older answers are dropped
-  var monthsLoaded = false;
+  var monthsLoaded = !!(monthEl && monthEl.hasAttribute('data-months-loaded'));   // the view draws them (1.3.0)
   var listDirty = true;             // the table needs the toolbar's filters pushed to it
   var selectMode = false;
   var chosen = {};                  // id -> true, the grid's bulk selection
@@ -85,12 +85,14 @@
     return 'document';
   }
   function docIcon(mime){
-    if (mime.indexOf('pdf') >= 0) return ['fa-file-pdf', '#dc2626'];
-    if (mime.indexOf('zip') >= 0 || mime.indexOf('compress') >= 0) return ['fa-file-zipper', '#d97706'];
-    if (mime.indexOf('word') >= 0 || mime.indexOf('document') >= 0) return ['fa-file-word', '#2563eb'];
-    if (mime.indexOf('sheet') >= 0 || mime.indexOf('excel') >= 0) return ['fa-file-excel', '#16a34a'];
-    if (mime.indexOf('text') >= 0) return ['fa-file-lines', '#64748b'];
-    return ['fa-file', '#94a3b8'];
+    // The icon and a theme colour class for each kind of document (1.3.0:
+    // classes, so the colours follow light and dark mode).
+    if (mime.indexOf('pdf') >= 0) return ['fa-file-pdf', 'text-red-600'];
+    if (mime.indexOf('zip') >= 0 || mime.indexOf('compress') >= 0) return ['fa-file-zipper', 'text-amber-600'];
+    if (mime.indexOf('word') >= 0 || mime.indexOf('document') >= 0) return ['fa-file-word', 'text-sky-600'];
+    if (mime.indexOf('sheet') >= 0 || mime.indexOf('excel') >= 0) return ['fa-file-excel', 'text-green-600'];
+    if (mime.indexOf('text') >= 0) return ['fa-file-lines', 'text-slate-500'];
+    return ['fa-file', 'text-slate-400'];
   }
   function filtered(){ return !!(state.q || state.type !== 'all' || state.month !== 'all'); }
 
@@ -209,7 +211,7 @@
     } else {
       var di = docIcon(String(m.mime_type || ''));
       var ext = (m.file_name || '').split('.').pop().toUpperCase();
-      inner = '<div class="nml-card__media nml-card__media--icon"><span style="color:' + di[1] + '">' + BasehimIcon(di[0], 'w-10 h-10') + '</span><span class="nml-ext">' + esc(ext) + '</span></div>';
+      inner = '<div class="nml-card__media nml-card__media--icon"><span class="' + di[1] + '">' + BasehimIcon(di[0], 'w-10 h-10') + '</span><span class="nml-ext">' + esc(ext) + '</span></div>';
     }
     // Labels apps add (BasehimMedia.addItemBadge, 1.2.87); escaped by media.js.
     var badges = (window.BasehimMedia && BasehimMedia.itemBadgesHtml) ? BasehimMedia.itemBadgesHtml(m) : '';
@@ -302,7 +304,7 @@
     }
     else if (k === 'video') preview = '<video src="' + esc(m.url) + '" controls preload="metadata"></video>';
     else if (k === 'audio') preview = '<div class="nml-pane__audio">' + BasehimIcon('musical-note', 'w-4 h-4') + '</div><audio src="' + esc(m.url) + '" controls preload="metadata"></audio>';
-    else { var di = docIcon(String(m.mime_type || '')); preview = '<div class="nml-pane__doc"><span style="color:' + di[1] + '">' + BasehimIcon(di[0], 'w-16 h-16') + '</span></div>'; }
+    else { var di = docIcon(String(m.mime_type || '')); preview = '<div class="nml-pane__doc"><span class="' + di[1] + '">' + BasehimIcon(di[0], 'w-16 h-16') + '</span></div>'; }
 
     var dims = (m.width && m.height) ? (m.width + ' × ' + m.height + ' px') : '—';
     var full = absUrl(m.url);

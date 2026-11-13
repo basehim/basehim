@@ -1,0 +1,9 @@
+/*
+ * Basehim colour palette (1.3.0): red, orange, yellow, green, blue, pink,
+ * purple, brown, black, white, and the statuses success, warning, danger and
+ * info. Link it from a theme:
+ *   <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/colors.css?v=<?= BASEHIM_VERSION ?>">
+ * The admin stylesheet already contains all of this. Built by
+ * tailwind.colors.config.js; see docs/ADMIN-UI.md, "Colour palette".
+ */
+@tailwind base;

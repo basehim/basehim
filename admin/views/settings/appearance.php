@@ -13,7 +13,7 @@ $picker = static function (string $name, string $url, string $box, string $empty
         . '<input type="url" id="' . $name . '_url" name="' . $name . '_url" class="bh-input" value="' . bh_set_e($url) . '" placeholder="Choose from the Media Library or paste a URL">'
         . '<div class="flex flex-wrap gap-2">'
         . '<button type="button" id="' . $name . '-select" class="bh-btn bh-btn--secondary bh-btn--sm">' . icon('photo', 'w-4 h-4') . 'Choose from Media</button>'
-        . '<button type="button" id="' . $name . '-remove" class="bh-btn bh-btn--ghost bh-btn--sm text-red-600 hover:!bg-red-50 hover:!text-red-700' . ($url ? '' : ' hidden') . '">' . icon('trash', 'w-4 h-4') . 'Remove</button>'
+        . '<button type="button" id="' . $name . '-remove" class="bh-btn bh-btn--ghost bh-btn--sm text-red-700 hover:!bg-red-50 hover:!text-red-700' . ($url ? '' : ' hidden') . '">' . icon('trash', 'w-4 h-4') . 'Remove</button>'
         . '</div>' . ($help !== '' ? '<p class="bh-help m-0">' . $help . '</p>' : '') . '</div></div>';
 };
 ?>

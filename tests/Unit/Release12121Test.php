@@ -23,7 +23,8 @@ test('admin header: one bar with search, New, View site, the bell and the accoun
     assert_contains("<?php if (\$can('manage_settings')): ?>", $layout, 'Settings only for those who may open it');
     assert_contains('/admin/assets/js/topbar.js', $layout);
     assert_false(str_contains($layout, '>Create</span>'), 'Create became New');
-    assert_contains('[data-bh-menu-btn] > svg:last-child', $layout, 'only a caret turns, never the bell\'s count');
+    // The layout's styles moved to the Tailwind source in 1.3.0.
+    assert_contains('[data-bh-menu-btn] > svg:last-child', (string) file_get_contents(BASEHIM_ROOT . '/admin/assets/css/src/tailwind.css'), 'only a caret turns, never the bell\'s count');
 });
 
 test('admin header: components in the compiled sheet, nothing inline', function () {

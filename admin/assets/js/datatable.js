@@ -1940,11 +1940,26 @@
 
             // The app's sticky top bar height — measured from the real element,
             // never assumed, so the controls sit exactly under it on any screen.
+            // 1.3.0: and every other sticky bar above the table on the page,
+            // such as a section's tabs (.bh-tabs) or an app's own bar marked
+            // data-bh-sticky. Before, a table under tabs slid its controls and
+            // column header behind them (CloudHim → Sites).
             function appBarHeight() {
                 var main = root.closest ? root.closest('.bh-main') : null;
-                var hdr = main ? main.querySelector(':scope > header') : null;
-                if (hdr) { try { if (getComputedStyle(hdr).position === 'sticky') return Math.round(hdr.getBoundingClientRect().height); } catch (e) {} }
-                return 0;
+                if (!main) return 0;
+                var bottom = 0;
+                main.querySelectorAll(':scope > header, .bh-tabs, [data-bh-sticky]').forEach(function (bar) {
+                    if (bar === root || bar.contains(root) || root.contains(bar)) return;
+                    if (!(bar.compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+                    try {
+                        var cs = getComputedStyle(bar);
+                        if (cs.position !== 'sticky' && cs.position !== 'fixed') return;
+                        if (cs.display === 'none' || cs.visibility === 'hidden') return;
+                        var top = parseFloat(cs.top) || 0;
+                        bottom = Math.max(bottom, top + bar.getBoundingClientRect().height);
+                    } catch (e) {}
+                });
+                return Math.round(bottom);
             }
             // Measure the offsets: the top-bar height, and the controls' height
             // WHEN SHRUNK (transitions suppressed), so the sticky header offset
@@ -1959,6 +1974,11 @@
                     // sub-pixel gap between the controls and the sticky header.
                     var h = topEl.getBoundingClientRect().height;
                     if (!hadStuck) topEl.classList.remove('is-stuck');
+                    // Settle the styles before transitions come back, or the
+                    // padding animates from the measured (stuck) size back to
+                    // normal on every load and resize: the table crept down
+                    // 24px in 4px steps after it appeared (1.3.0).
+                    void topEl.offsetHeight;
                     topEl.classList.remove('bh-dt-measuring');
                     root.style.setProperty('--dt-top-h', h + 'px');
                 } catch (e) {}
@@ -2046,16 +2066,22 @@
 
         renderHead(); renderBody(); renderFoot();
         remeasureSticky();   // initial wide-table overflow detection
+        root.classList.add('is-built');   // shows it (datatable.css, 1.3.0)
     }
 
     function init() {
         document.querySelectorAll('.bh-dt').forEach(function (root) {
             if (root.__dt || !root.querySelector('[data-dt-config]')) return;
             root.__dt = true;
-            try { new DataTable(root); } catch (e) { if (window.console) console.error('DataTable:', e); }
+            try { new DataTable(root); } catch (e) { root.classList.add('is-built'); if (window.console) console.error('DataTable:', e); }
         });
     }
+    // Build the tables already on the page now, while the browser is still
+    // parsing: this script comes right after the table's markup, so the
+    // finished table is what first paints. Waiting for DOMContentLoaded
+    // showed the plain server table first and then swapped it (1.3.0).
+    // Tables further down are built when the page has loaded.
+    init();
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
     window.BasehimDataTable = { init: init };
 })();

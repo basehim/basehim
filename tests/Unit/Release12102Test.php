@@ -34,14 +34,14 @@ test('data-table cards: on a phone-width card (< 420px) the values move under th
 });
 
 test('shared components: dialog, checkbox and stacking table live in ui.css; the layout opens dialogs and leaves stacking tables alone', function () {
-    $ui = r102_file('admin/assets/css/ui.css');
+    $ui = r102_file('admin/assets/css/src/ui.css'); // ui.css is built from it since 1.3.0
     foreach (['.bh-dialog {', '.bh-dialog__head {', '.bh-dialog__foot {', '.bh-check {', '.bh-check__input {', '.bh-checks {', '.bh-table {', '.bh-table--stack td[data-label]::before', '.bh-table--stack tr.hidden'] as $needle) {
         assert_contains($needle, $ui);
     }
     $l = r102_file('admin/views/layouts/app.php');
     assert_contains('window.bhDialog = function (target)', $l);
     assert_contains('[data-bh-dialog-open]', $l);
-    assert_contains('main table:not(.bh-table--stack) {', $l);
+    assert_contains('main table:not(.bh-table--stack) {', r102_file('admin/assets/css/src/tailwind.css'), 'the layout styles, in the Tailwind source since 1.3.0');
 });
 
 test('Users: core Data Table with search, role and status filters, sorts, Edit, and Delete only where the user may manage that person', function () {

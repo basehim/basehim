@@ -17,6 +17,24 @@
  *   text      what a card says wraps; nothing important is cut with "…"
  */
 @tailwind base;
+/* Native checkboxes, radios, sliders and progress bars take the person's
+   accent everywhere, app screens included (1.3.0; accent-color inherits). */
+@layer base {
+    html { accent-color: theme("backgroundColor.accent.600"); }
+    /* Jumping to an anchor, or Tab moving focus down the page, stops below
+       the sticky header (4rem), and below the section tabs too where a page
+       has them (1.3.0; it landed underneath them). */
+    html { scroll-padding-top: 5rem; }
+    html:has(.bh-tabs) { scroll-padding-top: 8.5rem; }
+    /* Text fields without a background class: the browser's default is white
+       in light mode but its own neutral grey in dark mode (color-scheme), off
+       the admin's slate. The surface colour instead, at zero specificity so
+       any class still wins (1.3.0). */
+    :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select, textarea) {
+        background-color: theme("backgroundColor.white");
+    }
+}
+
 @tailwind components;
 
 /* ═══ Core components ═════════════════════════════════════════════════════ */
@@ -155,19 +173,34 @@
 /* ── Notes inside a card: --info (neutral) and --warn. ─────────────────── */
 .bh-note { @apply flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-relaxed text-slate-700; }
 .bh-note > svg { @apply mt-0.5 h-4 w-4 flex-none text-slate-400; }
-.bh-note--warn { @apply border-amber-200 bg-amber-50 text-amber-900; }
-.bh-note--warn > svg { @apply text-amber-500; }
+/* Status notes (1.3.0): the palette's fixed status colours, not the accent. */
+.bh-note--warn { @apply border-warning-subtle bg-warning-subtle text-warning; }
+.bh-note--warn > svg { @apply text-warning; }
+.bh-note--info { @apply border-info-subtle bg-info-subtle text-info; }
+.bh-note--info > svg { @apply text-info; }
+.bh-note--success { @apply border-success-subtle bg-success-subtle text-success; }
+.bh-note--success > svg { @apply text-success; }
+.bh-note--danger { @apply border-danger-subtle bg-danger-subtle text-danger; }
+.bh-note--danger > svg { @apply text-danger; }
 .bh-note code, .bh-set code { @apply rounded bg-slate-100 px-1 py-px text-[0.75rem] text-slate-700; }
-.bh-note--warn code { @apply bg-amber-100/70 text-amber-900; }
+/* Code in a note sits on the card's surface, half see-through: lighter than
+   the tint in light mode, darker in dark, so its text keeps 4.5:1. */
+.bh-note--warn code, .bh-note--info code, .bh-note--success code, .bh-note--danger code { @apply bg-white/60; }
+.bh-note--warn code { @apply text-warning; }
+.bh-note--info code { @apply text-info; }
+.bh-note--success code { @apply text-success; }
+.bh-note--danger code { @apply text-danger; }
 
 /* ── Badges ───────────────────────────────────────────────────────────── */
 .bh-badge { @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold leading-snug; }
 .bh-badge svg { @apply h-3.5 w-3.5; }
 .bh-badge--gray { @apply bg-slate-100 text-slate-600; }
-.bh-badge--blue { @apply bg-blue-50 text-blue-700; }
-.bh-badge--green { @apply bg-emerald-50 text-emerald-700; }
-.bh-badge--amber { @apply bg-amber-50 text-amber-700; }
-.bh-badge--red { @apply bg-red-50 text-red-700; }
+/* Blue, green, amber and red badges are the statuses (info, success,
+   warning, danger), fixed whatever the accent (1.3.0). */
+.bh-badge--blue { @apply bg-info-subtle text-info; }
+.bh-badge--green { @apply bg-success-subtle text-success; }
+.bh-badge--amber { @apply bg-warning-subtle text-warning; }
+.bh-badge--red { @apply bg-danger-subtle text-danger; }
 .bh-badge--violet { @apply bg-violet-50 text-violet-700; }
 .bh-badge--indigo { @apply bg-indigo-50 text-indigo-700; }
 
@@ -183,6 +216,12 @@
    docs/DASHBOARD-WIDGETS.md. Built by admin/assets/js/dashboard.js.        */
 
 .bh-dash { @apply text-slate-700; --dash-gap: 1.25rem; }
+/* Phones (1.3.0): the page's gutter, the card and the tile each had their
+   own padding, so cards sat 20px apart and a tile's content got a third of
+   the screen. Cards sit as far apart as the screen's side gutter (main's
+   px-4), so the spacing reads even all round; stat tiles drop their own
+   boxes (below). */
+@media (max-width: 639px) { .bh-dash { --dash-gap: theme("spacing.4"); } }
 .bh-dash-sr { @apply sr-only; }
 .bh-dash-ico { @apply inline-flex flex-none; }
 .bh-dash-ico svg { @apply h-4 w-4; }
@@ -190,7 +229,8 @@
 /* ── Greeting (1.2.80): a light panel with the person's picture, the
       date, a time-of-day hello and the page's main buttons. ────────────── */
 .bh-dash-head {
-    @apply relative mb-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5;
+    /* Below it, the same space as between the cards (--dash-gap), 1.3.0. */
+    @apply relative mb-[var(--dash-gap)] flex flex-wrap items-center justify-between gap-x-6 gap-y-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5;
     @apply bg-gradient-to-r from-accent-50/80 via-white to-white;
 }
 /* A soft glow behind the picture. */
@@ -303,6 +343,9 @@
 .bh-dcard__body { @apply min-h-0 flex-1 p-4 text-sm sm:p-5; }
 .bh-dcard.is-collapsed .bh-dcard__body { @apply hidden; }
 .bh-dcard.is-refreshing .bh-dcard__refresh svg { @apply animate-spin; }
+/* A card waiting for its data keeps the height it had last time (dashboard.js,
+   1.3.0), so the grid doesn't jump when the data comes. */
+.bh-dcard.is-loading { min-height: var(--bh-dcard-h, 0px); }
 /* Footer: a summary strip, then a line of text and a link. */
 .bh-dcard__summary { @apply mt-4 flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5; }
 .bh-dcard__summary-icon { @apply grid h-7 w-7 flex-none place-items-center rounded-full bg-accent-100 text-accent-600; }
@@ -355,6 +398,18 @@
     .bh-dstat:last-child:nth-child(odd), .bh-dstat--wide { @apply col-auto; }
     .bh-dview--stat:has(> :nth-child(7)) { grid-template-columns: repeat(4, minmax(0, 1fr)); @apply grid-flow-row; }
 }
+/* Phones (1.3.0): no box inside a box. The card's body gives up its padding
+   and the tiles become cells of one grid divided by hairlines (the gap shows
+   the line colour), as the Analytics card lays out its figures. Each cell
+   keeps the card's own 1rem inside, so numbers line up with its heading,
+   and gets about 20% more width than a tile had. */
+@media (max-width: 639px) {
+    .bh-dcard__body:has(> .bh-dview--stat) { @apply p-0; }
+    .bh-dview--stat { @apply gap-px overflow-hidden rounded-b-[calc(1rem-1px)] bg-slate-100; }
+    .bh-dview--stat > .bh-dstat { @apply rounded-none border-0 bg-white p-4; }
+    .bh-dview--stat > a.bh-dstat:hover { @apply bg-slate-50 shadow-none; }
+    .bh-dview--stat > a.bh-dstat:focus-visible { @apply ring-inset; }
+}
 /* Every tile looks the same: a quiet slate panel, an accent icon square, the
    number, and one line of context. Colour is kept for what needs a look. */
 .bh-dstat {
@@ -368,7 +423,7 @@ a.bh-dstat:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
 .bh-dstat__top > .bh-dstat__go, .bh-dstat__top > .bh-dstat__people { @apply ml-auto; }
 /* Soft square (1.2.128): a light accent square and an accent icon. The solid
    square made the whole section read as blue next to the tile charts. */
-.bh-dstat__icon { @apply grid h-8 w-8 flex-none place-items-center rounded-[9px] bg-accent-50 text-accent-600; }
+.bh-dstat__icon { @apply grid h-8 w-8 flex-none place-items-center rounded-[9px] bg-gradient-to-br from-accent-50 to-palette-2/20 text-accent-600; }
 .bh-dstat__icon svg { @apply h-[18px] w-[18px]; }
 /* Wraps between words only; a word never splits. */
 .bh-dstat__label { @apply flex-1 self-center text-[0.8125rem] font-semibold leading-4 text-slate-900 [overflow-wrap:break-word]; }
@@ -380,23 +435,24 @@ a.bh-dstat:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
 .bh-dstat__foot { @apply mt-1.5 flex min-w-0 items-end justify-between gap-2; }
 .bh-dstat__hint { @apply min-w-0 text-xs leading-4 text-slate-500 [overflow-wrap:anywhere]; }
 /* A tile's own chart (1.2.128), at the foot of the tile so charts line up
-   across a row. Accent shades only; the newest point or bar is the strongest. */
+   across a row. The accent and its palette; the newest point or bar is the strongest. */
 .bh-dstat__chart { @apply relative mt-auto pt-3; }
 .bh-dstat__plot { @apply relative block h-10; }
 .bh-dstat__plot svg { @apply block h-full w-full overflow-visible; }
-.bh-dstat__area { @apply fill-accent-500/10; }
+.bh-dstat__area { @apply fill-palette-2/15; }
 .bh-dstat__line { @apply fill-none stroke-accent-600; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.bh-dstat__dot { @apply absolute right-0 h-2 w-2 -translate-y-1/2 translate-x-1/2 rounded-full bg-accent-600 ring-2 ring-white; }
+.bh-dstat__dot { @apply absolute right-0 h-2 w-2 -translate-y-1/2 translate-x-1/2 rounded-full bg-palette-2 ring-2 ring-white; }
 .bh-dstat__hits { @apply absolute inset-0 flex; }
 .bh-dstat__hits > span { @apply flex-1; }
 .bh-dstat__chart--bars { @apply flex h-[3.25rem] items-end gap-[3px]; }
 .bh-dstat__chart--bars > span { @apply flex-1 rounded-t-[3px] bg-accent-200; }
-.bh-dstat__chart--bars > span.is-last { @apply bg-accent-600; }
+.bh-dstat__chart--bars > span.is-last { @apply bg-gradient-to-t from-accent-600 to-palette-2; }
 .bh-dstat__split { @apply flex h-2 w-full gap-px overflow-hidden rounded-full bg-slate-100; }
-.bh-dstat__seg--1 { @apply bg-accent-600; }
-.bh-dstat__seg--2 { @apply bg-accent-400; }
-.bh-dstat__seg--3 { @apply bg-accent-200; }
-.bh-dstat__seg--4 { @apply bg-slate-300; }
+/* Shares use the accent's four palette colours. */
+.bh-dstat__seg--1 { @apply bg-palette-1; }
+.bh-dstat__seg--2 { @apply bg-palette-2; }
+.bh-dstat__seg--3 { @apply bg-palette-3; }
+.bh-dstat__seg--4 { @apply bg-palette-4; }
 .bh-dstat__legend { @apply mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] leading-4 text-slate-600; }
 .bh-dstat__key { @apply inline-flex items-center gap-1.5 whitespace-nowrap; }
 .bh-dstat__swatch { @apply h-2 w-2 flex-none rounded-sm; }
@@ -407,15 +463,18 @@ a.bh-dstat:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
 .bh-dstat__spark span { @apply w-1 rounded-full; }
 .bh-dstat__spark span:nth-child(1) { @apply h-2 bg-accent-200; }
 .bh-dstat__spark span:nth-child(2) { @apply h-3 bg-accent-300; }
-.bh-dstat__spark span:nth-child(3) { @apply h-4 bg-accent-500; }
-/* The pill beside the number: a trend (accent up, neutral down), or a count
-   that needs attention (solid accent). */
+.bh-dstat__spark span:nth-child(3) { @apply h-4 bg-palette-2; }
+/* The pill beside the number: a trend (success up, danger down: the same
+   whatever the accent), or a count that needs attention (solid warning or
+   danger). Violet stays the accent: it marks, it doesn't judge. */
 .bh-dstat__pill { @apply inline-flex flex-none items-center gap-0.5 whitespace-nowrap rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[0.6875rem] font-semibold leading-4 text-slate-600; }
 .bh-dstat__pill svg { @apply h-3 w-3; }
-.bh-dstat__pill--up, .bh-dstat__pill--blue, .bh-dstat__pill--green, .bh-dstat__pill--violet { @apply bg-accent-50 text-accent-700; }
-.bh-dstat__pill--down { @apply bg-slate-200/70 text-slate-600; }
-.bh-dstat__pill--amber { @apply bg-accent-600 text-white; }
-.bh-dstat__pill--red { @apply bg-red-600 text-white; }
+.bh-dstat__pill--up, .bh-dstat__pill--green { @apply bg-success-subtle text-success; }
+.bh-dstat__pill--down { @apply bg-danger-subtle text-danger; }
+.bh-dstat__pill--blue { @apply bg-info-subtle text-info; }
+.bh-dstat__pill--violet { @apply bg-accent-50 text-accent-700; }
+.bh-dstat__pill--amber { @apply bg-warning text-on-warning; }
+.bh-dstat__pill--red { @apply bg-danger text-on-danger; }
 .bh-dstat__go { @apply grid h-6 w-6 flex-none place-items-center rounded-full border border-slate-200 bg-white text-slate-500; }
 .bh-dstat__go svg { @apply h-3.5 w-3.5; }
 a.bh-dstat:hover .bh-dstat__go { @apply border-accent-200 text-accent-600; }
@@ -436,15 +495,16 @@ a.bh-dstat:hover .bh-dstat__go { @apply border-accent-200 text-accent-600; }
 @container (max-width: 9.5rem) {
     .bh-dstat__pill svg { @apply hidden; }
 }
-/* Tones. The colour names apps already use (blue, green, violet, indigo,
-   amber) all mean "the accent" now; amber still marks its hint, and red is
-   kept for a tile that reports a fault. */
+/* Tones. Blue, green, violet, indigo and slate tiles look alike (the accent
+   draws them). Amber and red judge: amber's hint ("2 waiting for review")
+   is the warning colour, red a tile reporting a fault in danger, the same
+   whatever the accent (1.3.0). */
 .bh-dstat--blue, .bh-dstat--green, .bh-dstat--violet, .bh-dstat--indigo, .bh-dstat--slate { @apply border-slate-200; }
-.bh-dstat--amber .bh-dstat__hint { @apply font-medium text-accent-700; }
-.bh-dstat--red { @apply border-red-200 bg-red-50/50; }
-.bh-dstat--red .bh-dstat__icon { @apply bg-red-50 text-red-600; }
-.bh-dstat--red .bh-dstat__spark span { @apply bg-red-400; }
-.bh-dstat--red .bh-dstat__hint { @apply text-red-700; }
+.bh-dstat--amber .bh-dstat__hint { @apply font-medium text-warning; }
+.bh-dstat--red { @apply border-danger-subtle bg-danger-subtle/50; }
+.bh-dstat--red .bh-dstat__icon { @apply bg-danger-subtle text-danger; }
+.bh-dstat--red .bh-dstat__spark span { @apply bg-danger; }
+.bh-dstat--red .bh-dstat__hint { @apply text-danger; }
 .bh-dstat__trend { @apply text-xs font-semibold; }
 
 /* ── View: list ───────────────────────────────────────────────────────── */
@@ -517,9 +577,9 @@ a.bh-dfeed__text:hover { @apply text-accent-600; }
 .bh-dstatus { @apply m-0 list-none p-0; }
 .bh-dstatus__row { @apply flex items-start gap-2.5 border-t border-slate-100 py-2 first:border-t-0; }
 .bh-dstatus__row > .bh-dash-ico { @apply mt-0.5; }
-.bh-dstatus__row.is-ok > .bh-dash-ico { @apply text-accent-600; }
-.bh-dstatus__row.is-warn > .bh-dash-ico { @apply text-amber-500; }
-.bh-dstatus__row.is-error > .bh-dash-ico { @apply text-red-600; }
+.bh-dstatus__row.is-ok > .bh-dash-ico { @apply text-success; }
+.bh-dstatus__row.is-warn > .bh-dash-ico { @apply text-warning; }
+.bh-dstatus__row.is-error > .bh-dash-ico { @apply text-danger; }
 .bh-dstatus__row.is-unknown > .bh-dash-ico { @apply text-slate-400; }
 .bh-dstatus__text { @apply flex min-w-0 flex-1 flex-wrap justify-between gap-x-3; }
 .bh-dstatus__label { @apply text-slate-900 no-underline; }
@@ -557,8 +617,8 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
 .bh-dstate__title { @apply m-0 font-semibold text-slate-900; }
 .bh-dstate__text { @apply m-0 max-w-[22rem] text-[0.8125rem] leading-normal text-slate-500; }
 .bh-dstate .bh-btn { @apply mt-2; }
-.bh-dstate--error > .bh-dash-ico { @apply bg-red-50 text-red-600; }
-.bh-dstate--info > .bh-dash-ico { @apply bg-accent-50 text-accent-600; }
+.bh-dstate--error > .bh-dash-ico { @apply bg-danger-subtle text-danger; }
+.bh-dstate--info > .bh-dash-ico { @apply bg-info-subtle text-info; }
 
 /* ── Customize mode on the cards ──────────────────────────────────────── */
 .bh-dash.is-editing .bh-dcard { @apply border-dashed border-slate-300 shadow-none; }
@@ -802,7 +862,7 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
 
 /* Categories: one scrolling row of chips. */
 .bh-mk-filters { @apply mb-5 flex items-center gap-3; }
-.bh-mk-chips { @apply -mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 py-1; scrollbar-width: none; }
+.bh-mk-chips { @apply -mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 py-1; scrollbar-width: none; --bh-strip-edge: .25rem; }
 .bh-mk-chips::-webkit-scrollbar { display: none; }
 .bh-mk-chip { @apply inline-flex h-8 flex-none items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 text-[0.8125rem] font-medium text-slate-600 transition-colors duration-150; }
 .bh-mk-chip:hover { @apply border-slate-300 text-slate-900; }
@@ -1098,7 +1158,7 @@ a.bh-dstatus__label:hover { @apply text-accent-600; }
 .bh-search-input:focus { @apply border-accent-500 ring-[3px] ring-accent-500/20; }
 .bh-search-clear { @apply absolute inset-y-0 right-1.5 flex cursor-pointer items-center border-0 bg-transparent px-1 text-slate-400; }
 .bh-search-clear:hover { @apply text-slate-600; }
-.bh-search-clear.hidden { display: none; }   /* (can't @apply the class the selector names) */
+.bh-search-clear[class~="hidden"] { display: none; }   /* attribute, not .hidden: Tailwind copies rules naming .hidden into every @apply hidden */
 /* The "/" shortcut, shown until the field is in use; not on touch screens. */
 .bh-search-kbd { @apply pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-b-2 border-slate-200 bg-slate-50 px-1.5 py-0.5 font-sans text-[0.6875rem] font-semibold leading-none text-slate-500; }
 .bh-search-input:focus ~ .bh-search-kbd, .bh-search-input:not(:placeholder-shown) ~ .bh-search-kbd { @apply hidden; }
@@ -1178,7 +1238,41 @@ a.bh-foot-card:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
 
 /* Panels: the New and account menus, and the notifications panel. */
 .bh-top-panel { @apply absolute right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10; }
-.bh-top-panel--menu { @apply w-56 py-1.5; }
+.bh-top-panel--menu { @apply w-64 py-1.5; }
+
+/* Appearance, in the account menu (1.3.0). */
+.bh-appearance { @apply flex flex-col gap-2 px-3 pb-2.5 pt-1; }
+.bh-appearance .bh-top-panel__label { @apply px-0 pb-0; }
+.bh-appearance__modes { @apply flex w-full gap-1 p-1; }
+.bh-appearance__modes > button { @apply flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-1 rounded-md px-2 py-2 text-xs font-medium leading-4 text-slate-600; }
+.bh-appearance__modes > button:hover { @apply text-slate-900; }
+.bh-appearance__modes > button[aria-checked="true"] { @apply bg-white text-accent-700 shadow-sm shadow-slate-900/10; }
+.bh-appearance__modes > button:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
+.bh-appearance__accent { @apply flex min-h-[2.75rem] w-full items-center justify-between gap-3 rounded-lg px-3 text-sm text-slate-700; }
+.bh-appearance__accent:hover { @apply bg-slate-50; }
+.bh-appearance__accent:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
+.bh-appearance__current { @apply inline-flex items-center gap-2 text-slate-500; }
+.bh-appearance__accent[aria-expanded="true"] .bh-appearance__current svg { @apply rotate-180; }
+.bh-appearance__current svg { @apply transition-transform duration-200 motion-reduce:transition-none; }
+/* The accent list opens and closes smoothly: its row grows from 0fr to 1fr.
+   While closed it gives back the gap above it and is inert, so its buttons can't be reached by Tab. */
+.bh-appearance__drawer { @apply -mt-2 grid grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity,margin] duration-200 ease-out motion-reduce:transition-none; }
+.bh-appearance__accent[aria-expanded="true"] + .bh-appearance__drawer { @apply mt-0 grid-rows-[1fr] opacity-100; }
+.bh-appearance__list { @apply flex min-h-0 flex-col gap-0.5 overflow-hidden; }
+.bh-appearance__list > button { @apply flex min-h-[2.75rem] items-center gap-3 rounded-lg px-3 text-left text-sm text-slate-700; }
+.bh-appearance__list > button:hover { @apply bg-slate-50; }
+.bh-appearance__list > button:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
+.bh-appearance__check { @apply ml-auto text-accent-600 opacity-0; }
+.bh-appearance__list > button[aria-checked="true"] { @apply font-semibold text-slate-900; }
+.bh-appearance__list > button[aria-checked="true"] .bh-appearance__check { @apply opacity-100; }
+/* An accent's colour: the element names its accent (data-accent), so it
+   shows that palette whatever the page's own accent is. */
+/* Two overlapping circles: the palette's main colour, and its second colour
+   tucked behind it. */
+.bh-swatch { @apply relative inline-flex h-4 w-[1.625rem] flex-none; }
+.bh-swatch::before, .bh-swatch::after { @apply absolute top-0 h-4 w-4 rounded-full ring-1 ring-inset ring-black/10; content: ""; }
+.bh-swatch::after { @apply left-2.5 bg-palette-2; }
+.bh-swatch::before { @apply left-0 z-10 bg-palette-1 shadow-[0_0_0_1.5px] shadow-white; }
 .bh-top-panel__label { @apply px-3 pb-1 pt-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-400; }
 .bh-top-panel__who { @apply mb-1 flex flex-col border-b border-slate-100 px-3 pb-2.5 pt-1.5; }
 .bh-top-panel__name { @apply truncate text-sm font-semibold text-slate-900; }
@@ -1283,3 +1377,604 @@ a.bh-foot-card:focus-visible { @apply outline-none ring-2 ring-accent-500/40; }
 
 
 @tailwind utilities;
+
+
+/* ==========================================================================
+   Admin layout (1.3.0): sidebar, tabs, toasts, dialogs, menus, tooltips.
+   Moved here from the <style> block in admin/views/layouts/app.php so its
+   colours come from the theme and follow light/dark mode and the accent.
+   Outside @layer: always emitted, whatever the content scan finds.
+   ========================================================================== */
+/* Inter comes from Google Fonts with display=swap: text paints in a local
+   font first and switches when Inter arrives. "Inter Fallback" is Arial
+   scaled to Inter's measurements (size, ascent, descent), so the switch
+   barely moves anything instead of reflowing every line (1.3.0). */
+@font-face { font-family: "Inter Fallback"; src: local("Arial"), local("ArialMT"); size-adjust: 107.4%; ascent-override: 90.2%; descent-override: 22.48%; line-gap-override: 0%; }
+body { font-family: 'Inter', 'Inter Fallback', system-ui, sans-serif; }
+
+/* ===== Global responsive polish (applies to every admin page) ===== */
+/* Any wide data table becomes horizontally scrollable on small screens
+   instead of clipping or forcing the whole page to scroll sideways. */
+@media (max-width: 767px) {
+    /* Except a table marked to stack into labelled rows (.bh-table--stack, 1.2.102, ui.css). */
+    main table:not(.bh-table--stack) { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+    /* Let cards/panels use the full width and tighten oversized headings. */
+    main h2 { font-size: 1.125rem; }
+    /* attribute, not .grid: Tailwind copies rules naming .grid into every @apply grid (1.3.0) */
+    main [class~="grid"] { gap: 1rem; }
+}
+/* Consistent focus ring for keyboard users across inputs/buttons. */
+main :is(input, select, textarea):focus-visible {
+    outline: 2px solid theme("colors.accent.600 / 50%"); outline-offset: 1px;
+}
+
+/* ===== Consistent button system =====
+   Opt-in component classes so buttons look identical across every page.
+   Existing utility-styled buttons keep working; new/updated markup can
+   use these for a single source of truth. */
+.nbtn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .5rem .9rem; border-radius: .625rem; font-size: .875rem; font-weight: 500;
+    line-height: 1.25rem; border: 1px solid transparent; cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+    white-space: nowrap; text-decoration: none;
+}
+.nbtn:focus-visible { outline: 2px solid theme("colors.accent.600 / 50%"); outline-offset: 2px; }
+.nbtn:disabled { opacity: .55; cursor: not-allowed; }
+.nbtn-sm { padding: .35rem .7rem; font-size: .8125rem; border-radius: .5rem; }
+.nbtn-primary { background: theme("backgroundColor.accent.600"); color: theme("textColor.white"); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.nbtn-primary:hover { background: theme("backgroundColor.accent.700"); }
+.nbtn-secondary { background: theme("backgroundColor.white"); color: theme("textColor.slate.700"); border-color: theme("borderColor.slate.200"); }
+.nbtn-secondary:hover { background: theme("backgroundColor.slate.50"); border-color: theme("borderColor.slate.300"); }
+.nbtn-danger { background: theme("backgroundColor.red.600"); color: theme("textColor.white"); }
+.nbtn-danger:hover { background: theme("backgroundColor.red.700"); }
+.nbtn-ghost { background: transparent; color: theme("textColor.slate.600"); }
+.nbtn-ghost:hover { background: theme("backgroundColor.slate.100"); }
+
+/* Consistent card + panel surface used across pages.
+   .nbtn* and .ncard are deprecated (1.2.102): core no longer uses them;
+   kept for apps that do. Use .bh-btn and .bh-card. */
+.ncard { background: theme("backgroundColor.white"); border: 1px solid theme("borderColor.slate.200"); border-radius: .75rem; }
+
+/* ===== Mobile off-canvas sidebar (< lg) ===== */
+@media (max-width: 1023px) {
+    .bh-sidebar {
+        transform: translateX(-100%);
+        transition: transform .25s ease;
+        box-shadow: 0 10px 40px rgba(2, 6, 23, .18);
+        width: 16rem !important;
+    }
+    .bh-sidebar.is-open { transform: translateX(0); }
+    /* On mobile the collapse feature is irrelevant — always show full. */
+    .bh-sidebar.is-collapsed { width: 16rem !important; }
+    .bh-sidebar.is-collapsed .bh-hide-collapsed { display: block !important; }
+    .bh-sidebar.is-collapsed .bh-nav-label { display: inline !important; }
+    .bh-main { margin-left: 0 !important; }
+    #bh-collapse-toggle { display: none; }
+}
+#bh-backdrop {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, .4);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s ease; z-index: 15;
+}
+#bh-backdrop.is-open { opacity: 1; visibility: visible; }
+@media (min-width: 1024px) { #bh-backdrop { display: none; } }
+
+/* Smoother off-canvas easing (cubic curve for a natural slide). */
+@media (max-width: 1023px) {
+    .bh-sidebar { transition: transform .32s cubic-bezier(.4, 0, .2, 1); }
+}
+
+/* ===== Reusable modal system (consistent blur overlay everywhere) =====
+   Any element with class "bh-modal" is a full-screen overlay; add
+   "is-open" to show it. Its child ".bh-modal-box" is the dialog. */
+.bh-modal {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, .45);
+    -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
+    opacity: 0; visibility: hidden; transition: opacity .22s ease, visibility .22s ease;
+}
+.bh-modal.is-open { opacity: 1; visibility: visible; }
+.bh-modal-box {
+    background: theme("backgroundColor.white"); border-radius: 16px; width: 100%; max-width: 30rem;
+    max-height: calc(100vh - 2rem); overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(2, 6, 23, .28);
+    transform: translateY(8px) scale(.98); transition: transform .22s ease;
+}
+.bh-modal.is-open .bh-modal-box { transform: translateY(0) scale(1); }
+
+/* App brand icon in the sidebar: fit the glyph box without distortion. */
+.bh-nav-appicon { object-fit: contain; border-radius: 5px; }
+/* Sidebar sections, items, sub-items, search and footer: core components
+   in admin/assets/css/src/tailwind.css ("Sidebar", 1.2.119). */
+
+
+/* ===== Section tabs (Settings / API / System) =====
+   One component so every section's tabs look and behave identically. */
+.bh-tabs {
+    position: sticky;
+    top: 4rem;                 /* sits directly under the 4rem header */
+    z-index: 9;                /* below the header (z-10), above content */
+    display: flex;
+    gap: .25rem;
+    /* Bleed sideways to the edges of main's padding so the sticky bar spans
+       the full width and no content peeks past it. No negative top margin —
+       the bar sits below a page heading, not at the top of <main>. */
+    margin: 0 -1rem 1.25rem;
+    padding: .5rem 1rem 0;
+    /* The page colour; frosted glass where the browser can blur, like the
+       data table's sticky header (1.3.0): content passing under the stuck
+       bar shows through, softened, rather than being cut off. */
+    background: theme("backgroundColor.slate.50");
+    border-bottom: 1px solid theme("borderColor.slate.200");
+    /* overflow-x:auto alone promotes overflow-y from visible to auto, which
+       is what produced the second (vertical) scrollbar. Pinning y to hidden
+       keeps a single horizontal scroll. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+}
+.bh-tabs::-webkit-scrollbar { display: none; }
+.bh-tabs { @apply supports-[backdrop-filter]:bg-slate-50/80 supports-[backdrop-filter]:backdrop-blur-md supports-[backdrop-filter]:backdrop-saturate-150; }
+/* Edge fades and arrows: the shared scroll strip (data-bh-strip, below). */
+@media (min-width: 640px) {
+    .bh-tabs { margin: 0 -1.5rem 1.5rem; padding: .625rem 1.5rem 0; }
+}
+
+/* Comments' classic status filter: a scroll strip on phones. */
+.bh-status-strip { @apply -mx-4 mb-4 px-4 sm:mx-0 sm:px-0; --bh-strip-edge: 1rem; }
+@media (min-width: 640px) { .bh-status-strip { --bh-strip-edge: 0px; } }
+
+/* ===== Scroll strips (1.3.0) =====
+   A row that scrolls sideways with its scrollbar hidden: the section tabs,
+   the Marketplace's categories, a status filter, any [data-bh-strip].
+   scroll-strip.js adds an arrow at each end. With a mouse there was no way
+   to reach items past the edge except a sideways wheel. Each arrow sticks
+   to its edge of the strip (position: sticky inside the scroller), overlaps
+   the items (negative margin, so nothing shifts when it appears) and shows
+   only while there is more that way. Touch screens keep swiping and the
+   edge fades. A strip sets two things:
+     --bh-strip-fade  the colour behind it, which the arrow fades from;
+     --bh-strip-edge  its side padding, so the arrow sits at the very edge. */
+[data-bh-strip] { @apply overflow-x-auto overflow-y-hidden; scrollbar-width: none; overscroll-behavior-x: contain; --bh-strip-fade: rgb(var(--bh-page)); --bh-strip-edge: 0px; }
+[data-bh-strip]::-webkit-scrollbar { display: none; }
+[data-bh-strip].has-more-right { -webkit-mask-image: linear-gradient(to right, #000 88%, transparent 100%); mask-image: linear-gradient(to right, #000 88%, transparent 100%); }
+[data-bh-strip].has-more-left { -webkit-mask-image: linear-gradient(to left, #000 88%, transparent 100%); mask-image: linear-gradient(to left, #000 88%, transparent 100%); }
+[data-bh-strip].has-more-left.has-more-right { -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); }
+.bh-strip__arrow { display: none; }
+@media (hover: hover) and (pointer: fine) {
+    [data-bh-strip].has-more-left, [data-bh-strip].has-more-right { -webkit-mask-image: none; mask-image: none; }
+    .bh-strip__arrow {
+        @apply sticky z-[1] w-14 flex-none place-items-center self-stretch text-slate-500 hover:text-slate-900;
+    }
+    .bh-strip__arrow svg { @apply box-content h-4 w-4 rounded-full border border-slate-200 bg-white p-1 shadow-sm; }
+    .bh-strip__arrow:hover svg { @apply border-slate-300; }
+    .bh-strip__arrow--left { @apply -mr-14 justify-items-start pl-1.5; left: calc(-1 * var(--bh-strip-edge)); background: linear-gradient(to right, var(--bh-strip-fade) 55%, transparent); }
+    .bh-strip__arrow--right { @apply -ml-14 justify-items-end pr-1.5; right: calc(-1 * var(--bh-strip-edge)); background: linear-gradient(to left, var(--bh-strip-fade) 55%, transparent); }
+    [data-bh-strip].has-more-left > .bh-strip__arrow--left, [data-bh-strip].has-more-right > .bh-strip__arrow--right { display: grid; }
+}
+.bh-tabs { --bh-strip-edge: 1rem; }
+/* Tabs (1.3.0): no faded edges. Items run to the edge of the glass bar; with
+   a mouse each arrow sits on a pane of the same glass, which tabs slide
+   under, instead of a fade. */
+.bh-tabs.has-more-left, .bh-tabs.has-more-right { -webkit-mask-image: none; mask-image: none; }
+@media (hover: hover) and (pointer: fine) {
+    .bh-tabs .bh-strip__arrow { @apply bg-slate-50 supports-[backdrop-filter]:bg-slate-50/80 supports-[backdrop-filter]:backdrop-blur-md; }
+}
+/* Centred on the tab's label, not its whole box: a tab has .5rem above the
+   label and .625rem + its 2px underline below, so the label sits half that
+   difference above the middle. The arrow fills the row's height (it never
+   makes the bar taller: copying the tab's padding did, by 4px, so every page
+   with tabs jumped when the arrows appeared) and is lifted by that much. */
+.bh-tabs .bh-strip__arrow { margin-bottom: -1px; padding-top: 0; padding-bottom: calc(.625rem + 2px - .5rem); }
+@media (min-width: 640px) { .bh-tabs { --bh-strip-edge: 1.5rem; } }
+
+.bh-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    flex: 0 0 auto;                /* never squash a tab */
+    padding: .5rem .75rem .625rem;
+    border: 0;
+    background: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;           /* overlap the container's own border */
+    font-size: .875rem;
+    font-weight: 500;
+    color: theme("textColor.slate.500");
+    white-space: nowrap;
+    cursor: pointer;
+    border-radius: .375rem .375rem 0 0;
+    transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+}
+.bh-tab:hover { color: theme("textColor.slate.900"); background: theme("backgroundColor.slate.100"); }
+.bh-tab:focus-visible { outline: 2px solid theme("colors.accent.300"); outline-offset: -2px; }
+/* The icon in the label's colour and weight (1.3.0): it was faded to 70% and
+   drawn with a thinner stroke, so it read lighter than its label. Stroke 1.75
+   matches the label's medium weight, 2 the active tab's semibold. */
+.bh-tab svg { flex-shrink: 0; color: currentColor; stroke-width: 1.75; }
+
+.bh-tab.is-active {
+    color: theme("textColor.accent.600");
+    border-bottom-color: theme("borderColor.accent.600");
+    font-weight: 600;
+}
+.bh-tab.is-active svg { stroke-width: 2; }
+.bh-tab.is-active:hover { background: transparent; }
+
+/* A tab opening a destructive panel — "Danger zone". Reads as a normal tab
+   until you reach for it, so it does not shout from a page you are only
+   reading. */
+.bh-tab-danger:hover { color: theme("textColor.red.600"); background: theme("backgroundColor.red.50"); }
+.bh-tab-danger.is-active { color: theme("textColor.red.600"); border-bottom-color: theme("borderColor.red.600"); }
+.bh-tab-danger.is-active:hover { background: theme("backgroundColor.red.50"); }
+
+/* Sidebar collapse/expand shifts the rail; keep the sticky bar aligned. */
+@media (max-width: 1023px) {
+    .bh-tabs { top: 4rem; }
+}
+
+/* ===== Collapsible sidebar ===== */
+/* Width (desktop collapse) and transform (mobile drawer) together. This rule
+   comes after the mobile one; with width alone it replaced the drawer's
+   transform transition, and the drawer jumped open and shut. */
+.bh-sidebar { transition: width .2s ease, transform .32s cubic-bezier(.4, 0, .2, 1); }
+@media (max-width: 1023px) { .bh-sidebar { will-change: transform; } }
+
+/* Admin UI components (.bh-btn, .bh-card, .bh-label/.bh-input, .bh-badge,
+   .bh-empty) are Tailwind components since 1.2.77: admin/assets/css/src/tailwind.css,
+   compiled into tailwind.min.css. See docs/ADMIN-UI.md. */
+
+/* Toasts (bhToast) */
+.bh-toasts { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 70; display: grid; gap: .5rem; justify-items: end; pointer-events: none; }
+.bh-toast {
+    pointer-events: auto; display: flex; align-items: flex-start; gap: .6rem; max-width: min(24rem, calc(100vw - 2rem));
+    padding: .7rem .9rem; border-radius: .65rem; background: theme("backgroundColor.slate.900"); color: theme("textColor.slate.50"); font-size: .875rem; line-height: 1.45;
+    box-shadow: 0 14px 34px -14px rgba(2, 6, 23, .55); cursor: pointer; animation: bh-toast-in .18s cubic-bezier(.2, .7, .3, 1);
+}
+.bh-toast::before { content: ""; flex: none; width: .5rem; height: .5rem; margin-top: .4rem; border-radius: 50%; background: theme("backgroundColor.accent.400"); }
+.bh-toast--success::before { background: theme("backgroundColor.success.DEFAULT"); }
+.bh-toast--error { background: theme("backgroundColor.red.900"); }
+.bh-toast--error::before { background: theme("backgroundColor.red.300"); }
+.bh-toast--warning::before { background: theme("backgroundColor.warning.DEFAULT"); }
+.bh-toast.is-leaving { animation: bh-toast-out .16s ease-in forwards; }
+@keyframes bh-toast-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes bh-toast-out { to { opacity: 0; transform: translateY(4px); } }
+
+/* A visible focus ring for keyboard users wherever a screen sets none.
+   :where() keeps this at zero specificity, so a screen's own focus style
+   (Tailwind focus:ring / focus:outline-none) still wins. */
+:where(.bh-main) :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid theme("colors.accent.500"); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .bh-toast, .bh-toast.is-leaving { animation: none; }
+    .bh-btn[aria-busy="true"]::before { animation-duration: 2s; }
+}
+
+/* ===== Tables scroll sideways on narrow screens (see the script) ===== */
+.bh-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.bh-table-scroll > table { min-width: 100%; }
+
+/* ===== Confirm / alert dialog (bhConfirm, bhAlert) ===== */
+.bh-ask { border: 0; padding: 0; border-radius: .9rem; width: min(26rem, calc(100vw - 2rem)); color: theme("textColor.slate.900"); box-shadow: 0 30px 70px -25px rgba(2, 6, 23, .55); }
+.bh-ask::backdrop { background: rgba(15, 23, 42, .4); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+.bh-ask[open] { animation: bh-ask-in .16s cubic-bezier(.2, .7, .3, 1); }
+@keyframes bh-ask-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.bh-ask__body { display: flex; gap: .9rem; padding: 1.25rem 1.25rem .5rem; }
+.bh-ask__icon { flex: none; width: 2.5rem; height: 2.5rem; border-radius: 50%; display: grid; place-items: center; background: theme("backgroundColor.accent.50"); color: theme("textColor.accent.600"); }
+.bh-ask.is-danger .bh-ask__icon { background: theme("backgroundColor.red.50"); color: theme("textColor.red.600"); }
+.bh-ask__icon svg { width: 1.25rem; height: 1.25rem; }
+.bh-ask__msg { margin: .35rem 0 0; font-size: .9rem; line-height: 1.55; color: theme("textColor.slate.700"); white-space: pre-line; overflow-wrap: anywhere; }
+.bh-ask__foot { display: flex; justify-content: flex-end; gap: .5rem; padding: 1rem 1.25rem 1.15rem; }
+.bh-ask__btn { padding: .5rem 1rem; border-radius: .55rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+.bh-ask__btn--ok { background: theme("backgroundColor.accent.600"); color: theme("textColor.white"); }
+.bh-ask__btn--ok:hover { background: theme("backgroundColor.accent.700"); }
+.bh-ask.is-danger .bh-ask__btn--ok { background: theme("backgroundColor.red.600"); }
+.bh-ask.is-danger .bh-ask__btn--ok:hover { background: theme("backgroundColor.red.700"); }
+.bh-ask__btn--cancel { background: theme("backgroundColor.white"); color: theme("textColor.slate.900"); border-color: theme("borderColor.slate.300"); font-weight: 500; }
+.bh-ask__btn--cancel:hover { background: theme("backgroundColor.slate.50"); }
+.bh-ask__btn:focus-visible { outline: 2px solid theme("colors.accent.300"); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .bh-ask[open] { animation: none; } }
+
+
+/* ===== Dropdowns (New, notifications, account) =====
+   Open = no "hidden" class. Matched as an attribute, not as .hidden: Tailwind
+   copies every rule naming .hidden into each @apply hidden (1.3.0). */
+[data-bh-menu-panel]:not([class~="hidden"]) { animation: bh-menu-in .16s cubic-bezier(.2, .7, .3, 1) both; transform-origin: top right; }
+[data-bh-menu-panel].is-closing { animation: bh-menu-out .12s ease-in both; pointer-events: none; }
+@keyframes bh-menu-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes bh-menu-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.98); } }
+/* Only a trailing caret turns (the bell ends with its count, not a caret). */
+[data-bh-menu-btn] > svg:last-child { transition: transform .2s ease; }
+[data-bh-menu-btn][aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+    .bh-sidebar, #bh-backdrop, .bh-nav-group .bh-submenu, [data-bh-menu-btn] > svg:last-child, .bh-sub-toggle svg, .bh-sub-toggle i { transition: none !important; }
+    [data-bh-menu-panel]:not([class~="hidden"]), [data-bh-menu-panel].is-closing { animation: none !important; }
+}
+.bh-sidebar.is-collapsed { width: 4.5rem; overflow-x: hidden; }
+.bh-sidebar.is-collapsed .bh-hide-collapsed { display: none !important; }
+.bh-nav-badge {
+    min-width: 18px; height: 18px; padding: 0 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; background: theme("backgroundColor.red.500"); color: theme("textColor.white");
+    font-size: 10px; font-weight: 700; line-height: 1;
+}
+/* `display:inline-flex` above is an author rule and would otherwise beat the
+   browser's `[hidden] { display: none }`, leaving a "0" badge on screen.
+   This restores the attribute's meaning so the badge disappears at zero. */
+.bh-nav-badge[hidden] { display: none; }
+/* Head + footer: zero the wide Tailwind padding and center the single
+   remaining child so nothing exceeds the 4.5rem rail. */
+.bh-sidebar.is-collapsed .bh-sidebar-head { padding-left: 0 !important; padding-right: 0 !important; justify-content: center; gap: 0; }
+.bh-sidebar.is-collapsed > div:last-child { padding-left: 0 !important; padding-right: 0 !important; justify-content: center; gap: 0; }
+.bh-sidebar.is-collapsed .bh-nav-item { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; height: 42px; margin: 0 auto; width: 44px; }
+.bh-sidebar.is-collapsed #bh-nav { padding-left: 0; padding-right: 0; }
+.bh-sidebar.is-collapsed #bh-nav-main { padding-left: 0; padding-right: 0; }
+.bh-sidebar.is-collapsed .bh-nav-label { display: none; }
+/* Bigger, easier-to-hit icons in the collapsed rail. */
+.bh-sidebar.is-collapsed .bh-nav-icon { width: auto; font-size: 1.15rem; }
+.bh-sidebar.is-collapsed .bh-search-wrap { display: none; }
+.bh-main.is-collapsed { margin-left: 4.5rem; }
+
+/* Vertical scroll only — never horizontal. Setting a non-visible value on
+   BOTH axes is required: mixing overflow-x:visible with overflow-y:auto
+   makes the browser force x to auto too, which caused a horizontal
+   scrollbar and the icons to shift sideways. */
+#bh-nav { overflow-y: auto; overflow-x: hidden; }
+.bh-sidebar.is-collapsed #bh-nav::-webkit-scrollbar { width: 0; height: 0; }
+.bh-sidebar.is-collapsed #bh-nav { scrollbar-width: none; }
+
+/* Collapsed tooltip is rendered at the body level by JS (see the sidebar
+   script), so a scrolling/clipping nav can never cut it off. */
+.bh-tip {
+    position: fixed; z-index: 9999; background: theme("backgroundColor.slate.900"); color: theme("textColor.white"); font-size: 12px; font-weight: 500;
+    padding: 5px 10px; border-radius: 6px; white-space: nowrap; pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,.18); opacity: 0; transform: translateY(-50%);
+    transition: opacity .12s ease; left: 0; top: 0;
+}
+.bh-tip.is-visible { opacity: 1; }
+.bh-tip::before {
+    content: ''; position: absolute; right: 100%; top: 50%; transform: translateY(-50%);
+    border: 5px solid transparent; border-right-color: theme("borderColor.slate.900");
+}
+
+/* Submenu groups */
+/* Height animates (see the submenu script); padding sits on the links so a
+   closed submenu is truly 0 high. */
+.bh-nav-group .bh-submenu { display: block; height: 0; overflow: hidden; transition: height .22s cubic-bezier(.4, 0, .2, 1); }
+.bh-nav-group.is-open .bh-submenu { height: auto; }
+.bh-nav-group .bh-submenu > :first-child { margin-top: 2px; }
+.bh-nav-group .bh-submenu > :last-child { margin-bottom: 4px; }
+.bh-sub-toggle svg, .bh-sub-toggle i { transition: transform .22s ease; }
+.bh-nav-group.is-open .bh-sub-toggle svg, .bh-nav-group.is-open .bh-sub-toggle i { transform: rotate(180deg); }
+.bh-sidebar.is-collapsed .bh-nav-group .bh-submenu { display: none !important; }
+
+
+
+/* ===== Profile photo field and its dialog (moved from the view in 1.3.0 so it follows dark mode and the accent) ===== */
+.bh-av{display:flex;align-items:center;gap:1.1rem}
+.bh-av__face{position:relative;width:96px;height:96px;flex:none}
+.bh-av__img{width:96px!important;height:96px!important;font-size:2.25rem;border:3px solid theme("backgroundColor.white");box-shadow:0 0 0 1px theme("borderColor.slate.200"),0 4px 14px -6px rgba(15,23,42,.35)}
+.bh-av__edit{position:absolute;right:-2px;bottom:-2px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:theme("backgroundColor.accent.600");color:theme("textColor.white");border:3px solid theme("backgroundColor.white");cursor:pointer;box-shadow:0 2px 6px rgba(15,23,42,.25);transition:transform .15s,background .15s}
+.bh-av__edit:hover{background:theme("backgroundColor.accent.700");transform:scale(1.06)}
+.bh-av__edit:focus-visible{outline:2px solid theme("borderColor.accent.300");outline-offset:2px}
+.bh-av__edit svg{width:15px;height:15px}
+.bh-av__label{font-size:.875rem;font-weight:600;color:theme("textColor.slate.900")}
+.bh-av__hint{font-size:.75rem;color:theme("textColor.slate.500");margin:.15rem 0 0;max-width:34ch;line-height:1.45}
+.bh-av__status{font-size:.75rem;margin:.35rem 0 0;min-height:1em;color:theme("textColor.emerald.700")}
+.bh-av__status.is-error{color:theme("textColor.red.600")}
+
+.bh-av-dialog{border:0;padding:0;border-radius:1rem;width:min(30rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);box-shadow:0 30px 70px -25px rgba(2,6,23,.55);color:theme("textColor.slate.900");background:theme("backgroundColor.white")}
+.bh-av-dialog::backdrop{background:rgba(15,23,42,.38);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.bh-av-dialog[open]{animation:bh-av-in .16s ease-out}
+@keyframes bh-av-in{from{opacity:0;transform:translateY(8px) scale(.98)}}
+.bh-av-dialog__box{display:flex;flex-direction:column;max-height:calc(100vh - 2rem)}
+.bh-av-dialog__head{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .5rem}
+.bh-av-dialog__head h2{font-size:1.0625rem;font-weight:650;margin:0}
+.bh-av-x{width:32px;height:32px;border-radius:.5rem;display:grid;place-items:center;border:0;background:transparent;color:theme("textColor.slate.500");cursor:pointer}
+.bh-av-x:hover{background:theme("backgroundColor.slate.100");color:theme("textColor.slate.900")}
+.bh-av-x svg{width:18px;height:18px}
+.bh-av-dialog section{padding:.25rem 1.25rem 0;overflow:auto}
+.bh-av-tabs{display:flex;gap:.25rem;border-bottom:1px solid theme("borderColor.slate.200");margin-bottom:1rem}
+.bh-av-tabs button{border:0;background:none;padding:.55rem .8rem;font:inherit;font-size:.875rem;font-weight:500;color:theme("textColor.slate.500");border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+.bh-av-tabs button.is-on{color:theme("textColor.slate.900");border-bottom-color:theme("borderColor.accent.600");font-weight:600}
+.bh-av-drop{display:flex;flex-direction:column;align-items:center;gap:.25rem;padding:2rem 1rem;border:2px dashed theme("borderColor.slate.300");border-radius:.85rem;background:theme("backgroundColor.slate.50");color:theme("textColor.slate.600");font-size:.875rem;cursor:pointer;text-align:center;transition:border-color .15s,background .15s}
+.bh-av-drop:hover,.bh-av-drop.is-over{border-color:theme("borderColor.accent.600");background:theme("backgroundColor.accent.50")}
+.bh-av-drop svg{width:34px;height:34px;color:theme("textColor.slate.400");margin-bottom:.35rem}
+.bh-av-drop strong{color:theme("textColor.slate.900")}
+.bh-av-drop u{color:theme("textColor.accent.600");text-decoration:none;font-weight:600}
+.bh-av-drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.bh-av-small{font-size:.75rem;color:theme("textColor.slate.500");margin:.6rem 0 0}
+.bh-av-search{width:100%;padding:.5rem .7rem;font:inherit;font-size:.875rem;border:1px solid theme("borderColor.slate.300");border-radius:.55rem;margin-bottom:.75rem}
+.bh-av-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:.5rem;max-height:300px;overflow:auto;padding:2px}
+.bh-av-grid button{aspect-ratio:1;padding:0;border:2px solid transparent;border-radius:.6rem;overflow:hidden;background:theme("backgroundColor.slate.100");cursor:pointer}
+.bh-av-grid button:hover,.bh-av-grid button:focus-visible{border-color:theme("borderColor.accent.600");outline:0}
+.bh-av-grid img{width:100%;height:100%;object-fit:cover;display:block}
+.bh-av-grid p{grid-column:1/-1;font-size:.8125rem;color:theme("textColor.slate.500");text-align:center;margin:1rem 0}
+.bh-av-more{text-align:center;margin-top:.6rem}
+.bh-av-crop{height:300px;background:theme("backgroundColor.slate.900");border-radius:.75rem;overflow:hidden}
+.bh-av-crop img{display:block;max-width:100%}
+.bh-av-crop.no-cropper{display:grid;place-items:center}
+.bh-av-crop.no-cropper img{width:220px;height:220px;object-fit:cover;border-radius:50%}
+.bh-av-crop .cropper-view-box,.bh-av-crop .cropper-face{border-radius:50%}
+.bh-av-crop .cropper-view-box{outline:0;box-shadow:0 0 0 2px rgba(255,255,255,.9)}
+.bh-av-crop .cropper-modal{background:theme("backgroundColor.slate.900");opacity:.6}
+.bh-av-tools{display:flex;justify-content:center;gap:.4rem;margin-top:.75rem}
+.bh-av-tool{min-width:38px;height:36px;padding:0 .6rem;border:1px solid theme("borderColor.slate.300");background:theme("backgroundColor.white");border-radius:.55rem;font:inherit;font-size:1.05rem;cursor:pointer;color:theme("textColor.slate.700")}
+.bh-av-tool--wide{font-size:.8125rem;font-weight:500}
+.bh-av-tool:hover{background:theme("backgroundColor.slate.50");border-color:theme("borderColor.slate.400")}
+.bh-av-msg{margin:.6rem 1.25rem 0;font-size:.8125rem;color:theme("textColor.red.600");min-height:1em}
+.bh-av-dialog__foot{display:flex;align-items:center;gap:.5rem;padding:.9rem 1.25rem 1.1rem}
+.bh-av-spacer{flex:1}
+.bh-av-btn{padding:.5rem 1rem;border-radius:.55rem;border:1px solid transparent;background:theme("backgroundColor.accent.600");color:theme("textColor.white");font:inherit;font-size:.875rem;font-weight:600;cursor:pointer}
+.bh-av-btn:hover{background:theme("backgroundColor.accent.700")}
+.bh-av-btn:disabled{opacity:.6;cursor:default}
+.bh-av-btn--quiet{background:theme("backgroundColor.white");color:theme("textColor.slate.900");border-color:theme("borderColor.slate.300");font-weight:500}
+.bh-av-btn--quiet:hover{background:theme("backgroundColor.slate.50")}
+.bh-av-btn--danger{background:theme("backgroundColor.white");color:theme("textColor.red.600");border-color:transparent;font-weight:500;padding-left:.5rem;padding-right:.5rem}
+.bh-av-btn--danger:hover{background:theme("backgroundColor.red.50")}
+@media (prefers-reduced-motion:reduce){.bh-av-dialog[open]{animation:none}.bh-av__edit{transition:none}}
+
+/* ===== Menu editor (moved from the view in 1.3.0 so it follows dark mode and the accent) ===== */
+.mb-item { border:1px solid theme("borderColor.slate.200"); border-radius:.625rem; background:theme("backgroundColor.white"); margin-bottom:.4rem; }
+.mb-item__row { display:flex; align-items:center; gap:.5rem; padding:.6rem .75rem; position:relative; }
+.mb-grip { color:theme("textColor.slate.300"); cursor:grab; flex-shrink:0; display:inline-flex; }
+.mb-grip:active { cursor:grabbing; }
+.mb-item:hover > .mb-item__row > .mb-grip { color:theme("textColor.slate.500"); }
+.mb-item.is-dragging { opacity:.35; }
+.mb-item.is-dragging .mb-item__row { cursor:grabbing; }
+
+/* The whole row is a grab target, not just the six-pixel handle. */
+.mb-item__row { cursor:grab; border-radius:.625rem; transition:background .12s ease; }
+.mb-item__row:hover { background:theme("backgroundColor.slate.50"); }
+
+/* Reordering: a solid rule where the item will land. Drawn on the row so it
+   sits at the boundary the pointer is actually near, rather than at the edge
+   of a subtree that may be hundreds of pixels tall. */
+.mb-item__row.drop-before,
+.mb-item__row.drop-after { position:relative; }
+.mb-item__row.drop-before::after,
+.mb-item__row.drop-after::after {
+    content:''; position:absolute; left:0; right:0; height:3px;
+    background:theme("backgroundColor.accent.600"); border-radius:2px;
+}
+.mb-item__row.drop-before::after { top:-2px; }
+.mb-item__row.drop-after::after  { bottom:-2px; }
+/* A dot at the line's start, so the target reads as a caret rather than a
+   stray border. */
+.mb-item__row.drop-before::before,
+.mb-item__row.drop-after::before {
+    content:''; position:absolute; left:-3px; width:9px; height:9px;
+    background:theme("backgroundColor.accent.600"); border-radius:50%; z-index:1;
+}
+.mb-item__row.drop-before::before { top:-5px; }
+.mb-item__row.drop-after::before  { bottom:-5px; }
+
+/* Nesting: the row itself is highlighted and indented, previewing where the
+   item is about to sit. */
+.mb-item__row.drop-into {
+    background:theme("backgroundColor.emerald.50");
+    box-shadow: inset 0 0 0 2px theme("borderColor.emerald.500");
+    padding-left:1.75rem;
+}
+.mb-item__row.drop-into::before {
+    content:'↳'; position:absolute; left:.6rem;
+    color:theme("textColor.emerald.600"); font-size:.9rem; font-weight:700; line-height:1;
+}
+
+/* While a drag is in progress, show where nesting is possible at all. A
+   cue that only appears once you have found the zone teaches nobody. */
+body.mb-dragging .mb-item__row {
+    outline:1px dashed transparent; outline-offset:-2px;
+}
+body.mb-dragging .mb-item__row:not(.drop-into):not(.drop-before):not(.drop-after) {
+    outline-color:theme("borderColor.slate.300");
+}
+
+/* The row copy that follows the pointer. Fixed, so it is positioned in
+   viewport coordinates and unaffected by the page scrolling underneath. */
+.mb-ghost {
+    position:fixed; z-index:9999; pointer-events:none;
+    background:theme("backgroundColor.white"); border:1px solid theme("borderColor.slate.300"); border-radius:.625rem;
+    box-shadow:0 12px 28px rgba(15,23,42,.22);
+    opacity:.95; transform:rotate(-1deg);
+}
+
+/* touch-action:none tells the browser this element's gestures are ours, so
+   a drag does not also scroll the page. It is set on the row rather than
+   the tree, or the list itself could never be scrolled on a phone. */
+.mb-item__row { touch-action:none; -webkit-user-select:none; user-select:none; }
+
+/* A larger grip on touch: the pointer is a fingertip, not a cursor. */
+@media (pointer:coarse) {
+    .mb-grip { padding:.35rem; margin:-.35rem; }
+    .mb-item__row { padding-top:.75rem; padding-bottom:.75rem; }
+}
+.mb-kids { margin-left:1.75rem; padding-left:.75rem; border-left:2px dashed theme("borderColor.slate.200"); }
+.mb-edit { border-top:1px solid theme("borderColor.slate.100"); padding:.75rem; background:theme("backgroundColor.slate.50"); }
+
+/* ===== Updates: app details dialog (moved from the view in 1.3.0 so it follows dark mode and the accent) ===== */
+.bh-app-modal { border: 0; padding: 0; border-radius: .9rem; width: min(36rem, calc(100vw - 2rem)); max-height: min(44rem, calc(100vh - 2rem)); color: theme("textColor.slate.900"); box-shadow: 0 30px 70px -25px rgba(2, 6, 23, .55); background:theme("backgroundColor.white")}
+.bh-app-modal[open] { display: flex; flex-direction: column; animation: bh-ask-in .16s cubic-bezier(.2, .7, .3, 1); }
+.bh-app-modal::backdrop { background: rgba(15, 23, 42, .4); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+.bh-am__head { display: flex; align-items: center; gap: .9rem; padding: 1.25rem 1.25rem .75rem; }
+.bh-am__x { align-self: flex-start; padding: .25rem; border-radius: .4rem; color: theme("textColor.slate.500"); }
+.bh-am__x:hover { background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.900"); }
+.bh-am__body { padding: 0 1.25rem; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.bh-am__facts { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-size: .8rem; padding: .75rem 0; border-top: 1px solid theme("borderColor.slate.100"); border-bottom: 1px solid theme("borderColor.slate.100"); margin-bottom: 1rem; }
+.bh-am__facts dt { color: theme("textColor.slate.500"); }
+.bh-am__facts dd { color: theme("textColor.slate.900"); margin: 0; overflow-wrap: anywhere; }
+.bh-am__notes h4 { font-size: .8rem; font-weight: 600; color: theme("textColor.slate.900"); margin: 0 0 .3rem; }
+.bh-am__notes + .bh-am__notes { margin-top: 1rem; }
+.bh-am__notes div { font-size: .85rem; line-height: 1.55; color: theme("textColor.slate.700"); white-space: pre-line; overflow-wrap: anywhere; }
+.bh-am__foot { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; padding: 1rem 1.25rem 1.15rem; border-top: 1px solid theme("borderColor.slate.100"); }
+.bh-am__btn { padding: .5rem 1rem; border-radius: .55rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+.bh-am__btn--ok { background: theme("backgroundColor.emerald.600"); color: theme("textColor.white"); }
+.bh-am__btn--ok:hover { background: theme("backgroundColor.emerald.700"); }
+.bh-am__btn--ok:disabled { opacity: .6; cursor: default; }
+.bh-am__btn--cancel { background: theme("backgroundColor.white"); color: theme("textColor.slate.900"); border-color: theme("borderColor.slate.300"); font-weight: 500; }
+.bh-am__btn--cancel:hover { background: theme("backgroundColor.slate.50"); }
+.bh-am__btn:focus-visible, .bh-am__x:focus-visible { outline: 2px solid theme("borderColor.accent.300"); outline-offset: 2px; }
+.bh-app-open:focus-visible { outline: 2px solid theme("borderColor.accent.300"); outline-offset: 2px; border-radius: .5rem; }
+@media (prefers-reduced-motion: reduce) { .bh-app-modal[open] { animation: none; } }
+
+/* ===== Widget areas (moved from the view in 1.3.0 so it follows dark mode and the accent) ===== */
+/* Layout for this screen only; colours are the admin's slate and accent. */
+.bhw-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:20px}
+.bhw-grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));align-items:start}
+.bhw-area .bh-card__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.bhw-key{font:500 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:theme("textColor.slate.400");margin-left:6px}
+.bhw-count{font-size:12px;color:theme("textColor.slate.500");white-space:nowrap}
+.bhw-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;min-height:48px;border-radius:10px}
+.bhw-list.is-over{outline:2px dashed theme("borderColor.accent.300");outline-offset:4px}
+.bhw-empty{border:1px dashed theme("borderColor.slate.300");border-radius:10px;padding:14px;text-align:center;font-size:13px;color:theme("textColor.slate.500")}
+.bhw-item{border:1px solid theme("borderColor.slate.200");border-radius:10px;background:theme("backgroundColor.white")}
+.bhw-item.is-dragging{opacity:.45}
+.bhw-item.is-off .bhw-row__name{color:theme("textColor.slate.400")}
+.bhw-row{display:flex;align-items:center;gap:8px;padding:8px 10px;min-width:0}
+.bhw-handle{cursor:grab;color:theme("textColor.slate.400")}
+.bhw-handle:focus-visible{outline:2px solid theme("borderColor.accent.600");outline-offset:2px}
+.bhw-row__icon{color:theme("textColor.slate.500");flex:0 0 auto;display:inline-flex}
+.bhw-row__text{flex:1 1 auto;min-width:0}
+.bhw-row__name{font-size:14px;font-weight:600;color:theme("textColor.slate.900");overflow-wrap:anywhere}
+.bhw-row__label{font-size:12px;color:theme("textColor.slate.500");overflow-wrap:anywhere}
+.bhw-row__badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.bhw-row__actions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.bhw-panel{border-top:1px solid theme("borderColor.slate.100");padding:14px 12px 12px;display:grid;gap:14px}
+.bhw-field{display:grid;gap:4px}
+.bhw-field[hidden]{display:none}
+.bhw-field .bh-switch{justify-self:start}
+.bhw-inline{display:flex;align-items:center;gap:10px}
+.bhw-checks{display:grid;gap:4px;max-height:180px;overflow:auto;border:1px solid theme("borderColor.slate.200");border-radius:8px;padding:8px}
+.bhw-checks label{display:flex;gap:8px;align-items:center;font-size:13px;color:theme("textColor.slate.700")}
+.bhw-error{font-size:12px;color:theme("textColor.red.600")}
+.bhw-locked{font-size:12px;color:theme("textColor.slate.500")}
+.bhw-options{border-top:1px dashed theme("borderColor.slate.200");padding-top:12px;display:grid;gap:12px}
+.bhw-buttons{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bhw-preview{border:1px solid theme("borderColor.slate.200");border-radius:10px;overflow:hidden;background:theme("backgroundColor.white")}
+.bhw-preview iframe{display:block;width:100%;border:0;min-height:120px;background:theme("backgroundColor.white")}
+.bhw-preview__note{font-size:12px;color:theme("textColor.slate.500");padding:8px 10px;border-top:1px solid theme("borderColor.slate.100")}
+.bhw-picker{width:min(640px,calc(100vw - 32px));max-height:min(80vh,720px);padding:0;border:0;border-radius:14px;box-shadow:0 20px 50px rgba(15,23,42,.25);background:theme("backgroundColor.white")}
+.bhw-picker::backdrop{background:rgba(15,23,42,.45)}
+.bhw-picker__head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid theme("borderColor.slate.100");position:sticky;top:0;background:theme("backgroundColor.white");z-index:1}
+.bhw-picker__body{padding:12px 16px 16px;display:grid;gap:16px}
+.bhw-picker__group h3{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:theme("textColor.slate.500");margin:0 0 6px}
+.bhw-picker__items{display:grid;gap:6px;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr))}
+.bhw-pick{display:flex;gap:10px;align-items:flex-start;text-align:left;border:1px solid theme("borderColor.slate.200");border-radius:10px;padding:10px;background:theme("backgroundColor.white");cursor:pointer;width:100%}
+.bhw-pick:hover:not([aria-disabled=true]),.bhw-pick:focus-visible{border-color:theme("borderColor.accent.600");background:theme("backgroundColor.accent.50");outline:none}
+.bhw-pick[aria-disabled=true]{cursor:not-allowed;opacity:.6}
+.bhw-pick__title{font-size:14px;font-weight:600;color:theme("textColor.slate.900")}
+.bhw-pick__text{font-size:12px;color:theme("textColor.slate.500")}
+.bhw-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media (max-width:640px){
+  .bhw-row{flex-wrap:wrap}
+  .bhw-row__actions{width:100%;justify-content:flex-end}
+  .bhw-row .bh-btn--icon{width:44px;height:44px}
+  .bhw-panel .bh-input,.bhw-panel .bh-select,.bhw-panel .bh-textarea{font-size:16px}
+}

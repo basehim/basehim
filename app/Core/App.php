@@ -659,7 +659,10 @@ abstract class App
      */
     protected function adminView(string $template, string $title, array $data = []): string
     {
-        // Render the app template to a string.
+        // Render the app template to a string. The admin layout prints <head>
+        // afterwards, so stylesheets core's partials ask for while the body
+        // renders (a data table) can wait for it (1.3.0).
+        \App\Core\Http\HeadStyles::expectHead();
         $body = $this->view($template, $data);
 
         // Render the admin layout with our body pre-set as the 'content' section.

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\Core\Http\StatusPage;
+
 final class ErrorHandler
 {
     public static function handle(\Throwable $e): void
@@ -88,67 +90,38 @@ final class ErrorHandler
             return;
         }
 
-        $msg = htmlspecialchars($e->getMessage(), ENT_QUOTES);
-        $file = htmlspecialchars($e->getFile(), ENT_QUOTES);
-        $trace = htmlspecialchars($e->getTraceAsString(), ENT_QUOTES);
-        $class = $e::class;
-        $line = $e->getLine();
-        $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
-        // Rendered before the heredoc, which does not run PHP tags: until
-        // 1.2.128 the icon calls were written inside it and printed as text.
-        $iconError = Icon::svg('exclamation-circle', 'w-6 h-6 text-red-500');
-        $iconFile = Icon::svg('file-code', 'w-4 h-4 mt-1 text-slate-400');
-
-        echo <<<HTML
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Error · Basehim</title>
-<link rel="stylesheet" href="{$base}/admin/assets/css/tailwind.min.css">
-</head><body class="bg-slate-100 text-slate-900 font-sans">
-<div class="max-w-5xl mx-auto p-8">
-  <div class="bg-white rounded-2xl shadow-lg border border-red-200">
-    <div class="p-6 border-b border-red-100 bg-red-50 rounded-t-2xl">
-      <div class="flex items-center gap-3">
-        {$iconError}
-        <div>
-          <div class="text-xs uppercase tracking-wider text-red-600 font-semibold">{$class}</div>
-          <h1 class="text-xl font-semibold text-slate-900">{$msg}</h1>
-        </div>
-      </div>
-    </div>
-    <div class="p-6 space-y-3">
-      <div class="flex items-start gap-3">
-        {$iconFile}
-        <div class="text-sm text-slate-700"><span class="text-slate-500">in</span> <code class="bg-slate-100 px-2 py-1 rounded">{$file}</code> <span class="text-slate-500">at line</span> <span class="font-semibold">{$line}</span></div>
-      </div>
-      <pre class="bg-slate-900 text-slate-100 rounded-lg p-4 text-xs overflow-auto max-h-96">{$trace}</pre>
-    </div>
-  </div>
-</div>
-</body></html>
-HTML;
+        // Debug details, inside the same page every error uses (1.3.0).
+        $esc = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $details = '<div class="mt-4 space-y-3">'
+            . '<p class="text-xs font-semibold uppercase tracking-wider text-danger">' . $esc($e::class) . '</p>'
+            . '<p class="text-sm text-slate-700"><span class="text-slate-500">in</span> '
+            . '<code class="rounded bg-slate-100 px-1.5 py-0.5 [overflow-wrap:anywhere]">' . $esc($e->getFile()) . '</code> '
+            . '<span class="text-slate-500">at line</span> <span class="font-semibold">' . (int) $e->getLine() . '</span></p>'
+            . '<pre class="max-h-96 overflow-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-200">' . $esc($e->getTraceAsString()) . '</pre>'
+            . '</div>';
+        echo StatusPage::html($status, $e->getMessage() !== '' ? $e->getMessage() : self::titleFromStatus($status), '', [
+            'wide' => true, 'icon' => 'exclamation-circle', 'details' => $details,
+        ]);
     }
 
     private static function genericHtml(int $status): string
     {
-        $title = self::titleFromStatus($status);
-        $base = defined('BASEHIM_BASE') ? BASEHIM_BASE : '';
-        $home = $base ?: '/';
-        $iconWarn = Icon::svg('exclamation-triangle', 'w-16 h-16 text-accent-500 mb-4 mx-auto');
-        $iconHome = Icon::svg('home', 'w-4 h-4');
-
-        return <<<HTML
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{$status} · {$title}</title>
-<link rel="stylesheet" href="{$base}/admin/assets/css/tailwind.min.css">
-</head><body class="bg-accent-50 min-h-screen flex items-center justify-center text-slate-900 font-sans">
-<div class="text-center px-6">
-  {$iconWarn}
-  <h1 class="text-5xl font-bold mb-2">{$status}</h1>
-  <p class="text-slate-600 text-lg">{$title}</p>
-  <a href="{$home}" class="bh-btn bh-btn--primary mt-6">{$iconHome} Back to home</a>
-</div>
-</body></html>
-HTML;
+        $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
+        $server = $status >= 500;
+        // Try again = this address, only as a path on this site ("//host"
+        // would be another site).
+        $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+        $again = (str_starts_with($uri, '/') && !str_starts_with($uri, '//') && !str_contains($uri, '\\')) ? $uri : $base . '/';
+        return StatusPage::html($status, self::titleFromStatus($status),
+            $server
+                ? 'Something went wrong on our side and it has been logged. Please try again in a moment.'
+                : 'This request could not be completed.', [
+            'tone' => $server ? 'danger' : 'warning',
+            'actions' => [
+                ['label' => 'Try again', 'href' => $again, 'primary' => true, 'icon' => 'arrow-path'],
+                ['label' => 'Home', 'href' => $base . '/', 'icon' => 'home'],
+            ],
+        ]);
     }
 
     private static function statusFromException(\Throwable $e): int

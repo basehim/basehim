@@ -22,13 +22,29 @@
                          a constant distance down and never jumps on shrink. */
     --dt-sticky-top: 0px; --dt-top-h: 0px; }
 
+/* The glass fill, for the sticky chrome below: the surface at 80% with a
+   blur, where the browser can blur (otherwise the element's solid fill). */
+.bh-glass { @apply supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:backdrop-blur-md supports-[backdrop-filter]:backdrop-saturate-150; }
+
 /* Sticky chrome (1.2.110) --------------------------------------------------
    Controls + column header stick under the app's top bar; pagination sticks to
    the bottom. On by default; toggled from Screen Options via the classes here.
    The controls region is ALWAYS positioned so the Screen Options popover
    anchors to it whether sticky is on or off. */
+/* Until datatable.js has drawn the table (1.3.0): the server's first page
+   keeps its place in the card but isn't shown, so it doesn't flash and then
+   get replaced. Only the partial's own markup ([data-bh-draw]): an app's
+   markup that borrows .bh-dt classes is never hidden. Only when scripts run (html.bh-js, set in the head); if the
+   script never finishes, the server's table appears after 2.5s anyway. */
+.bh-js .bh-dt[data-bh-draw]:not(.is-built) > * { visibility: hidden; animation: bh-dt-reveal 0s 2.5s forwards; }
+@keyframes bh-dt-reveal { to { visibility: visible; } }
 .bh-dt-top { @apply relative; }
-.bh-dt--sticky .bh-dt-top { @apply z-[6] bg-white;
+/* Glass (1.3.0): the sticky controls, column header and pager are a
+   little see-through with a blur, so rows scrolling under them stay faintly
+   visible. It is on at rest too (over the card it looks solid), never switched
+   on when the bar sticks: a blur that snaps on flashed on fast scrolls (see
+   1.2.117). Browsers without backdrop-filter keep the solid fill. */
+.bh-dt--sticky .bh-dt-top { @apply z-[6] bg-white bh-glass;
     position: sticky; top: var(--dt-sticky-top);
     border-top-left-radius: var(--dt-r); border-top-right-radius: var(--dt-r);
     transition: padding .18s ease, box-shadow .18s ease; }
@@ -42,9 +58,12 @@
 /* Suppress transitions while the script measures the shrunk height. */
 .bh-dt-measuring, .bh-dt-measuring * { transition: none !important; }
 
-.bh-dt--sticky .bh-dt-table thead th { position: sticky; top: calc(var(--dt-sticky-top) + var(--dt-top-h)); z-index: 4; }
+.bh-dt--sticky .bh-dt-table thead th { @apply bh-glass; position: sticky; top: calc(var(--dt-sticky-top) + var(--dt-top-h)); z-index: 4; }
+.bh-dt--sticky .bh-dt-table thead th { @apply supports-[backdrop-filter]:bg-slate-50/80; }
+/* In the wide-table grid the header must stay solid: frozen columns pass under it. */
+.bh-dt--xscroll .bh-dt-table thead th { @apply supports-[backdrop-filter]:bg-slate-50 supports-[backdrop-filter]:backdrop-blur-none; }
 
-.bh-dt--sticky-foot .bh-dt-foot { @apply z-[5] bg-white; position: sticky; bottom: 0; }
+.bh-dt--sticky-foot .bh-dt-foot { @apply z-[5] bg-white bh-glass; position: sticky; bottom: 0; }
 
 /* The sticky chrome stays ABOVE the table rows (z-0) but BELOW the admin
    shell — the mobile off-canvas nav's backdrop (#bh-backdrop, z-15) and the
@@ -74,11 +93,11 @@
 /* Opaque backgrounds so the scrolling columns pass UNDER the frozen ones
    (header cells already carry the header fill; body cells are transparent). */
 .bh-dt--xscroll .bh-dt-table tbody td.bh-dt-frz { @apply bg-white; }
-.bh-dt--xscroll .bh-dt-table tbody tr:hover td.bh-dt-frz { background: #f8fafc; }
-.bh-dt--xscroll .bh-dt-table tbody tr.is-selected td.bh-dt-frz { background: #f5f9ff; }
+.bh-dt--xscroll .bh-dt-table tbody tr:hover td.bh-dt-frz { background: theme("backgroundColor.slate.50"); }
+.bh-dt--xscroll .bh-dt-table tbody tr.is-selected td.bh-dt-frz { background: theme("backgroundColor.accent.50 / 70%"); }
 /* The freeze boundary: a hairline on the last frozen cell always, a soft
    shadow once scrolled so it reads as "the other columns continue under here". */
-.bh-dt--xscroll .bh-dt-table .bh-dt-frz--last { border-right: 1px solid #e2e8f0; }
+.bh-dt--xscroll .bh-dt-table .bh-dt-frz--last { border-right: 1px solid theme("borderColor.slate.200"); }
 /* In the grid the other columns keep their content on one line and scroll,
    instead of squeezing tags into a stack (1.2.115). */
 .bh-dt--xscroll .bh-dt-table td:not(.bh-dt-frz) { white-space: nowrap; }
@@ -93,54 +112,54 @@
 .bh-dt.bh-card { border-radius: var(--dt-r); }
 
 /* Reusable cell components ------------------------------------------------- */
-.bh-ava { border-radius: 9999px; object-fit: cover; display: inline-block; flex: none; background: #e2e8f0; }
+.bh-ava { border-radius: 9999px; object-fit: cover; display: inline-block; flex: none; background: theme("backgroundColor.slate.200"); }
 .bh-ava--initials { display: inline-flex; align-items: center; justify-content: center;
-    color: #fff; font-weight: 600; line-height: 1; }
+    color: theme("textColor.white"); font-weight: 600; line-height: 1; }
 .bh-usercell { display: inline-flex; align-items: center; gap: .5rem; min-width: 0; }
 .bh-usercell__meta { display: flex; flex-direction: column; min-width: 0; }
-.bh-usercell__name { font-weight: 500; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bh-usercell__sub { font-size: .72rem; color: #94a3b8; }
+.bh-usercell__name { font-weight: 500; color: theme("textColor.slate.700"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-usercell__sub { font-size: .72rem; color: theme("textColor.slate.400"); }
 .bh-thumb { display: inline-flex; align-items: center; justify-content: center; flex: none;
-    border-radius: .5rem; overflow: hidden; background: #eef2ff; color: #6366f1; }
+    border-radius: .5rem; overflow: hidden; background: theme("backgroundColor.accent.50"); color: theme("textColor.accent.500"); }
 .bh-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.bh-thumb--empty { background: linear-gradient(135deg,#eff6ff,#eef2ff); color: #93a5cf; }
+.bh-thumb--empty { background: linear-gradient(135deg,theme("backgroundColor.accent.50"),theme("backgroundColor.palette.2 / 15%")); color: theme("textColor.slate.400"); }
 
 .bh-dt-badge { display: inline-block; padding: .2rem .55rem; border-radius: var(--dt-r-in, .375rem);
     font-size: .72rem; font-weight: 600; line-height: 1.3; white-space: nowrap; }
 .bh-dt-chip { display: inline-block; padding: .15rem .55rem; border-radius: var(--dt-r-in, .375rem);
-    background: #eef2ff; color: #4338ca; font-size: .74rem; font-weight: 500; }
+    background: theme("backgroundColor.accent.50"); color: theme("textColor.accent.700"); font-size: .74rem; font-weight: 500; }
 a.bh-dt-chip--link { text-decoration: none; transition: background .12s, color .12s; }
-a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
+a.bh-dt-chip--link:hover { background: theme("backgroundColor.accent.100"); color: theme("textColor.accent.800"); }
 
 /* Term filter dropdowns (Category / Tags) — Screen-Options styling ---------- */
 .bh-dt-filter { position: relative; display: inline-flex; }
 .bh-dt-filterbtn { display: inline-flex; align-items: center; gap: .4rem; }
-.bh-dt-filterbtn.is-active { border-color: #bfdbfe; background: #eff6ff; color: #2563eb; }
+.bh-dt-filterbtn.is-active { border-color: theme("borderColor.accent.200"); background: theme("backgroundColor.accent.50"); color: theme("textColor.accent.600"); }
 .bh-dt-filterbadge { display: inline-flex; align-items: center; justify-content: center;
     min-width: 1.15rem; height: 1.15rem; padding: 0 .3rem; border-radius: 9999px;
-    background: #2563eb; color: #fff; font-size: .68rem; font-weight: 700; line-height: 1; }
+    background: theme("backgroundColor.accent.600"); color: theme("textColor.white"); font-size: .68rem; font-weight: 700; line-height: 1; }
 .bh-dt-filterpanel { left: 0; right: auto; width: 17rem; padding: .85rem; }
 .bh-dt-filtersearch { width: 100%; margin-bottom: .6rem; }
 .bh-dt-termlist { max-height: 15rem; overflow-y: auto; margin: 0 -.2rem; }
 .bh-dt-term { display: flex; align-items: center; gap: .55rem; padding: .38rem .4rem; border-radius: var(--dt-r-in); cursor: pointer; }
-.bh-dt-term:hover { background: #f8fafc; }
-.bh-dt-term input { width: 1rem; height: 1rem; accent-color: #2563eb; flex: none; }
-.bh-dt-term__name { flex: 1; font-size: .8125rem; color: #334155; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bh-dt-term__count { font-size: .72rem; color: #94a3b8; font-variant-numeric: tabular-nums; }
-.bh-dt-termempty { font-size: .82rem; color: #94a3b8; padding: .6rem .4rem; margin: 0; }
+.bh-dt-term:hover { background: theme("backgroundColor.slate.50"); }
+.bh-dt-term input { width: 1rem; height: 1rem; accent-color: theme("backgroundColor.accent.600"); flex: none; }
+.bh-dt-term__name { flex: 1; font-size: .8125rem; color: theme("textColor.slate.700"); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-dt-term__count { font-size: .72rem; color: theme("textColor.slate.400"); font-variant-numeric: tabular-nums; }
+.bh-dt-termempty { font-size: .82rem; color: theme("textColor.slate.400"); padding: .6rem .4rem; margin: 0; }
 .bh-dt-filterfoot { display: flex; align-items: center; justify-content: space-between;
-    gap: .5rem; margin-top: .6rem; padding-top: .55rem; border-top: 1px solid #f1f5f9; }
-.bh-dt-filterhint { font-size: .74rem; color: #94a3b8; }
+    gap: .5rem; margin-top: .6rem; padding-top: .55rem; border-top: 1px solid theme("borderColor.slate.100"); }
+.bh-dt-filterhint { font-size: .74rem; color: theme("textColor.slate.400"); }
 
 /* Toolbar ------------------------------------------------------------------ */
 /* The toolbar band (1.2.85; an inline style on the partial before). */
 /* position is set in the sticky-chrome section above (sticky establishes the
    positioning context the Screen Options panel needs). */
-.bh-dt-top { border-bottom: 1px solid rgb(226 232 240); }
+.bh-dt-top { border-bottom: 1px solid theme("borderColor.slate.200 / 100%"); }
 .bh-dt-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 .bh-dt-search { position: relative; flex: 1 1 260px; min-width: 200px; }
 .bh-dt-search > svg { position: absolute; top: 50%; left: .85rem; width: 1rem; height: 1rem;
-    transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
+    transform: translateY(-50%); color: theme("textColor.slate.400"); pointer-events: none; }
 .bh-dt-search input { width: 100%; padding-left: 2.5rem; text-overflow: ellipsis; }
 /* Every toolbar control is one height (1.2.115): search, filters, selects,
    buttons and the view switch measured 37.3 / 36 / 37 / 33.6px before. */
@@ -215,11 +234,11 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
    table, same card shape in List/Grid and on phones, at the current rows-per-
    page — so the real data lands exactly where the skeleton sat, with no dim
    overlay blink. */
-.bh-dt-skel__bar { @apply block h-3 rounded; background: linear-gradient(100deg, #eef2f7 30%, #f8fafc 50%, #eef2f7 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
+.bh-dt-skel__bar { @apply block h-3 rounded; background: linear-gradient(100deg, theme("backgroundColor.slate.100") 30%, theme("backgroundColor.slate.50") 50%, theme("backgroundColor.slate.100") 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
 .bh-dt-skel__bar--sm { @apply h-2.5; }
 .bh-dt-skel__bar--chip { @apply h-4 w-16 rounded-md; }
-.bh-dt-skel__thumb { @apply block flex-none rounded-lg; background: linear-gradient(100deg, #eef2f7 30%, #f8fafc 50%, #eef2f7 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
-.bh-dt-skel__dot { @apply h-6 w-6 flex-none rounded-full; background: linear-gradient(100deg, #eef2f7 30%, #f8fafc 50%, #eef2f7 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
+.bh-dt-skel__thumb { @apply block flex-none rounded-lg; background: linear-gradient(100deg, theme("backgroundColor.slate.100") 30%, theme("backgroundColor.slate.50") 50%, theme("backgroundColor.slate.100") 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
+.bh-dt-skel__dot { @apply h-6 w-6 flex-none rounded-full; background: linear-gradient(100deg, theme("backgroundColor.slate.100") 30%, theme("backgroundColor.slate.50") 50%, theme("backgroundColor.slate.100") 70%); background-size: 200% 100%; animation: bh-dt-shimmer 1.2s ease-in-out infinite; }
 @keyframes bh-dt-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .bh-dt-skelrow td { vertical-align: middle; }
 .bh-dt-skelcell { @apply flex flex-col gap-2; }
@@ -271,16 +290,16 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
 .bh-dt-table th, .bh-dt-table td { padding: .7rem 1rem; text-align: left; vertical-align: middle;
     border: 0; border-radius: 0; background: none; }
-.bh-dt-table thead th { background: #f8fafc; border-bottom: 1px solid #e2e8f0;
-    font-weight: 600; color: #475569; white-space: nowrap; }
-.bh-dt-table tbody tr { border-bottom: 1px solid #f1f5f9; }
-.bh-dt-table tbody tr:hover { background: #f8fafc; }
-.bh-dt-table tbody tr.is-selected { background: #f5f9ff; }
+.bh-dt-table thead th { background: theme("backgroundColor.slate.50"); border-bottom: 1px solid theme("borderColor.slate.200");
+    font-weight: 600; color: theme("textColor.slate.600"); white-space: nowrap; }
+.bh-dt-table tbody tr { border-bottom: 1px solid theme("borderColor.slate.100"); }
+.bh-dt-table tbody tr:hover { background: theme("backgroundColor.slate.50"); }
+.bh-dt-table tbody tr.is-selected { background: theme("backgroundColor.accent.50 / 70%"); }
 .bh-dt-table td.bh-dt-al-center, .bh-dt-table th.bh-dt-al-center { text-align: center; }
 .bh-dt-table td.bh-dt-al-right,  .bh-dt-table th.bh-dt-al-right  { text-align: right; }
 /* The Views column (1.2.115: was .bh-dt-views, the same class as the view
    switch, so the cell inherited its inline-flex + border and sat top-aligned). */
-.bh-dt-table td.bh-dt-col-views { color: #334155; font-variant-numeric: tabular-nums; }
+.bh-dt-table td.bh-dt-col-views { color: theme("textColor.slate.700"); font-variant-numeric: tabular-nums; }
 
 /* Density */
 .bh-dt[data-density="compact"] .bh-dt-table th,
@@ -288,16 +307,18 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 
 /* Sortable headers */
 .bh-dt-sorth { cursor: pointer; user-select: none; }
-.bh-dt-sorth:hover { color: #1e293b; }
+.bh-dt-sorth:hover { color: theme("textColor.slate.800"); }
 .bh-dt-caret { display: inline-block; width: .85rem; height: .85rem; opacity: .35;
     vertical-align: -2px; margin-left: .1rem; }
-.bh-dt-sorth[aria-sort] .bh-dt-caret { opacity: 1; color: #2563eb; }
+.bh-dt-sorth[aria-sort] .bh-dt-caret { opacity: 1; color: theme("textColor.accent.600"); }
 
 /* Cells */
-.bh-dt-title { font-weight: 600; color: #0f172a; text-decoration: none; display: block; }
-@media (hover: hover) { .bh-dt-title:hover { color: #2563eb; } }   /* touch keeps :hover after a tap (1.2.116) */
-.bh-dt-sub { display: block; font-size: .76rem; color: #94a3b8; }
-.bh-dt-date { color: #334155; display: block; }
+.bh-dt-title { font-weight: 600; color: theme("textColor.slate.900"); text-decoration: none; display: block; }
+@media (hover: hover) { .bh-dt-title:hover { color: theme("textColor.accent.600"); } }   /* touch keeps :hover after a tap (1.2.116) */
+/* slate-500 (1.3.0): slate-400 was 2.6:1 on white, too faint for the
+   emails and comment text it carries. */
+.bh-dt-sub { display: block; font-size: .76rem; color: theme("textColor.slate.500"); }
+.bh-dt-date { color: theme("textColor.slate.700"); display: block; }
 /* A date is one line in the table ("November 10, 2026" wrapped to three
    lines and made every row tall); the time stays under it (1.2.115). */
 .bh-dt-table .bh-dt-date { white-space: nowrap; }
@@ -307,7 +328,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-table .bh-dt-title ~ .bh-dt-sub { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
     overflow: hidden; overflow-wrap: anywhere; }   /* clamps to the column; never sets its width */
 .bh-dt-check { width: 1.75rem; }
-.bh-dt-check input, .bh-dt-bulk__check input { width: 1rem; height: 1rem; accent-color: #2563eb; cursor: pointer; }
+.bh-dt-check input, .bh-dt-bulk__check input { width: 1rem; height: 1rem; accent-color: theme("backgroundColor.accent.600"); cursor: pointer; }
 /* No browser margin: the header box sat ~2px above the header text (1.2.115). */
 .bh-dt-table .bh-dt-check input { display: block; margin: 0; }
 .bh-dt-col-thumb { width: 3.25rem; }
@@ -320,27 +341,27 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
    whatever an admin theme or Tailwind's base styles do to svg (display:block
    left it flush left), and sized here rather than by utility classes. */
 .bh-dt-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: .25rem; padding: 3.5rem 1.25rem; text-align: center; color: #64748b; }
+    gap: .25rem; padding: 3.5rem 1.25rem; text-align: center; color: theme("textColor.slate.500"); }
 .bh-dt-state__icon { display: flex; align-items: center; justify-content: center; flex: none;
     width: 4.5rem; height: 4.5rem; margin: 0 0 .75rem; border-radius: 50%;
-    background: #f1f5f9; color: #94a3b8; }
+    background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.400"); }
 .bh-dt-state__icon svg { display: block; width: 2.25rem; height: 2.25rem; margin: 0; }
-.bh-dt-state__title { font-size: .9375rem; font-weight: 600; color: #334155; margin: 0; }
+.bh-dt-state__title { font-size: .9375rem; font-weight: 600; color: theme("textColor.slate.700"); margin: 0; }
 .bh-dt-state__text { margin: 0; max-width: 28rem; font-size: .875rem; line-height: 1.5; }
-.bh-dt-state--error .bh-dt-state__icon { background: #fef2f2; color: #ef4444; }
-.bh-dt-state--error .bh-dt-state__title { color: #991b1b; }
+.bh-dt-state--error .bh-dt-state__icon { background: theme("backgroundColor.red.50"); color: theme("textColor.red.500"); }
+.bh-dt-state--error .bh-dt-state__title { color: theme("textColor.red.800"); }
 /* The old dim-and-spin overlay is superseded by the skeleton (1.2.107); the
    element is kept for any third party that toggles it, but stays hidden. */
-.bh-dt-loading { position: absolute; inset: 0; background: rgba(255,255,255,.6);
+.bh-dt-loading { position: absolute; inset: 0; background: theme("backgroundColor.white / 60%");
     display: none; align-items: center; justify-content: center; z-index: 5; }
-.bh-dt-spinner { width: 1.5rem; height: 1.5rem; border: 2px solid #cbd5e1;
-    border-top-color: #2563eb; border-radius: 50%; animation: bh-dt-spin .6s linear infinite; }
+.bh-dt-spinner { width: 1.5rem; height: 1.5rem; border: 2px solid theme("borderColor.slate.300");
+    border-top-color: theme("borderColor.accent.600"); border-radius: 50%; animation: bh-dt-spin .6s linear infinite; }
 @keyframes bh-dt-spin { to { transform: rotate(360deg); } }
 
 /* Pagination (compacted + sticky bottom, 1.2.110) -------------------------- */
 .bh-dt-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-    gap: .5rem; padding: .45rem .85rem; border-top: 1px solid #e2e8f0; }
-.bh-dt-count { font-size: .8125rem; color: #64748b; }
+    gap: .5rem; padding: .45rem .85rem; border-top: 1px solid theme("borderColor.slate.200"); }
+.bh-dt-count { font-size: .8125rem; color: theme("textColor.slate.500"); }
 .bh-dt-foot__right { display: flex; align-items: center; gap: .9rem; margin-left: auto; }
 .bh-dt-pages { display: flex; align-items: center; gap: .25rem; }
 .bh-dt-pages[hidden] { display: none; }
@@ -348,11 +369,11 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
    rows-per-page select beside them; numbers keep a square minimum. */
 .bh-dt-page { min-width: 2rem; padding-left: .5rem; padding-right: .5rem; font-variant-numeric: tabular-nums; }
 .bh-dt-page--gap { @apply inline-flex h-8 items-center justify-center text-slate-400; min-width: 1.25rem; padding: 0; }
-.bh-dt-perpage { display: flex; align-items: center; gap: .5rem; font-size: .82rem; color: #64748b; }
+.bh-dt-perpage { display: flex; align-items: center; gap: .5rem; font-size: .82rem; color: theme("textColor.slate.500"); }
 
 /* Screen Options panel ----------------------------------------------------- */
 .bh-dt-panel { position: absolute; right: 0; top: calc(100% + .45rem); width: 20rem; z-index: 40;
-    background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r);
+    background: theme("backgroundColor.white"); border: 1px solid theme("borderColor.slate.200"); border-radius: var(--dt-r);
     box-shadow: 0 16px 40px rgba(15,23,42,.16); padding: 1.1rem; display: none;
     /* Never let the panel exceed the viewport — it scrolls instead of hiding
        its lower items (1.2.110). --dt-panel-max is the space below the panel's
@@ -362,20 +383,20 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 /* A long column list scrolls within the panel rather than pushing the rows and
    toggles below it out of reach. */
 .bh-dt-collist { max-height: 14rem; overflow-y: auto; overscroll-behavior: contain; }
-.bh-dt-panel__title { display: flex; align-items: center; gap: .5rem; font-size: .875rem; font-weight: 600; color: #0f172a; }
-.bh-dt-panel__desc { font-size: .78rem; color: #94a3b8; margin: .35rem 0 .9rem; }
+.bh-dt-panel__title { display: flex; align-items: center; gap: .5rem; font-size: .875rem; font-weight: 600; color: theme("textColor.slate.900"); }
+.bh-dt-panel__desc { font-size: .78rem; color: theme("textColor.slate.400"); margin: .35rem 0 .9rem; }
 .bh-dt-panel__label { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
-    color: #94a3b8; font-weight: 600; margin: .9rem 0 .4rem; }
+    color: theme("textColor.slate.400"); font-weight: 600; margin: .9rem 0 .4rem; }
 .bh-dt-collist { list-style: none; margin: 0; padding: 0; }
 .bh-dt-col { display: flex; align-items: center; gap: .55rem; padding: .4rem .3rem; border-radius: var(--dt-r-in); }
-.bh-dt-col:hover { background: #f8fafc; }
+.bh-dt-col:hover { background: theme("backgroundColor.slate.50"); }
 .bh-dt-col.is-dragging { opacity: .4; }
-.bh-dt-col__grip { cursor: grab; color: #cbd5e1; display: inline-flex; touch-action: none; }
-.bh-dt-col input { width: 1rem; height: 1rem; accent-color: #2563eb; }
-.bh-dt-col__name { flex: 1; font-size: .8125rem; color: #334155; }
-.bh-dt-panel__sep { border: 0; border-top: 1px solid #f1f5f9; margin: .9rem 0; }
+.bh-dt-col__grip { cursor: grab; color: theme("textColor.slate.300"); display: inline-flex; touch-action: none; }
+.bh-dt-col input { width: 1rem; height: 1rem; accent-color: theme("backgroundColor.accent.600"); }
+.bh-dt-col__name { flex: 1; font-size: .8125rem; color: theme("textColor.slate.700"); }
+.bh-dt-panel__sep { border: 0; border-top: 1px solid theme("borderColor.slate.100"); margin: .9rem 0; }
 .bh-dt-panel__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .6rem; }
-.bh-dt-panel__row span { font-size: .8125rem; color: #334155; }
+.bh-dt-panel__row span { font-size: .8125rem; color: theme("textColor.slate.700"); }
 .bh-dt-panel__actions { display: flex; align-items: center; gap: 1rem; margin-top: 1.1rem; }
 
 /* Cards ----------------------------------------------------------------------
@@ -386,26 +407,26 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
      per item (1.2.65, .bh-dt-card--compact below). */
 .bh-dt-cards { display: none; }
 .bh-dt-cards > .bh-dt-state { grid-column: 1 / -1; }
-.bh-dt-card { position: relative; min-width: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r);
+.bh-dt-card { position: relative; min-width: 0; background: theme("backgroundColor.white"); border: 1px solid theme("borderColor.slate.200"); border-radius: var(--dt-r);
     padding: .75rem .85rem; margin: .6rem .75rem; transition: border-color .12s, box-shadow .12s, background-color .12s; }
-.bh-dt-card.is-selected { border-color: #93c5fd; box-shadow: 0 0 0 1px #93c5fd; background: #f8fbff; }
+.bh-dt-card.is-selected { border-color: theme("borderColor.accent.300"); box-shadow: 0 0 0 1px theme("colors.accent.300"); background: theme("backgroundColor.accent.50 / 60%"); }
 .bh-dt-card__top { display: flex; align-items: flex-start; gap: .65rem; }
 .bh-dt-card__top .bh-dt-check { width: auto; flex: none; display: inline-flex; align-items: center; min-height: 1.35rem; }
 .bh-dt-card__thumb { flex: none; }
 .bh-dt-card__main { flex: 1; min-width: 0; }
-.bh-dt-card__title { font-size: .875rem; line-height: 1.35; font-weight: 600; color: #0f172a; overflow-wrap: anywhere; }
+.bh-dt-card__title { font-size: .875rem; line-height: 1.35; font-weight: 600; color: theme("textColor.slate.900"); overflow-wrap: anywhere; }
 .bh-dt-card__title .bh-dt-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .bh-dt-card__title .bh-dt-sub { margin-top: .1rem; font-weight: 400; }
 .bh-dt-card__badge { margin-top: .4rem; }
 /* The ⋮ button: a 2.25rem target, like the dialog's ×. */
 .bh-dt-card .bh-dt-actbtn { flex: none; width: 2.25rem; height: 2.25rem; margin: -.4rem -.5rem 0 0; padding: 0;
-    align-items: center; justify-content: center; border-radius: var(--dt-r); color: #475569; }
-.bh-dt-card .bh-dt-actbtn:hover { background: #f1f5f9; color: #0f172a; }
-.bh-dt-card__rows { margin-top: .7rem; padding-top: .65rem; border-top: 1px solid #f1f5f9;
+    align-items: center; justify-content: center; border-radius: var(--dt-r); color: theme("textColor.slate.600"); }
+.bh-dt-card .bh-dt-actbtn:hover { background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.900"); }
+.bh-dt-card__rows { margin-top: .7rem; padding-top: .65rem; border-top: 1px solid theme("borderColor.slate.100");
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem .85rem; }
 .bh-dt-card__row { display: flex; flex-direction: column; gap: .15rem; min-width: 0; font-size: .82rem; }
-.bh-dt-card__key { font-size: .72rem; font-weight: 600; color: #64748b; }
-.bh-dt-card__val { color: #334155; min-width: 0; overflow-wrap: anywhere; }
+.bh-dt-card__key { font-size: .72rem; font-weight: 600; color: theme("textColor.slate.500"); }
+.bh-dt-card__val { color: theme("textColor.slate.700"); min-width: 0; overflow-wrap: anywhere; }
 
 /* The compact card (820px and below): one line per item (1.2.65) —
    checkbox · picture · title with its chips · author · values with icons · ⋮.
@@ -426,10 +447,10 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-card--compact .bh-dt-card__aside { grid-area: aside; display: flex; align-items: center; gap: .55rem; min-width: 0; }
 .bh-dt-card--compact .bh-dt-card__body > .bh-dt-actbtn { grid-area: menu; align-self: center; }
 
-.bh-dt-card--compact .bh-dt-card__title { font-size: .8125rem; line-height: 1.35; font-weight: 600; color: #0f172a; overflow-wrap: anywhere; }
+.bh-dt-card--compact .bh-dt-card__title { font-size: .8125rem; line-height: 1.35; font-weight: 600; color: theme("textColor.slate.900"); overflow-wrap: anywhere; }
 .bh-dt-card--compact .bh-dt-card__title .bh-dt-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .bh-dt-card--compact .bh-dt-card__title .bh-dt-sub { display: none; }   /* the slug: in the table and Quick Edit */
-.bh-dt-card--compact .bh-dt-card__sub { margin-top: .15rem; font-size: .8rem; line-height: 1.4; color: #64748b;
+.bh-dt-card--compact .bh-dt-card__sub { margin-top: .15rem; font-size: .8rem; line-height: 1.4; color: theme("textColor.slate.500");
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .bh-dt-card--compact .bh-dt-card__sub .bh-dt-sub { display: inline; font-size: inherit; }
 /* Chips and badges; the usual state (Published, Approved) is left off, so a
@@ -444,30 +465,30 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-card--compact .bh-dt-card__side .bh-usercell { gap: .3rem; }
 .bh-dt-card--compact .bh-dt-card__side .bh-ava { width: 1.5rem !important; height: 1.5rem !important; font-size: .6rem !important; }
 .bh-dt-card--compact .bh-dt-card__side .bh-usercell__name { white-space: normal; overflow-wrap: anywhere; max-width: 2.9rem; font-size: .7rem; line-height: 1.3;
-    font-weight: 500; color: #475569; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    font-weight: 500; color: theme("textColor.slate.600"); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .bh-dt-card--compact .bh-dt-card__side .bh-usercell__sub { display: none; }
 
 /* Views, date …: a value per line, each after its icon. */
 .bh-dt-card--compact .bh-dt-card__meta { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
-.bh-dt-card--compact .bh-dt-card__metaitem { display: flex; align-items: flex-start; gap: .25rem; font-size: .7rem; line-height: 1.3; color: #334155; font-variant-numeric: tabular-nums; }
-.bh-dt-card--compact .bh-dt-card__icon { flex: none; display: inline-flex; color: #94a3b8; margin-top: .05rem; }
+.bh-dt-card--compact .bh-dt-card__metaitem { display: flex; align-items: flex-start; gap: .25rem; font-size: .7rem; line-height: 1.3; color: theme("textColor.slate.700"); font-variant-numeric: tabular-nums; }
+.bh-dt-card--compact .bh-dt-card__icon { flex: none; display: inline-flex; color: theme("textColor.slate.400"); margin-top: .05rem; }
 .bh-dt-card--compact .bh-dt-card__icon svg { width: .8rem; height: .8rem; }
-.bh-dt-card--compact .bh-dt-card__metakey { flex: none; color: #94a3b8; }
+.bh-dt-card--compact .bh-dt-card__metakey { flex: none; color: theme("textColor.slate.400"); }
 .bh-dt-card--compact .bh-dt-card__metaval { min-width: 0; max-width: 3.1rem; }
 .bh-dt-card--compact .bh-dt-card__metaval .bh-dt-date { display: block; }
 .bh-dt-card--compact .bh-dt-card__metaval .bh-dt-sub { font-size: .68rem; margin-top: .1rem; }
 
 /* The ⋮ button: a 2rem target that does not widen the card. */
 .bh-dt-card--compact .bh-dt-actbtn { flex: none; width: 1.75rem; height: 2.25rem; padding: 0; margin: -.25rem -.15rem -.25rem 0;
-    align-items: center; justify-content: center; border-radius: var(--dt-r); color: #475569; }
-.bh-dt-card--compact .bh-dt-actbtn:hover { background: #f1f5f9; color: #0f172a; }
+    align-items: center; justify-content: center; border-radius: var(--dt-r); color: theme("textColor.slate.600"); }
+.bh-dt-card--compact .bh-dt-actbtn:hover { background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.900"); }
 
 /* Card polish (1.2.107): a hairline lift on hover/press and a softer resting
    shadow, so the list reads as a stack of tappable surfaces. */
 .bh-dt-card--compact { transition: border-color .15s ease, box-shadow .15s ease, transform .12s ease; }
-.bh-dt-card--compact:hover { border-color: #cbd5e1; box-shadow: 0 8px 20px -10px rgb(15 23 42 / 0.18); }
+.bh-dt-card--compact:hover { border-color: theme("borderColor.slate.300"); box-shadow: 0 8px 20px -10px rgb(15 23 42 / 0.18); }
 .bh-dt-card--compact:active { transform: scale(.995); }
-.bh-dt-card--compact.is-selected:hover { border-color: #93c5fd; }
+.bh-dt-card--compact.is-selected:hover { border-color: theme("borderColor.accent.300"); }
 
 /* A roomy card (a phone on its side): nothing needs to wrap. */
 @container dtcard (min-width: 520px) {
@@ -499,9 +520,9 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 
 /* Select all for cards (1.2.65): the table header's checkbox, for the views
    that have no table header. Shown wherever the cards are. */
-.bh-dt-cardshead { display: none; align-items: center; gap: .6rem; padding: .6rem 1rem; background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0; font-size: .82rem; font-weight: 600; color: #475569; cursor: pointer; user-select: none; }
-.bh-dt-cardshead input { width: 1rem; height: 1rem; accent-color: #2563eb; cursor: pointer; margin: 0; }
+.bh-dt-cardshead { display: none; align-items: center; gap: .6rem; padding: .6rem 1rem; background: theme("backgroundColor.slate.50");
+    border-bottom: 1px solid theme("borderColor.slate.200"); font-size: .82rem; font-weight: 600; color: theme("textColor.slate.600"); cursor: pointer; user-select: none; }
+.bh-dt-cardshead input { width: 1rem; height: 1rem; accent-color: theme("backgroundColor.accent.600"); cursor: pointer; margin: 0; }
 .bh-dt[data-view="list"] .bh-dt-cardshead, .bh-dt[data-view="grid"] .bh-dt-cardshead { display: flex; }
 .bh-dt-cardshead[hidden] { display: none !important; }
 
@@ -509,7 +530,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
    (the table header / cards carry it there) and when selection is off. */
 .bh-dt-selall { display: none; align-items: center; justify-content: center; flex: none;
     min-height: var(--dt-ctl-h); min-width: var(--dt-ctl-h); padding: 0 .4rem; margin: 0; cursor: pointer; }
-.bh-dt-selall input { width: 1.15rem; height: 1.15rem; accent-color: #2563eb; cursor: pointer; margin: 0; }
+.bh-dt-selall input { width: 1.15rem; height: 1.15rem; accent-color: theme("backgroundColor.accent.600"); cursor: pointer; margin: 0; }
 .bh-dt-selall[hidden] { display: none !important; }
 .bh-dt[data-select="none"] .bh-dt-selall { display: none !important; }
 
@@ -537,22 +558,22 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-dt-table tbody tr:hover .bh-dt-rowlinks,
 .bh-dt-table tbody tr:focus-within .bh-dt-rowlinks { visibility: visible; }
 .bh-dt[data-density="compact"] .bh-dt-rowlinks { display: none; }
-.bh-dt-rowlink { position: relative; margin-left: 1rem; padding: 0; border: 0; background: none; font: inherit; color: #2563eb; cursor: pointer;
+.bh-dt-rowlink { position: relative; margin-left: 1rem; padding: 0; border: 0; background: none; font: inherit; color: theme("textColor.accent.600"); cursor: pointer;
     text-decoration: none; white-space: nowrap; }
-.bh-dt-rowlink + .bh-dt-rowlink::before { content: ""; position: absolute; left: -.55rem; top: .25em; height: .9em; width: 1px; background: #cbd5e1; }
-.bh-dt-rowlink:hover { color: #1d4ed8; text-decoration: underline; }
-.bh-dt-rowlink:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; border-radius: 2px; }
-.bh-dt-rowlink--danger { color: #b91c1c; }
-.bh-dt-rowlink--danger:hover { color: #991b1b; }
+.bh-dt-rowlink + .bh-dt-rowlink::before { content: ""; position: absolute; left: -.55rem; top: .25em; height: .9em; width: 1px; background: theme("backgroundColor.slate.300"); }
+.bh-dt-rowlink:hover { color: theme("textColor.accent.700"); text-decoration: underline; }
+.bh-dt-rowlink:focus-visible { outline: 2px solid theme("colors.accent.600"); outline-offset: 1px; border-radius: 2px; }
+.bh-dt-rowlink--danger { color: theme("textColor.red.700"); }
+.bh-dt-rowlink--danger:hover { color: theme("textColor.red.800"); }
 .bh-dt:not([data-density="compact"]) .bh-dt-table .bh-dt-rowactions { display: none; }
-.bh-dt-menu { position: absolute; z-index: 60; min-width: 11rem; background: #fff; border: 1px solid #e2e8f0;
+.bh-dt-menu { position: absolute; z-index: 60; min-width: 11rem; background: theme("backgroundColor.white"); border: 1px solid theme("borderColor.slate.200");
     border-radius: .5rem; box-shadow: 0 12px 32px rgba(15,23,42,.16); padding: .3rem; }
 .bh-dt-menu__item { display: flex; align-items: center; gap: .55rem; width: 100%; padding: .5rem .6rem; border: 0;
-    background: none; color: #334155; font-size: .85rem; text-align: left; cursor: pointer; border-radius: .375rem; text-decoration: none; }
-.bh-dt-menu__item:hover { background: #f1f5f9; }
-.bh-dt-menu__item svg { width: 1rem; height: 1rem; color: #64748b; }
-.bh-dt-menu__item--danger { color: #dc2626; }
-.bh-dt-menu__item--danger svg { color: #dc2626; }
+    background: none; color: theme("textColor.slate.700"); font-size: .85rem; text-align: left; cursor: pointer; border-radius: .375rem; text-decoration: none; }
+.bh-dt-menu__item:hover { background: theme("backgroundColor.slate.100"); }
+.bh-dt-menu__item svg { width: 1rem; height: 1rem; color: theme("textColor.slate.500"); }
+.bh-dt-menu__item--danger { color: theme("textColor.red.600"); }
+.bh-dt-menu__item--danger svg { color: theme("textColor.red.600"); }
 
 /* Clear: a quiet ghost button that closes the selection. */
 /* Clear selection: a core ghost icon button (1.2.115). */
@@ -651,7 +672,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
        (the top padding was 0) — and the page's own background, so at rest it
        is not a stray white strip. Stuck, it frosts over and gains a hairline.
        !important on the vertical padding: it must beat the stuck shrink. */
-    .bh-dt > .bh-card--pad { @apply -mx-4 mb-3 bg-slate-50 px-4; padding-top: .625rem !important; padding-bottom: .625rem !important;
+    .bh-dt > .bh-card--pad { @apply -mx-4 mb-3 bg-slate-50 px-4 supports-[backdrop-filter]:bg-slate-50/80; padding-top: .625rem !important; padding-bottom: .625rem !important;
         border-bottom: 0 !important; box-shadow: none !important; }
     /* Stuck, the bar keeps its fill — opaque slate-50, the page's own colour —
        and gains only a hairline and a soft shadow underneath, drawn by ::after
@@ -660,7 +681,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
        snaps (a backdrop blur switching on, a fill changing) flashed at the
        boundary on a fast scroll; an opacity fade hides that frame. */
     .bh-dt--sticky > .bh-dt-top::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: .75rem;
-        pointer-events: none; border-top: 1px solid rgb(226 232 240);
+        pointer-events: none; border-top: 1px solid theme("borderColor.slate.200 / 100%");
         background: linear-gradient(rgb(15 23 42 / .08), rgb(15 23 42 / 0));
         opacity: 0; transition: opacity .2s ease; }
     .bh-dt--sticky > .bh-dt-top.is-stuck::after { opacity: 1; }
@@ -670,10 +691,11 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-toolbar .bh-dt-panel { left: 1rem; right: 1rem; }
     .bh-dt .bh-dt-cards { grid-template-columns: minmax(0, 1fr); gap: .6rem; padding: 0; }
     /* With no frame, the empty state gets the cards' own surface (1.2.66). */
-    .bh-dt .bh-dt-cards > .bh-dt-state { background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r); padding: 2.5rem 1rem; }
+    .bh-dt .bh-dt-cards > .bh-dt-state { background: theme("backgroundColor.white"); border: 1px solid theme("borderColor.slate.200"); border-radius: var(--dt-r); padding: 2.5rem 1rem; }
     .bh-dt .bh-dt-wrap { overflow: visible; }
     .bh-dt-foot { margin-top: .75rem; padding: .5rem .5rem .5rem .85rem; gap: .5rem; flex-wrap: nowrap; justify-content: space-between;
-        background: #fff; border: 1px solid #e2e8f0; border-radius: var(--dt-r); }
+        border: 1px solid theme("borderColor.slate.200"); border-radius: var(--dt-r); }
+    .bh-dt-foot:not(.bh-dt--sticky-foot .bh-dt-foot) { background: theme("backgroundColor.white"); }
     /* Stuck to the bottom it is an app bar too (1.2.115): one row (the count
        keeps just its numbers, "1–8 of 25"), edge to edge, square, and clear of
        the iPhone home indicator. It was two rows and 80px tall. */
@@ -701,17 +723,17 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
    (a segment inside the switch, a suggestion row) use --qe-r-in. */
 .bh-qe {
     --qe-r: .5rem; --qe-r-in: .375rem;
-    border: 0; padding: 0; border-radius: var(--qe-r); color: #0f172a; background: #fff;
+    border: 0; padding: 0; border-radius: var(--qe-r); color: theme("textColor.slate.900"); background: theme("backgroundColor.white");
     width: min(52rem, calc(100vw - 2rem)); max-height: min(44rem, calc(100vh - 2rem)); max-height: min(44rem, calc(100dvh - 2rem));
     box-shadow: 0 30px 70px -25px rgba(2, 6, 23, .55); overflow: hidden;
 }
 .bh-qe[open] { display: flex; flex-direction: column; animation: bh-qe-in .16s cubic-bezier(.2, .7, .3, 1); }
 .bh-qe::backdrop { background: rgba(15, 23, 42, .4); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 @keyframes bh-qe-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
-.bh-qe__head { flex: none; display: flex; align-items: flex-start; gap: .75rem; padding: .85rem 1rem .75rem 1.15rem; border-bottom: 1px solid #e2e8f0; }
+.bh-qe__head { flex: none; display: flex; align-items: flex-start; gap: .75rem; padding: .85rem 1rem .75rem 1.15rem; border-bottom: 1px solid theme("borderColor.slate.200"); }
 .bh-qe__titles { min-width: 0; flex: 1; }
-.bh-qe__title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.35; color: #0f172a; outline: none; }
-.bh-qe__sub { margin: .1rem 0 0; font-size: .8rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-qe__title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.35; color: theme("textColor.slate.900"); outline: none; }
+.bh-qe__sub { margin: .1rem 0 0; font-size: .8rem; color: theme("textColor.slate.500"); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bh-qe__sub:empty { display: none; }
 .bh-qe__x { flex: none; margin: -.15rem -.25rem 0 0; }   /* a core ghost icon button (1.2.115) */
 .bh-qe__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
@@ -720,67 +742,67 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-qv { width: min(40rem, calc(100vw - 2rem)); }
 .bh-qv__head { align-items: center; }
 .bh-qv__media { flex: none; display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: .625rem;
-    background: #eff6ff; color: #2563eb; overflow: hidden; }
+    background: theme("backgroundColor.accent.50"); color: theme("textColor.accent.600"); overflow: hidden; }
 .bh-qv__media svg { width: 1.35rem; height: 1.35rem; }
-.bh-qv__media.has-image { background: #f8fafc; border: 1px solid #e2e8f0; }
+.bh-qv__media.has-image { background: theme("backgroundColor.slate.50"); border: 1px solid theme("borderColor.slate.200"); }
 .bh-qv__media img { width: 100%; height: 100%; object-fit: contain; padding: .3rem; }
-.bh-qv__sub { margin: .15rem 0 0; font-size: .8rem; line-height: 1.4; color: #64748b; overflow-wrap: anywhere; }
+.bh-qv__sub { margin: .15rem 0 0; font-size: .8rem; line-height: 1.4; color: theme("textColor.slate.500"); overflow-wrap: anywhere; }
 .bh-qv__badges { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
 .bh-qv__body { padding: .35rem 1.15rem 1.1rem; }
 .bh-qv__loading { padding: 1rem 0; }
 .bh-qv__error { margin: 1rem 0; }
 .bh-qv__section { padding: .75rem 0 .35rem; }
-.bh-qv__section + .bh-qv__section { border-top: 1px solid #f1f5f9; }
-.bh-qv__heading { margin: 0 0 .4rem; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #64748b; }
+.bh-qv__section + .bh-qv__section { border-top: 1px solid theme("borderColor.slate.100"); }
+.bh-qv__heading { margin: 0 0 .4rem; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: theme("textColor.slate.500"); }
 .bh-qv__list { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem 1rem; }
 .bh-qv__item { min-width: 0; }
 /* A full-width item (1.2.105) for a notes or description block: spans both
    columns and keeps the text's own line breaks. */
 .bh-qv__item--wide { grid-column: 1 / -1; }
 .bh-qv__item--wide dd { white-space: pre-wrap; }
-.bh-qv__item dt { font-size: .72rem; color: #64748b; }
+.bh-qv__item dt { font-size: .72rem; color: theme("textColor.slate.500"); }
 .bh-qv__item dt:empty { display: none; }
-.bh-qv__item dd { margin: .1rem 0 0; font-size: .875rem; color: #0f172a; overflow-wrap: anywhere; }
+.bh-qv__item dd { margin: .1rem 0 0; font-size: .875rem; color: theme("textColor.slate.900"); overflow-wrap: anywhere; }
 .bh-qv__item dd.is-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; }
-.bh-qv__item dd a { color: #2563eb; text-decoration: none; }
+.bh-qv__item dd a { color: theme("textColor.accent.600"); text-decoration: none; }
 .bh-qv__item dd a:hover { text-decoration: underline; }
-.bh-qv__foot { display: flex; flex-wrap: wrap; gap: .5rem; padding-top: .9rem; border-top: 1px solid #f1f5f9; margin-top: .5rem; }
+.bh-qv__foot { display: flex; flex-wrap: wrap; gap: .5rem; padding-top: .9rem; border-top: 1px solid theme("borderColor.slate.100"); margin-top: .5rem; }
 @media (max-width: 520px) {
     .bh-qv__list { grid-template-columns: minmax(0, 1fr); }
     .bh-qv__foot .bh-btn { flex: 1 1 auto; min-height: 2.75rem; }
 }
 
 .bh-dt-qe { padding: .9rem 1.15rem 0; }
-.bh-dt-qe__loading { display: flex; align-items: center; gap: .6rem; padding: .25rem 0 1rem; color: #64748b; font-size: .85rem; }
+.bh-dt-qe__loading { display: flex; align-items: center; gap: .6rem; padding: .25rem 0 1rem; color: theme("textColor.slate.500"); font-size: .85rem; }
 .bh-dt-qe__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem .85rem; align-items: start; }
 .bh-dt-qe__field { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
 .bh-dt-qe__field.is-wide { grid-column: 1 / -1; }
 .bh-dt-qe__field[hidden] { display: none; }
-.bh-dt-qe__field .bh-label { margin: 0; font-size: .75rem; font-weight: 600; color: #475569; }
+.bh-dt-qe__field .bh-label { margin: 0; font-size: .75rem; font-weight: 600; color: theme("textColor.slate.600"); }
 .bh-dt-qe__field .bh-input, .bh-dt-qe__field .bh-select { min-height: 2.25rem; padding-top: .35rem; padding-bottom: .35rem; font-size: .875rem; border-radius: var(--qe-r); }
-.bh-dt-qe__field .bh-help { margin: 0; font-size: .72rem; color: #64748b; }
+.bh-dt-qe__field .bh-help { margin: 0; font-size: .72rem; color: theme("textColor.slate.500"); }
 .bh-dt-qe__field.has-error .bh-input,
 .bh-dt-qe__field.has-error .bh-select,
 .bh-dt-qe__field.has-error .bh-dt-qe__checklist,
-.bh-dt-qe__field.has-error .bh-terms__list { border-color: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
-.bh-dt-qe__error { margin: 0; font-size: .75rem; font-weight: 500; color: #b91c1c; }
+.bh-dt-qe__field.has-error .bh-terms__list { border-color: theme("borderColor.red.600"); box-shadow: 0 0 0 1px theme("colors.red.600"); }
+.bh-dt-qe__error { margin: 0; font-size: .75rem; font-weight: 500; color: theme("textColor.red.700"); }
 .bh-dt-qe__component { min-width: 0; }
 .bh-dt-qe__component .bh-terms__list { max-height: 7rem; }
 .bh-dt-qe__checklist { display: flex; flex-wrap: wrap; gap: .25rem .9rem; max-height: 7rem; overflow-y: auto;
-    padding: .45rem .6rem; border: 1px solid #cbd5e1; border-radius: var(--qe-r); background: #fff; }
-.bh-dt-qe__opt { display: inline-flex; align-items: center; gap: .4rem; font-size: .84rem; color: #334155; cursor: pointer; }
+    padding: .45rem .6rem; border: 1px solid theme("borderColor.slate.300"); border-radius: var(--qe-r); background: theme("backgroundColor.white"); }
+.bh-dt-qe__opt { display: inline-flex; align-items: center; gap: .4rem; font-size: .84rem; color: theme("textColor.slate.700"); cursor: pointer; }
 .bh-dt-qe__opt[hidden] { display: none; }
 .bh-dt-qe__filter { max-width: 16rem; }
 .bh-dt-qe__field.is-toggle { justify-content: flex-end; }
-.bh-dt-qe__togglelabel { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; color: #334155; cursor: pointer; min-height: 2.25rem; }
-.bh-dt-qe__check { width: 1rem; height: 1rem; accent-color: #2563eb; }
+.bh-dt-qe__togglelabel { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; color: theme("textColor.slate.700"); cursor: pointer; min-height: 2.25rem; }
+.bh-dt-qe__check { width: 1rem; height: 1rem; accent-color: theme("backgroundColor.accent.600"); }
 .bh-dt-qe__msg { margin: 0 0 .65rem; padding: .5rem .75rem; border-radius: var(--qe-r); font-size: .8rem; line-height: 1.45;
-    background: #eff6ff; color: #1e3a8a; display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+    background: theme("backgroundColor.accent.50"); color: theme("textColor.accent.900"); display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
 .bh-dt-qe__msg[hidden] { display: none; }
-.bh-dt-qe__msg--error { background: #fef2f2; color: #991b1b; border-left: 3px solid #dc2626; }
+.bh-dt-qe__msg--error { background: theme("backgroundColor.red.50"); color: theme("textColor.red.800"); border-left: 3px solid theme("borderColor.red.600"); }
 /* Footer: stays in view while the fields scroll. */
 .bh-dt-qe__actions { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: .5rem;
-    margin: .9rem -1.15rem 0; padding: .7rem 1.15rem; background: #fff; border-top: 1px solid #e2e8f0; }
+    margin: .9rem -1.15rem 0; padding: .7rem 1.15rem; background: theme("backgroundColor.white"); border-top: 1px solid theme("borderColor.slate.200"); }
 .bh-dt-qe__actions .bh-btn { border-radius: var(--qe-r); min-width: 5.5rem; }
 
 /* The shared fields, in the dialog's corners (the editor keeps its own). */
@@ -794,7 +816,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 .bh-qe .bh-publish__preview, .bh-qe .bh-publish__error { border-radius: var(--qe-r); }
 
 .bh-dt-table tr.is-updated > td, .bh-dt-card.is-updated { animation: bh-dt-flash 1.6s ease-out; }
-@keyframes bh-dt-flash { from { background: #dcfce7; } to { background: transparent; } }
+@keyframes bh-dt-flash { from { background: theme("backgroundColor.green.100"); } to { background: transparent; } }
 
 /* Wide: twelve columns, each field taking the span the server gave it
    (title 6, slug 3, author 3; status 3 + publish 9; categories 5 + tags 7 …). */
@@ -831,20 +853,20 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
 
 /* Card ticks are round, like a photo picker's; the table keeps square boxes. */
 .bh-dt-card .bh-dt-check input { -webkit-appearance: none; appearance: none; flex: none; margin: 0; cursor: pointer;
-    width: 1.375rem; height: 1.375rem; border-radius: 9999px; border: 2px solid #94a3b8; background-color: #fff;
+    width: 1.375rem; height: 1.375rem; border-radius: 9999px; border: 2px solid theme("borderColor.slate.400"); background-color: theme("backgroundColor.white");
     transition: background-color .15s ease, border-color .15s ease; }
-.bh-dt-card .bh-dt-check input:checked { border-color: #2563eb;
-    background: #2563eb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / .875rem no-repeat; }
-.bh-dt-card .bh-dt-check input:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.bh-dt-card .bh-dt-check input:checked { border-color: theme("borderColor.accent.600");
+    background: theme("backgroundColor.accent.600") url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / .875rem no-repeat; }
+.bh-dt-card .bh-dt-check input:focus-visible { outline: 2px solid theme("colors.accent.600"); outline-offset: 2px; }
 
 /* The tick on a picture: covers it, centred; hidden until revealed below. */
 .bh-dt-tickhost { position: relative; }
 .bh-dt-card .bh-dt-check.bh-dt-check--over { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center;
     width: auto; min-height: 0; padding: 0; margin: 0; border-radius: var(--dt-r); cursor: pointer;
     background: transparent; opacity: 0; pointer-events: none; transition: opacity .15s ease, background-color .15s ease; }
-.bh-dt-card .bh-dt-check--over input { border-color: #fff; box-shadow: 0 1px 3px rgb(15 23 42 / .4); }
-.bh-dt-card .bh-dt-check--over:has(input:checked) { background: rgb(37 99 235 / .85); }
-.bh-dt-card .bh-dt-check--over input:checked { border-color: #fff; box-shadow: none; }
+.bh-dt-card .bh-dt-check--over input { border-color: theme("textColor.white"); box-shadow: 0 1px 3px rgb(15 23 42 / .4); }
+.bh-dt-card .bh-dt-check--over:has(input:checked) { background: theme("backgroundColor.accent.600 / 85%"); }
+.bh-dt-card .bh-dt-check--over input:checked { border-color: theme("textColor.white"); box-shadow: none; }
 
 .bh-dt-toolbar .bh-dt-selectmode { display: none; }
 .bh-dt-bulk__hint { @apply whitespace-nowrap pl-1 text-sm font-medium text-slate-500; }
@@ -862,7 +884,7 @@ a.bh-dt-chip--link:hover { background: #e0e7ff; color: #3730a3; }
     .bh-dt-card:hover .bh-dt-check--over,
     .bh-dt-card:focus-within .bh-dt-check--over,
     .bh-dt.has-selection .bh-dt-check--over { opacity: 1; pointer-events: auto; }
-    .bh-dt-card:hover .bh-dt-check--over:not(:has(input:checked)) { background: rgb(255 255 255 / .45); }
+    .bh-dt-card:hover .bh-dt-check--over:not(:has(input:checked)) { background: theme("backgroundColor.white / 45%"); }
 }
 
 @media (hover: none) {

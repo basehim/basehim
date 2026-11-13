@@ -304,11 +304,11 @@ $methodColors = [
                                     <?= icon('puzzle-piece', 'w-4 h-4 text-[8px]') ?> App
                                 </span>
                             <?php elseif ($auth): ?>
-                                <span class="inline-flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium">
+                                <span class="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium">
                                     <?= icon('lock-closed', 'w-4 h-4 text-[8px]') ?> Auth
                                 </span>
                             <?php else: ?>
-                                <span class="inline-flex items-center gap-1 text-[10px] text-green-600 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full font-medium">
+                                <span class="inline-flex items-center gap-1 text-[10px] text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full font-medium">
                                     <?= icon('globe-alt', 'w-4 h-4 text-[8px]') ?> Public
                                 </span>
                             <?php endif; ?>
@@ -355,9 +355,9 @@ $methodColors = [
                             <div class="flex items-center gap-2 flex-wrap">
                                 <code class="text-xs font-mono text-slate-800 break-all"><?= htmlspecialchars($a['name']) ?></code>
                                 <?php if ($a['auth'] === 'public'): ?>
-                                    <span class="inline-flex items-center gap-1 text-[10px] text-green-600 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full font-medium"><?= icon('globe-alt', 'w-3 h-3') ?> Public</span>
+                                    <span class="inline-flex items-center gap-1 text-[10px] text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full font-medium"><?= icon('globe-alt', 'w-3 h-3') ?> Public</span>
                                 <?php else: ?>
-                                    <span class="inline-flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium"><?= icon('lock-closed', 'w-3 h-3') ?> <?= htmlspecialchars($a['auth']) ?></span>
+                                    <span class="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium"><?= icon('lock-closed', 'w-3 h-3') ?> <?= htmlspecialchars($a['auth']) ?></span>
                                 <?php endif; ?>
                                 <?php if (str_contains($a['method'], ',')): ?><span class="text-[10px] text-slate-400"><?= htmlspecialchars($a['method']) ?></span><?php endif; ?>
                             </div>
@@ -517,9 +517,9 @@ Content-Type: application/json</pre>
                                 <tr>
                                     <td class="pl-3 pr-3 py-2">
                                         <div class="font-mono text-sky-200 whitespace-nowrap"><?= htmlspecialchars($t['name']) ?><?php if ($t['app']): ?> <span class="ml-1 text-[10px] text-violet-300 font-sans">app</span><?php endif; ?></div>
-                                        <?php if ($t['desc'] !== ''): ?><div class="text-slate-400 mt-0.5 leading-snug bh-tools__desc"><?= htmlspecialchars($t['desc']) ?></div><?php endif; ?>
+                                        <?php if ($t['desc'] !== ''): ?><div class="text-slate-200/75 mt-0.5 leading-snug bh-tools__desc"><?= htmlspecialchars($t['desc']) ?></div><?php endif; ?>
                                     </td>
-                                    <td class="pr-3 py-2 font-mono whitespace-nowrap text-right <?= $t['scope'] === null ? 'text-slate-400' : 'text-emerald-200' ?>"><?= htmlspecialchars($t['scope'] ?? '(always)') ?></td>
+                                    <td class="pr-3 py-2 font-mono whitespace-nowrap text-right <?= $t['scope'] === null ? 'text-slate-200/75' : 'text-emerald-200' ?>"><?= htmlspecialchars($t['scope'] ?? '(always)') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                             <?php if (!$mcpTools): ?>

@@ -137,6 +137,31 @@ class AppApi
     }
 
     /**
+     * The signed-in person's admin appearance (1.3.0), for an app that draws
+     * something on the server that must match it (an image, an email preview,
+     * an inline SVG):
+     *
+     *     ['mode' => 'light'|'dark'|'system', 'theme' => 'light'|'dark'|null,
+     *      'accent' => 'kiwi', 'accent_label' => 'Kiwi']
+     *
+     * theme is null for "system": only the browser knows the device's setting,
+     * so prefer CSS (rgb(var(--bh-accent)), [data-theme="dark"]) or
+     * Basehim.appearance in the browser where you can. Nobody signed in: the
+     * defaults. Needs no permission: it is the viewer's own choice.
+     */
+    public function appearance(): array
+    {
+        $userId = $this->app->make(\App\Services\AuthService::class)->currentUserId();
+        $a = $this->app->make(\App\Services\AppearanceService::class)->forUser($userId);
+        return [
+            'mode'         => $a['mode'],
+            'theme'        => $a['mode'] === 'system' ? null : $a['mode'],
+            'accent'       => $a['accent'],
+            'accent_label' => \App\Services\AppearanceService::ACCENTS[$a['accent']],
+        ];
+    }
+
+    /**
      * Run $fn in one database transaction (1.2.75, CR-08): every write made
      * inside it, through this API or the app's own tables, is kept together
      * or not at all.

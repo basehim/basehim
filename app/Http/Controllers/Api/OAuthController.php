@@ -310,13 +310,9 @@ final class OAuthController
 
     private function errorPage(string $title, string $msg): Response
     {
-        $t = htmlspecialchars($title); $m = htmlspecialchars($msg);
+        // The page every standalone answer uses (1.3.0): it had inline CSS with fixed colours.
         return Response::make(
-            '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' . $t . '</title>'
-            . '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            . '<style>body{font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:grid;place-items:center;min-height:100vh;margin:0}'
-            . '.c{max-width:26rem;padding:2rem;text-align:center}h1{font-size:1.15rem;margin:0 0 .5rem}p{color:#64748b;font-size:.9rem;line-height:1.6}</style>'
-            . '</head><body><div class="c"><h1>' . $t . '</h1><p>' . $m . '</p></div></body></html>',
+            \App\Core\Http\StatusPage::html(400, $title, $msg, ['tone' => 'warning']),
             400, ['Content-Type' => 'text/html; charset=utf-8']
         );
     }

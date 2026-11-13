@@ -669,11 +669,11 @@ final class AppGuard
         // Reload by itself once: the next request runs without the app.
         $refresh = in_array($method, ['GET', 'HEAD'], true);
         if ($refresh) header('Refresh: 1');
-        echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            . '<title>One moment</title><style>body{font:16px/1.5 system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:grid;place-items:center;min-height:100vh;margin:0}'
-            . 'main{max-width:28rem;padding:2rem;text-align:center}p{color:#475569}</style></head><body><main>'
-            . '<h1>One moment…</h1><p>Part of this site had a problem and has been switched off. '
-            . ($refresh ? 'The page will reload by itself.' : 'Please go back and try again.') . '</p></main></body></html>';
+        // The page every standalone answer uses (1.3.0): it had inline CSS with fixed colours.
+        echo \App\Core\Http\StatusPage::html(503, 'One moment…',
+            'Part of this site had a problem and has been switched off. '
+            . ($refresh ? 'The page will reload by itself.' : 'Please go back and try again.'),
+            ['icon' => 'arrow-path', 'tone' => 'info']);
     }
 
     // ------------------------------------------------------------------

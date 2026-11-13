@@ -443,6 +443,26 @@
     // Card bodies: states and views
     // ------------------------------------------------------------------
 
+    // Remembered card heights (1.3.0): a card waiting for its data shows a
+    // skeleton, which was a different height from the finished card, so the
+    // grid jumped when the data came. Each card's last height (per card and
+    // per width band, as the grid changes columns) is kept in this browser
+    // and given to its skeleton, so the swap happens in place.
+    var H_KEY = 'bh-dash-heights';
+    var heights = (function () { try { return JSON.parse(localStorage.getItem(H_KEY) || '{}') || {}; } catch (e) { return {}; } })();
+    var heightSave = null;
+    function heightKey(id) { return id + '@' + Math.round(window.innerWidth / 160); }
+    function rememberHeight(card, id) {
+        requestAnimationFrame(function () {
+            if (card.classList.contains('is-loading') || !card.isConnected) return;
+            var h = Math.round(card.getBoundingClientRect().height);
+            if (!h || heights[heightKey(id)] === h) return;
+            heights[heightKey(id)] = h;
+            clearTimeout(heightSave);
+            heightSave = setTimeout(function () { try { localStorage.setItem(H_KEY, JSON.stringify(heights)); } catch (e) {} }, 400);
+        });
+    }
+
     function paintBody(card, item) {
         var body = card.querySelector('.bh-dcard__body');
         if (!body) return;
@@ -453,12 +473,16 @@
 
         var res = data[item.id];
         if (!res || res.pending) {
+            var known = heights[heightKey(item.id)];
+            if (known) card.style.setProperty('--bh-dcard-h', known + 'px');
             card.classList.add('is-loading');
             body.setAttribute('aria-busy', 'true');
             body.appendChild(skeleton(w, item));
             return;
         }
         body.removeAttribute('aria-busy');
+        card.style.removeProperty('--bh-dcard-h');
+        rememberHeight(card, item.id);
         if (!res.ok) {
             if (res.state === 'unavailable') {
                 body.appendChild(stateBlock('no-symbol', 'Not available right now', res.message, 'muted'));

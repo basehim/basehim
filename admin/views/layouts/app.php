@@ -114,14 +114,19 @@ foreach ($navItems as $__item) {
 $navSections = array_filter($navSections, fn($s) => !empty($s['items']));
 
 $flash = $flash ?? null;
+// Light/dark and the accent, from the person's account (1.3.0).
+$__appearance = \App\Core\Application::getInstance()->make(\App\Services\AppearanceService::class)
+    ->forUser(isset($user['id']) ? (int) $user['id'] : null);
 ?><!DOCTYPE html>
-<html lang="en">
+<html lang="en" <?= \App\Services\AppearanceService::htmlAttributes($__appearance) ?>>
 <head>
     <meta charset="UTF-8">
+    <?php $this->include('partials.appearance-head'); ?>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <?php $this->include('partials.admin-head', ['base' => $base, 'title' => $title ?? null]); ?>
     <link rel="stylesheet" href="<?= $base ?>/admin/assets/css/tailwind.min.css?v=<?= urlencode(BASEHIM_VERSION) ?>">
     <?php $this->include('partials.admin-styles', ['base' => $base]); ?>
+<?= $this->headStyles() /* stylesheets views asked for with style() (1.3.0) */ ?>
     <!-- Heroicons for JS-built markup (window.BasehimIcon). Loaded in <head> so
          every later script — core, app, and theme — can rely on it. -->
     <script src="<?= $base ?>/admin/assets/js/icons.js?v=<?= urlencode(BASEHIM_VERSION) ?>"></script>
@@ -131,6 +136,8 @@ $flash = $flash ?? null;
     <?php $this->include('partials.ajax-client', ['base' => $base]); ?>
     <?php /* Header search and notifications (1.2.121); deferred so it runs after the layout's menus are wired. */ ?>
     <script src="<?= $base ?>/admin/assets/js/topbar.js?v=<?= urlencode(BASEHIM_VERSION) ?>" defer></script>
+    <script src="<?= $base ?>/admin/assets/js/appearance.js?v=<?= urlencode(BASEHIM_VERSION) ?>" defer></script>
+    <script src="<?= $base ?>/admin/assets/js/scroll-strip.js?v=<?= urlencode(BASEHIM_VERSION) ?>" defer></script>
 <?php
 // App-registered admin stylesheets (via $this->addAdminStyle()).
 try {
@@ -141,331 +148,10 @@ try {
     }
 } catch (\Throwable) {}
 ?>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
-
-    /* ===== Global responsive polish (applies to every admin page) ===== */
-    /* Any wide data table becomes horizontally scrollable on small screens
-       instead of clipping or forcing the whole page to scroll sideways. */
-    @media (max-width: 767px) {
-        /* Except a table marked to stack into labelled rows (.bh-table--stack, 1.2.102, ui.css). */
-        main table:not(.bh-table--stack) { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
-        /* Let cards/panels use the full width and tighten oversized headings. */
-        main h2 { font-size: 1.125rem; }
-        main .grid { gap: 1rem; }
-    }
-    /* Consistent focus ring for keyboard users across inputs/buttons. */
-    main :is(input, select, textarea):focus-visible {
-        outline: 2px solid rgba(37, 99, 235, .5); outline-offset: 1px;
-    }
-
-    /* ===== Consistent button system =====
-       Opt-in component classes so buttons look identical across every page.
-       Existing utility-styled buttons keep working; new/updated markup can
-       use these for a single source of truth. */
-    .nbtn {
-        display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
-        padding: .5rem .9rem; border-radius: .625rem; font-size: .875rem; font-weight: 500;
-        line-height: 1.25rem; border: 1px solid transparent; cursor: pointer;
-        transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
-        white-space: nowrap; text-decoration: none;
-    }
-    .nbtn:focus-visible { outline: 2px solid rgba(37, 99, 235, .5); outline-offset: 2px; }
-    .nbtn:disabled { opacity: .55; cursor: not-allowed; }
-    .nbtn-sm { padding: .35rem .7rem; font-size: .8125rem; border-radius: .5rem; }
-    .nbtn-primary { background: #2563eb; color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
-    .nbtn-primary:hover { background: #1d4ed8; }
-    .nbtn-secondary { background: #fff; color: #334155; border-color: #e2e8f0; }
-    .nbtn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
-    .nbtn-danger { background: #dc2626; color: #fff; }
-    .nbtn-danger:hover { background: #b91c1c; }
-    .nbtn-ghost { background: transparent; color: #475569; }
-    .nbtn-ghost:hover { background: #f1f5f9; }
-
-    /* Consistent card + panel surface used across pages.
-       .nbtn* and .ncard are deprecated (1.2.102): core no longer uses them;
-       kept for apps that do. Use .bh-btn and .bh-card. */
-    .ncard { background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem; }
-
-    /* ===== Mobile off-canvas sidebar (< lg) ===== */
-    @media (max-width: 1023px) {
-        .bh-sidebar {
-            transform: translateX(-100%);
-            transition: transform .25s ease;
-            box-shadow: 0 10px 40px rgba(2, 6, 23, .18);
-            width: 16rem !important;
-        }
-        .bh-sidebar.is-open { transform: translateX(0); }
-        /* On mobile the collapse feature is irrelevant — always show full. */
-        .bh-sidebar.is-collapsed { width: 16rem !important; }
-        .bh-sidebar.is-collapsed .bh-hide-collapsed { display: block !important; }
-        .bh-sidebar.is-collapsed .bh-nav-label { display: inline !important; }
-        .bh-main { margin-left: 0 !important; }
-        #bh-collapse-toggle { display: none; }
-    }
-    #bh-backdrop {
-        position: fixed; inset: 0; background: rgba(15, 23, 42, .4);
-        -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-        opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s ease; z-index: 15;
-    }
-    #bh-backdrop.is-open { opacity: 1; visibility: visible; }
-    @media (min-width: 1024px) { #bh-backdrop { display: none; } }
-
-    /* Smoother off-canvas easing (cubic curve for a natural slide). */
-    @media (max-width: 1023px) {
-        .bh-sidebar { transition: transform .32s cubic-bezier(.4, 0, .2, 1); }
-    }
-
-    /* ===== Reusable modal system (consistent blur overlay everywhere) =====
-       Any element with class "bh-modal" is a full-screen overlay; add
-       "is-open" to show it. Its child ".bh-modal-box" is the dialog. */
-    .bh-modal {
-        position: fixed; inset: 0; z-index: 60;
-        display: flex; align-items: center; justify-content: center;
-        padding: 1rem;
-        background: rgba(15, 23, 42, .45);
-        -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
-        opacity: 0; visibility: hidden; transition: opacity .22s ease, visibility .22s ease;
-    }
-    .bh-modal.is-open { opacity: 1; visibility: visible; }
-    .bh-modal-box {
-        background: #fff; border-radius: 16px; width: 100%; max-width: 30rem;
-        max-height: calc(100vh - 2rem); overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(2, 6, 23, .28);
-        transform: translateY(8px) scale(.98); transition: transform .22s ease;
-    }
-    .bh-modal.is-open .bh-modal-box { transform: translateY(0) scale(1); }
-
-    /* App brand icon in the sidebar: fit the glyph box without distortion. */
-    .bh-nav-appicon { object-fit: contain; border-radius: 5px; }
-    /* Sidebar sections, items, sub-items, search and footer: core components
-       in admin/assets/css/src/tailwind.css ("Sidebar", 1.2.119). */
-
-
-    /* ===== Section tabs (Settings / API / System) =====
-       One component so every section's tabs look and behave identically. */
-    .bh-tabs {
-        position: sticky;
-        top: 4rem;                 /* sits directly under the 4rem header */
-        z-index: 9;                /* below the header (z-10), above content */
-        display: flex;
-        gap: .25rem;
-        /* Bleed sideways to the edges of main's padding so the sticky bar spans
-           the full width and no content peeks past it. No negative top margin —
-           the bar sits below a page heading, not at the top of <main>. */
-        margin: 0 -1rem 1.25rem;
-        padding: .5rem 1rem 0;
-        /* Match the page background, otherwise content shows through when the
-           bar sticks. */
-        background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0;
-        /* overflow-x:auto alone promotes overflow-y from visible to auto, which
-           is what produced the second (vertical) scrollbar. Pinning y to hidden
-           keeps a single horizontal scroll. */
-        overflow-x: auto;
-        overflow-y: hidden;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-        overscroll-behavior-x: contain;
-        -webkit-overflow-scrolling: touch;
-    }
-    .bh-tabs::-webkit-scrollbar { display: none; }
-    /* Edge fades: a quiet cue that there are more tabs off-screen. */
-    .bh-tabs { -webkit-mask-image: none; mask-image: none; }
-    .bh-tabs.has-more-right {
-        -webkit-mask-image: linear-gradient(to right, #000 88%, transparent 100%);
-        mask-image: linear-gradient(to right, #000 88%, transparent 100%);
-    }
-    .bh-tabs.has-more-left {
-        -webkit-mask-image: linear-gradient(to left, #000 88%, transparent 100%);
-        mask-image: linear-gradient(to left, #000 88%, transparent 100%);
-    }
-    .bh-tabs.has-more-left.has-more-right {
-        -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%);
-        mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%);
-    }
-    @media (min-width: 640px) {
-        .bh-tabs { margin: 0 -1.5rem 1.5rem; padding: .625rem 1.5rem 0; }
-    }
-
-    .bh-tab {
-        display: inline-flex;
-        align-items: center;
-        gap: .4rem;
-        flex: 0 0 auto;                /* never squash a tab */
-        padding: .5rem .75rem .625rem;
-        border: 0;
-        background: none;
-        border-bottom: 2px solid transparent;
-        margin-bottom: -1px;           /* overlap the container's own border */
-        font-size: .875rem;
-        font-weight: 500;
-        color: #64748b;
-        white-space: nowrap;
-        cursor: pointer;
-        border-radius: .375rem .375rem 0 0;
-        transition: color .15s ease, background-color .15s ease, border-color .15s ease;
-    }
-    .bh-tab:hover { color: #0f172a; background: #f1f5f9; }
-    .bh-tab:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; }
-    .bh-tab svg { flex-shrink: 0; opacity: .7; }
-
-    .bh-tab.is-active {
-        color: #2563eb;
-        border-bottom-color: #2563eb;
-        font-weight: 600;
-    }
-    .bh-tab.is-active svg { opacity: 1; }
-    .bh-tab.is-active:hover { background: transparent; }
-
-    /* A tab opening a destructive panel — "Danger zone". Reads as a normal tab
-       until you reach for it, so it does not shout from a page you are only
-       reading. */
-    .bh-tab-danger:hover { color: #dc2626; background: #fef2f2; }
-    .bh-tab-danger.is-active { color: #dc2626; border-bottom-color: #dc2626; }
-    .bh-tab-danger.is-active:hover { background: #fef2f2; }
-
-    /* Sidebar collapse/expand shifts the rail; keep the sticky bar aligned. */
-    @media (max-width: 1023px) {
-        .bh-tabs { top: 4rem; }
-    }
-
-    /* ===== Collapsible sidebar ===== */
-    /* Width (desktop collapse) and transform (mobile drawer) together. This rule
-       comes after the mobile one; with width alone it replaced the drawer's
-       transform transition, and the drawer jumped open and shut. */
-    .bh-sidebar { transition: width .2s ease, transform .32s cubic-bezier(.4, 0, .2, 1); }
-    @media (max-width: 1023px) { .bh-sidebar { will-change: transform; } }
-
-    /* Admin UI components (.bh-btn, .bh-card, .bh-label/.bh-input, .bh-badge,
-       .bh-empty) are Tailwind components since 1.2.77: admin/assets/css/src/tailwind.css,
-       compiled into tailwind.min.css. See docs/ADMIN-UI.md. */
-
-    /* Toasts (bhToast) */
-    .bh-toasts { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 70; display: grid; gap: .5rem; justify-items: end; pointer-events: none; }
-    .bh-toast {
-        pointer-events: auto; display: flex; align-items: flex-start; gap: .6rem; max-width: min(24rem, calc(100vw - 2rem));
-        padding: .7rem .9rem; border-radius: .65rem; background: #0f172a; color: #f8fafc; font-size: .875rem; line-height: 1.45;
-        box-shadow: 0 14px 34px -14px rgba(2, 6, 23, .55); cursor: pointer; animation: bh-toast-in .18s cubic-bezier(.2, .7, .3, 1);
-    }
-    .bh-toast::before { content: ""; flex: none; width: .5rem; height: .5rem; margin-top: .4rem; border-radius: 50%; background: #60a5fa; }
-    .bh-toast--success::before { background: #34d399; }
-    .bh-toast--error { background: #7f1d1d; }
-    .bh-toast--error::before { background: #fca5a5; }
-    .bh-toast--warning::before { background: #fbbf24; }
-    .bh-toast.is-leaving { animation: bh-toast-out .16s ease-in forwards; }
-    @keyframes bh-toast-in { from { opacity: 0; transform: translateY(8px); } }
-    @keyframes bh-toast-out { to { opacity: 0; transform: translateY(4px); } }
-
-    /* A visible focus ring for keyboard users wherever a screen sets none.
-       :where() keeps this at zero specificity, so a screen's own focus style
-       (Tailwind focus:ring / focus:outline-none) still wins. */
-    :where(.bh-main) :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
-
-    @media (prefers-reduced-motion: reduce) {
-        .bh-toast, .bh-toast.is-leaving { animation: none; }
-        .bh-btn[aria-busy="true"]::before { animation-duration: 2s; }
-    }
-
-    /* ===== Tables scroll sideways on narrow screens (see the script) ===== */
-    .bh-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
-    .bh-table-scroll > table { min-width: 100%; }
-
-    /* ===== Confirm / alert dialog (bhConfirm, bhAlert) ===== */
-    .bh-ask { border: 0; padding: 0; border-radius: .9rem; width: min(26rem, calc(100vw - 2rem)); color: #0f172a; box-shadow: 0 30px 70px -25px rgba(2, 6, 23, .55); }
-    .bh-ask::backdrop { background: rgba(15, 23, 42, .4); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
-    .bh-ask[open] { animation: bh-ask-in .16s cubic-bezier(.2, .7, .3, 1); }
-    @keyframes bh-ask-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
-    .bh-ask__body { display: flex; gap: .9rem; padding: 1.25rem 1.25rem .5rem; }
-    .bh-ask__icon { flex: none; width: 2.5rem; height: 2.5rem; border-radius: 50%; display: grid; place-items: center; background: #eff6ff; color: #2563eb; }
-    .bh-ask.is-danger .bh-ask__icon { background: #fef2f2; color: #dc2626; }
-    .bh-ask__icon svg { width: 1.25rem; height: 1.25rem; }
-    .bh-ask__msg { margin: .35rem 0 0; font-size: .9rem; line-height: 1.55; color: #334155; white-space: pre-line; overflow-wrap: anywhere; }
-    .bh-ask__foot { display: flex; justify-content: flex-end; gap: .5rem; padding: 1rem 1.25rem 1.15rem; }
-    .bh-ask__btn { padding: .5rem 1rem; border-radius: .55rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
-    .bh-ask__btn--ok { background: #2563eb; color: #fff; }
-    .bh-ask__btn--ok:hover { background: #1d4ed8; }
-    .bh-ask.is-danger .bh-ask__btn--ok { background: #dc2626; }
-    .bh-ask.is-danger .bh-ask__btn--ok:hover { background: #b91c1c; }
-    .bh-ask__btn--cancel { background: #fff; color: #0f172a; border-color: #cbd5e1; font-weight: 500; }
-    .bh-ask__btn--cancel:hover { background: #f8fafc; }
-    .bh-ask__btn:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
-    @media (prefers-reduced-motion: reduce) { .bh-ask[open] { animation: none; } }
-
-
-    /* ===== Dropdowns (New, notifications, account) ===== */
-    [data-bh-menu-panel]:not(.hidden) { animation: bh-menu-in .16s cubic-bezier(.2, .7, .3, 1) both; transform-origin: top right; }
-    [data-bh-menu-panel].is-closing { animation: bh-menu-out .12s ease-in both; pointer-events: none; }
-    @keyframes bh-menu-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
-    @keyframes bh-menu-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.98); } }
-    /* Only a trailing caret turns (the bell ends with its count, not a caret). */
-    [data-bh-menu-btn] > svg:last-child { transition: transform .2s ease; }
-    [data-bh-menu-btn][aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
-
-    @media (prefers-reduced-motion: reduce) {
-        .bh-sidebar, #bh-backdrop, .bh-nav-group .bh-submenu, [data-bh-menu-btn] > svg:last-child, .bh-sub-toggle svg, .bh-sub-toggle i { transition: none !important; }
-        [data-bh-menu-panel]:not(.hidden), [data-bh-menu-panel].is-closing { animation: none !important; }
-    }
-    .bh-sidebar.is-collapsed { width: 4.5rem; overflow-x: hidden; }
-    .bh-sidebar.is-collapsed .bh-hide-collapsed { display: none !important; }
-    .bh-nav-badge {
-        min-width: 18px; height: 18px; padding: 0 5px;
-        display: inline-flex; align-items: center; justify-content: center;
-        border-radius: 999px; background: #ef4444; color: #fff;
-        font-size: 10px; font-weight: 700; line-height: 1;
-    }
-    /* `display:inline-flex` above is an author rule and would otherwise beat the
-       browser's `[hidden] { display: none }`, leaving a "0" badge on screen.
-       This restores the attribute's meaning so the badge disappears at zero. */
-    .bh-nav-badge[hidden] { display: none; }
-    /* Head + footer: zero the wide Tailwind padding and center the single
-       remaining child so nothing exceeds the 4.5rem rail. */
-    .bh-sidebar.is-collapsed .bh-sidebar-head { padding-left: 0 !important; padding-right: 0 !important; justify-content: center; gap: 0; }
-    .bh-sidebar.is-collapsed > div:last-child { padding-left: 0 !important; padding-right: 0 !important; justify-content: center; gap: 0; }
-    .bh-sidebar.is-collapsed .bh-nav-item { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; height: 42px; margin: 0 auto; width: 44px; }
-    .bh-sidebar.is-collapsed #bh-nav { padding-left: 0; padding-right: 0; }
-    .bh-sidebar.is-collapsed #bh-nav-main { padding-left: 0; padding-right: 0; }
-    .bh-sidebar.is-collapsed .bh-nav-label { display: none; }
-    /* Bigger, easier-to-hit icons in the collapsed rail. */
-    .bh-sidebar.is-collapsed .bh-nav-icon { width: auto; font-size: 1.15rem; }
-    .bh-sidebar.is-collapsed .bh-search-wrap { display: none; }
-    .bh-main.is-collapsed { margin-left: 4.5rem; }
-
-    /* Vertical scroll only — never horizontal. Setting a non-visible value on
-       BOTH axes is required: mixing overflow-x:visible with overflow-y:auto
-       makes the browser force x to auto too, which caused a horizontal
-       scrollbar and the icons to shift sideways. */
-    #bh-nav { overflow-y: auto; overflow-x: hidden; }
-    .bh-sidebar.is-collapsed #bh-nav::-webkit-scrollbar { width: 0; height: 0; }
-    .bh-sidebar.is-collapsed #bh-nav { scrollbar-width: none; }
-
-    /* Collapsed tooltip is rendered at the body level by JS (see the sidebar
-       script), so a scrolling/clipping nav can never cut it off. */
-    .bh-tip {
-        position: fixed; z-index: 9999; background: #0f172a; color: #fff; font-size: 12px; font-weight: 500;
-        padding: 5px 10px; border-radius: 6px; white-space: nowrap; pointer-events: none;
-        box-shadow: 0 4px 12px rgba(0,0,0,.18); opacity: 0; transform: translateY(-50%);
-        transition: opacity .12s ease; left: 0; top: 0;
-    }
-    .bh-tip.is-visible { opacity: 1; }
-    .bh-tip::before {
-        content: ''; position: absolute; right: 100%; top: 50%; transform: translateY(-50%);
-        border: 5px solid transparent; border-right-color: #0f172a;
-    }
-
-    /* Submenu groups */
-    /* Height animates (see the submenu script); padding sits on the links so a
-       closed submenu is truly 0 high. */
-    .bh-nav-group .bh-submenu { display: block; height: 0; overflow: hidden; transition: height .22s cubic-bezier(.4, 0, .2, 1); }
-    .bh-nav-group.is-open .bh-submenu { height: auto; }
-    .bh-nav-group .bh-submenu > :first-child { margin-top: 2px; }
-    .bh-nav-group .bh-submenu > :last-child { margin-bottom: 4px; }
-    .bh-sub-toggle svg, .bh-sub-toggle i { transition: transform .22s ease; }
-    .bh-nav-group.is-open .bh-sub-toggle svg, .bh-nav-group.is-open .bh-sub-toggle i { transform: rotate(180deg); }
-    .bh-sidebar.is-collapsed .bh-nav-group .bh-submenu { display: none !important; }
-
-    </style>
+    <?php // Layout styles: admin/assets/css/src/tailwind.css ("Admin layout", 1.3.0). ?>
 </head>
 <?php $csrfToken = \App\Core\Application::getInstance()->make(\App\Core\Session::class)->csrfToken(); ?>
 <body class="bg-slate-50 min-h-screen antialiased text-slate-800"
@@ -776,6 +462,35 @@ try {
                             <span class="bh-top-item__icon"><?= icon('cog-6-tooth', 'w-4 h-4') ?></span> Settings
                         </a>
                         <?php endif; ?>
+                        <div class="bh-top-panel__sep" role="separator"></div>
+                        <?php // Appearance (1.3.0): saved on the account; admin/assets/js/appearance.js. ?>
+                        <div class="bh-appearance" data-bh-appearance data-bh-keep-open>
+                            <p class="bh-top-panel__label" id="bh-appearance-label">Appearance</p>
+                            <div class="bh-seg bh-appearance__modes" role="radiogroup" aria-labelledby="bh-appearance-label">
+                                <?php foreach (\App\Services\AppearanceService::MODES as $__m => $__label): ?>
+                                <button type="button" role="radio" data-bh-mode="<?= $__m ?>" aria-checked="<?= $__appearance['mode'] === $__m ? 'true' : 'false' ?>">
+                                    <?= icon(['light' => 'sun', 'dark' => 'moon', 'system' => 'computer-desktop'][$__m], 'w-4 h-4') ?><?= $__label ?>
+                                </button>
+                                <?php endforeach; ?>
+                            </div>
+                            <button type="button" class="bh-appearance__accent" data-bh-accent-toggle aria-expanded="false" aria-controls="bh-accent-list">
+                                <span class="bh-appearance__accent-label">Accent</span>
+                                <span class="bh-appearance__current">
+                                    <span class="bh-swatch" data-bh-accent-swatch data-accent="<?= $__appearance['accent'] ?>"></span>
+                                    <span data-bh-accent-name><?= \App\Services\AppearanceService::ACCENTS[$__appearance['accent']] ?></span>
+                                    <?= icon('chevron-down', 'w-3.5 h-3.5') ?>
+                                </span>
+                            </button>
+                            <div class="bh-appearance__drawer">
+                            <div id="bh-accent-list" class="bh-appearance__list" role="radiogroup" aria-label="Accent colour" inert>
+                                <?php foreach (\App\Services\AppearanceService::ACCENTS as $__a => $__label): ?>
+                                <button type="button" role="radio" data-bh-accent="<?= $__a ?>" aria-checked="<?= $__appearance['accent'] === $__a ? 'true' : 'false' ?>">
+                                    <span class="bh-swatch" data-accent="<?= $__a ?>"></span><?= $__label ?><?= icon('check', 'w-4 h-4 bh-appearance__check') ?>
+                                </button>
+                                <?php endforeach; ?>
+                            </div>
+                            </div>
+                        </div>
                         <div class="bh-top-panel__sep" role="separator"></div>
                         <form method="POST" action="<?= $base ?>/admin/logout">
                             <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrfToken) ?>">
@@ -1113,35 +828,7 @@ try {
         }
     });
 
-    /* ===== Section tabs ===== */
-    // On a narrow screen the active tab can start off-screen, which makes the
-    // bar look empty/wrong. Bring it into view and hint that it scrolls.
-    document.querySelectorAll('.bh-tabs').forEach(function (bar) {
-        var active = bar.querySelector('.bh-tab.is-active');
-        if (active) {
-            var barRect = bar.getBoundingClientRect();
-            var tabRect = active.getBoundingClientRect();
-            if (tabRect.left < barRect.left || tabRect.right > barRect.right) {
-                bar.scrollLeft = active.offsetLeft - (bar.clientWidth / 2) + (active.offsetWidth / 2);
-            }
-        }
-        // Fade the edges only while there is more to scroll to.
-        var sync = function () {
-            var max = bar.scrollWidth - bar.clientWidth;
-            bar.classList.toggle('has-more-right', max > 1 && bar.scrollLeft < max - 1);
-            bar.classList.toggle('has-more-left', bar.scrollLeft > 1);
-        };
-        sync();
-        bar.addEventListener('scroll', sync, { passive: true });
-        window.addEventListener('resize', sync);
-        // Horizontal scroll with a vertical wheel (trackpad-friendly).
-        bar.addEventListener('wheel', function (ev) {
-            if (Math.abs(ev.deltaY) <= Math.abs(ev.deltaX)) return;
-            if (bar.scrollWidth <= bar.clientWidth) return;
-            ev.preventDefault();
-            bar.scrollLeft += ev.deltaY;
-        }, { passive: false });
-    });
+    /* ===== Section tabs: scroll-strip.js (1.3.0) ===== */
 
     /* ===== Click-based dropdown menus (create + user) ===== */
     // Replaces hover-only menus so they work on touch devices.
@@ -1172,8 +859,9 @@ try {
                 btn.setAttribute('aria-expanded', 'true');
             }
         });
-        // A click inside the panel (other than on a link or button) keeps it open.
-        panel.addEventListener('click', function (e) { if (!e.target.closest('a, button')) e.stopPropagation(); });
+        // A click inside the panel (other than on a link or button) keeps it
+        // open; so does one inside [data-bh-keep-open] (Appearance, 1.3.0).
+        panel.addEventListener('click', function (e) { if (!e.target.closest('a, button') || e.target.closest('[data-bh-keep-open]')) e.stopPropagation(); });
     });
     document.addEventListener('click', function () { menus.forEach(closeMenu); });
     document.addEventListener('keydown', function (ev) {

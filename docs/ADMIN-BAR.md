@@ -85,7 +85,7 @@ list of options, on save and when read.
 | On phones | the same, a floating button, nothing | the same |
 | Who sees it | roles; none ticked = everyone who can manage something | none ticked |
 | This page's menu, Quick search, Notifications, Keyboard shortcut | on, off | on |
-| Colours | dark, light, follow the device | dark |
+| Colours | each person's Appearance (their light, dark or device setting, 1.3.0), always dark, always light, follow the device. The accent is always the person's own | each person's Appearance |
 | Spacing | comfortable, compact | comfortable |
 | Menu labels | icons and labels, icons only | icons and labels |
 | Show the site's name, Show the user's picture | on, off | on |

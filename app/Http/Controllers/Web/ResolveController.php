@@ -79,6 +79,12 @@ class ResolveController extends Controller
      */
     public function showCategoryPost(Request $request, string $category, string $slug): Response
     {
+        // An unknown admin address (/admin/x) is not a post in a category
+        // called "admin": answer with the admin's own page, in the person's
+        // appearance, not the public theme's 404 (1.3.0).
+        if ($category === 'admin') {
+            return Response::view('errors.404', ['path' => $request->path()], 404);
+        }
         /** @var SettingService $settings */
         $settings  = $this->app->make(SettingService::class);
         /** @var PostService $posts */

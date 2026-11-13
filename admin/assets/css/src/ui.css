@@ -1,0 +1,330 @@
+/*
+ * Shared admin UI components that live outside the main layout's inline
+ * styles, so both admin layouts (and the media picker) get them.
+ * See docs/ADMIN-UI.md.
+ *
+ * Source since 1.3.0: colours are theme() references, so they follow light
+ * and dark mode and the chosen accent. Build admin/assets/css/ui.css with
+ *     npm run build:ui
+ * (needs the colour variables from tailwind.min.css, loaded first).
+ */
+
+/* ── Loader: the dark pill with a spinner and a short message ─────────────
+   One design wherever the admin waits on the server: next to a button
+   (Save draft), over an image (the media library's full-size preview), in a
+   panel. JavaScript: bhLoader(anchor, 'Saving…', { place }) — see app.php.   */
+.bh-loader {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    background: rgba(15, 23, 42, .72); color: theme("textColor.white");
+    font: 500 12px/1.2 Inter, "Inter Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    white-space: nowrap; vertical-align: middle; pointer-events: none;
+    transition: opacity .18s ease, background-color .18s ease;
+}
+.bh-loader__spin {
+    width: 14px; height: 14px; flex: 0 0 auto; box-sizing: border-box;
+    border-radius: 50%; border: 2px solid rgba(255, 255, 255, .35); border-top-color: theme("textColor.white");
+    animation: bh-loader-spin .7s linear infinite;
+}
+.bh-loader.is-done { background: theme("backgroundColor.emerald.700 / 90%"); }
+.bh-loader.is-error { background: theme("backgroundColor.red.700 / 90%"); pointer-events: auto; }
+.bh-loader.is-done .bh-loader__spin,
+.bh-loader.is-error .bh-loader__spin { animation: none; border: 0; display: inline-flex; }
+/* Done / failed: an icon from the icon set (check, exclamation-circle), put in by bhLoader. */
+.bh-loader__spin svg { width: 14px; height: 14px; stroke-width: 2.25; }
+.bh-loader.is-leaving { opacity: 0; }
+/* Placed over something (an image): centred on it. */
+.bh-loader--over { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+/* Next to a button: a little breathing room. */
+.bh-loader--before { margin-right: 8px; }
+.bh-loader--after { margin-left: 8px; }
+@keyframes bh-loader-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bh-loader__spin { animation-duration: 2s; } }
+
+/* ── Loader inside a button (1.2.50): bhLoader(button, 'Saving…'), and
+   bhBusy(button, true) since 1.2.83 ───────────────────────────────────────
+   The button keeps its own colours; its label becomes a spinner and a word
+   or two, then a check (done) or an exclamation icon (failed) before the
+   label comes back. This is the only place a busy button's spinner and icon
+   come from (BH-036): nothing else may add one, so the guard below hides
+   anything else that ends up inside, and turns off pseudo-element content. */
+.bh-btn-busy { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.bh-btn-busy[aria-busy="true"] { cursor: progress; }
+button.bh-btn-busy:disabled { opacity: 1; cursor: progress; }   /* beats .bhe-btn:disabled and similar */
+.bh-btn-busy__icon {
+    width: 1em; height: 1em; flex: 0 0 auto; box-sizing: border-box;
+    border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent;
+    opacity: .9; animation: bh-loader-spin .7s linear infinite;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1em; line-height: 1; font-weight: 700;
+}
+.bh-btn-busy.is-done .bh-btn-busy__icon,
+.bh-btn-busy.is-error .bh-btn-busy__icon { animation: none; border: 0; opacity: 1; }
+.bh-btn-busy__icon svg { width: 1em; height: 1em; stroke-width: 2.25; }
+/* The guard: one spinner or icon, one label, nothing else. */
+.bh-btn-busy::before, .bh-btn-busy::after { content: none !important; display: none !important; }
+.bh-btn-busy > :not(.bh-btn-busy__icon):not(.bh-btn-busy__text) { display: none !important; }
+.bh-btn-busy.is-error { background-color: theme("backgroundColor.red.600") !important; border-color: theme("borderColor.red.600") !important; color: theme("textColor.white") !important; }
+.bh-btn-busy__text { white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .bh-btn-busy__icon { animation-duration: 2s; } }
+
+/* ── Tag box (post editor) ───────────────────────────────────────────────── */
+.bh-tags { display: grid; gap: 10px; }
+.bh-tags__chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
+.bh-tags__chips:empty { display: none; }
+.bh-tag {
+    display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+    padding: 3px 4px 3px 9px; border-radius: 999px;
+    background: theme("backgroundColor.indigo.50"); color: theme("textColor.indigo.800"); font-size: 12.5px; line-height: 1.4;
+}
+.bh-tag__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-tag.is-new { background: theme("backgroundColor.yellow.50"); color: theme("textColor.yellow.800"); box-shadow: inset 0 0 0 1px theme("colors.amber.200"); }
+.bh-tag.is-new .bh-tag__name::after { content: " (new)"; opacity: .7; }
+.bh-tag.is-busy { opacity: .55; }
+.bh-tag__x {
+    display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none;
+    border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer;
+    font-size: 14px; line-height: 1; padding: 0;
+}
+.bh-tag__x:hover, .bh-tag__x:focus-visible { background: theme("backgroundColor.indigo.800 / 14%"); outline: none; }
+.bh-tags__field { position: relative; }
+.bh-tags__suggest {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
+    margin: 0; padding: 4px; list-style: none; background: theme("backgroundColor.white");
+    border: 1px solid theme("borderColor.slate.200"); border-radius: 10px; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, .35);
+    max-height: 240px; overflow-y: auto;
+}
+.bh-tags__suggest[hidden] { display: none; }
+.bh-tags__opt {
+    display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 6px;
+    font-size: 13px; color: theme("textColor.slate.900"); cursor: pointer;
+}
+.bh-tags__opt[aria-selected="true"], .bh-tags__opt:hover { background: theme("backgroundColor.accent.50"); }
+.bh-tags__opt small { color: theme("textColor.slate.500"); }
+.bh-tags__opt mark { background: none; color: inherit; font-weight: 600; }
+.bh-tags__hint { font-size: 12px; color: theme("textColor.slate.500"); }
+.bh-tags__group { display: grid; gap: 6px; }
+.bh-tags__group-title { font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: theme("textColor.slate.500"); }
+.bh-tags__cloud { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.bh-tags__pick {
+    border: 0; background: none; padding: 1px 2px; cursor: pointer;
+    color: theme("textColor.accent.600"); font-size: 12.5px; text-decoration: none;
+}
+.bh-tags__pick:hover, .bh-tags__pick:focus-visible { text-decoration: underline; outline: none; }
+.bh-tags__pick[disabled] { color: theme("textColor.slate.400"); cursor: default; text-decoration: none; }
+.bh-tags__pick small { color: theme("textColor.slate.400"); }
+
+/* ── Shared post fields (1.2.62): the block editor's sidebar and Quick Edit ──
+   post-fields.js draws Categories, Tags and Publish the same way in both. */
+
+/* Categories */
+.bh-terms { display: grid; gap: 8px; min-width: 0; }
+.bh-terms__list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow: auto; padding: 2px; }
+.bh-terms__opt { display: flex; align-items: center; gap: 8px; font-size: 13px; color: theme("textColor.slate.800"); cursor: pointer; min-width: 0; }
+.bh-terms__opt[hidden] { display: none; }
+.bh-terms__opt input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: theme("backgroundColor.accent.600"); }
+.bh-terms__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-terms__empty { margin: 0; font-size: 13px; color: theme("textColor.slate.500"); }
+.bh-terms__empty a { color: theme("textColor.accent.600"); }
+.bh-terms__filter { width: 100%; }
+.bh-terms--compact .bh-terms__list { flex-direction: row; flex-wrap: wrap; gap: 6px 14px; max-height: 7.25rem;
+    padding: 8px 10px; border: 1px solid theme("borderColor.slate.300"); border-radius: 8px; background: theme("backgroundColor.white"); }
+
+/* Tags: compact variant for Quick Edit */
+.bh-tags--compact { gap: 6px; }
+.bh-tags--compact .bh-tags__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.bh-tags--compact .bh-tags__hint { margin: 0; font-size: 11.5px; }
+.bh-tags--compact .bh-tags__group { grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 8px; }
+
+/* Publish: now or scheduled, keep or change a live post's date */
+.bh-publish { display: grid; gap: 12px; min-width: 0; }
+.bh-publish [hidden] { display: none !important; }
+.bh-publish__state { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; line-height: 1.45; color: theme("textColor.slate.800"); }
+.bh-publish__dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: theme("backgroundColor.slate.400"); }
+.bh-publish__state--published .bh-publish__dot { background: theme("backgroundColor.green.600"); }
+.bh-publish__state--scheduled .bh-publish__dot { background: theme("backgroundColor.violet.600"); }
+.bh-publish__state--pending .bh-publish__dot { background: theme("backgroundColor.accent.600"); }
+.bh-publish__state--draft .bh-publish__dot { background: theme("backgroundColor.amber.600"); }
+.bh-publish__modes { margin: 0; padding: 0; border: 0; min-width: 0; }
+.bh-publish__modes > legend { display: block; margin-bottom: 6px; padding: 0; }
+.bh-publish__seg { display: flex; padding: 2px; gap: 2px; border: 1px solid theme("borderColor.slate.400"); border-radius: 6px; background: theme("backgroundColor.white"); }
+.bh-publish__mode { flex: 1 1 0; position: relative; display: flex; min-width: 0; cursor: pointer; }
+.bh-publish__mode input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.bh-publish__mode span { flex: 1; display: flex; align-items: center; justify-content: center; height: 30px; padding: 0 8px;
+    border-radius: 4px; font-size: 13px; color: theme("textColor.slate.700"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .1s, color .1s; }
+.bh-publish__mode:hover span { background: theme("backgroundColor.slate.100"); }
+.bh-publish__mode input:checked + span { background: theme("backgroundColor.slate.800"); color: theme("textColor.white"); }
+.bh-publish__mode input:focus-visible + span { box-shadow: 0 0 0 2px theme("textColor.white"), 0 0 0 4px theme("colors.accent.600"); }
+.bh-publish__when { display: grid; gap: 8px; }
+.bh-publish__grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px; }
+.bh-publish__field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bh-publish__grid input { font-variant-numeric: tabular-nums; }
+.bh-publish__grid input[aria-invalid="true"] { border-color: theme("borderColor.red.600"); box-shadow: 0 0 0 1px theme("colors.red.600"); }
+.bh-publish__tz { margin: 0; font-size: 12px; line-height: 1.45; color: theme("textColor.slate.500"); }
+.bh-publish__tz strong { font-weight: 500; color: theme("textColor.slate.700"); }
+.bh-publish__error { margin: 0; padding: 8px 10px; border-left: 3px solid theme("borderColor.red.600"); background: theme("backgroundColor.red.50"); font-size: 12px; line-height: 1.45; color: theme("textColor.red.800"); }
+.bh-publish__preview { margin: 0; padding: 8px 10px; border-radius: 6px; background: theme("backgroundColor.accent.600 / 8%"); font-size: 12px; line-height: 1.5; color: theme("textColor.slate.700"); }
+.bh-publish__note { margin: 0; }
+/* Compact (Quick Edit): one row on wide screens — mode, date, time; notes under it. */
+.bh-publish--compact { gap: 6px; }
+.bh-publish--compact .bh-publish__state { font-size: 12px; color: theme("textColor.slate.600"); }
+.bh-publish--compact .bh-publish__modes > legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.bh-publish--compact .bh-publish__mode span { height: 28px; font-size: 12.5px; }
+.bh-publish--compact .bh-publish__when { gap: 6px; }
+.bh-publish--compact .bh-publish__field .bh-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.bh-publish--compact .bh-publish__preview, .bh-publish--compact .bh-publish__error { padding: 5px 8px; font-size: 11.5px; }
+@media (min-width: 700px) {
+    .bh-publish--compact { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); align-items: start; column-gap: 10px; }
+    .bh-publish--compact .bh-publish__state, .bh-publish--compact .bh-publish__preview { grid-column: 1 / -1; }
+}
+
+/* ── Code boxes: a scrollbar you can see (1.2.50) ─────────────────────────
+   Long lines in a <pre> scroll sideways. With overlay scrollbars (macOS,
+   phones) nothing showed that there was more, so the text looked cut off.
+   Chrome/Safari draw this one always; Firefox gets its thin variant.        */
+.bh-code::-webkit-scrollbar,
+pre.overflow-x-auto::-webkit-scrollbar,
+pre.overflow-auto::-webkit-scrollbar { width: 10px; height: 10px; }
+.bh-code::-webkit-scrollbar-track,
+pre.overflow-x-auto::-webkit-scrollbar-track,
+pre.overflow-auto::-webkit-scrollbar-track { background: transparent; }
+.bh-code::-webkit-scrollbar-thumb,
+pre.overflow-x-auto::-webkit-scrollbar-thumb,
+pre.overflow-auto::-webkit-scrollbar-thumb {
+    background: theme("backgroundColor.slate.400 / 55%"); border-radius: 10px;
+    border: 3px solid transparent; background-clip: padding-box;
+}
+.bh-code::-webkit-scrollbar-thumb:hover,
+pre.overflow-x-auto::-webkit-scrollbar-thumb:hover,
+pre.overflow-auto::-webkit-scrollbar-thumb:hover { background-color: theme("backgroundColor.slate.400 / 85%"); }
+.bh-code::-webkit-scrollbar-corner,
+pre.overflow-x-auto::-webkit-scrollbar-corner,
+pre.overflow-auto::-webkit-scrollbar-corner { background: transparent; }
+@supports not selector(::-webkit-scrollbar) {
+    .bh-code, pre.overflow-x-auto, pre.overflow-auto { scrollbar-width: thin; scrollbar-color: theme("backgroundColor.slate.400 / 60%") transparent; }
+}
+
+/* ── Dialog (1.2.102): one design for the admin's own pop-up windows ───────
+   Native <dialog> opened with showModal(), so the browser handles Escape,
+   focus and the page behind it:
+
+   <dialog class="bh-dialog" id="key-dialog" aria-labelledby="key-dialog-title">
+     <form method="POST" class="bh-dialog__form">
+       <header class="bh-dialog__head">
+         <div><h2 class="bh-dialog__title" id="key-dialog-title">New key</h2>
+              <p class="bh-dialog__sub">Optional line under the title.</p></div>
+         <button type="button" class="bh-dialog__close" data-bh-dialog-close aria-label="Close">×</button>
+       </header>
+       <div class="bh-dialog__body"> … </div>
+       <footer class="bh-dialog__foot"> buttons </footer>
+     </form>
+   </dialog>
+   <button type="button" data-bh-dialog-open="key-dialog">New key</button>
+
+   The layout script opens [data-bh-dialog-open], closes [data-bh-dialog-close]
+   and a click on the backdrop. Sizes: --sm (24rem), default (32rem), --lg
+   (44rem). Phones get a sheet from the bottom: full width, the body scrolls,
+   the buttons stay in view.                                                  */
+.bh-dialog {
+    width: min(32rem, calc(100vw - 2rem)); max-height: min(88vh, 46rem); max-height: min(88dvh, 46rem);
+    margin: auto; padding: 0; border: 0; border-radius: 16px; background: theme("backgroundColor.white"); color: theme("textColor.slate.900");
+    box-shadow: 0 24px 60px rgba(15, 23, 42, .28); overflow: hidden;
+}
+.bh-dialog--sm { width: min(24rem, calc(100vw - 2rem)); }
+.bh-dialog--lg { width: min(44rem, calc(100vw - 2rem)); }
+.bh-dialog[open] { display: flex; flex-direction: column; animation: bh-dialog-in .18s ease-out; }
+.bh-dialog::backdrop { background: rgba(15, 23, 42, .45); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+@keyframes bh-dialog-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.bh-dialog__form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; margin: 0; }
+.bh-dialog__head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 16px 20px 12px; border-bottom: 1px solid theme("borderColor.slate.100"); flex: none;
+}
+.bh-dialog__title { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; color: theme("textColor.slate.900"); }
+.bh-dialog__sub { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: theme("textColor.slate.500"); }
+.bh-dialog__close {
+    flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; margin: -6px -8px 0 0;
+    border: 0; border-radius: 10px; background: transparent; color: theme("textColor.slate.500"); cursor: pointer; font-size: 22px; line-height: 1;
+}
+.bh-dialog__close:hover { background: theme("backgroundColor.slate.100"); color: theme("textColor.slate.900"); }
+.bh-dialog__close:focus-visible { outline: 2px solid theme("colors.accent.600"); outline-offset: 1px; }
+.bh-dialog__close svg { width: 20px; height: 20px; }
+.bh-dialog__body { padding: 16px 20px; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; gap: 16px; }
+.bh-dialog__foot {
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex: none;
+    padding: 12px 20px 16px; border-top: 1px solid theme("borderColor.slate.100"); background: theme("backgroundColor.slate.50");
+}
+@media (max-width: 639px) {
+    .bh-dialog, .bh-dialog--sm, .bh-dialog--lg {
+        width: 100vw; max-width: 100vw; max-height: 92vh; max-height: 92dvh; margin: auto 0 0;
+        border-radius: 16px 16px 0 0;
+    }
+    .bh-dialog[open] { animation-name: bh-dialog-up; }
+    .bh-dialog__foot { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+    .bh-dialog__foot > .bh-btn { flex: 1 1 auto; min-height: 44px; }
+}
+@keyframes bh-dialog-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bh-dialog[open] { animation: none; } }
+
+/* ── Checkbox (1.2.102): for "pick any of these" lists ─────────────────────
+   On/off settings use the switch (.bh-switch); a list of choices uses this:
+
+   <label class="bh-check">
+     <input type="checkbox" class="bh-check__input" name="roles[]" value="editor">
+     <span class="bh-check__text">Editor <span class="bh-check__help">Optional line.</span></span>
+   </label>
+
+   A clear 18px box in the accent colour, and the whole row is the target —
+   at least 44px tall on touch screens.                                       */
+.bh-check { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 6px 0; cursor: pointer;
+    font-size: 14px; line-height: 1.4; color: theme("textColor.slate.900"); }
+.bh-check__input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: theme("backgroundColor.accent.600"); cursor: pointer; }
+.bh-check__input:focus-visible { outline: 2px solid theme("colors.accent.600"); outline-offset: 2px; }
+.bh-check__input:disabled, .bh-check__input:disabled + .bh-check__text { cursor: not-allowed; opacity: .6; }
+.bh-check__text { min-width: 0; overflow-wrap: anywhere; }
+.bh-check__help { display: block; margin-top: 2px; font-size: 12px; line-height: 1.45; color: theme("textColor.slate.500"); }
+.bh-checks { display: grid; gap: 0 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr)); }
+@media (pointer: coarse) { .bh-check { min-height: 44px; align-items: center; padding: 4px 0; } .bh-check__input { margin-top: 0; } }
+
+/* ── Small tables (1.2.102) ───────────────────────────────────────────────
+   For short lists that don't need the Data Table (a site's menus, its API
+   keys, a settings list): <table class="bh-table bh-table--stack">. On
+   phones a stacking table turns each row into a block, every cell under its
+   column name (td data-label="Location"); the cell marked .bh-table__primary
+   leads and .bh-table__actions goes along the bottom. Without --stack a
+   phone scrolls it sideways, as before.                                      */
+.bh-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.bh-table th { padding: 10px 16px; text-align: left; font-size: 12px; font-weight: 600; color: theme("textColor.slate.500"); background: theme("backgroundColor.slate.50");
+    border-bottom: 1px solid theme("borderColor.slate.200"); white-space: nowrap; }
+.bh-table td { padding: 12px 16px; color: theme("textColor.slate.700"); border-bottom: 1px solid theme("borderColor.slate.100"); vertical-align: middle; }
+.bh-table tbody tr:last-child td { border-bottom: 0; }
+.bh-table tbody tr:hover td { background: theme("backgroundColor.slate.50"); }
+.bh-table__actions { text-align: right; white-space: nowrap; }
+.bh-table__actions > * + * { margin-left: 4px; }
+@media (max-width: 639px) {
+    .bh-table--stack, .bh-table--stack tbody, .bh-table--stack tr, .bh-table--stack td { display: block; width: 100%; }
+    .bh-table--stack thead { display: none; }
+    .bh-table--stack tr { padding: 12px 16px; border-bottom: 1px solid theme("borderColor.slate.100"); }
+    .bh-table--stack tbody tr:last-child { border-bottom: 0; }
+    .bh-table--stack tbody tr:hover td { background: transparent; }
+    .bh-table--stack td { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+        padding: 4px 0; border: 0; text-align: right; overflow-wrap: anywhere; }
+    .bh-table--stack td[data-label]::before { content: attr(data-label); flex: none; max-width: 45%; text-align: left;
+        font-size: 12px; font-weight: 600; color: theme("textColor.slate.500"); }
+    .bh-table--stack td.bh-table__primary { display: block; text-align: left; padding: 0 0 6px; }
+    .bh-table--stack td.bh-table__primary::before { content: none; }
+    .bh-table--stack td.bh-table__actions { justify-content: flex-start; flex-wrap: wrap; gap: 8px; padding-top: 10px; }
+    .bh-table--stack td.bh-table__actions::before { content: none; }
+    .bh-table--stack td.bh-table__actions > * + * { margin-left: 0; }
+    /* A full-width row (an inline editor: td colspan) stays a plain block. */
+    .bh-table--stack td[colspan] { display: block; text-align: left; padding: 8px 0 0; }
+    .bh-table--stack tr.hidden, .bh-table--stack tr[hidden] { display: none; }
+}
+.bh-table td[colspan] { text-align: left; }
+
+/* ── Touch targets on phones (1.2.102) ────────────────────────────────────
+   The settings screens' "‹ Settings" link: 44px tall on touch screens.     */
+@media (pointer: coarse) {
+    .bh-set__back { min-height: 44px; }
+}

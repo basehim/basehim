@@ -23,7 +23,7 @@ $classic = (($_GET['view'] ?? '') === 'classic');
 <?php else: ?>
 
 <!-- Status tabs -->
-<div class="mb-4 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto" style="scrollbar-width:none;">
+<div class="bh-status-strip" data-bh-strip>
 <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 w-max max-w-none">
     <?php
     $tabs = [

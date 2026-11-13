@@ -118,7 +118,7 @@ $prm     = $baseUrl . '/.well-known/oauth-protected-resource';
                 </tbody>
             </table>
         </div>
-        <p class="text-[11px] text-slate-400 mt-3">Recent posts are also exposed as MCP <em>resources</em> at <code class="bg-slate-100 px-1 rounded">basehim://post/{slug}</code>.</p>
+        <p class="text-[11px] text-slate-500 mt-3">Recent posts are also exposed as MCP <em>resources</em> at <code class="bg-slate-100 px-1 rounded">basehim://post/{slug}</code>.</p>
     </div>
 
     <!-- How auth works -->
@@ -137,7 +137,7 @@ $prm     = $baseUrl . '/.well-known/oauth-protected-resource';
             </div>
             <div class="min-w-0">
                 <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Standards implemented</p>
-                <pre class="bg-slate-900 text-slate-300 rounded-lg p-3 text-[11px] overflow-x-auto">OAuth 2.1 + PKCE (S256)
+                <pre class="bg-slate-900 text-slate-200 rounded-lg p-3 text-[11px] overflow-x-auto">OAuth 2.1 + PKCE (S256)
 RFC 9728  protected resource
 RFC 8414  server metadata
 RFC 7591  dynamic registration

@@ -68,6 +68,6 @@ test('data table: Comfortable links are inside their row, shown by that row\'s o
 });
 
 test('media: a long title wraps inside its phone card instead of running over the size and date', function () {
-    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/media-picker.css');
+    $css = (string) file_get_contents(dirname(__DIR__, 2) . '/admin/assets/css/src/media-picker.css'); // the source since 1.3.0 (built minified)
     assert_contains('.bh-dt-card .bh-media-open { max-width: 100%; white-space: normal; overflow-wrap: anywhere;', $css);
 });

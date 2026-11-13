@@ -153,22 +153,13 @@ final class AdminAreaPolicy
         }
 
         $base = defined('BASEHIM_BASE') ? rtrim((string) BASEHIM_BASE, '/') : '';
-        // Shared admin styles and an icon (1.2.128): this page had inline
-        // styles, an emoji for an icon and no viewport, so it was tiny on a phone.
-        $lock = \App\Core\Icon::svg('lock-closed', 'w-6 h-6');
-        $html = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
-            . '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            . '<title>Access denied</title>'
-            . '<link rel="stylesheet" href="' . $base . '/admin/assets/css/tailwind.min.css"></head>'
-            . '<body class="grid min-h-screen place-items-center bg-slate-50 p-4 font-sans">'
-            . '<div class="bh-card w-full max-w-md p-8 text-center">'
-            . '<div class="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-accent-50 text-accent-600">' . $lock . '</div>'
-            . '<h1 class="mb-2 text-lg font-semibold text-slate-900">Access denied</h1>'
-            . '<p class="mb-6 text-sm text-slate-500">Your role doesn\'t include this area (it needs '
-            . '<code class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">' . htmlspecialchars($required) . '</code>).'
-            . ' Ask an administrator if you need it.</p>'
-            . '<a href="' . $base . '/admin/dashboard" class="bh-btn bh-btn--primary">Back to dashboard</a>'
-            . '</div></body></html>';
+        // The page every standalone answer uses (1.3.0): the person's light or
+        // dark mode and accent, which this page (light, fixed) ignored.
+        $html = \App\Core\Http\StatusPage::html(403, 'Access denied',
+            "Your role doesn't include this area (it needs " . $required . '). Ask an administrator if you need it.', [
+            'icon' => 'lock-closed', 'tone' => 'accent',
+            'actions' => [['label' => 'Back to dashboard', 'href' => $base . '/admin/dashboard', 'primary' => true]],
+        ]);
         return Response::html($html, 403);
     }
 }

@@ -5,7 +5,13 @@
   "scripts": {
     "build:css": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/tailwind.css -o admin/assets/css/tailwind.min.css --minify",
     "build:datatable": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/datatable.css -o admin/assets/css/datatable.css --minify",
-    "build": "npm run build:css && npm run build:datatable"
+    "build": "npm run build:css && npm run build:datatable && npm run build:ui && npm run build:media && npm run build:editor && npm run build:customizer && npm run build:adminbar && npm run build:colors",
+    "build:editor": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/block-editor.css -o admin/assets/css/block-editor.css --minify",
+    "build:customizer": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/customizer.css -o admin/assets/css/customizer.css --minify",
+    "build:adminbar": "tailwindcss -c tailwind.adminbar.config.js -i admin/assets/css/src/admin-bar.css -o admin/assets/css/admin-bar.css --minify",
+    "build:media": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/media-picker.css -o admin/assets/css/media-picker.css --minify",
+    "build:ui": "tailwindcss -c tailwind.config.js -i admin/assets/css/src/ui.css -o admin/assets/css/ui.css --minify",
+    "build:colors": "tailwindcss -c tailwind.colors.config.js -i admin/assets/css/src/colors.css -o admin/assets/css/colors.css --minify"
   },
   "devDependencies": {
     "tailwindcss": "3.4.19"

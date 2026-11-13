@@ -18,7 +18,7 @@ $tabs      = $tabs ?? [];
 $active    = (string) ($active ?? '');
 $urlPrefix = $urlPrefix ?? null;
 ?>
-<nav class="bh-tabs" id="bh-tabs" aria-label="<?= htmlspecialchars($ariaLabel ?? 'Section') ?>">
+<nav class="bh-tabs" id="bh-tabs" data-bh-strip aria-label="<?= htmlspecialchars($ariaLabel ?? 'Section') ?>">
     <?php foreach ($tabs as $key => $t):
         $url = $t['url'] ?? (($urlPrefix !== null) ? $urlPrefix . $key : '#');
         $isActive = $active === (string) $key;

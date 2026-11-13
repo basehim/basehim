@@ -43,6 +43,8 @@ content/uploads/*
 !content/uploads/.gitkeep
 
 *.log
+# PHP writes its errors to a file named error_log on many hosts.
+error_log
 *.cache
 
 #------------------------------------------------------------------------------

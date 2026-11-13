@@ -27,6 +27,8 @@ $path = rawurldecode((string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_
 if (preg_match('#^/(app|config|database|routes|tests)(/|$)#', $path)
     || preg_match('#^/storage(/(?!uploads/)|$)#', $path)
     || $path === '/bootstrap.php'
+    // PHP's own error log, which many hosts write into the site folder (1.3.0).
+    || preg_match('#(^|/)error_log$#', $path)
     // Dotfiles stay private, but /.well-known/ is public by standard: OAuth
     // and MCP discovery live there (RFC 8615). Blocking it, as before 1.2.43,
     // made AI connectors fail against a local site. The allowed form has no

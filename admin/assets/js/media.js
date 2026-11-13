@@ -269,7 +269,6 @@
         var note = body.querySelector('.nm-progress-row-note');
         if (!note) {
             note = el('div', { class: 'nm-progress-row-note' });
-            note.style.cssText = 'font-size:11px;color:#64748b;margin-top:2px';
             body.appendChild(note);
         }
         note.textContent = text;

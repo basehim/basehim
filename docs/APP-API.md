@@ -42,6 +42,7 @@ $this->api()->http()
 $this->api()->rateLimit()        // counting limits (1.2.90)
 $this->api()->search()           // BH Search: index and search your records (1.2.92)
 $this->api()->adminBar()         // the frontend admin bar: menus, items, panels, badges, notices (1.2.96)
+$this->api()->appearance()       // the viewer's light/dark mode and accent (1.3.0, ADMIN-UI.md)
 ```
 
 ## Examples

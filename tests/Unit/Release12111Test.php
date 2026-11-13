@@ -46,7 +46,7 @@ test('Sticky #4/7: offsets are measured (not hardcoded), and the controls are fl
     // The top-bar height is read from the real sticky header; the shrunk
     // controls height is measured once so the header offset never jumps.
     assert_contains('appBarHeight', $js);
-    assert_contains("getComputedStyle(hdr).position === 'sticky'", $js, 'measures the real top bar');
+    assert_contains("if (cs.position !== 'sticky' && cs.position !== 'fixed') return;", $js, 'measures the real sticky bars above the table (1.3.0: the header and section tabs)');
     assert_contains('bh-dt-measuring', $js, 'measures the shrunk height with transitions suppressed');
     assert_false(str_contains($js, "rootMargin: '-65px"), 'no hardcoded 65px offset remains');
 

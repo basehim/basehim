@@ -46,7 +46,7 @@ final class View
             $content = $this->captureTemplate($parentTemplate, $data);
         }
 
-        return $content;
+        return $this->withUnprintedStyles($content);
     }
 
     private function captureTemplate(string $template, array $data): string
@@ -79,6 +79,9 @@ final class View
     public function extend(string $layout): void
     {
         $this->layout = $layout;
+        // Core's layouts print <head> after the view: stylesheets the view
+        // and its partials ask for can wait for it (1.3.0).
+        \App\Core\Http\HeadStyles::expectHead();
     }
 
     public function section(string $name): void
@@ -132,7 +135,32 @@ final class View
             $content = $this->captureTemplate($parentTemplate, $data);
         }
 
-        return $content;
+        return $this->withUnprintedStyles($content);
+    }
+
+    /**
+     * Ask for a stylesheet in the page's <head> (1.3.0); see HeadStyles,
+     * which partials call directly (they may be included by an app, where
+     * $this is not this class). Prints the link here when no <head> is to come.
+     *
+     * @param array<string, string|true> $attrs extra attributes (true = bare)
+     */
+    public function style(string $href, array $attrs = []): void
+    {
+        echo \App\Core\Http\HeadStyles::add($href, $attrs);
+    }
+
+    /** The waiting <link> tags, for a layout's <head>. */
+    public function headStyles(): string
+    {
+        return \App\Core\Http\HeadStyles::printHead();
+    }
+
+    /** A page whose layout printed no <head> (an app's own layout) still gets its stylesheets, first. */
+    private function withUnprintedStyles(string $content): string
+    {
+        $links = \App\Core\Http\HeadStyles::unprinted();
+        return $links === '' ? $content : $links . $content;
     }
 
     public function include(string $partial, array $data = []): void
